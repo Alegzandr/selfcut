@@ -12,9 +12,14 @@ import {
 } from '../types';
 import { uid } from '../lib/id';
 import { clamp } from '../lib/time';
-import { DEFAULT_PX_PER_SEC, MIN_CLIP_DURATION_MS, MIN_PX_PER_SEC, MAX_PX_PER_SEC, PROJECT_FPS } from '../app/config';
+import { DEFAULT_PX_PER_SEC, MIN_CLIP_DURATION_MS, MIN_PX_PER_SEC, MAX_PX_PER_SEC, PROJECT_FPS, TIMELINE_PAD_LEFT } from '../app/config';
 
 const HISTORY_LIMIT = 50;
+
+interface ClipboardEntry {
+  clip: Clip;
+  kind: Track['kind'];
+}
 
 export interface EditorState {
   project: Project;
@@ -25,6 +30,12 @@ export interface EditorState {
   seekVersion: number;
   playing: boolean;
   pxPerSec: number;
+  /** Left padding of the timeline content in px (half the viewport on mobile, fixed on desktop). */
+  timelinePadLeft: number;
+  /** Mobile only: the inspector opens on demand (Adjust button), not on every selection. */
+  inspectorOpen: boolean;
+  shortcutsOpen: boolean;
+  clipboard: ClipboardEntry | null;
   exportOpen: boolean;
   importing: boolean;
   error: string | null;
@@ -50,6 +61,10 @@ export interface EditorState {
   trimClip: (clipId: string, edge: 'left' | 'right', timelineMs: number) => void;
   splitAtPlayhead: () => void;
   deleteClip: (clipId: string) => void;
+  duplicateClip: (clipId: string) => void;
+  copyClip: (clipId: string) => void;
+  cutClip: (clipId: string) => void;
+  pasteAtPlayhead: () => void;
 
   beginGesture: () => void;
   endGesture: () => void;
@@ -60,6 +75,9 @@ export interface EditorState {
   setCurrentTimeFromEngine: (ms: number) => void;
   setPlaying: (playing: boolean) => void;
   setPxPerSec: (v: number) => void;
+  setTimelinePadLeft: (px: number) => void;
+  setInspectorOpen: (open: boolean) => void;
+  setShortcutsOpen: (open: boolean) => void;
   setExportOpen: (open: boolean) => void;
   setImporting: (v: boolean) => void;
   setError: (msg: string | null) => void;
@@ -105,6 +123,10 @@ export const useStore = create<EditorState>((set, get) => {
     seekVersion: 0,
     playing: false,
     pxPerSec: DEFAULT_PX_PER_SEC,
+    timelinePadLeft: TIMELINE_PAD_LEFT,
+    inspectorOpen: false,
+    shortcutsOpen: false,
+    clipboard: null,
     exportOpen: false,
     importing: false,
     error: null,
@@ -208,7 +230,8 @@ export const useStore = create<EditorState>((set, get) => {
         if (t) t.hidden = !t.hidden;
       }),
 
-    selectClip: (id) => set({ selectedClipId: id }),
+    selectClip: (id) =>
+      set({ selectedClipId: id, ...(id === null ? { inspectorOpen: false } : {}) }),
 
     updateClip: (clipId, patch) =>
       withoutHistory((p) => {
@@ -301,7 +324,62 @@ export const useStore = create<EditorState>((set, get) => {
           track.clips = track.clips.filter((c) => c.id !== clipId);
         }
       });
-      if (get().selectedClipId === clipId) set({ selectedClipId: null });
+      if (get().selectedClipId === clipId) set({ selectedClipId: null, inspectorOpen: false });
+    },
+
+    duplicateClip: (clipId) => {
+      let newId = '';
+      withHistory((p) => {
+        const found = findClip(p, clipId);
+        if (!found) return;
+        const copy: Clip = {
+          ...structuredClone(found.clip),
+          id: uid('clip'),
+          timelineStartMs: clipEndMs(found.clip),
+        };
+        newId = copy.id;
+        found.track.clips.push(copy);
+      });
+      if (newId) set({ selectedClipId: newId });
+    },
+
+    copyClip: (clipId) => {
+      const found = findClip(get().project, clipId);
+      if (found) set({ clipboard: { clip: structuredClone(found.clip), kind: found.track.kind } });
+    },
+
+    cutClip: (clipId) => {
+      get().copyClip(clipId);
+      get().deleteClip(clipId);
+    },
+
+    pasteAtPlayhead: () => {
+      const { clipboard, currentTimeMs } = get();
+      if (!clipboard) return;
+      let newId = '';
+      withHistory((p) => {
+        let track =
+          p.tracks.find((t) => t.id === clipboard.clip.trackId && t.kind === clipboard.kind) ??
+          p.tracks.find((t) => t.kind === clipboard.kind);
+        if (!track) {
+          track = { id: uid('track'), kind: clipboard.kind, clips: [] };
+          if (clipboard.kind === 'video') {
+            const lastVideoIdx = p.tracks.map((t) => t.kind).lastIndexOf('video');
+            p.tracks.splice(lastVideoIdx + 1, 0, track);
+          } else {
+            p.tracks.push(track);
+          }
+        }
+        const clip: Clip = {
+          ...structuredClone(clipboard.clip),
+          id: uid('clip'),
+          trackId: track.id,
+          timelineStartMs: currentTimeMs,
+        };
+        newId = clip.id;
+        track.clips.push(clip);
+      });
+      set({ selectedClipId: newId });
     },
 
     beginGesture: () => set({ gestureSnapshot: get().project }),
@@ -328,6 +406,7 @@ export const useStore = create<EditorState>((set, get) => {
         past: past.slice(0, -1),
         future: [project, ...future],
         selectedClipId: null,
+        inspectorOpen: false,
       });
     },
 
@@ -340,6 +419,7 @@ export const useStore = create<EditorState>((set, get) => {
         past: [...past, project].slice(-HISTORY_LIMIT),
         future: future.slice(1),
         selectedClipId: null,
+        inspectorOpen: false,
       });
     },
 
@@ -356,6 +436,13 @@ export const useStore = create<EditorState>((set, get) => {
     setPlaying: (playing) => set({ playing }),
 
     setPxPerSec: (v) => set({ pxPerSec: clamp(v, MIN_PX_PER_SEC, MAX_PX_PER_SEC) }),
+
+    setTimelinePadLeft: (px) => {
+      if (get().timelinePadLeft !== px) set({ timelinePadLeft: px });
+    },
+
+    setInspectorOpen: (open) => set({ inspectorOpen: open }),
+    setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
 
     setExportOpen: (open) => set({ exportOpen: open }),
     setImporting: (v) => set({ importing: v }),

@@ -1,16 +1,19 @@
 import { memo, useMemo } from 'react';
 import { useStore } from '../store/store';
 import { formatTimeShort } from '../lib/time';
-import { TIMELINE_PAD_LEFT } from '../app/config';
 
 const TICK_STEPS_SEC = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
 
 interface Props {
   durationMs: number;
   pxPerMs: number;
+  /** Extra ticks past the project end (0 on mobile so the scroll range stays exact). */
+  overscanMs: number;
 }
 
-export const Ruler = memo(function Ruler({ durationMs, pxPerMs }: Props) {
+export const Ruler = memo(function Ruler({ durationMs, pxPerMs, overscanMs }: Props) {
+  const padLeft = useStore((s) => s.timelinePadLeft);
+
   const stepSec = useMemo(() => {
     const pxPerSec = pxPerMs * 1000;
     return TICK_STEPS_SEC.find((s) => s * pxPerSec >= 56) ?? 600;
@@ -18,13 +21,13 @@ export const Ruler = memo(function Ruler({ durationMs, pxPerMs }: Props) {
 
   const ticks = useMemo(() => {
     const out: number[] = [];
-    for (let t = 0; t <= durationMs + 30_000; t += stepSec * 1000) out.push(t);
+    for (let t = 0; t <= durationMs + overscanMs; t += stepSec * 1000) out.push(t);
     return out;
-  }, [durationMs, stepSec]);
+  }, [durationMs, stepSec, overscanMs]);
 
   const scrubTo = (e: React.PointerEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const tMs = (e.clientX - rect.left - TIMELINE_PAD_LEFT) / pxPerMs;
+    const tMs = (e.clientX - rect.left - padLeft) / pxPerMs;
     useStore.getState().seek(tMs);
   };
 
@@ -43,7 +46,7 @@ export const Ruler = memo(function Ruler({ durationMs, pxPerMs }: Props) {
         <div
           key={tMs}
           className="absolute bottom-0 flex h-full items-start"
-          style={{ left: TIMELINE_PAD_LEFT + tMs * pxPerMs }}
+          style={{ left: padLeft + tMs * pxPerMs }}
         >
           <div className="h-full w-px bg-zinc-700" />
           <span className="pl-1 text-[9px] leading-6 text-zinc-500">{formatTimeShort(tMs)}</span>

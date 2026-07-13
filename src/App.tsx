@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UploadCloud } from 'lucide-react';
 import { useStore } from './store/store';
@@ -12,37 +12,16 @@ import { Inspector } from './inspector/Inspector';
 import { ExportSheet } from './export/ExportSheet';
 import { useImport } from './ui/useImport';
 import { MediaLibrary } from './ui/MediaLibrary';
+import { ClipActionBar } from './ui/ClipActionBar';
+import { ShortcutsHelp } from './ui/ShortcutsHelp';
+import { useEditorHotkeys } from './ui/useEditorHotkeys';
 
 export default function App() {
   const [supported] = useState(isSupported);
   const importFiles = useImport();
   const [dragging, setDragging] = useState(false);
 
-  // Keyboard shortcuts (desktop comfort).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-      const s = useStore.getState();
-      if (e.code === 'Space') {
-        e.preventDefault();
-        s.setPlaying(!s.playing);
-      } else if (e.key === 's' || e.key === 'S') {
-        s.splitAtPlayhead();
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (s.selectedClipId) s.deleteClip(s.selectedClipId);
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) s.redo();
-        else s.undo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-        e.preventDefault();
-        s.redo();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  useEditorHotkeys();
 
   if (!supported) return <UnsupportedScreen />;
 
@@ -73,8 +52,10 @@ export default function App() {
       <Transport />
       <Timeline />
 
+      <ClipActionBar />
       <Inspector />
       <ExportSheet />
+      <ShortcutsHelp />
       <Toast />
 
       <AnimatePresence>

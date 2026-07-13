@@ -1,16 +1,17 @@
 import { RefObject, useEffect } from 'react';
 import { useStore } from '../store/store';
-import { TIMELINE_PAD_LEFT } from '../app/config';
 
 interface Props {
   scrollerRef: RefObject<HTMLDivElement | null>;
 }
 
+/** Desktop playhead: positioned at the current time, draggable, paged into view while playing. */
 export function Playhead({ scrollerRef }: Props) {
   const currentTimeMs = useStore((s) => s.currentTimeMs);
   const playing = useStore((s) => s.playing);
+  const padLeft = useStore((s) => s.timelinePadLeft);
   const pxPerMs = useStore((s) => s.pxPerSec) / 1000;
-  const x = TIMELINE_PAD_LEFT + currentTimeMs * pxPerMs;
+  const x = padLeft + currentTimeMs * pxPerMs;
 
   // Keep the playhead in view while playing.
   useEffect(() => {
@@ -19,16 +20,16 @@ export function Playhead({ scrollerRef }: Props) {
     const margin = 48;
     if (x > scroller.scrollLeft + scroller.clientWidth - margin) {
       scroller.scrollLeft = x - margin;
-    } else if (x < scroller.scrollLeft + TIMELINE_PAD_LEFT) {
-      scroller.scrollLeft = Math.max(0, x - TIMELINE_PAD_LEFT);
+    } else if (x < scroller.scrollLeft + padLeft) {
+      scroller.scrollLeft = Math.max(0, x - padLeft);
     }
-  }, [x, playing, scrollerRef]);
+  }, [x, playing, padLeft, scrollerRef]);
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!(e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) return;
     const content = (e.currentTarget as HTMLElement).closest('[data-timeline-content]') as HTMLElement;
     const rect = content.getBoundingClientRect();
-    useStore.getState().seek((e.clientX - rect.left - TIMELINE_PAD_LEFT) / pxPerMs);
+    useStore.getState().seek((e.clientX - rect.left - padLeft) / pxPerMs);
   };
 
   return (

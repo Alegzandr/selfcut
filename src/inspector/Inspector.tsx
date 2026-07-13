@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { RotateCcw, Trash2, X } from 'lucide-react';
 import { useStore, getSelectedClip } from '../store/store';
 import { Clip, ClipTransform, DEFAULT_TRANSFORM } from '../types';
+import { useIsCoarsePointer } from '../lib/device';
 
 function SliderRow({
   label,
@@ -86,10 +87,15 @@ function SpeedControl({ clip }: { clip: Clip }) {
 export function Inspector() {
   const clip = useStore(getSelectedClip);
   const asset = useStore((s) => (clip ? s.assets[clip.assetId] : undefined));
+  const coarse = useIsCoarsePointer();
+  const inspectorOpen = useStore((s) => s.inspectorOpen);
+  // Desktop: docked panel, always visible for the selection. Mobile: opens on demand
+  // from the clip action bar ("Adjust"), CapCut-style.
+  const show = clip && (!coarse || inspectorOpen);
 
   return (
     <AnimatePresence>
-      {clip && (
+      {show && clip && (
         <motion.div
           key={clip.id}
           initial={{ y: '110%' }}
@@ -106,7 +112,8 @@ export function Inspector() {
 }
 
 function InspectorBody({ clip, isVideo, name }: { clip: Clip; isVideo: boolean; name: string }) {
-  const { updateClip, deleteClip, selectClip, updateClipCommitted } = useStore.getState();
+  const { updateClip, deleteClip, selectClip, updateClipCommitted, setInspectorOpen } = useStore.getState();
+  const coarse = useIsCoarsePointer();
   const tf: ClipTransform = clip.transform ?? DEFAULT_TRANSFORM;
   const setTf = (patch: Partial<ClipTransform>) =>
     updateClip(clip.id, { transform: { ...tf, ...patch } });
@@ -129,7 +136,7 @@ function InspectorBody({ clip, isVideo, name }: { clip: Clip; isVideo: boolean; 
         </button>
         <button
           className="rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800"
-          onClick={() => selectClip(null)}
+          onClick={() => (coarse ? setInspectorOpen(false) : selectClip(null))}
           title="Close"
         >
           <X className="h-4 w-4" />

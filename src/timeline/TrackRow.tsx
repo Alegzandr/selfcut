@@ -14,7 +14,8 @@ export const TrackRow = memo(function TrackRow({ track, pxPerMs }: Props) {
   const selectedClipId = useStore((s) => s.selectedClipId);
   const { toggleTrackMuted, toggleTrackHidden, moveTrack, removeTrack } = useStore.getState();
 
-  const btn = 'flex h-4.5 w-4.5 items-center justify-center rounded text-zinc-500 active:bg-zinc-700';
+  const btn =
+    'flex h-4.5 w-4.5 items-center justify-center rounded text-zinc-500 active:bg-zinc-700 pointer-coarse:h-5 pointer-coarse:w-5';
 
   return (
     <div
