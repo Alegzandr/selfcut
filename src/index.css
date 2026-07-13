@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+/* Slim scrollbars for the timeline */
+.timeline-scroller::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.timeline-scroller::-webkit-scrollbar-thumb {
+  background: rgb(63 63 70);
+  border-radius: 4px;
+}
+.timeline-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
