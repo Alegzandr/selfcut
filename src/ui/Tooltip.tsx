@@ -143,7 +143,7 @@ export function Tooltip({
   const hasLabel = props['aria-label'] != null || props['aria-labelledby'] != null;
 
   const trigger = cloneElement(child, {
-    ref: mergeRefs(triggerRef, (child as unknown as { ref?: Ref<HTMLElement> }).ref),
+    ref: mergeRefs(triggerRef, (props as { ref?: Ref<HTMLElement> }).ref),
     onMouseEnter: chain(props.onMouseEnter as ((e: unknown) => void) | undefined, show),
     onMouseLeave: chain(props.onMouseLeave as ((e: unknown) => void) | undefined, hide),
     onPointerDown: chain(props.onPointerDown as ((e: PointerEvent) => void) | undefined, hide),
@@ -161,39 +161,38 @@ export function Tooltip({
       {createPortal(
         <AnimatePresence>
           {open && (
-            <div
-              className="pointer-events-none fixed z-[200]"
+            <motion.div
+              ref={tipRef}
+              role="tooltip"
+              // `translate` centers/anchors the pill; framer drives `transform`
+              // (scale/opacity/y) separately, so the two never fight.
               style={{
+                position: 'fixed',
                 left: pos.left,
                 top: pos.top,
-                transform: `translateX(-50%)${pos.place === 'top' ? ' translateY(-100%)' : ''}`,
+                translate: pos.place === 'top' ? '-50% -100%' : '-50% 0',
               }}
+              initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: pos.place === 'top' ? 3 : -3 }}
+              animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.08 } }}
+              transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+              className="pointer-events-none z-[200] flex max-w-64 items-center gap-2 rounded-md border border-zinc-700/70 bg-zinc-950/95 px-2 py-1 text-xs font-medium leading-snug text-zinc-100 shadow-lg shadow-black/50 ring-1 ring-white/5 backdrop-blur-sm"
             >
-              <motion.div
-                ref={tipRef}
-                role="tooltip"
-                initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: pos.place === 'top' ? 3 : -3 }}
-                animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.08 } }}
-                transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                className="relative flex max-w-64 items-center gap-2 rounded-md border border-zinc-700/70 bg-zinc-950/95 px-2 py-1 text-xs font-medium leading-snug text-zinc-100 shadow-lg shadow-black/50 ring-1 ring-white/5 backdrop-blur-sm"
-              >
-                <span>{label}</span>
-                {shortcut && (
-                  <kbd className="flex-none rounded border border-zinc-700 bg-zinc-800/80 px-1 py-px font-mono text-[10px] leading-none tracking-tight text-zinc-400">
-                    {shortcut}
-                  </kbd>
-                )}
-                {/* Caret. Tucked under the pill by 1px so its top edges stay hidden. */}
-                <span
-                  className={`absolute left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 border-zinc-700/70 bg-zinc-950 ${
-                    pos.place === 'top'
-                      ? 'bottom-px translate-y-1/2 border-b border-r'
-                      : 'top-px -translate-y-1/2 border-l border-t'
-                  }`}
-                />
-              </motion.div>
-            </div>
+              <span>{label}</span>
+              {shortcut && (
+                <kbd className="flex-none rounded border border-zinc-700 bg-zinc-800/80 px-1 py-px font-mono text-[10px] leading-none tracking-tight text-zinc-400">
+                  {shortcut}
+                </kbd>
+              )}
+              {/* Caret. Tucked under the pill by 1px so its top edges stay hidden. */}
+              <span
+                className={`absolute left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-zinc-950 ${
+                  pos.place === 'top'
+                    ? 'bottom-px translate-y-1/2 border-b border-r border-zinc-700/70'
+                    : 'top-px -translate-y-1/2 border-l border-t border-zinc-700/70'
+                }`}
+              />
+            </motion.div>
           )}
         </AnimatePresence>,
         document.body,

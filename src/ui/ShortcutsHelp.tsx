@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useStore } from '../store/store';
+import { Tooltip } from './Tooltip';
 
 /**
  * Shortcut table. `GROUPS` lives outside the component, so it holds i18n *keys*
@@ -150,13 +151,14 @@ export function ShortcutsHelp() {
           >
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-zinc-100">{t('shortcuts.title')}</h2>
-              <button
-                className="rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800"
-                onClick={() => setShortcutsOpen(false)}
-                title={t('shortcuts.close')}
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <Tooltip label={t('shortcuts.close')} shortcut="Esc">
+                <button
+                  className="rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800"
+                  onClick={() => setShortcutsOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </Tooltip>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               {GROUPS.map((g) => (

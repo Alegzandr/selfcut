@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronDown, Languages } from 'lucide-react';
+import { Check } from 'lucide-react';
 import logoUrl from '../assets/logo.png';
 import { APP_NAME } from '../app/config';
-import i18n, { LOCALES, type Locale } from '../i18n';
+import { useStore } from '../store/store';
 import { useEditorCommands, type Command } from './commands';
 
 /**
@@ -75,61 +75,10 @@ function MenuItem({ command, onRun }: { command: Command | undefined; onRun: () 
   );
 }
 
-function LanguagePicker() {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const current = (i18n.resolvedLanguage ?? 'en') as Locale;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        className="flex items-center gap-1.5 rounded px-2 py-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-        onClick={() => setOpen((o) => !o)}
-        title={t('topbar.language')}
-        aria-expanded={open}
-      >
-        <Languages className="h-4 w-4" />
-        <span className="hidden md:inline">{LOCALES[current] ?? LOCALES.en}</span>
-        <ChevronDown className="h-3 w-3" />
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-0.5 min-w-40 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl shadow-black/50">
-          {(Object.keys(LOCALES) as Locale[]).map((code) => (
-            <button
-              key={code}
-              type="button"
-              className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs text-zinc-200 hover:bg-zinc-800"
-              onClick={() => {
-                void i18n.changeLanguage(code);
-                setOpen(false);
-              }}
-            >
-              <span className="flex h-4 w-4 flex-none items-center justify-center">
-                {code === current && <Check className="h-3.5 w-3.5 text-sky-400" />}
-              </span>
-              <span className="flex-1">{LOCALES[code]}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function MenuBar() {
   const { t } = useTranslation();
   const commands = useEditorCommands();
+  const { setPreferencesOpen } = useStore.getState();
   const [open, setOpen] = useState<ParseKeys | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -187,8 +136,17 @@ export function MenuBar() {
         );
       })}
 
+      {/* Preferences is a top-level entry like the menus, but opens a dialog
+          instead of a dropdown (language + time format live better as controls). */}
+      <button
+        type="button"
+        className="rounded px-2.5 py-1 text-zinc-300 hover:bg-zinc-800/60"
+        onClick={() => setPreferencesOpen(true)}
+      >
+        {t('menu.preferences')}
+      </button>
+
       <div className="ml-auto" />
-      <LanguagePicker />
     </div>
   );
 }

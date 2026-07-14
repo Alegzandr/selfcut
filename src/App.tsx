@@ -17,6 +17,7 @@ import { useImport } from './ui/useImport';
 import { MediaLibrary } from './ui/MediaLibrary';
 import { MobileBottomBar } from './ui/MobileBottomBar';
 import { ShortcutsHelp } from './ui/ShortcutsHelp';
+import { Preferences } from './ui/Preferences';
 import { useEditorHotkeys } from './ui/useEditorHotkeys';
 import { useIsCoarsePointer } from './lib/device';
 
@@ -112,6 +113,7 @@ export default function App() {
       {coarse && <Inspector />}
       <ExportSheet />
       <ShortcutsHelp />
+      <Preferences />
       <Toast />
 
       <AnimatePresence>

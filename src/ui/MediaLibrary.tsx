@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Film, FolderOpen, Music, Plus, Trash2, X } from 'lucide-react';
 import { useStore } from '../store/store';
+import { Tooltip } from './Tooltip';
 import { MediaAsset } from '../types';
 import { formatTimeShort } from '../lib/time';
 import { ASSET_DRAG_MIME } from '../app/config';
@@ -126,16 +127,17 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
         <span className="min-w-0 flex-1 truncate text-[10px] text-zinc-300" title={asset.file.name}>
           {asset.file.name}
         </span>
-        <button
-          className="flex-none rounded p-1 text-zinc-500 active:bg-zinc-800 active:text-red-400"
-          title={t('library.remove')}
-          onClick={() => removeAsset(asset.id)}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        <Tooltip label={t('library.remove')}>
+          <button
+            className="flex-none rounded p-1 text-zinc-500 active:bg-zinc-800 active:text-red-400"
+            onClick={() => removeAsset(asset.id)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </Tooltip>
+        <Tooltip label={t('library.add')}>
         <button
           className="flex-none rounded bg-sky-500/15 p-1 text-sky-300 active:bg-sky-500/30"
-          title={t('library.add')}
           onClick={() => {
             addClipFromAsset(asset.id);
             // Mobile drawer: close it so the freshly placed clip is visible.
@@ -144,6 +146,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
+        </Tooltip>
       </div>
     </div>
   );

@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, FilePlus, FileX2, FolderOpen, Plus, Redo2, Square, Type, Undo2 } from 'lucide-react';
+import { Download, FileX2, FolderOpen, Redo2, Undo2 } from 'lucide-react';
 import { APP_NAME } from '../app/config';
 import logoUrl from '../assets/logo.png';
 import { useStore } from '../store/store';
-import { useImport } from './useImport';
 import { Tooltip } from './Tooltip';
 import { useIsCoarsePointer } from '../lib/device';
 import { AspectRatio } from '../types';
@@ -33,28 +32,30 @@ function NewProjectButton() {
 
   if (armed) {
     return (
-      <button
-        className="flex items-center gap-1.5 rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-semibold text-red-300 active:bg-red-500/30"
-        onClick={() => {
-          setArmed(false);
-          resetProject();
-        }}
-        onBlur={() => setArmed(false)}
-        title={t('topbar.newProject.confirm')}
-      >
-        <FileX2 className="h-4 w-4" />
-        {t('topbar.newProject.armed')}
-      </button>
+      <Tooltip label={t('topbar.newProject.confirm')}>
+        <button
+          className="flex items-center gap-1.5 rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-semibold text-red-300 active:bg-red-500/30"
+          onClick={() => {
+            setArmed(false);
+            resetProject();
+          }}
+          onBlur={() => setArmed(false)}
+        >
+          <FileX2 className="h-4 w-4" />
+          {t('topbar.newProject.armed')}
+        </button>
+      </Tooltip>
     );
   }
   return (
-    <button
-      className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
-      onClick={() => setArmed(true)}
-      title={t('topbar.newProject.title')}
-    >
-      <FileX2 className="h-4 w-4" />
-    </button>
+    <Tooltip label={t('topbar.newProject.title')}>
+      <button
+        className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+        onClick={() => setArmed(true)}
+      >
+        <FileX2 className="h-4 w-4" />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -65,42 +66,31 @@ export function TopBar() {
   const canRedo = useStore((s) => s.future.length > 0);
   const assetCount = useStore((s) => Object.keys(s.assets).length);
   const coarse = useIsCoarsePointer();
-  const { setAspectRatio, undo, redo, setExportOpen, addTextClip, addSolidClip, setLibraryOpen } = useStore.getState();
-  const importFiles = useImport();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const createRef = useRef<HTMLDivElement>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-
-  // Close the "Add" menu on any press outside it (incl. the Import/Export
-  // buttons next to it), so it never lingers over the toolbar.
-  useEffect(() => {
-    if (!createOpen) return;
-    const onDown = (e: PointerEvent) => {
-      if (createRef.current && !createRef.current.contains(e.target as Node)) setCreateOpen(false);
-    };
-    document.addEventListener('pointerdown', onDown);
-    return () => document.removeEventListener('pointerdown', onDown);
-  }, [createOpen]);
+  const { setAspectRatio, undo, redo, setExportOpen, setLibraryOpen } = useStore.getState();
 
   return (
     <header className="flex h-12 flex-none items-center gap-1 border-b border-zinc-800 bg-zinc-900 px-2 sm:gap-2 sm:px-3">
-      <div className="flex items-center gap-1.5 pr-1">
-        <img src={logoUrl} alt="" className="h-6 w-6 select-none" draggable={false} />
-        <span className="hidden text-sm font-bold tracking-wide text-zinc-100 sm:inline">
-          {APP_NAME}
-        </span>
-      </div>
+      {/* Desktop shows the logo/name in the menu bar above; only mobile
+          (which has no menu bar) needs the branding here. */}
+      {coarse && (
+        <div className="flex items-center gap-1.5 pr-1">
+          <img src={logoUrl} alt="" className="h-6 w-6 select-none" draggable={false} />
+          <span className="hidden text-sm font-bold tracking-wide text-zinc-100 sm:inline">
+            {APP_NAME}
+          </span>
+        </div>
+      )}
 
       <div className="flex overflow-hidden rounded-lg border border-zinc-700">
         {ASPECTS.map(({ value, titleKey }) => (
-          <button
-            key={value}
-            className={`px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 active:bg-zinc-800'}`}
-            onClick={() => setAspectRatio(value)}
-            title={t(titleKey)}
-          >
-            {value}
-          </button>
+          <Tooltip key={value} label={t(titleKey)}>
+            <button
+              className={`px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 active:bg-zinc-800'}`}
+              onClick={() => setAspectRatio(value)}
+            >
+              {value}
+            </button>
+          </Tooltip>
         ))}
       </div>
 
@@ -124,80 +114,36 @@ export function TopBar() {
 
       <NewProjectButton />
 
-      <button
-        className="rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
-        disabled={!canUndo}
-        onClick={undo}
-        title={t('topbar.undo')}
-      >
-        <Undo2 className="h-4 w-4" />
-      </button>
-      <button
-        className="rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
-        disabled={!canRedo}
-        onClick={redo}
-        title={t('topbar.redo')}
-      >
-        <Redo2 className="h-4 w-4" />
-      </button>
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/*,audio/*,.mp4,.mov,.webm,.mkv,.mp3,.wav,.m4a,.aac,.ogg,.flac,.srt,.vtt"
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files?.length) void importFiles(e.target.files);
-          e.target.value = '';
-        }}
-      />
-      {/* Touch: Add and Import live in the CapCut-style bottom tool rail. */}
-      {!coarse && (
-        <>
-      <div className="relative" ref={createRef}>
+      <Tooltip label={t('topbar.undo')} shortcut="Ctrl+Z">
         <button
-          className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs font-medium text-zinc-200 active:bg-zinc-800"
-          onClick={() => setCreateOpen((open) => !open)}
-          title={t('topbar.add')}
-          aria-expanded={createOpen}
+          className="rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
+          disabled={!canUndo}
+          onClick={undo}
         >
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">{t('topbar.add')}</span>
+          <Undo2 className="h-4 w-4" />
         </button>
-        {createOpen && (
-          <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl shadow-black/40">
-            <button className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-zinc-200 active:bg-zinc-800" onClick={() => { addTextClip(); setCreateOpen(false); }}>
-              <Type className="h-4 w-4 text-violet-300" />
-              <span>{t('topbar.text')}</span>
-            </button>
-            <button className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-zinc-200 active:bg-zinc-800" onClick={() => { addSolidClip('color'); setCreateOpen(false); }}>
-              <Square className="h-4 w-4 text-indigo-300" />
-              <span>{t('topbar.solidColor')}</span>
-            </button>
-            <button className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-zinc-200 active:bg-zinc-800" onClick={() => { addSolidClip('gradient'); setCreateOpen(false); }}>
-              <Square className="h-4 w-4 text-pink-300" />
-              <span>{t('topbar.solidGradient')}</span>
-            </button>
-          </div>
-        )}
-      </div>
-      <button
-        className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs font-medium text-zinc-200 active:bg-zinc-800"
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <FilePlus className="h-4 w-4" />
-        <span className="hidden sm:inline">{t('topbar.import')}</span>
-      </button>
-        </>
-      )}
-      <button
-        className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-2.5 py-1.5 text-xs font-semibold text-white active:bg-sky-600"
-        onClick={() => setExportOpen(true)}
-      >
-        <Download className="h-4 w-4" />
-        <span className="hidden sm:inline">{t('topbar.export')}</span>
-      </button>
+      </Tooltip>
+      <Tooltip label={t('topbar.redo')} shortcut="Ctrl+Shift+Z">
+        <button
+          className="rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
+          disabled={!canRedo}
+          onClick={redo}
+        >
+          <Redo2 className="h-4 w-4" />
+        </button>
+      </Tooltip>
+
+      {/* Add / Import are covered by the Insert & File menus on desktop, and by
+          the CapCut-style bottom tool rail on touch - no toolbar duplicate here. */}
+      <Tooltip label={t('topbar.exportHint')} shortcut="Ctrl+E">
+        <button
+          className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-2.5 py-1.5 text-xs font-semibold text-white active:bg-sky-600"
+          onClick={() => setExportOpen(true)}
+        >
+          <Download className="h-4 w-4" />
+          <span className="hidden sm:inline">{t('topbar.export')}</span>
+        </button>
+      </Tooltip>
     </header>
   );
 }

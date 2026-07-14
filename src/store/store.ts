@@ -17,7 +17,7 @@ import {
   sortedMarkers,
 } from '../types';
 import { uid } from '../lib/id';
-import { clamp } from '../lib/time';
+import { clamp, type TimeFormat } from '../lib/time';
 import { disposeAssetResources } from '../media/mediaCache';
 import { t } from '../i18n';
 import {
@@ -31,6 +31,19 @@ import {
 } from '../app/config';
 
 const HISTORY_LIMIT = 50;
+
+/** Persisted UI preferences (survive a reload, unlike the ephemeral session state). */
+const TIME_FORMAT_KEY = 'selfcut.timeFormat';
+
+function loadTimeFormat(): TimeFormat {
+  try {
+    const v = localStorage.getItem(TIME_FORMAT_KEY);
+    if (v === 'decimal' || v === 'timecode') return v;
+  } catch {
+    /* private mode / no storage - fall through to the default */
+  }
+  return 'timecode';
+}
 
 interface ClipboardEntry {
   clip: Clip;
@@ -64,6 +77,10 @@ export interface EditorState {
   /** Mobile only: the media library lives in a drawer (desktop docks it permanently). */
   libraryOpen: boolean;
   shortcutsOpen: boolean;
+  /** Preferences dialog (language, time format). */
+  preferencesOpen: boolean;
+  /** How the transport spells time out (persisted). */
+  timeFormat: TimeFormat;
   clipboard: ClipboardEntry | null;
   exportOpen: boolean;
   importing: boolean;
@@ -169,6 +186,8 @@ export interface EditorState {
   setInspectorOpen: (open: boolean) => void;
   setLibraryOpen: (open: boolean) => void;
   setShortcutsOpen: (open: boolean) => void;
+  setPreferencesOpen: (open: boolean) => void;
+  setTimeFormat: (format: TimeFormat) => void;
   setExportOpen: (open: boolean) => void;
   setImporting: (v: boolean) => void;
   setError: (msg: string | null) => void;
@@ -318,6 +337,8 @@ export const useStore = create<EditorState>((set, get) => {
     inspectorOpen: false,
     libraryOpen: false,
     shortcutsOpen: false,
+    preferencesOpen: false,
+    timeFormat: loadTimeFormat(),
     clipboard: null,
     exportOpen: false,
     importing: false,
@@ -1021,6 +1042,16 @@ export const useStore = create<EditorState>((set, get) => {
     setInspectorOpen: (open) => set({ inspectorOpen: open }),
     setLibraryOpen: (open) => set({ libraryOpen: open }),
     setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
+    setPreferencesOpen: (open) => set({ preferencesOpen: open }),
+
+    setTimeFormat: (format) => {
+      try {
+        localStorage.setItem(TIME_FORMAT_KEY, format);
+      } catch {
+        /* private mode / no storage - the choice just won't persist */
+      }
+      set({ timeFormat: format });
+    },
 
     setExportOpen: (open) => set({ exportOpen: open }),
     setImporting: (v) => set({ importing: v }),

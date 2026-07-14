@@ -1,6 +1,7 @@
 import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/store';
+import { Tooltip } from '../ui/Tooltip';
 import { Marker, sortedMarkers } from '../types';
 import { collectSnapPoints, snapTime } from './snapping';
 import {
@@ -172,53 +173,58 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
             className={`absolute inset-y-0 ${loopEnabled ? 'bg-amber-400/35' : 'bg-amber-400/20'}`}
             style={{ left: xOf(region.startMs), width: Math.max(1, (region.endMs - region.startMs) * pxPerMs) }}
           />
-          <div
-            className={`${handle} rounded-l-sm`}
-            style={{ left: xOf(region.startMs) }}
-            title={t('marker.regionIn')}
-            onPointerDown={(e) => onHandlePointerDown(e, 'in')}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-          />
-          <div
-            className={`${handle} rounded-r-sm`}
-            style={{ left: xOf(region.endMs) - 10 }}
-            title={t('marker.regionOut')}
-            onPointerDown={(e) => onHandlePointerDown(e, 'out')}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-          />
+          <Tooltip label={t('marker.regionIn')}>
+            <div
+              className={`${handle} rounded-l-sm`}
+              style={{ left: xOf(region.startMs) }}
+              onPointerDown={(e) => onHandlePointerDown(e, 'in')}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+            />
+          </Tooltip>
+          <Tooltip label={t('marker.regionOut')}>
+            <div
+              className={`${handle} rounded-r-sm`}
+              style={{ left: xOf(region.endMs) - 10 }}
+              onPointerDown={(e) => onHandlePointerDown(e, 'out')}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+            />
+          </Tooltip>
         </>
       )}
 
       {markers.map((marker, i) => (
-        <div
+        <Tooltip
           key={marker.id}
-          className="absolute top-0 z-10 flex h-full max-w-[160px] cursor-grab touch-none items-center gap-1 rounded-r-sm border-l-2 border-cyan-400 bg-cyan-500/25 pl-1 pr-1.5 text-[10px] leading-none text-cyan-100 active:cursor-grabbing"
-          style={{ left: xOf(marker.timeMs) }}
-          title={
+          label={
             marker.label
               ? t('marker.titleLabeled', { n: i + 1, label: marker.label })
               : t('marker.title', { n: i + 1 })
           }
-          onPointerDown={(e) => onMarkerPointerDown(e, marker)}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            setEditing(marker);
-          }}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            useStore.getState().removeMarker(marker.id);
-          }}
         >
-          <span className="truncate">{marker.label || i + 1}</span>
-        </div>
+          <div
+            className="absolute top-0 z-10 flex h-full max-w-[160px] cursor-grab touch-none items-center gap-1 rounded-r-sm border-l-2 border-cyan-400 bg-cyan-500/25 pl-1 pr-1.5 text-[10px] leading-none text-cyan-100 active:cursor-grabbing"
+            style={{ left: xOf(marker.timeMs) }}
+            onPointerDown={(e) => onMarkerPointerDown(e, marker)}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              setEditing(marker);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              useStore.getState().removeMarker(marker.id);
+            }}
+          >
+            <span className="truncate">{marker.label || i + 1}</span>
+          </div>
+        </Tooltip>
       ))}
 
       {editing && (

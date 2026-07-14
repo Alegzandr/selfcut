@@ -1,8 +1,9 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Crop, LayoutPanelTop, RotateCcw, Trash2, X } from 'lucide-react';
 import { useStore, getSelectedClip } from '../store/store';
+import { Tooltip } from '../ui/Tooltip';
 import { Clip, ClipTransform, DEFAULT_TRANSFORM } from '../types';
 import { useIsCoarsePointer } from '../lib/device';
 import i18n from '../i18n';
@@ -38,7 +39,6 @@ function SliderRow({
   onChange: (v: number) => void;
 }) {
   const { beginGesture, endGesture } = useStore.getState();
-  const fill = max > min ? ((value - min) / (max - min)) * 100 : 0;
   return (
     <label className="flex items-center gap-3 text-xs text-zinc-400">
       <span className="w-16 flex-none">{label}</span>
@@ -48,8 +48,7 @@ function SliderRow({
         max={max}
         step={step}
         value={value}
-        style={{ '--fill': `${fill}%` } as CSSProperties}
-        className="slider min-w-0 flex-1"
+        className="min-w-0 flex-1 accent-sky-500"
         onPointerDown={beginGesture}
         onPointerUp={endGesture}
         onChange={(e) => onChange(Number(e.target.value))}
@@ -174,37 +173,41 @@ function TextSection({ clip }: { clip: Clip }) {
       />
       <div className="flex items-center gap-3 text-xs text-zinc-400">
         <span className="w-16 flex-none">{t('inspector.style')}</span>
-        <input
-          type="color"
-          value={text.color}
-          className="h-7 w-10 flex-none cursor-pointer rounded border border-zinc-700 bg-zinc-800"
-          title={t('inspector.textColor')}
-          onFocus={beginGesture}
-          onBlur={endGesture}
-          onChange={(e) => setText({ color: e.target.value })}
-        />
-        <button
-          className={`rounded-md px-2 py-1 font-bold ${text.bold ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`}
-          onClick={() => useStore.getState().updateClipCommitted(clip.id, { text: { ...text, bold: !text.bold } })}
-          title={t('inspector.bold')}
-        >
-          {/* The glyph itself is localised: "B" in English, "G" (gras) in French. */}
-          {t('inspector.bold.short')}
-        </button>
-        <button
-          className={`rounded-md px-2 py-1 ${text.outline ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`}
-          onClick={() => useStore.getState().updateClipCommitted(clip.id, { text: { ...text, outline: !text.outline } })}
-          title={t('inspector.outline.hint')}
-        >
-          {t('inspector.outline')}
-        </button>
-        <button
-          className={`rounded-md px-2 py-1 ${text.background ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`}
-          onClick={() => useStore.getState().updateClipCommitted(clip.id, { text: { ...text, background: !text.background } })}
-          title={t('inspector.box.hint')}
-        >
-          {t('inspector.box')}
-        </button>
+        <Tooltip label={t('inspector.textColor')}>
+          <input
+            type="color"
+            value={text.color}
+            className="h-7 w-10 flex-none cursor-pointer rounded border border-zinc-700 bg-zinc-800"
+            onFocus={beginGesture}
+            onBlur={endGesture}
+            onChange={(e) => setText({ color: e.target.value })}
+          />
+        </Tooltip>
+        <Tooltip label={t('inspector.bold')}>
+          <button
+            className={`rounded-md px-2 py-1 font-bold ${text.bold ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`}
+            onClick={() => useStore.getState().updateClipCommitted(clip.id, { text: { ...text, bold: !text.bold } })}
+          >
+            {/* The glyph itself is localised: "B" in English, "G" (gras) in French. */}
+            {t('inspector.bold.short')}
+          </button>
+        </Tooltip>
+        <Tooltip label={t('inspector.outline.hint')}>
+          <button
+            className={`rounded-md px-2 py-1 ${text.outline ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`}
+            onClick={() => useStore.getState().updateClipCommitted(clip.id, { text: { ...text, outline: !text.outline } })}
+          >
+            {t('inspector.outline')}
+          </button>
+        </Tooltip>
+        <Tooltip label={t('inspector.box.hint')}>
+          <button
+            className={`rounded-md px-2 py-1 ${text.background ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`}
+            onClick={() => useStore.getState().updateClipCommitted(clip.id, { text: { ...text, background: !text.background } })}
+          >
+            {t('inspector.box')}
+          </button>
+        </Tooltip>
       </div>
       <SliderRow
         label={t('inspector.size')}
@@ -238,8 +241,14 @@ function SolidSection({ clip }: { clip: Clip }) {
       </div>
       <div className="flex items-center gap-3 text-xs text-zinc-400">
         <span className="w-16 flex-none">{t('inspector.colors')}</span>
-        <input type="color" value={solid.color} className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-zinc-800" title={t('inspector.solid.firstColor')} onFocus={beginGesture} onBlur={endGesture} onChange={(e) => setSolid({ color: e.target.value })} />
-        {solid.kind === 'gradient' && <input type="color" value={solid.color2 ?? solid.color} className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-zinc-800" title={t('inspector.solid.secondColor')} onFocus={beginGesture} onBlur={endGesture} onChange={(e) => setSolid({ color2: e.target.value })} />}
+        <Tooltip label={t('inspector.solid.firstColor')}>
+          <input type="color" value={solid.color} className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-zinc-800" onFocus={beginGesture} onBlur={endGesture} onChange={(e) => setSolid({ color: e.target.value })} />
+        </Tooltip>
+        {solid.kind === 'gradient' && (
+          <Tooltip label={t('inspector.solid.secondColor')}>
+            <input type="color" value={solid.color2 ?? solid.color} className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-zinc-800" onFocus={beginGesture} onBlur={endGesture} onChange={(e) => setSolid({ color2: e.target.value })} />
+          </Tooltip>
+        )}
       </div>
       {solid.kind === 'gradient' && (
         <div className="flex items-center gap-2 text-xs text-zinc-400">
@@ -286,20 +295,22 @@ function InspectorBody({
     <>
       <div className="flex items-center gap-2">
         <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-100">{name}</h2>
-        <button
-          className="rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800"
-          onClick={() => deleteClip(clip.id)}
-          title={t('inspector.deleteClip')}
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-        <button
-          className="rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800"
-          onClick={() => (coarse ? setInspectorOpen(false) : selectClip(null))}
-          title={t('inspector.close')}
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <Tooltip label={t('inspector.deleteClip')}>
+          <button
+            className="rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800"
+            onClick={() => deleteClip(clip.id)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </Tooltip>
+        <Tooltip label={t('inspector.close')}>
+          <button
+            className="rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800"
+            onClick={() => (coarse ? setInspectorOpen(false) : selectClip(null))}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </Tooltip>
       </div>
 
       {isText && <TextSection clip={clip} />}
@@ -390,22 +401,24 @@ function InspectorBody({
           </div>
           {isVideo && (
             <div className="flex items-center gap-2">
-              <button
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium ${cropEditing ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`}
-                onClick={() => setCropEditing(!cropEditing)}
-                title="Adjust the crop by dragging a rectangle in the preview"
-              >
-                <Crop className="h-3.5 w-3.5" />
-                {cropEditing ? 'Done cropping' : 'Edit crop'}
-              </button>
-              <button
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-zinc-800 px-2 py-1.5 text-[11px] font-medium text-zinc-300 active:bg-zinc-700"
-                onClick={() => useStore.getState().applyStreamLayout(clip.id)}
-                title="Facecam band on top, gameplay below - then adjust both crops"
-              >
-                <LayoutPanelTop className="h-3.5 w-3.5" />
-                Stream layout
-              </button>
+              <Tooltip label={t('inspector.crop.hint')}>
+                <button
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium ${cropEditing ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`}
+                  onClick={() => setCropEditing(!cropEditing)}
+                >
+                  <Crop className="h-3.5 w-3.5" />
+                  {cropEditing ? t('inspector.crop.done') : t('inspector.crop.edit')}
+                </button>
+              </Tooltip>
+              <Tooltip label={t('inspector.streamLayout.hint')}>
+                <button
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-zinc-800 px-2 py-1.5 text-[11px] font-medium text-zinc-300 active:bg-zinc-700"
+                  onClick={() => useStore.getState().applyStreamLayout(clip.id)}
+                >
+                  <LayoutPanelTop className="h-3.5 w-3.5" />
+                  {t('inspector.streamLayout')}
+                </button>
+              </Tooltip>
             </div>
           )}
           {/* 16:9 vers 9:16 en "cover" demande 3,16x : le max doit laisser de la marge au-dela. */}

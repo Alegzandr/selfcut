@@ -16,103 +16,37 @@ textarea {
   user-select: text;
 }
 
-/* Sliders de l'inspecteur : piste dégradée + thumb à halo, calés sur zinc/sky.
-   Le remplissage WebKit se fait via un gradient piloté par --fill (posé inline),
-   Firefox utilise ::-moz-range-progress. */
-input[type='range'].slider {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 18px;
+/* Barres de defilement fines, calees sur le theme sombre (toute l'app).
+   Le thumb "flotte" grace a une bordure transparente + background-clip. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(63 63 70) transparent;
+}
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
   background: transparent;
-  cursor: pointer;
 }
-input[type='range'].slider::-webkit-slider-runnable-track {
-  height: 5px;
+::-webkit-scrollbar-thumb {
+  background-color: rgb(63 63 70);
   border-radius: 9999px;
-  background: linear-gradient(
-    to right,
-    rgb(14 165 233) 0%,
-    rgb(56 189 248) var(--fill, 0%),
-    rgb(63 63 70 / 0.55) var(--fill, 0%),
-    rgb(63 63 70 / 0.55) 100%
-  );
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
-input[type='range'].slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  margin-top: -5px;
-  height: 15px;
-  width: 15px;
-  border-radius: 9999px;
-  background: #fff;
-  border: 2px solid rgb(14 165 233);
-  box-shadow:
-    0 0 0 0 rgb(14 165 233 / 0.18),
-    0 1px 3px rgb(0 0 0 / 0.45);
-  transition:
-    box-shadow 0.15s ease,
-    transform 0.1s ease;
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(82 82 91);
 }
-input[type='range'].slider:hover::-webkit-slider-thumb {
-  box-shadow:
-    0 0 0 5px rgb(14 165 233 / 0.18),
-    0 1px 4px rgb(0 0 0 / 0.5);
+::-webkit-scrollbar-thumb:active {
+  background-color: rgb(113 113 122);
 }
-input[type='range'].slider:active::-webkit-slider-thumb,
-input[type='range'].slider:focus-visible::-webkit-slider-thumb {
-  transform: scale(1.12);
-  box-shadow:
-    0 0 0 6px rgb(14 165 233 / 0.25),
-    0 1px 5px rgb(0 0 0 / 0.55);
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
-/* Firefox */
-input[type='range'].slider::-moz-range-track {
-  height: 5px;
-  border-radius: 9999px;
-  background: rgb(63 63 70 / 0.55);
-}
-input[type='range'].slider::-moz-range-progress {
-  height: 5px;
-  border-radius: 9999px;
-  background: linear-gradient(to right, rgb(14 165 233), rgb(56 189 248));
-}
-input[type='range'].slider::-moz-range-thumb {
-  height: 15px;
-  width: 15px;
-  border: 2px solid rgb(14 165 233);
-  border-radius: 9999px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
-  transition:
-    box-shadow 0.15s ease,
-    transform 0.1s ease;
-}
-input[type='range'].slider:hover::-moz-range-thumb {
-  box-shadow:
-    0 0 0 5px rgb(14 165 233 / 0.18),
-    0 1px 4px rgb(0 0 0 / 0.5);
-}
-input[type='range'].slider:active::-moz-range-thumb,
-input[type='range'].slider:focus-visible::-moz-range-thumb {
-  transform: scale(1.12);
-  box-shadow:
-    0 0 0 6px rgb(14 165 233 / 0.25),
-    0 1px 5px rgb(0 0 0 / 0.55);
-}
-input[type='range'].slider:focus {
-  outline: none;
-}
-
-/* Slim scrollbars for the timeline */
+/* Timeline : scrollbar un peu plus fine, meme teinte. */
 .timeline-scroller::-webkit-scrollbar {
-  height: 8px;
-  width: 8px;
-}
-.timeline-scroller::-webkit-scrollbar-thumb {
-  background: rgb(63 63 70);
-  border-radius: 4px;
-}
-.timeline-scroller::-webkit-scrollbar-track {
-  background: transparent;
+  height: 10px;
+  width: 10px;
 }

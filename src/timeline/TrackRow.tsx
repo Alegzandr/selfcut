@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp, Eye, EyeOff, Film, Music2, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { Track, trackCrossfades } from '../types';
 import { useStore } from '../store/store';
+import { Tooltip } from '../ui/Tooltip';
 import { useIsCoarsePointer } from '../lib/device';
 import { ClipView } from './ClipView';
 import { TrackMeter } from './TrackMeter';
@@ -45,33 +46,43 @@ export const TrackRow = memo(function TrackRow({ track, pxPerMs }: Props) {
             ) : (
               <Music2 className="h-3 w-3 text-emerald-400" />
             )}
-            <button className={btn} onClick={() => removeTrack(track.id)} title={t('track.delete')}>
-              <Trash2 className="h-3 w-3" />
-            </button>
+            <Tooltip label={t('track.delete')}>
+              <button className={btn} onClick={() => removeTrack(track.id)}>
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </Tooltip>
           </div>
           <div className="flex items-center gap-0.5">
-            <button className={btn} onClick={() => toggleTrackMuted(track.id)} title={t('track.mute')}>
-              {track.muted ? (
-                <VolumeX className="h-3 w-3 text-red-400" />
-              ) : (
-                <Volume2 className="h-3 w-3" />
-              )}
-            </button>
-            {track.kind === 'video' ? (
-              <button className={btn} onClick={() => toggleTrackHidden(track.id)} title={t('track.hide')}>
-                {track.hidden ? <EyeOff className="h-3 w-3 text-red-400" /> : <Eye className="h-3 w-3" />}
+            <Tooltip label={t('track.mute')}>
+              <button className={btn} onClick={() => toggleTrackMuted(track.id)}>
+                {track.muted ? (
+                  <VolumeX className="h-3 w-3 text-red-400" />
+                ) : (
+                  <Volume2 className="h-3 w-3" />
+                )}
               </button>
+            </Tooltip>
+            {track.kind === 'video' ? (
+              <Tooltip label={t('track.hide')}>
+                <button className={btn} onClick={() => toggleTrackHidden(track.id)}>
+                  {track.hidden ? <EyeOff className="h-3 w-3 text-red-400" /> : <Eye className="h-3 w-3" />}
+                </button>
+              </Tooltip>
             ) : (
               <span className="h-4.5 w-4.5" />
             )}
           </div>
           <div className="flex items-center gap-0.5">
-            <button className={btn} onClick={() => moveTrack(track.id, -1)} title={t('track.moveUp')}>
-              <ChevronUp className="h-3 w-3" />
-            </button>
-            <button className={btn} onClick={() => moveTrack(track.id, 1)} title={t('track.moveDown')}>
-              <ChevronDown className="h-3 w-3" />
-            </button>
+            <Tooltip label={t('track.moveUp')}>
+              <button className={btn} onClick={() => moveTrack(track.id, -1)}>
+                <ChevronUp className="h-3 w-3" />
+              </button>
+            </Tooltip>
+            <Tooltip label={t('track.moveDown')}>
+              <button className={btn} onClick={() => moveTrack(track.id, 1)}>
+                <ChevronDown className="h-3 w-3" />
+              </button>
+            </Tooltip>
           </div>
         </div>
 

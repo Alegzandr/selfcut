@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { subscribeLevels } from '../preview/meterBus';
+import { Tooltip } from '../ui/Tooltip';
 
 /** Meter floor: -48 dBFS maps to an empty bar, 0 dBFS to a full one. */
 const MIN_DB = -48;
@@ -36,11 +37,13 @@ export function TrackMeter({ trackId }: { trackId: string }) {
   }, [trackId]);
 
   return (
-    <div className="flex h-1.5 w-full items-center gap-0.5" title={t('track.meter.title')}>
-      <div className="h-full min-w-0 flex-1 overflow-hidden rounded-sm bg-zinc-800">
-        <div ref={barRef} className="h-full w-0 rounded-sm" />
+    <Tooltip label={t('track.meter.title')}>
+      <div className="flex h-1.5 w-full items-center gap-0.5">
+        <div className="h-full min-w-0 flex-1 overflow-hidden rounded-sm bg-zinc-800">
+          <div ref={barRef} className="h-full w-0 rounded-sm" />
+        </div>
+        <div ref={clipDotRef} className="h-1.5 w-1.5 flex-none rounded-full bg-red-500 opacity-15" />
       </div>
-      <div ref={clipDotRef} className="h-1.5 w-1.5 flex-none rounded-full bg-red-500 opacity-15" />
-    </div>
+    </Tooltip>
   );
 }

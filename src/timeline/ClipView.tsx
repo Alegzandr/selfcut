@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Music, Type } from 'lucide-react';
 import { Clip, MediaAsset, clipDurationMs } from '../types';
 import { useStore } from '../store/store';
+import { Tooltip } from '../ui/Tooltip';
 import { collectSnapPoints, snapMove, snapTime } from './snapping';
 import { SNAP_THRESHOLD_PX, TRACK_HEIGHT_PX } from '../app/config';
 import { clamp } from '../lib/time';
@@ -412,32 +413,34 @@ export const ClipView = memo(function ClipView({
           corner is easy to grab; the dot itself sits at the ramp's top. */}
       {selected && (
         <>
-          <div
-            className={`absolute top-0 z-10 flex -translate-x-1/2 items-start justify-center cursor-ew-resize touch-none ${coarse ? 'h-8 w-8' : 'h-6 w-6'}`}
-            style={{ left: clamp(clip.fadeInMs * pxPerMs, 6, Math.max(6, width / 2)) }}
-            title={t('clip.fadeIn')}
-            onPointerDown={(e) => beginDrag(e, 'fade-in')}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-          >
-            <span
-              className={`pointer-events-none rounded-full border border-zinc-900 bg-amber-300 shadow ${coarse ? 'h-4 w-4' : 'h-3 w-3'}`}
-            />
-          </div>
-          <div
-            className={`absolute top-0 z-10 flex -translate-x-1/2 items-start justify-center cursor-ew-resize touch-none ${coarse ? 'h-8 w-8' : 'h-6 w-6'}`}
-            style={{ left: clamp(width - clip.fadeOutMs * pxPerMs, Math.min(width - 6, width / 2), width - 6) }}
-            title={t('clip.fadeOut')}
-            onPointerDown={(e) => beginDrag(e, 'fade-out')}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-          >
-            <span
-              className={`pointer-events-none rounded-full border border-zinc-900 bg-amber-300 shadow ${coarse ? 'h-4 w-4' : 'h-3 w-3'}`}
-            />
-          </div>
+          <Tooltip label={t('clip.fadeIn')}>
+            <div
+              className={`absolute top-0 z-10 flex -translate-x-1/2 items-start justify-center cursor-ew-resize touch-none ${coarse ? 'h-8 w-8' : 'h-6 w-6'}`}
+              style={{ left: clamp(clip.fadeInMs * pxPerMs, 6, Math.max(6, width / 2)) }}
+              onPointerDown={(e) => beginDrag(e, 'fade-in')}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+            >
+              <span
+                className={`pointer-events-none rounded-full border border-zinc-900 bg-amber-300 shadow ${coarse ? 'h-4 w-4' : 'h-3 w-3'}`}
+              />
+            </div>
+          </Tooltip>
+          <Tooltip label={t('clip.fadeOut')}>
+            <div
+              className={`absolute top-0 z-10 flex -translate-x-1/2 items-start justify-center cursor-ew-resize touch-none ${coarse ? 'h-8 w-8' : 'h-6 w-6'}`}
+              style={{ left: clamp(width - clip.fadeOutMs * pxPerMs, Math.min(width - 6, width / 2), width - 6) }}
+              onPointerDown={(e) => beginDrag(e, 'fade-out')}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+            >
+              <span
+                className={`pointer-events-none rounded-full border border-zinc-900 bg-amber-300 shadow ${coarse ? 'h-4 w-4' : 'h-3 w-3'}`}
+              />
+            </div>
+          </Tooltip>
         </>
       )}
     </div>

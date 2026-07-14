@@ -33,6 +33,28 @@ export function formatTimecodeParts(ms: number, fps: number): { main: string; fr
   return { main: `${m}:${s.toString().padStart(2, '0')}`, frames: f.toString().padStart(2, '0') };
 }
 
+/** How the transport readout spells time out - a user preference. */
+export type TimeFormat = 'timecode' | 'decimal';
+
+/**
+ * Time split into main + trailing sub-part, honouring the display preference:
+ * timecode keeps the frame count in `frames` (de-emphasized by the readout),
+ * decimal folds the tenths straight into `main` and leaves `frames` empty.
+ */
+export function formatClockParts(
+  ms: number,
+  fps: number,
+  format: TimeFormat,
+): { main: string; frames: string } {
+  if (format === 'decimal') return { main: formatTime(ms), frames: '' };
+  return formatTimecodeParts(ms, fps);
+}
+
+/** Single-string time honouring the display preference. */
+export function formatClock(ms: number, fps: number, format: TimeFormat): string {
+  return format === 'decimal' ? formatTime(ms) : formatTimecode(ms, fps);
+}
+
 export function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
