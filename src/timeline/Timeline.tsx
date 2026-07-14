@@ -6,6 +6,7 @@ import { TrackRow } from './TrackRow';
 import { Ruler } from './Ruler';
 import { Playhead } from './Playhead';
 import { MarkerBar, TimelineOverlay } from './MarkerBar';
+import { msFromClientX, msFromContentX, timelineContentEl } from './coords';
 import { ASSET_DRAG_MIME, TIMELINE_PAD_LEFT } from '../app/config';
 import { useImport } from '../ui/useImport';
 import { useIsCoarsePointer } from '../lib/device';
@@ -179,13 +180,12 @@ export function Timeline() {
     e.preventDefault();
     e.stopPropagation();
     const s = useStore.getState();
-    const content = (e.currentTarget as HTMLElement).querySelector<HTMLElement>('[data-timeline-content]');
+    const content = timelineContentEl(e.currentTarget as HTMLElement);
     if (!content) {
       s.addClipFromAssetAt(assetId, 0);
       return;
     }
-    const rect = content.getBoundingClientRect();
-    const ms = (e.clientX - rect.left - s.timelinePadLeft) / (s.pxPerSec / 1000);
+    const ms = msFromContentX(content, e.clientX);
     const row = (e.target as HTMLElement).closest<HTMLElement>('[data-track-id]');
     s.addClipFromAssetAt(assetId, ms, row?.dataset.trackId);
   };
@@ -231,10 +231,7 @@ export function Timeline() {
 
   // Desktop: click on empty track background moves the playhead there (and scrubs while held).
   const seekToClientX = (e: React.PointerEvent) => {
-    const content = (e.currentTarget as HTMLElement).closest('[data-timeline-content]') as HTMLElement;
-    const rect = content.getBoundingClientRect();
-    const s = useStore.getState();
-    s.seek((e.clientX - rect.left - s.timelinePadLeft) / (s.pxPerSec / 1000));
+    useStore.getState().seek(msFromClientX(e.currentTarget as HTMLElement, e.clientX));
   };
   const onBgPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).dataset.rowbg === undefined) return;

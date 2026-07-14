@@ -5,10 +5,11 @@ import { Clip, MediaAsset, clipDurationMs } from '../types';
 import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { collectSnapPoints, snapMove, snapTime } from './snapping';
+import { msFromClientX, msFromContentX, timelineContentEl } from './coords';
 import { SNAP_THRESHOLD_PX, TRACK_HEIGHT_PX } from '../app/config';
 import { clamp } from '../lib/time';
 import { useIsCoarsePointer } from '../lib/device';
-import { snapTick } from '../lib/haptics';
+import { hapticOnSnap } from '../lib/haptics';
 import { Waveform } from './Waveform';
 
 interface DragState {
@@ -99,9 +100,6 @@ export const ClipView = memo(function ClipView({
   const left = padLeft + clip.timelineStartMs * pxPerMs;
   const width = Math.max(6, durMs * pxPerMs);
 
-  const contentOf = (el: HTMLElement) =>
-    el.closest('[data-timeline-content]') as HTMLElement;
-
   const beginDrag = (e: React.PointerEvent, mode: DragState['mode']) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     // Mobile (CapCut-style): an unselected clip lets the timeline scroll; tap selects it
@@ -129,11 +127,8 @@ export const ClipView = memo(function ClipView({
     }
     // Time under the pointer at press: a plain click (no drag) on a clip moves
     // the playhead there, like a classic NLE.
-    const contentEl = contentOf(e.currentTarget as HTMLElement);
-    const downMs = contentEl
-      ? (e.clientX - contentEl.getBoundingClientRect().left - state.timelinePadLeft) /
-        (state.pxPerSec / 1000)
-      : clip.timelineStartMs;
+    const contentEl = timelineContentEl(e.currentTarget as HTMLElement);
+    const downMs = contentEl ? msFromContentX(contentEl, e.clientX) : clip.timelineStartMs;
     drag.current = {
       mode,
       startX: e.clientX,
@@ -165,9 +160,7 @@ export const ClipView = memo(function ClipView({
 
     if (d.mode === 'move') {
       const raw = d.origStartMs + dx / pxMs;
-      let proposed = snapMove(raw, d.durMs, d.points, snapThresholdMs);
-      if (proposed !== raw && d.lastSnap !== proposed) snapTick();
-      d.lastSnap = proposed !== raw ? proposed : null;
+      let proposed = hapticOnSnap(raw, snapMove(raw, d.durMs, d.points, snapThresholdMs), d);
       proposed = Math.max(0, proposed);
 
       if (d.groupStarts.size > 1) {
@@ -189,9 +182,7 @@ export const ClipView = memo(function ClipView({
       }
     } else if (d.mode === 'fade-in' || d.mode === 'fade-out') {
       // Fade handles: drag inward from a clip edge to fade from/to black (and silence).
-      const rect = contentOf(e.currentTarget as HTMLElement).getBoundingClientRect();
-      const contentX = e.clientX - rect.left;
-      const tMs = (contentX - state.timelinePadLeft) / pxMs;
+      const tMs = msFromClientX(e.currentTarget as HTMLElement, e.clientX);
       if (d.mode === 'fade-in') {
         const v = Math.round(clamp(tMs - d.origStartMs, 0, d.durMs) / 10) * 10;
         state.updateClip(clip.id, { fadeInMs: v });
@@ -200,12 +191,8 @@ export const ClipView = memo(function ClipView({
         state.updateClip(clip.id, { fadeOutMs: v });
       }
     } else {
-      const rect = contentOf(e.currentTarget as HTMLElement).getBoundingClientRect();
-      const contentX = e.clientX - rect.left;
-      const raw = (contentX - state.timelinePadLeft) / pxMs;
-      const tMs = snapTime(raw, d.points, snapThresholdMs);
-      if (tMs !== raw && d.lastSnap !== tMs) snapTick();
-      d.lastSnap = tMs !== raw ? tMs : null;
+      const raw = msFromClientX(e.currentTarget as HTMLElement, e.clientX);
+      const tMs = hapticOnSnap(raw, snapTime(raw, d.points, snapThresholdMs), d);
       state.trimClip(clip.id, d.mode === 'trim-left' ? 'left' : 'right', tMs);
     }
   };

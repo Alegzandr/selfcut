@@ -4,20 +4,18 @@ import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { Marker, sortedMarkers } from '../types';
 import { collectSnapPoints, snapTime } from './snapping';
+import { msFromClientX } from './coords';
 import {
   MARKER_BAR_HEIGHT_PX,
   RULER_HEIGHT_PX,
   SNAP_THRESHOLD_PX,
   TRACK_HEIGHT_PX,
 } from '../app/config';
-import { snapTick } from '../lib/haptics';
+import { hapticOnSnap } from '../lib/haptics';
 
-/** Timeline ms under a client X, read from the timeline content box. */
-function msFromClientX(el: HTMLElement, clientX: number): number {
-  const content = el.closest('[data-timeline-content]') as HTMLElement;
-  const rect = content.getBoundingClientRect();
-  const s = useStore.getState();
-  return Math.max(0, (clientX - rect.left - s.timelinePadLeft) / (s.pxPerSec / 1000));
+/** Timeline ms under a client X, clamped to the origin (the bar has no negative time). */
+function markerMsFromClientX(el: HTMLElement, clientX: number): number {
+  return Math.max(0, msFromClientX(el, clientX));
 }
 
 interface RegionDrag {
@@ -69,11 +67,8 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
   const snapped = (e: React.PointerEvent, d: Drag): number => {
     const s = useStore.getState();
     const thresholdMs = e.altKey ? 0 : SNAP_THRESHOLD_PX / (s.pxPerSec / 1000);
-    const raw = msFromClientX(e.currentTarget as HTMLElement, e.clientX);
-    const value = snapTime(raw, d.points, thresholdMs);
-    if (value !== raw && d.lastSnap !== value) snapTick();
-    d.lastSnap = value !== raw ? value : null;
-    return value;
+    const raw = markerMsFromClientX(e.currentTarget as HTMLElement, e.clientX);
+    return hapticOnSnap(raw, snapTime(raw, d.points, thresholdMs), d);
   };
 
   // Empty bar: start a fresh region. A press that never moves is a plain click - it clears it.
@@ -81,7 +76,7 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
-    const anchorMs = msFromClientX(el, e.clientX);
+    const anchorMs = markerMsFromClientX(el, e.clientX);
     drag.current = {
       kind: 'region',
       anchorMs,

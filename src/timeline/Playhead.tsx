@@ -1,5 +1,6 @@
 import { RefObject, useEffect, useRef } from 'react';
 import { useStore } from '../store/store';
+import { msFromClientX } from './coords';
 
 interface Props {
   scrollerRef: RefObject<HTMLDivElement | null>;
@@ -51,10 +52,7 @@ export function Playhead({ scrollerRef }: Props) {
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!(e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) return;
-    const content = (e.currentTarget as HTMLElement).closest('[data-timeline-content]') as HTMLElement;
-    const rect = content.getBoundingClientRect();
-    const s = useStore.getState();
-    s.seek((e.clientX - rect.left - s.timelinePadLeft) / (s.pxPerSec / 1000));
+    useStore.getState().seek(msFromClientX(e.currentTarget as HTMLElement, e.clientX));
   };
 
   return (

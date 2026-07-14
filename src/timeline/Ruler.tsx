@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react';
 import { useStore } from '../store/store';
 import { formatTimeShort } from '../lib/time';
+import { msFromClientX } from './coords';
 import { MARKER_BAR_HEIGHT_PX, RULER_HEIGHT_PX } from '../app/config';
 
 const TICK_STEPS_SEC = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
@@ -27,9 +28,7 @@ export const Ruler = memo(function Ruler({ durationMs, pxPerMs, overscanMs }: Pr
   }, [durationMs, stepSec, overscanMs]);
 
   const scrubTo = (e: React.PointerEvent) => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const tMs = (e.clientX - rect.left - padLeft) / pxPerMs;
-    useStore.getState().seek(tMs);
+    useStore.getState().seek(msFromClientX(e.currentTarget as HTMLElement, e.clientX));
   };
 
   return (
