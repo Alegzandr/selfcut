@@ -4,10 +4,10 @@ import { PRESETS, presetsForAspect, exportFileName } from './presets';
 describe('presetsForAspect', () => {
   it('returns the matching video presets plus the aspect-agnostic audio ones', () => {
     const got = presetsForAspect('16:9');
-    // every returned preset is either 16:9 or has no aspect (mp3)
-    expect(got.every((p) => !p.aspect || p.aspect === '16:9')).toBe(true);
+    // every returned preset is either 16:9 or aspect-agnostic (mp3)
+    expect(got.every((p) => p.kind === 'mp3' || p.aspect === '16:9')).toBe(true);
     // no preset tied to a different aspect leaks through
-    expect(got.some((p) => p.aspect === '9:16')).toBe(false);
+    expect(got.some((p) => p.kind === 'mp4' && p.aspect === '9:16')).toBe(false);
     // the mp3 presets are always available
     expect(got.some((p) => p.kind === 'mp3')).toBe(true);
   });

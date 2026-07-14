@@ -2,7 +2,7 @@ import { AspectRatio } from '../types';
 import { APP_NAME, PROJECT_FPS } from '../app/config';
 import type { ParseKeys } from 'i18next';
 
-export interface ExportPreset {
+interface BaseExportPreset {
   id: string;
   /**
    * Translation keys, not strings: the module is evaluated once at import time,
@@ -13,15 +13,31 @@ export interface ExportPreset {
   descriptionKey: ParseKeys;
   /** Optional quality shown next to the format name in the export sheet. */
   qualityKey?: ParseKeys;
-  kind: 'mp4' | 'mp3';
-  /** MP4 presets are tied to a project aspect ratio; MP3 fits any. */
-  aspect?: AspectRatio;
-  width?: number;
-  height?: number;
-  fps: number;
-  videoBitrate?: number;
   audioBitrate: number;
 }
+
+/** A video export: carries the frame geometry and bitrate the worker needs. */
+export interface Mp4Preset extends BaseExportPreset {
+  kind: 'mp4';
+  /** MP4 presets are tied to a project aspect ratio. */
+  aspect: AspectRatio;
+  width: number;
+  height: number;
+  fps: number;
+  videoBitrate: number;
+}
+
+/** An audio-only export: fits any aspect ratio, no video geometry. */
+export interface Mp3Preset extends BaseExportPreset {
+  kind: 'mp3';
+}
+
+/**
+ * Discriminated on `kind`: the video fields (width/height/fps/videoBitrate) only
+ * exist on MP4 presets, so the worker never needs a non-null assertion and MP3
+ * presets can't carry a meaningless fps.
+ */
+export type ExportPreset = Mp4Preset | Mp3Preset;
 
 export const PRESETS: ExportPreset[] = [
   ...videoPresets('youtube', 'export.preset.youtube.label', '16:9', [
@@ -63,7 +79,7 @@ function videoPresets(
   labelKey: ParseKeys,
   aspect: AspectRatio,
   qualities: readonly VideoQuality[],
-): ExportPreset[] {
+): Mp4Preset[] {
   return qualities.map(([quality, width, height, videoBitrate]) => ({
     id: `${id}-${quality}`,
     labelKey,
@@ -80,20 +96,19 @@ function videoPresets(
 }
 
 
-function audioPresets(id: string, qualities: readonly AudioQuality[]): ExportPreset[] {
+function audioPresets(id: string, qualities: readonly AudioQuality[]): Mp3Preset[] {
   return qualities.map(([quality, audioBitrate]) => ({
     id: `${id}-${quality}`,
     labelKey: 'export.preset.mp3.label',
     descriptionKey: 'export.preset.audio.description',
     qualityKey: `export.quality.mp3_${quality}` as ParseKeys,
     kind: 'mp3',
-    fps: PROJECT_FPS,
     audioBitrate,
   }));
 }
 
 export function presetsForAspect(aspect: AspectRatio): ExportPreset[] {
-  return PRESETS.filter((p) => !p.aspect || p.aspect === aspect);
+  return PRESETS.filter((p) => p.kind === 'mp3' || p.aspect === aspect);
 }
 
 export function exportFileName(preset: ExportPreset): string {

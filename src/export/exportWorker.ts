@@ -17,6 +17,7 @@ import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
 import { Clip, isTextClip, timelineToSourceMs, trackCrossfades } from '../types';
 import { clipsAt, drawClipSample, drawSolidClip, drawTextClip } from '../preview/compositor';
+import type { Mp4Preset } from './presets';
 import { ExportErrorCode, ExportRequest, WorkerReply } from './protocol';
 
 /**
@@ -48,7 +49,7 @@ worker.onmessage = (e) => {
     try {
       if (e.data.type === 'export') {
         if (e.data.preset.kind === 'mp3') await exportMp3(e.data);
-        else await exportMp4(e.data);
+        else await exportMp4(e.data, e.data.preset);
       }
     } catch (err) {
       worker.postMessage(
@@ -64,10 +65,10 @@ function postProgress(value: number): void {
   worker.postMessage({ type: 'progress', value: Math.min(1, Math.max(0, value)) });
 }
 
-async function exportMp4(req: ExportRequest): Promise<void> {
-  const { project, preset, files, startMs, durationMs, audio } = req;
-  const width = preset.width!;
-  const height = preset.height!;
+async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
+  const { project, files, startMs, durationMs, audio } = req;
+  const width = preset.width;
+  const height = preset.height;
 
   if (audio && !(await canEncodeAudio('aac'))) registerAacEncoder();
 
@@ -85,7 +86,7 @@ async function exportMp4(req: ExportRequest): Promise<void> {
   ctx.imageSmoothingQuality = 'high';
   const videoSource = new CanvasSource(canvas, {
     codec: 'avc',
-    bitrate: preset.videoBitrate!,
+    bitrate: preset.videoBitrate,
   });
   output.addVideoTrack(videoSource);
 
