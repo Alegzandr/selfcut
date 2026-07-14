@@ -1,5 +1,6 @@
 import { AspectRatio } from '../types';
 import { APP_NAME, PROJECT_FPS } from '../app/config';
+import type { ParseKeys } from 'i18next';
 
 export interface ExportPreset {
   id: string;
@@ -8,8 +9,8 @@ export interface ExportPreset {
    * while the locale can still change afterwards. The UI resolves them at render
    * (`description` interpolates `{{fps}}`).
    */
-  labelKey: string;
-  descriptionKey: string;
+  labelKey: ParseKeys;
+  descriptionKey: ParseKeys;
   kind: 'mp4' | 'mp3';
   /** MP4 presets are tied to a project aspect ratio; MP3 fits any. */
   aspect?: AspectRatio;
