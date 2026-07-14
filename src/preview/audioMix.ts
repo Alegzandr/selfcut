@@ -1,4 +1,4 @@
-import { Clip, Project, clipEndMs, clipEnvelopeGainAt, isTextClip, trackCrossfades } from '../types';
+import { Clip, Project, clipEndMs, clipEnvelopeGainAt, isGeneratedClip, trackCrossfades } from '../types';
 
 export interface ScheduledSource {
   source: AudioBufferSourceNode;
@@ -33,7 +33,7 @@ export function scheduleProjectAudio(
     const xfades = trackCrossfades(track.clips);
     const dest = typeof destination === 'function' ? destination(track.id) : destination;
     for (const clip of track.clips) {
-      if (isTextClip(clip)) continue;
+      if (isGeneratedClip(clip)) continue;
       if (clip.volume <= 0) continue;
       if (clipEndMs(clip) <= fromMs) continue;
       const buffer = getBuffer(clip.assetId);

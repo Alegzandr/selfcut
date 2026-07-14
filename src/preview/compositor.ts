@@ -146,6 +146,37 @@ export function drawTextClip(
   ctx.restore();
 }
 
+/** Draw a generated full-frame colour or linear gradient. */
+export function drawSolidClip(
+  ctx: Ctx2D,
+  clip: Clip,
+  outW: number,
+  outH: number,
+  timelineMs: number,
+  alphaMul = 1,
+  xfadeInMs = 0,
+): void {
+  const solid = clip.solid;
+  if (!solid) return;
+  const alpha = clipEnvelopeGainAt(clip, timelineMs, xfadeInMs, 0) * alphaMul;
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  if (solid.kind === 'gradient') {
+    const radians = ((solid.angle ?? 0) * Math.PI) / 180;
+    const x = Math.cos(radians) * outW / 2;
+    const y = Math.sin(radians) * outH / 2;
+    const gradient = ctx.createLinearGradient(outW / 2 - x, outH / 2 - y, outW / 2 + x, outH / 2 + y);
+    gradient.addColorStop(0, solid.color);
+    gradient.addColorStop(1, solid.color2 ?? solid.color);
+    ctx.fillStyle = gradient;
+  } else {
+    ctx.fillStyle = solid.color;
+  }
+  ctx.fillRect(0, 0, outW, outH);
+  ctx.restore();
+}
+
 let measureCtx: Ctx2D | null = null;
 
 /**

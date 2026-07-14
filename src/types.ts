@@ -81,6 +81,16 @@ export interface ClipText {
   background?: boolean;
 }
 
+/** A generated full-frame colour or two-colour gradient. */
+export interface ClipSolid {
+  /** A single fill, or a linear gradient between the two colours. */
+  kind: 'color' | 'gradient';
+  color: string;
+  color2?: string;
+  /** Direction of a gradient, in degrees (0 = left to right). */
+  angle?: number;
+}
+
 export interface Clip {
   id: string;
   /** Empty string for generated clips (text) that have no media asset. */
@@ -107,6 +117,8 @@ export interface Clip {
   zoomEnd?: number;
   /** Present on text clips; the clip then renders text instead of media. */
   text?: ClipText;
+  /** Present on solid clips; the clip then renders a full-frame fill instead of media. */
+  solid?: ClipSolid;
 }
 
 /**
@@ -126,6 +138,11 @@ export function clipZoomAt(clip: Clip, timelineMs: number): number {
 /** A clip that renders generated text instead of a media asset. */
 export function isTextClip(clip: Clip): boolean {
   return clip.text != null;
+}
+
+/** A clip with no backing media asset. */
+export function isGeneratedClip(clip: Clip): boolean {
+  return clip.text != null || clip.solid != null;
 }
 
 export const DEFAULT_TRANSFORM: ClipTransform = {

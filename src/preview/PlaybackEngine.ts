@@ -10,7 +10,7 @@ import {
   trackCrossfades,
 } from '../types';
 import { createVideoSink, getAudioBuffer } from '../media/mediaCache';
-import { clipsAt, drawClipSample, drawTextClip } from './compositor';
+import { clipsAt, drawClipSample, drawSolidClip, drawTextClip } from './compositor';
 import { ScheduledSource, scheduleProjectAudio, stopScheduled } from './audioMix';
 import { TrackLevels, publishLevels } from './meterBus';
 
@@ -381,6 +381,10 @@ export class PlaybackEngine {
         const xfadeInMs = xfades.get(clip.id)?.inMs ?? 0;
         if (isTextClip(clip)) {
           drawTextClip(this.ctx, clip, w, h, tMs, alphaMul, xfadeInMs);
+          continue;
+        }
+        if (clip.solid) {
+          drawSolidClip(this.ctx, clip, w, h, tMs, alphaMul, xfadeInMs);
           continue;
         }
         const asset = state.assets[clip.assetId];

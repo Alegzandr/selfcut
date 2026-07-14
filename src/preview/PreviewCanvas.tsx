@@ -8,6 +8,7 @@ import {
   MediaAsset,
   clipEndMs,
   isTextClip,
+  isGeneratedClip,
   outputDimensions,
   timelineToSourceMs,
 } from '../types';
@@ -192,7 +193,7 @@ export function PreviewCanvas() {
   const { width: outW, height: outH } = outputDimensions(project.aspectRatio);
 
   // Crop mode only makes sense for a media clip whose source we can show.
-  const cropAsset = selectedClip && !isTextClip(selectedClip) ? assets[selectedClip.assetId] : undefined;
+  const cropAsset = selectedClip && !isGeneratedClip(selectedClip) ? assets[selectedClip.assetId] : undefined;
   const croppingClip = cropEditing && selectedClip && cropAsset ? selectedClip : null;
 
   useEffect(() => {
@@ -203,6 +204,7 @@ export function PreviewCanvas() {
   /** Bounding rect of a clip in output coordinates (null when unknown). */
   const rectOf = (clip: Clip): DestRect | null => {
     if (isTextClip(clip)) return textClipRect(clip, outW, outH);
+    if (clip.solid) return { dx: 0, dy: 0, dw: outW, dh: outH };
     const asset = assets[clip.assetId];
     // The dest rect only depends on the source aspect ratio, known from the probe.
     if (!asset?.width || !asset?.height) return null;

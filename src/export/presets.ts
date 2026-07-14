@@ -11,6 +11,8 @@ export interface ExportPreset {
    */
   labelKey: ParseKeys;
   descriptionKey: ParseKeys;
+  /** Optional quality shown next to the format name in the export sheet. */
+  qualityKey?: ParseKeys;
   kind: 'mp4' | 'mp3';
   /** MP4 presets are tied to a project aspect ratio; MP3 fits any. */
   aspect?: AspectRatio;
@@ -22,63 +24,73 @@ export interface ExportPreset {
 }
 
 export const PRESETS: ExportPreset[] = [
-  {
-    id: 'youtube',
-    labelKey: 'export.preset.youtube.label',
-    descriptionKey: 'export.preset.youtube.description',
+  ...videoPresets('youtube', 'export.preset.youtube.label', '16:9', [
+    ['720', 1280, 720, 5_000_000],
+    ['1080', 1920, 1080, 12_000_000],
+    ['1440', 2560, 1440, 24_000_000],
+    ['4k', 3840, 2160, 45_000_000],
+  ]),
+  ...videoPresets('tiktok', 'export.preset.tiktok.label', '9:16', [
+    ['720', 720, 1280, 5_000_000],
+    ['1080', 1080, 1920, 12_000_000],
+    ['1440', 1440, 2560, 24_000_000],
+    ['4k', 2160, 3840, 45_000_000],
+  ]),
+  ...videoPresets('square', 'export.preset.square.label', '1:1', [
+    ['720', 720, 720, 5_000_000],
+    ['1080', 1080, 1080, 8_000_000],
+    ['1440', 1440, 1440, 16_000_000],
+    ['4k', 2160, 2160, 30_000_000],
+  ]),
+  ...videoPresets('portrait45', 'export.preset.portrait45.label', '4:5', [
+    ['720', 576, 720, 5_000_000],
+    ['1080', 1080, 1350, 9_000_000],
+    ['1440', 1152, 1440, 16_000_000],
+    ['4k', 2160, 2700, 30_000_000],
+  ]),
+  ...audioPresets('mp3', [
+    ['128', 128_000],
+    ['192', 192_000],
+    ['320', 320_000],
+  ]),
+];
+
+type VideoQuality = readonly [id: '720' | '1080' | '1440' | '4k', width: number, height: number, bitrate: number];
+type AudioQuality = readonly [id: '128' | '192' | '320', bitrate: number];
+
+function videoPresets(
+  id: string,
+  labelKey: ParseKeys,
+  aspect: AspectRatio,
+  qualities: readonly VideoQuality[],
+): ExportPreset[] {
+  return qualities.map(([quality, width, height, videoBitrate]) => ({
+    id: `${id}-${quality}`,
+    labelKey,
+    descriptionKey: 'export.preset.video.description',
+    qualityKey: `export.quality.${quality}` as ParseKeys,
     kind: 'mp4',
-    aspect: '16:9',
-    width: 1920,
-    height: 1080,
+    aspect,
+    width,
+    height,
     fps: PROJECT_FPS,
-    videoBitrate: 12_000_000,
+    videoBitrate,
     audioBitrate: 192_000,
-  },
-  {
-    id: 'tiktok',
-    labelKey: 'export.preset.tiktok.label',
-    descriptionKey: 'export.preset.tiktok.description',
-    kind: 'mp4',
-    aspect: '9:16',
-    width: 1080,
-    height: 1920,
-    fps: PROJECT_FPS,
-    videoBitrate: 10_000_000,
-    audioBitrate: 192_000,
-  },
-  {
-    id: 'square',
-    labelKey: 'export.preset.square.label',
-    descriptionKey: 'export.preset.square.description',
-    kind: 'mp4',
-    aspect: '1:1',
-    width: 1080,
-    height: 1080,
-    fps: PROJECT_FPS,
-    videoBitrate: 8_000_000,
-    audioBitrate: 192_000,
-  },
-  {
-    id: 'portrait45',
-    labelKey: 'export.preset.portrait45.label',
-    descriptionKey: 'export.preset.portrait45.description',
-    kind: 'mp4',
-    aspect: '4:5',
-    width: 1080,
-    height: 1350,
-    fps: PROJECT_FPS,
-    videoBitrate: 9_000_000,
-    audioBitrate: 192_000,
-  },
-  {
-    id: 'mp3',
+  }));
+}
+
+
+function audioPresets(id: string, qualities: readonly AudioQuality[]): ExportPreset[] {
+  return qualities.map(([quality, audioBitrate]) => ({
+    id: `${id}-${quality}`,
     labelKey: 'export.preset.mp3.label',
-    descriptionKey: 'export.preset.mp3.description',
+    descriptionKey: 'export.preset.audio.description',
+    qualityKey: `export.quality.mp3_${quality}` as ParseKeys,
     kind: 'mp3',
     fps: PROJECT_FPS,
-    audioBitrate: 320_000,
-  },
-];
+    audioBitrate,
+  }));
+}
 
 export function presetsForAspect(aspect: AspectRatio): ExportPreset[] {
   return PRESETS.filter((p) => !p.aspect || p.aspect === aspect);

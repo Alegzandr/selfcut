@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, FilePlus, FileX2, FolderOpen, Redo2, Type, Undo2 } from 'lucide-react';
+import { Download, FilePlus, FileX2, FolderOpen, Plus, Redo2, Square, Type, Undo2 } from 'lucide-react';
 import { APP_NAME } from '../app/config';
 import logoUrl from '../assets/logo.png';
 import { useStore } from '../store/store';
@@ -64,9 +64,10 @@ export function TopBar() {
   const canRedo = useStore((s) => s.future.length > 0);
   const assetCount = useStore((s) => Object.keys(s.assets).length);
   const coarse = useIsCoarsePointer();
-  const { setAspectRatio, undo, redo, setExportOpen, addTextClip, setLibraryOpen } = useStore.getState();
+  const { setAspectRatio, undo, redo, setExportOpen, addTextClip, addSolidClip, setLibraryOpen } = useStore.getState();
   const importFiles = useImport();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   return (
     <header className="flex h-12 flex-none items-center gap-1 border-b border-zinc-800 bg-zinc-900 px-2 sm:gap-2 sm:px-3">
@@ -138,14 +139,33 @@ export function TopBar() {
           e.target.value = '';
         }}
       />
-      <button
-        className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs font-medium text-zinc-200 active:bg-zinc-800"
-        onClick={addTextClip}
-        title={t('topbar.addText')}
-      >
-        <Type className="h-4 w-4" />
-        <span className="hidden sm:inline">{t('topbar.text')}</span>
-      </button>
+      <div className="relative">
+        <button
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs font-medium text-zinc-200 active:bg-zinc-800"
+          onClick={() => setCreateOpen((open) => !open)}
+          title={t('topbar.add')}
+          aria-expanded={createOpen}
+        >
+          <Plus className="h-4 w-4" />
+          <span className="hidden sm:inline">{t('topbar.add')}</span>
+        </button>
+        {createOpen && (
+          <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl shadow-black/40">
+            <button className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-zinc-200 active:bg-zinc-800" onClick={() => { addTextClip(); setCreateOpen(false); }}>
+              <Type className="h-4 w-4 text-violet-300" />
+              <span>{t('topbar.text')}</span>
+            </button>
+            <button className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-zinc-200 active:bg-zinc-800" onClick={() => { addSolidClip('color'); setCreateOpen(false); }}>
+              <Square className="h-4 w-4 text-indigo-300" />
+              <span>{t('topbar.solidColor')}</span>
+            </button>
+            <button className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-zinc-200 active:bg-zinc-800" onClick={() => { addSolidClip('gradient'); setCreateOpen(false); }}>
+              <Square className="h-4 w-4 text-pink-300" />
+              <span>{t('topbar.solidGradient')}</span>
+            </button>
+          </div>
+        )}
+      </div>
       <button
         className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs font-medium text-zinc-200 active:bg-zinc-800"
         onClick={() => fileInputRef.current?.click()}

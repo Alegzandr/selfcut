@@ -16,7 +16,7 @@ import {
 import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
 import { Clip, isTextClip, timelineToSourceMs, trackCrossfades } from '../types';
-import { clipsAt, drawClipSample, drawTextClip } from '../preview/compositor';
+import { clipsAt, drawClipSample, drawSolidClip, drawTextClip } from '../preview/compositor';
 import { ExportErrorCode, ExportRequest, WorkerReply } from './protocol';
 
 /**
@@ -149,6 +149,10 @@ async function exportMp4(req: ExportRequest): Promise<void> {
         const xfadeInMs = xfades.get(clip.id)?.inMs ?? 0;
         if (isTextClip(clip)) {
           drawTextClip(ctx, clip, width, height, tMs, alphaMul, xfadeInMs);
+          continue;
+        }
+        if (clip.solid) {
+          drawSolidClip(ctx, clip, width, height, tMs, alphaMul, xfadeInMs);
           continue;
         }
         const sink = await getSink(clip);

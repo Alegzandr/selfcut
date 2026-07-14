@@ -81,6 +81,8 @@ export interface EditorState {
   addClipFromAssetAt: (assetId: string, timelineMs: number, targetTrackId?: string) => void;
   /** Insert a generated text clip at the playhead, on a free topmost video track. */
   addTextClip: () => void;
+  /** Insert a generated full-frame colour or gradient clip at the playhead. */
+  addSolidClip: (kind: 'color' | 'gradient') => void;
   addTrack: (kind: Track['kind']) => void;
   /** Live track edit (volume/opacity slider drags) - wrap with begin/endGesture. */
   updateTrack: (trackId: string, patch: Partial<Track>) => void;
@@ -433,6 +435,44 @@ export const useStore = create<EditorState>((set, get) => {
           fadeInMs: 0,
           fadeOutMs: 0,
           text: { content: t('clip.defaultText'), color: '#ffffff', sizeFrac: 0.08, bold: true },
+        });
+      }, newClipId);
+      set({ selectedClipId: newClipId, selectedClipIds: [newClipId] });
+    },
+
+    addSolidClip: (kind) => {
+      const { currentTimeMs } = get();
+      const newClipId = uid('clip');
+      const durMs = 3000;
+      withHistory((p) => {
+        const start = Math.max(0, currentTimeMs);
+        let track = [...p.tracks]
+          .reverse()
+          .find(
+            (t) =>
+              t.kind === 'video' &&
+              t.clips.every((c) => clipEndMs(c) <= start || c.timelineStartMs >= start + durMs),
+          );
+        if (!track) {
+          track = { id: uid('track'), kind: 'video', clips: [] };
+          const lastVideoIdx = p.tracks.map((t) => t.kind).lastIndexOf('video');
+          p.tracks.splice(lastVideoIdx + 1, 0, track);
+        }
+        track.clips.push({
+          id: newClipId,
+          assetId: '',
+          trackId: track.id,
+          timelineStartMs: start,
+          sourceInMs: 0,
+          sourceOutMs: durMs,
+          speed: 1,
+          volume: 1,
+          fadeInMs: 0,
+          fadeOutMs: 0,
+          solid:
+            kind === 'color'
+              ? { kind, color: '#6366f1' }
+              : { kind, color: '#7c3aed', color2: '#ec4899', angle: 45 },
         });
       }, newClipId);
       set({ selectedClipId: newClipId, selectedClipIds: [newClipId] });

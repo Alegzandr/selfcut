@@ -233,6 +233,18 @@ export const ClipView = memo(function ClipView({
             {clip.text.content.split('\n')[0] || t('clip.text.placeholder')}
           </span>
         </div>
+      ) : clip.solid ? (
+        <div
+          className="pointer-events-none flex h-full w-full items-center gap-1 px-1.5"
+          style={{
+            background:
+              clip.solid.kind === 'gradient'
+                ? `linear-gradient(${clip.solid.angle ?? 0}deg, ${clip.solid.color}, ${clip.solid.color2 ?? clip.solid.color})`
+                : clip.solid.color,
+          }}
+        >
+          <span className="truncate text-[11px] font-medium text-white drop-shadow">{t(`clip.solid.${clip.solid.kind}`)}</span>
+        </div>
       ) : isVideo && asset?.thumbnails.length ? (
         <div className="pointer-events-none h-full w-full">
           <Filmstrip asset={asset} clip={clip} widthPx={width} />

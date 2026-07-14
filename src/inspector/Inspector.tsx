@@ -118,7 +118,7 @@ export function Inspector() {
           clip={clip}
           isVideo={asset?.kind === 'video'}
           hasAudio={asset?.hasAudio ?? false}
-          name={clip.text ? t('inspector.textClip') : asset?.file.name ?? ''}
+          name={clip.text ? t('inspector.textClip') : clip.solid ? t(`inspector.solid.${clip.solid.kind}`) : asset?.file.name ?? ''}
         />
       </div>
     );
@@ -140,7 +140,7 @@ export function Inspector() {
             clip={clip}
             isVideo={asset?.kind === 'video'}
             hasAudio={asset?.hasAudio ?? false}
-            name={clip.text ? t('inspector.textClip') : asset?.file.name ?? ''}
+            name={clip.text ? t('inspector.textClip') : clip.solid ? t(`inspector.solid.${clip.solid.kind}`) : asset?.file.name ?? ''}
           />
         </motion.div>
       )}
@@ -213,6 +213,38 @@ function TextSection({ clip }: { clip: Clip }) {
   );
 }
 
+function SolidSection({ clip }: { clip: Clip }) {
+  const { t } = useTranslation();
+  const { updateClip, beginGesture, endGesture } = useStore.getState();
+  const solid = clip.solid!;
+  const setSolid = (patch: Partial<NonNullable<Clip['solid']>>) =>
+    updateClip(clip.id, { solid: { ...solid, ...patch } });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-xs text-zinc-400">
+        <span className="w-16 flex-none">{t('inspector.fill')}</span>
+        {(['color', 'gradient'] as const).map((kind) => (
+          <button key={kind} className={`rounded-md px-2 py-1 ${solid.kind === kind ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`} onClick={() => useStore.getState().updateClipCommitted(clip.id, { solid: { ...solid, kind } })}>
+            {t(`inspector.solid.${kind}`)}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-3 text-xs text-zinc-400">
+        <span className="w-16 flex-none">{t('inspector.colors')}</span>
+        <input type="color" value={solid.color} className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-zinc-800" title={t('inspector.solid.firstColor')} onFocus={beginGesture} onBlur={endGesture} onChange={(e) => setSolid({ color: e.target.value })} />
+        {solid.kind === 'gradient' && <input type="color" value={solid.color2 ?? solid.color} className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-zinc-800" title={t('inspector.solid.secondColor')} onFocus={beginGesture} onBlur={endGesture} onChange={(e) => setSolid({ color2: e.target.value })} />}
+      </div>
+      {solid.kind === 'gradient' && (
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <span className="w-16 flex-none">{t('inspector.direction')}</span>
+          {[0, 45, 90, 135].map((angle) => <button key={angle} className={`rounded-md px-2 py-1 ${solid.angle === angle ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`} onClick={() => useStore.getState().updateClipCommitted(clip.id, { solid: { ...solid, angle } })}>{angle}°</button>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InspectorBody({
   clip,
   isVideo,
@@ -230,6 +262,7 @@ function InspectorBody({
   const cropEditing = useStore((s) => s.cropEditing);
   const coarse = useIsCoarsePointer();
   const isText = clip.text != null;
+  const isSolid = clip.solid != null;
   const tf: ClipTransform = clip.transform ?? DEFAULT_TRANSFORM;
   const setTf = (patch: Partial<ClipTransform>) =>
     updateClip(clip.id, { transform: { ...tf, ...patch } });
@@ -264,6 +297,7 @@ function InspectorBody({
       </div>
 
       {isText && <TextSection clip={clip} />}
+      {isSolid && <SolidSection clip={clip} />}
 
       {hasAudio && (
         <>

@@ -106,9 +106,16 @@ export function ExportSheet() {
                       className={`block w-full rounded-xl border p-3 text-left ${selected.id === preset.id ? 'border-sky-500 bg-sky-500/10' : 'border-zinc-800 bg-zinc-950 active:bg-zinc-800'}`}
                       onClick={() => setSelectedId(preset.id)}
                     >
-                      <div className="text-sm font-medium text-zinc-100">{t(preset.labelKey)}</div>
+                      <div className="text-sm font-medium text-zinc-100">
+                        {t(preset.labelKey)}{preset.qualityKey && ` · ${t(preset.qualityKey)}`}
+                      </div>
                       <div className="mt-0.5 text-xs text-zinc-500">
-                        {t(preset.descriptionKey, { fps: preset.fps })}
+                        {t(preset.descriptionKey, {
+                          fps: preset.fps,
+                          width: preset.width,
+                          height: preset.height,
+                          bitrate: preset.videoBitrate ? Math.round(preset.videoBitrate / 1_000_000) : Math.round(preset.audioBitrate / 1_000),
+                        })}
                       </div>
                     </button>
                   ))}
@@ -135,7 +142,7 @@ export function ExportSheet() {
                 >
                   <Download className="h-4 w-4" />
                   {t(exportedRegion ? 'export.cta.region' : 'export.cta', {
-                    preset: t(selected.labelKey),
+                    preset: `${t(selected.labelKey)}${selected.qualityKey ? ` · ${t(selected.qualityKey)}` : ''}`,
                   })}
                 </button>
                 <p className="text-center text-[11px] text-zinc-600">{t('export.privacy')}</p>
