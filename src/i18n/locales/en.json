@@ -121,6 +121,7 @@
   "inspector.textColor": "Text color",
   "inspector.textPlaceholder": "Your text…",
   "inspector.transform": "Transform",
+  "inspector.zoomAnim": "Zoom anim",
   "inspector.volume": "Volume",
 
   "library.add": "Add to timeline",

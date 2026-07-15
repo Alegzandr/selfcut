@@ -113,6 +113,7 @@
   "inspector.textColor": "Textfarbe",
   "inspector.textPlaceholder": "Dein Text...",
   "inspector.transform": "Verwandeln",
+  "inspector.zoomAnim": "Zoom-Anim.",
   "inspector.volume": "Lautstärke",
   "library.add": "Zur Timeline hinzufügen",
   "library.close": "Schließen",

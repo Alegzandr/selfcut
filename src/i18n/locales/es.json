@@ -113,6 +113,7 @@
   "inspector.textColor": "Color del texto",
   "inspector.textPlaceholder": "Tu texto…",
   "inspector.transform": "transformar",
+  "inspector.zoomAnim": "Anim. de zoom",
   "inspector.volume": "Volumen",
   "library.add": "Agregar a la línea de tiempo",
   "library.close": "Cerrar",

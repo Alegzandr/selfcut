@@ -375,7 +375,7 @@ function InspectorBody({
 
       {isVideo && (
         <SliderRow
-          label="Zoom anim"
+          label={t('inspector.zoomAnim')}
           value={clip.zoomEnd ?? 1}
           min={0.5}
           max={2}

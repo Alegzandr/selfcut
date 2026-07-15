@@ -1,9 +1,8 @@
-import { memo, useRef, useState } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { Marker } from '../types';
-import { sortedMarkers } from '../model';
 import { collectSnapPoints, snapTime } from './snapping';
 import { msFromClientX } from './coords';
 import {
@@ -51,11 +50,13 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
   const padLeft = useStore((s) => s.timelinePadLeft);
   const region = useStore((s) => s.loopRegion);
   const loopEnabled = useStore((s) => s.loopEnabled);
-  const project = useStore((s) => s.project);
+  // Subscribe to the markers only (not the whole project): a clip drag must not
+  // re-render + re-sort the marker bar on every frame.
+  const markerList = useStore((s) => s.project.markers);
   const [editing, setEditing] = useState<Marker | null>(null);
   const drag = useRef<Drag | null>(null);
 
-  const markers = sortedMarkers(project);
+  const markers = useMemo(() => [...markerList].sort((a, b) => a.timeMs - b.timeMs), [markerList]);
   const xOf = (ms: number) => padLeft + ms * pxPerMs;
 
   /** Snap points, minus the position the drag currently owns (it must not stick to itself). */
@@ -107,7 +108,7 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
     if (d.kind === 'marker') {
       s.endGesture();
       // A marker pressed but not dragged is a cue: jump to it.
-      if (!d.moved) s.seek(project.markers.find((m) => m.id === d.id)?.timeMs ?? s.currentTimeMs);
+      if (!d.moved) s.seek(s.project.markers.find((m) => m.id === d.id)?.timeMs ?? s.currentTimeMs);
       return;
     }
     // A press on the bar that never moved is a click: it clears the selection.

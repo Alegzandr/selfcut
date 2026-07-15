@@ -121,8 +121,8 @@ export const ClipView = memo(function ClipView({
     state.beginGesture();
     const groupIds = multi ? state.selectedClipIds : [clip.id];
     const groupStarts = new Map<string, number>();
-    for (const t of state.project.tracks) {
-      for (const c of t.clips) {
+    for (const tr of state.project.tracks) {
+      for (const c of tr.clips) {
         if (groupIds.includes(c.id)) groupStarts.set(c.id, c.timelineStartMs);
       }
     }
@@ -136,7 +136,7 @@ export const ClipView = memo(function ClipView({
       startY: e.clientY,
       origStartMs: clip.timelineStartMs,
       durMs,
-      origTrackIndex: state.project.tracks.findIndex((t) => t.id === clip.trackId),
+      origTrackIndex: state.project.tracks.findIndex((tr) => tr.id === clip.trackId),
       points: collectSnapPoints(state.project, groupIds, state.currentTimeMs, state.loopRegion),
       moved: false,
       lastSnap: null,
