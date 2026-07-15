@@ -134,7 +134,7 @@ export async function initPersistence(): Promise<void> {
     if (saved && pristine && (saved.project.tracks.length > 0 || saved.assets.length > 0)) {
       s.hydrate(saved.project, saved.assets);
       // Recompute anything saved before it finished (peaks, thumbnail strip).
-      for (const asset of saved.assets) ensureAssetVisuals(asset);
+      for (const asset of saved.assets) ensureAssetVisuals(asset, s);
     }
   } catch (err) {
     console.warn('[persistence] restore failed:', err);

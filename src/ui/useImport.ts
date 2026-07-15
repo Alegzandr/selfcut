@@ -32,7 +32,7 @@ export function useImport(): (files: Iterable<File>) => Promise<void> {
           addAsset(asset);
           addClipFromAsset(asset.id);
           // Peaks and the full thumbnail strip arrive in the background.
-          ensureAssetVisuals(asset);
+          ensureAssetVisuals(asset, useStore.getState());
         } catch (err) {
           setError(
             err instanceof Error ? err.message : t('errors.media.importFailed', { name: file.name }),
