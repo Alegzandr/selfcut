@@ -37,6 +37,25 @@ export interface Track {
   opacity?: number;
 }
 
+/**
+ * One decodable audio track carried by a source file. A video can multiplex
+ * several (VO + dub, commentary, discrete channels); each becomes its own audio
+ * clip on import. The `index` is the track's position among ALL audio tracks of
+ * the file (as returned by mediabunny's getAudioTracks), so it stays stable
+ * across sessions and is what a clip references to pick its source track.
+ */
+export interface AudioTrackInfo {
+  index: number;
+  /** ISO 639-2/T language code ('und' if unknown), when the container provides one. */
+  language?: string;
+  /** Container-provided track name, when present. */
+  label?: string;
+  /** Channel count of the source track (≥ 1). */
+  channels: number;
+  /** Normalized peaks (0..1) over the whole duration, for this track's waveform. */
+  peaks?: number[];
+}
+
 export interface MediaAsset {
   id: string;
   file: File;
@@ -44,12 +63,15 @@ export interface MediaAsset {
   durationMs: number;
   width?: number;
   height?: number;
-  /** Whether the asset has a decodable audio track (true for pure audio, usually true for video). */
+  /** Whether the asset has at least one decodable audio track (== audioTracks.length > 0). */
   hasAudio: boolean;
+  /**
+   * Every decodable audio track of the source, in file order. Empty for a
+   * silent video. A pure-audio asset has exactly one entry.
+   */
+  audioTracks: AudioTrackInfo[];
   /** Thumbnails (data URLs) spread across the duration, used to paint video clips. */
   thumbnails: string[];
-  /** Normalized audio peaks (0..1) over the whole duration, for waveform rendering. */
-  peaks?: number[];
   /**
    * Set on restore when the persisted File can no longer be read (the on-disk
    * file was moved, renamed or deleted between sessions). A disconnected asset
@@ -119,6 +141,13 @@ interface BaseClip {
    * delegates its audio (it stays silent in the mix). Undefined = not linked.
    */
   linkId?: string;
+  /**
+   * Which audio track of `assetId` this clip plays, as an `AudioTrackInfo.index`.
+   * Undefined = the source's primary audio track (the historical single-track
+   * behaviour). Set on the audio clips that import splits off a multi-track
+   * video so each one carries a different source track.
+   */
+  audioTrackIndex?: number;
   transform?: ClipTransform;
   /**
    * Animated zoom (Ken Burns): scale multiplier reached at the END of the

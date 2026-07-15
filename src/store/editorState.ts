@@ -101,7 +101,7 @@ export interface EditorState {
   toggleTrackMuted: (trackId: string) => void;
   toggleTrackHidden: (trackId: string) => void;
 
-  setAssetPeaks: (assetId: string, peaks: number[]) => void;
+  setAssetPeaks: (assetId: string, audioTrackIndex: number, peaks: number[]) => void;
   setAssetThumbnails: (assetId: string, thumbnails: string[]) => void;
 
   selectClip: (id: string | null) => void;

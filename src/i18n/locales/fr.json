@@ -61,6 +61,7 @@
   "ctx.marker.goto": "Aller au marqueur",
   "ctx.marker.rename": "Renommer…",
   "ctx.marker.delete": "Supprimer le marqueur",
+  "clip.audioTrack": "A{{n}}",
   "clip.defaultText": "Titre",
   "clip.solid.color": "Couleur unie",
   "clip.solid.gradient": "Dégradé",

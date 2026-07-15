@@ -43,10 +43,14 @@ export function createAssetsSlice(
       }
     },
 
-    setAssetPeaks: (assetId, peaks) => {
+    setAssetPeaks: (assetId, audioTrackIndex, peaks) => {
       const asset = get().assets[assetId];
       if (!asset) return;
-      set({ assets: { ...get().assets, [assetId]: { ...asset, peaks } } });
+      // Attach the peaks to their own audio track, leaving the others untouched.
+      const audioTracks = asset.audioTracks.map((tr) =>
+        tr.index === audioTrackIndex ? { ...tr, peaks } : tr,
+      );
+      set({ assets: { ...get().assets, [assetId]: { ...asset, audioTracks } } });
     },
 
     setAssetThumbnails: (assetId, thumbnails) => {

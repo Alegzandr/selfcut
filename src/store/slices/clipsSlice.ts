@@ -21,6 +21,47 @@ import { clamp } from '../../lib/time';
 import { MIN_CLIP_DURATION_MS } from '../../app/config';
 import { t as translate } from '../../i18n';
 
+/**
+ * The `laneIndex`-th audio track of the project, creating enough audio tracks to
+ * reach it. A multi-track video explodes onto parallel audio lanes (one per
+ * source track), so its extracted clips never overlap or fight for a lane.
+ * Mutates `p` (called on the withHistory draft).
+ */
+function ensureAudioLane(p: Project, laneIndex: number): Track {
+  let audioTracks = p.tracks.filter((t) => t.kind === 'audio');
+  while (audioTracks.length <= laneIndex) {
+    insertTrack(p, { id: uid('track'), kind: 'audio', clips: [] });
+    audioTracks = p.tracks.filter((t) => t.kind === 'audio');
+  }
+  return audioTracks[laneIndex]!;
+}
+
+/** An extracted-audio clip for one source track, aligned with its video partner. */
+function buildAudioClip(
+  assetId: string,
+  trackId: string,
+  start: number,
+  durationMs: number,
+  linkId: string,
+  audioTrackIndex: number,
+): Clip {
+  return {
+    kind: 'media',
+    id: uid('clip'),
+    assetId,
+    trackId,
+    timelineStartMs: start,
+    sourceInMs: 0,
+    sourceOutMs: durationMs,
+    speed: 1,
+    volume: 1,
+    fadeInMs: 0,
+    fadeOutMs: 0,
+    linkId,
+    audioTrackIndex,
+  };
+}
+
 /** Copy-on-write edits shifting each clip's start by `delta` (clamped ≥ 0). */
 function shiftEdits(clipIds: string[], delta: number): Map<string, (c: Clip) => Clip> {
   const edits = new Map<string, (c: Clip) => Clip>();
@@ -64,22 +105,24 @@ export function createClipsSlice(
     addClipFromAsset: (assetId) => {
       const asset = get().assets[assetId];
       if (!asset) return;
-      // A video that carries audio lands as an A/V-linked pair: the picture on a
-      // video track, its audio split onto an audio track so it can be edited on
-      // its own while staying tied to the video.
-      const withAudio = asset.kind === 'video' && asset.hasAudio;
+      // A video that carries audio lands as an A/V-linked group: the picture on a
+      // video track, and EVERY source audio track split onto its own audio lane
+      // so each can be edited independently while staying tied to the video.
+      // A video multiplexing several audio tracks (VO + dub, commentary, discrete
+      // channels) explodes into one linked audio clip per track.
+      const splitAudio = asset.kind === 'video' && asset.audioTracks.length > 0;
       let newClipId = '';
       withHistory((p) => {
         const trackEnd = (t: Track) => t.clips.reduce((max, c) => Math.max(max, clipEndMs(c)), 0);
         const track = ensureTrack(p, asset.kind);
-        const audioTrack = withAudio ? ensureTrack(p, 'audio') : undefined;
-        // The pair shares one start, placed past the end of BOTH tracks so
-        // neither side overlaps and gets nudged independently (which would
-        // desync them).
-        const start = audioTrack
-          ? Math.max(trackEnd(track), trackEnd(audioTrack))
-          : trackEnd(track);
-        const linkId = withAudio ? uid('link') : undefined;
+        const lanes = splitAudio
+          ? asset.audioTracks.map((_, i) => ensureAudioLane(p, i))
+          : [];
+        // The group shares one start, placed past the end of the video track AND
+        // every audio lane it touches, so no side overlaps and gets nudged
+        // independently (which would desync the group).
+        const start = Math.max(trackEnd(track), ...lanes.map(trackEnd));
+        const linkId = splitAudio ? uid('link') : undefined;
         const clip: Clip = {
           kind: 'media',
           id: uid('clip'),
@@ -96,20 +139,11 @@ export function createClipsSlice(
         };
         newClipId = clip.id;
         track.clips.push(clip);
-        if (audioTrack && linkId) {
-          audioTrack.clips.push({
-            kind: 'media',
-            id: uid('clip'),
-            assetId,
-            trackId: audioTrack.id,
-            timelineStartMs: start,
-            sourceInMs: 0,
-            sourceOutMs: asset.durationMs,
-            speed: 1,
-            volume: 1,
-            fadeInMs: 0,
-            fadeOutMs: 0,
-            linkId,
+        if (splitAudio && linkId) {
+          asset.audioTracks.forEach((info, i) => {
+            lanes[i]!.clips.push(
+              buildAudioClip(assetId, lanes[i]!.id, start, asset.durationMs, linkId, info.index),
+            );
           });
         }
       });
@@ -119,13 +153,13 @@ export function createClipsSlice(
     addClipFromAssetAt: (assetId, timelineMs, targetTrackId) => {
       const asset = get().assets[assetId];
       if (!asset) return;
-      const withAudio = asset.kind === 'video' && asset.hasAudio;
+      const splitAudio = asset.kind === 'video' && asset.audioTracks.length > 0;
       const newClipId = uid('clip');
       const start = Math.max(0, timelineMs);
       // The dropped clip keeps its position (priority) when overlaps settle.
       withHistory((p) => {
         const track = ensureTrack(p, asset.kind, targetTrackId);
-        const linkId = withAudio ? uid('link') : undefined;
+        const linkId = splitAudio ? uid('link') : undefined;
         track.clips.push({
           kind: 'media',
           id: newClipId,
@@ -140,22 +174,14 @@ export function createClipsSlice(
           fadeOutMs: 0,
           ...(linkId ? { linkId } : {}),
         });
-        if (linkId) {
-          // The extracted audio drops at the same instant, on the audio track.
-          const audioTrack = ensureTrack(p, 'audio');
-          audioTrack.clips.push({
-            kind: 'media',
-            id: uid('clip'),
-            assetId,
-            trackId: audioTrack.id,
-            timelineStartMs: start,
-            sourceInMs: 0,
-            sourceOutMs: asset.durationMs,
-            speed: 1,
-            volume: 1,
-            fadeInMs: 0,
-            fadeOutMs: 0,
-            linkId,
+        if (splitAudio && linkId) {
+          // Every extracted audio track drops at the same instant, each on its
+          // own lane so a multi-track source lands as parallel audio clips.
+          asset.audioTracks.forEach((info, i) => {
+            const lane = ensureAudioLane(p, i);
+            lane.clips.push(
+              buildAudioClip(assetId, lane.id, start, asset.durationMs, linkId, info.index),
+            );
           });
         }
       }, newClipId);

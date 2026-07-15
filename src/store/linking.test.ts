@@ -24,7 +24,7 @@ beforeAll(async () => {
   ({ useStore } = await import('./store'));
 });
 
-function videoAsset(id: string, durationMs = 5000): MediaAsset {
+function videoAsset(id: string, durationMs = 5000, audioTrackCount = 1): MediaAsset {
   return {
     id,
     file: new File([], `${id}.mp4`),
@@ -32,7 +32,8 @@ function videoAsset(id: string, durationMs = 5000): MediaAsset {
     durationMs,
     width: 1920,
     height: 1080,
-    hasAudio: true,
+    hasAudio: audioTrackCount > 0,
+    audioTracks: Array.from({ length: audioTrackCount }, (_, i) => ({ index: i, channels: 2 })),
     thumbnails: [],
   };
 }
@@ -75,12 +76,52 @@ describe('addClipFromAsset', () => {
   });
 
   it('does not split audio for a silent video', () => {
-    s().addAsset({ ...videoAsset('v'), hasAudio: false });
+    s().addAsset(videoAsset('v', 5000, 0));
     s().addClipFromAsset('v');
     const { video, audio } = tracksByKind();
     expect(video[0]!.clips).toHaveLength(1);
     expect(video[0]!.clips[0]!.linkId).toBeUndefined();
     expect(audio).toHaveLength(0);
+  });
+
+  it('explodes every audio track into its own linked clip on its own lane', () => {
+    s().addAsset(videoAsset('v', 5000, 3));
+    s().addClipFromAsset('v');
+
+    const { video, audio } = tracksByKind();
+    expect(video).toHaveLength(1);
+    // One audio lane per source track, one extracted clip on each.
+    expect(audio).toHaveLength(3);
+    const audioClips = audio.flatMap((tr) => tr.clips);
+    expect(audioClips).toHaveLength(3);
+
+    const vClip = video[0]!.clips[0]!;
+    // The whole group (video + 3 audio) shares one link.
+    expect(vClip.linkId).toBeTruthy();
+    for (const c of audioClips) {
+      expect(c.linkId).toBe(vClip.linkId);
+      expect(c.timelineStartMs).toBe(vClip.timelineStartMs);
+    }
+    // Each audio clip pins a distinct source track (0, 1, 2).
+    expect(audioClips.map((c) => c.audioTrackIndex).sort()).toEqual([0, 1, 2]);
+    // Each lane holds exactly one of the three.
+    for (const tr of audio) expect(tr.clips).toHaveLength(1);
+  });
+
+  it('moves and deletes the whole exploded group together', () => {
+    s().addAsset(videoAsset('v', 5000, 2));
+    s().addClipFromAsset('v');
+    const video = s().project.tracks.find((t) => t.kind === 'video')!.clips[0]!;
+
+    s().moveClip(video.id, 2000);
+    const allStarts = s()
+      .project.tracks.flatMap((t) => t.clips)
+      .map((c) => c.timelineStartMs);
+    expect(allStarts).toEqual([2000, 2000, 2000]);
+
+    s().deleteClip(video.id);
+    const total = s().project.tracks.reduce((n, t) => n + t.clips.length, 0);
+    expect(total).toBe(0);
   });
 });
 

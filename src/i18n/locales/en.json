@@ -67,6 +67,7 @@
   "ctx.marker.rename": "Rename…",
   "ctx.marker.delete": "Delete marker",
 
+  "clip.audioTrack": "A{{n}}",
   "clip.defaultText": "Title",
   "clip.solid.color": "Solid color",
   "clip.solid.gradient": "Gradient",

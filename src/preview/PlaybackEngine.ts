@@ -2,7 +2,7 @@ import type { VideoSample } from 'mediabunny';
 import { useStore, EditorState } from '../store/store';
 import { Project } from '../types';
 import { outputDimensions, projectDurationMs, timelineToSourceMs } from '../model';
-import { getAudioBuffer } from '../media/mediaCache';
+import { audioKey, getAudioBuffer } from '../media/mediaCache';
 import { FrameCursor } from './FrameCursor';
 import { drawClip, visibleVideoClips } from './compositor';
 import { ScheduledSource, scheduleProjectAudio, stopScheduled } from './audioMix';
@@ -98,17 +98,19 @@ export class PlaybackEngine {
     if (!this.audioCtx || !this.masterGain) return;
     stopScheduled(this.scheduled);
 
-    // Kick decoding for any asset we don't have a buffer for yet.
+    // Kick decoding for any (asset, audio track) pair we don't have a buffer for
+    // yet - a multi-track clip pulls its own source track, keyed independently.
     for (const track of state.project.tracks) {
       for (const clip of track.clips) {
         const asset = state.assets[clip.assetId];
-        if (asset?.hasAudio && !this.audioBuffers.has(asset.id)) {
-          this.audioBuffers.set(asset.id, null);
-          void getAudioBuffer(asset).then((buffer) => {
-            this.audioBuffers.set(asset.id, buffer);
-            if (buffer) this.audioDirty = true;
-          });
-        }
+        if (!asset?.hasAudio) continue;
+        const key = audioKey(asset.id, clip.audioTrackIndex);
+        if (this.audioBuffers.has(key)) continue;
+        this.audioBuffers.set(key, null);
+        void getAudioBuffer(asset, clip.audioTrackIndex).then((buffer) => {
+          this.audioBuffers.set(key, buffer);
+          if (buffer) this.audioDirty = true;
+        });
       }
     }
 
@@ -120,7 +122,7 @@ export class PlaybackEngine {
       this.audioCtx,
       (trackId) => this.busFor(trackId).gain,
       state.project,
-      (assetId) => this.audioBuffers.get(assetId) ?? null,
+      (assetId, audioTrackIndex) => this.audioBuffers.get(audioKey(assetId, audioTrackIndex)) ?? null,
       fromMs,
       startCtx,
       this.rate,
@@ -276,11 +278,11 @@ export class PlaybackEngine {
 
   private pruneCursors(project: Project): void {
     const liveIds = new Set<string>();
-    const liveAssetIds = new Set<string>();
+    const liveAudioKeys = new Set<string>();
     for (const track of project.tracks) {
       for (const clip of track.clips) {
         liveIds.add(clip.id);
-        liveAssetIds.add(clip.assetId);
+        liveAudioKeys.add(audioKey(clip.assetId, clip.audioTrackIndex));
       }
     }
     for (const [clipId, cursor] of this.cursors) {
@@ -289,9 +291,10 @@ export class PlaybackEngine {
         this.cursors.delete(clipId);
       }
     }
-    // Decoded audio of assets no longer on the timeline can be large - drop it.
-    for (const assetId of [...this.audioBuffers.keys()]) {
-      if (!liveAssetIds.has(assetId)) this.audioBuffers.delete(assetId);
+    // Decoded audio no longer referenced by any clip can be large - drop it,
+    // per (asset, audio track) so one track's buffer never evicts another's.
+    for (const key of [...this.audioBuffers.keys()]) {
+      if (!liveAudioKeys.has(key)) this.audioBuffers.delete(key);
     }
     // Buses of deleted tracks: disconnect so they stop feeding the master.
     const liveTrackIds = new Set(project.tracks.map((t) => t.id));

@@ -20,7 +20,7 @@ export function scheduleProjectAudio(
   ctx: BaseAudioContext,
   destination: MixDestination,
   project: Project,
-  getBuffer: (assetId: string) => AudioBuffer | null,
+  getBuffer: (assetId: string, audioTrackIndex?: number) => AudioBuffer | null,
   fromMs: number,
   startAtCtxTime: number,
   rate = 1,
@@ -40,7 +40,7 @@ export function scheduleProjectAudio(
       if (track.kind === 'video' && clip.linkId) continue;
       if (clip.volume <= 0) continue;
       if (clipEndMs(clip) <= fromMs) continue;
-      const buffer = getBuffer(clip.assetId);
+      const buffer = getBuffer(clip.assetId, clip.audioTrackIndex);
       if (!buffer) continue;
       const xf = xfades.get(clip.id) ?? { inMs: 0, outMs: 0 };
       scheduled.push(

@@ -1,4 +1,4 @@
-import { Clip, ClipTransform, SolidClip, TextClip } from '../types';
+import { AudioTrackInfo, Clip, ClipTransform, MediaAsset, SolidClip, TextClip } from '../types';
 
 /**
  * Clip-level model math: durations, source<->timeline mapping, fade/zoom
@@ -16,6 +16,24 @@ export const DEFAULT_TRANSFORM: ClipTransform = {
 /** A clip that renders generated text instead of a media asset. */
 export function isTextClip(clip: Clip): clip is TextClip {
   return clip.kind === 'text';
+}
+
+/**
+ * The source audio track a clip draws its sound (and waveform) from: the one
+ * whose `index` matches `clip.audioTrackIndex`, or the asset's first track when
+ * the clip doesn't pin a track (undefined index = primary). Returns undefined
+ * for a silent asset. Shared by the mix, the export and the timeline waveform so
+ * they never disagree about which track a clip plays.
+ */
+export function audioTrackForClip(
+  asset: MediaAsset,
+  clip: Clip,
+): AudioTrackInfo | undefined {
+  if (asset.audioTracks.length === 0) return undefined;
+  if (clip.audioTrackIndex == null) return asset.audioTracks[0];
+  return (
+    asset.audioTracks.find((a) => a.index === clip.audioTrackIndex) ?? asset.audioTracks[0]
+  );
 }
 
 /** A clip with no backing media asset (text or solid). */

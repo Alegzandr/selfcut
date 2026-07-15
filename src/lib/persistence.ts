@@ -1,4 +1,4 @@
-import { MediaAsset, Project } from '../types';
+import { AudioTrackInfo, MediaAsset, Project } from '../types';
 import { useStore } from '../store/store';
 import { ensureAssetVisuals } from '../media/probe';
 import { t } from '../i18n';
@@ -97,12 +97,30 @@ async function isFileReadable(file: File): Promise<boolean> {
   }
 }
 
+/**
+ * Bring an asset stored before multi-track audio up to the current shape: a
+ * legacy asset has `hasAudio` + a single top-level `peaks` array but no
+ * `audioTracks`, so synthesize a one-entry list (the old primary track) that
+ * carries those peaks. Assets already on the new shape pass through untouched.
+ */
+function migrateAsset(asset: MediaAsset): MediaAsset {
+  if (Array.isArray(asset.audioTracks)) return asset;
+  const legacy = asset as MediaAsset & { peaks?: number[] };
+  const audioTracks: AudioTrackInfo[] = legacy.hasAudio
+    ? [{ index: 0, channels: 2, ...(legacy.peaks ? { peaks: legacy.peaks } : {}) }]
+    : [];
+  const { peaks: _dropped, ...rest } = legacy;
+  return { ...rest, audioTracks };
+}
+
 async function loadPersisted(): Promise<{ project: Project; assets: MediaAsset[] } | null> {
   const d = await db();
   const tx = d.transaction([PROJECT_STORE, ASSETS_STORE], 'readonly');
   const project = await requestDone(tx.objectStore(PROJECT_STORE).get(PROJECT_KEY));
   if (!isValidProject(project)) return null;
-  const stored = (await requestDone(tx.objectStore(ASSETS_STORE).getAll())).filter(isValidAsset);
+  const stored = (await requestDone(tx.objectStore(ASSETS_STORE).getAll()))
+    .filter(isValidAsset)
+    .map(migrateAsset);
   // Flag every asset whose source file no longer reads (disconnected source).
   const assets = await Promise.all(
     stored.map(async (asset) => ({

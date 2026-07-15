@@ -2,7 +2,7 @@ import { LoopRegion, MediaAsset, Project } from '../types';
 import { clipEndMs, projectDurationMs } from '../model';
 import { AUDIO_SAMPLE_RATE } from '../app/config';
 import { t } from '../i18n';
-import { getAudioBuffer } from '../media/mediaCache';
+import { audioKey, getAudioBuffer } from '../media/mediaCache';
 import { scheduleProjectAudio } from '../preview/audioMix';
 import { ExportPreset, exportFileName } from './presets';
 import { ExportErrorCode, ExportRequest, WorkerReply } from './protocol';
@@ -127,17 +127,25 @@ async function renderAudioMix(
       if (clip.timelineStartMs >= startMs + durationMs) continue;
       const asset = assets[clip.assetId];
       if (!asset?.hasAudio) continue;
-      if (!buffers.has(asset.id)) {
-        buffers.set(asset.id, await getAudioBuffer(asset));
+      const key = audioKey(asset.id, clip.audioTrackIndex);
+      if (!buffers.has(key)) {
+        buffers.set(key, await getAudioBuffer(asset, clip.audioTrackIndex));
       }
-      if (buffers.get(asset.id)) hasAudibleClip = true;
+      if (buffers.get(key)) hasAudibleClip = true;
     }
   }
   if (!hasAudibleClip) return null;
 
   const length = Math.max(1, Math.ceil((durationMs / 1000) * AUDIO_SAMPLE_RATE));
   const ctx = new OfflineAudioContext(2, length, AUDIO_SAMPLE_RATE);
-  scheduleProjectAudio(ctx, ctx.destination, project, (id) => buffers.get(id) ?? null, startMs, 0);
+  scheduleProjectAudio(
+    ctx,
+    ctx.destination,
+    project,
+    (id, audioTrackIndex) => buffers.get(audioKey(id, audioTrackIndex)) ?? null,
+    startMs,
+    0,
+  );
   const rendered = await ctx.startRendering();
 
   return {

@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef } from 'react';
 import { Clip, MediaAsset } from '../types';
-import { clipDurationMs } from '../model';
+import { audioTrackForClip, clipDurationMs } from '../model';
 
 interface Props {
   asset: MediaAsset;
@@ -14,7 +14,9 @@ interface Props {
 /** Waveform of the clip's source window [sourceInMs, sourceOutMs], mirrored around the center. */
 export const Waveform = memo(function Waveform({ asset, clip, widthPx, color }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const peaks = asset.peaks;
+  // The clip's own source audio track (a multi-track video's clips each draw a
+  // different track's waveform).
+  const peaks = audioTrackForClip(asset, clip)?.peaks;
 
   useEffect(() => {
     const canvas = canvasRef.current;

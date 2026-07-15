@@ -61,6 +61,7 @@
   "ctx.marker.goto": "Zur Markierung springen",
   "ctx.marker.rename": "Umbenennen…",
   "ctx.marker.delete": "Markierung löschen",
+  "clip.audioTrack": "A{{n}}",
   "clip.defaultText": "Titel",
   "clip.solid.color": "Volltonfarbe",
   "clip.solid.gradient": "Farbverlauf",

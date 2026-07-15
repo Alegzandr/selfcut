@@ -2,7 +2,7 @@ import { memo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link2, Music, Type } from 'lucide-react';
 import { Clip, MediaAsset } from '../types';
-import { clipDurationMs } from '../model';
+import { audioTrackForClip, clipDurationMs } from '../model';
 import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { collectSnapPoints, snapMove, snapTime } from './snapping';
@@ -100,6 +100,18 @@ export const ClipView = memo(function ClipView({
   const durMs = clipDurationMs(clip);
   const left = padLeft + clip.timelineStartMs * pxPerMs;
   const width = Math.max(6, durMs * pxPerMs);
+
+  // The source audio track this clip draws its waveform from. When the source
+  // carries several audio tracks, label the clip with which one it plays.
+  const audioInfo = asset ? audioTrackForClip(asset, clip) : undefined;
+  const hasPeaks = (audioInfo?.peaks?.length ?? 0) > 0;
+  // Only an audio clip pins a single source track worth labelling - a video clip
+  // delegates all of them, so it gets no track badge.
+  const trackBadge =
+    trackKind === 'audio' && asset && asset.audioTracks.length > 1 && audioInfo
+      ? (audioInfo.language?.toUpperCase() ??
+        t('clip.audioTrack', { n: asset.audioTracks.indexOf(audioInfo) + 1 }))
+      : null;
 
   const beginDrag = (e: React.PointerEvent, mode: DragState['mode']) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -264,7 +276,7 @@ export const ClipView = memo(function ClipView({
         <div className="pointer-events-none h-full w-full">
           <Filmstrip asset={asset} clip={clip} widthPx={width} />
           {/* Audio envelope under the thumbnails - cutting to sound needs to be visual. */}
-          {asset.peaks && (
+          {hasPeaks && (
             <div className="absolute inset-x-0 bottom-0 h-1/3 bg-black/40">
               <Waveform asset={asset} clip={clip} widthPx={width} color="rgba(255,255,255,0.85)" />
             </div>
@@ -272,7 +284,7 @@ export const ClipView = memo(function ClipView({
         </div>
       ) : (
         <div className="pointer-events-none relative h-full w-full bg-gradient-to-b from-emerald-900/60 to-emerald-950">
-          {asset?.peaks && (
+          {hasPeaks && asset && (
             <div className="absolute inset-0">
               <Waveform asset={asset} clip={clip} widthPx={width} color="rgba(110,231,183,0.65)" />
             </div>
@@ -284,6 +296,11 @@ export const ClipView = memo(function ClipView({
               <Music className="h-3 w-3 flex-none text-emerald-300" />
             )}
             <span className="truncate text-[10px] text-emerald-100">{asset?.file.name}</span>
+            {trackBadge && (
+              <span className="flex-none rounded bg-emerald-800/80 px-1 text-[9px] font-medium text-emerald-100">
+                {trackBadge}
+              </span>
+            )}
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
-import { CanvasSink } from 'mediabunny';
-import { MediaAsset } from '../types';
+import { CanvasSink, Input } from 'mediabunny';
+import { AudioTrackInfo, MediaAsset } from '../types';
 import { uid } from '../lib/id';
 import { createInput, expectedPeakBins, getInput, getPeaks, registerInput, warmAudio } from './mediaCache';
 import { t } from '../i18n';
@@ -7,11 +7,31 @@ import { t } from '../i18n';
 /**
  * Where computed visuals are committed. The store satisfies this structurally,
  * so probe stays a pure media module with no store dependency (the caller owns
- * the commit).
+ * the commit). Peaks are committed per audio track (`audioTrackIndex`).
  */
 export interface AssetVisualsSink {
-  setAssetPeaks: (assetId: string, peaks: number[]) => void;
+  setAssetPeaks: (assetId: string, audioTrackIndex: number, peaks: number[]) => void;
   setAssetThumbnails: (assetId: string, thumbnails: string[]) => void;
+}
+
+/** Enumerate every decodable audio track of a source, in file order. */
+async function probeAudioTracks(input: Input): Promise<AudioTrackInfo[]> {
+  const tracks = await input.getAudioTracks();
+  const out: AudioTrackInfo[] = [];
+  for (let i = 0; i < tracks.length; i++) {
+    const track = tracks[i]!;
+    // Skip tracks the browser can't decode - they would only fail silently
+    // later. `index` is the position in the FULL list, so mediaCache can
+    // re-fetch the exact track even when earlier ones were skipped.
+    if (!(await track.canDecode())) continue;
+    out.push({
+      index: i,
+      language: track.languageCode && track.languageCode !== 'und' ? track.languageCode : undefined,
+      label: track.name ?? undefined,
+      channels: Math.max(1, track.numberOfChannels),
+    });
+  }
+  return out;
 }
 
 /**
@@ -31,8 +51,8 @@ export async function probeFile(file: File, reuseId?: string): Promise<MediaAsse
   }
 
   const videoTrack = await input.getPrimaryVideoTrack();
-  const audioTrack = await input.getPrimaryAudioTrack();
-  if (!videoTrack && !audioTrack) {
+  const audioTracks = await probeAudioTracks(input);
+  if (!videoTrack && audioTracks.length === 0) {
     input.dispose();
     throw new Error(t('errors.media.noTrack', { name: file.name }));
   }
@@ -54,7 +74,8 @@ export async function probeFile(file: File, reuseId?: string): Promise<MediaAsse
     durationMs,
     width: videoTrack ? await videoTrack.getDisplayWidth() : undefined,
     height: videoTrack ? await videoTrack.getDisplayHeight() : undefined,
-    hasAudio: !!audioTrack && (await audioTrack.canDecode()),
+    hasAudio: audioTracks.length > 0,
+    audioTracks,
     thumbnails: [],
   };
 
@@ -86,9 +107,11 @@ export function targetThumbnailCount(durationMs: number): number {
  * Called after import and after an IndexedDB restore.
  */
 export function ensureAssetVisuals(asset: MediaAsset, sink: AssetVisualsSink): void {
-  if (asset.hasAudio && (asset.peaks?.length ?? 0) < expectedPeakBins(asset.durationMs)) {
-    void getPeaks(asset).then((peaks) => {
-      if (peaks) sink.setAssetPeaks(asset.id, peaks);
+  const wantBins = expectedPeakBins(asset.durationMs);
+  for (const track of asset.audioTracks) {
+    if ((track.peaks?.length ?? 0) >= wantBins) continue;
+    void getPeaks(asset, track.index).then((peaks) => {
+      if (peaks) sink.setAssetPeaks(asset.id, track.index, peaks);
     });
   }
   if (asset.kind === 'video' && asset.thumbnails.length < targetThumbnailCount(asset.durationMs)) {
