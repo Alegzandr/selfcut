@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
-import { UploadCloud } from 'lucide-react';
+import { PlugZap, UploadCloud } from 'lucide-react';
 import { useStore } from './store/store';
 import { initPersistence } from './lib/persistence';
+import { openMediaPicker } from './ui/mediaPicker';
 import { MenuBar } from './ui/MenuBar';
 import { TopBar } from './ui/TopBar';
 import { Transport } from './ui/Transport';
@@ -18,6 +19,7 @@ import { MediaLibrary } from './ui/MediaLibrary';
 import { MobileBottomBar } from './ui/MobileBottomBar';
 import { ShortcutsHelp } from './ui/ShortcutsHelp';
 import { Preferences } from './ui/Preferences';
+import { About } from './ui/About';
 import { useEditorHotkeys } from './ui/useEditorHotkeys';
 import { useIsCoarsePointer } from './lib/device';
 
@@ -94,6 +96,7 @@ export default function App() {
     >
       {!coarse && <MenuBar />}
       <TopBar />
+      <DisconnectedBanner />
       <div
         className="flex flex-none border-b border-zinc-800"
         style={{ height: coarse ? '34dvh' : `${previewFrac * 100}dvh` }}
@@ -114,6 +117,7 @@ export default function App() {
       <ExportSheet />
       <ShortcutsHelp />
       <Preferences />
+      <About />
       <Toast />
 
       <AnimatePresence>
@@ -129,6 +133,58 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * Restore warning: shown when a reopened session has assets whose source file
+ * can no longer be read. Offers to reconnect the files in bulk (matched by
+ * name) or to start a fresh project.
+ */
+function DisconnectedBanner() {
+  const { t } = useTranslation();
+  // Select the stable assets reference and derive in render: returning a fresh
+  // array straight from the selector would make Zustand loop (new ref each run).
+  const assets = useStore((s) => s.assets);
+  const disconnected = Object.values(assets).filter((a) => a.disconnected);
+  if (disconnected.length === 0) return null;
+
+  const reconnectAll = () => {
+    openMediaPicker((files) => {
+      const { reconnectAsset } = useStore.getState();
+      // Match each picked file back to a disconnected asset by file name.
+      const byName = new Map(disconnected.map((a) => [a.file.name, a.id]));
+      for (const file of files) {
+        const id = byName.get(file.name);
+        if (id) {
+          void reconnectAsset(id, file);
+          byName.delete(file.name);
+        }
+      }
+    });
+  };
+
+  return (
+    <div className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+      <PlugZap className="h-4 w-4 flex-none text-amber-300" />
+      <span className="min-w-0 flex-1">
+        {t('restore.disconnected', { count: disconnected.length })}
+      </span>
+      <button
+        className="flex-none rounded bg-amber-400/20 px-2.5 py-1 font-medium text-amber-100 hover:bg-amber-400/30"
+        onClick={reconnectAll}
+      >
+        {t('restore.reconnect')}
+      </button>
+      <button
+        className="flex-none rounded px-2.5 py-1 font-medium text-amber-200/80 hover:bg-amber-400/10 hover:text-amber-100"
+        onClick={() => {
+          if (window.confirm(t('restore.startNewConfirm'))) useStore.getState().resetProject();
+        }}
+      >
+        {t('restore.startNew')}
+      </button>
     </div>
   );
 }

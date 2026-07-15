@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { PlugZap } from 'lucide-react';
 import { PlaybackEngine } from './PlaybackEngine';
 import { useStore, getSelectedClip } from '../store/store';
 import { Clip, ClipTransform, MediaAsset } from '../types';
@@ -182,6 +184,7 @@ interface PreviewResize {
  * expressed in % of the canvas so no pixel measuring is needed.
  */
 export function PreviewCanvas() {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<PreviewDrag | null>(null);
@@ -197,6 +200,17 @@ export function PreviewCanvas() {
   const cropEditing = useStore((s) => s.cropEditing);
 
   const { width: outW, height: outH } = outputDimensions(project.aspectRatio);
+
+  // Whether a media clip visible right now points at a disconnected source:
+  // the canvas would otherwise just render black with no explanation.
+  const disconnectedNow = project.tracks.some(
+    (tr) =>
+      tr.kind === 'video' &&
+      !tr.hidden &&
+      clipsAt(tr.clips, currentTimeMs).some(
+        (c) => !isGeneratedClip(c) && assets[c.assetId]?.disconnected,
+      ),
+  );
 
   // Crop mode only makes sense for a media clip whose source we can show.
   const cropAsset = selectedClip && !isGeneratedClip(selectedClip) ? assets[selectedClip.assetId] : undefined;
@@ -419,6 +433,12 @@ export function PreviewCanvas() {
         onPointerCancel={onPointerUp}
       >
         <canvas ref={canvasRef} className="h-full w-full rounded-lg shadow-lg shadow-black/50" />
+        {disconnectedNow && !croppingClip && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg bg-zinc-950/70 px-4 text-center">
+            <PlugZap className="h-7 w-7 text-amber-300" />
+            <p className="text-xs font-medium text-amber-100">{t('preview.disconnected')}</p>
+          </div>
+        )}
         {croppingClip && cropAsset && <CropOverlay clip={croppingClip} asset={cropAsset} />}
         {/* Smart-guide lines while dragging a clip in the preview. */}
         {(guides.v.length > 0 || guides.h.length > 0) && (

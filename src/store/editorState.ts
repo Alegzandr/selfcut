@@ -42,6 +42,8 @@ export interface EditorState {
   shortcutsOpen: boolean;
   /** Preferences dialog (language, time format). */
   preferencesOpen: boolean;
+  /** About dialog (app name, version). */
+  aboutOpen: boolean;
   /** How the transport spells time out (persisted). */
   timeFormat: TimeFormat;
   clipboard: ClipboardEntry | null;
@@ -56,6 +58,11 @@ export interface EditorState {
   setAspectRatio: (a: AspectRatio) => void;
   addAsset: (asset: MediaAsset) => void;
   removeAsset: (assetId: string) => void;
+  /**
+   * Re-probe a user-chosen file for an asset whose persisted File went stale
+   * (see `MediaAsset.disconnected`), keeping the asset id so its clips reconnect.
+   */
+  reconnectAsset: (assetId: string, file: File) => Promise<void>;
   addClipFromAsset: (assetId: string) => void;
   /** Drop an asset at a specific timeline position (drag from the media library). */
   addClipFromAssetAt: (assetId: string, timelineMs: number, targetTrackId?: string) => void;
@@ -149,6 +156,7 @@ export interface EditorState {
   setLibraryOpen: (open: boolean) => void;
   setShortcutsOpen: (open: boolean) => void;
   setPreferencesOpen: (open: boolean) => void;
+  setAboutOpen: (open: boolean) => void;
   setTimeFormat: (format: TimeFormat) => void;
   setExportOpen: (open: boolean) => void;
   setImporting: (v: boolean) => void;

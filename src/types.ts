@@ -50,6 +50,13 @@ export interface MediaAsset {
   thumbnails: string[];
   /** Normalized audio peaks (0..1) over the whole duration, for waveform rendering. */
   peaks?: number[];
+  /**
+   * Set on restore when the persisted File can no longer be read (the on-disk
+   * file was moved, renamed or deleted between sessions). A disconnected asset
+   * keeps its metadata and thumbnails so the timeline still renders, but its
+   * frames/audio decode to nothing until the user reconnects the source file.
+   */
+  disconnected?: boolean;
 }
 
 export interface ClipTransform {

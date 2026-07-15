@@ -1,6 +1,9 @@
 /** Application name - change it in one place. */
 export const APP_NAME = 'SelfCut';
 
+/** Application version - keep in sync with package.json. */
+export const APP_VERSION = '0.1.0';
+
 /** Fixed frame rate for the project and export. */
 export const PROJECT_FPS = 60 as const;
 

@@ -1,12 +1,27 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, FileX2, FolderOpen, Redo2, Undo2 } from 'lucide-react';
+import {
+  Download,
+  FileX2,
+  Flag,
+  FolderOpen,
+  Keyboard,
+  Magnet,
+  Redo2,
+  Scissors,
+  StretchHorizontal,
+  Trash2,
+  Undo2,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react';
 import { APP_NAME } from '../app/config';
 import logoUrl from '../assets/logo.png';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
 import { useIsCoarsePointer } from '../lib/device';
 import { AspectRatio } from '../types';
+import { zoomAtPlayhead, zoomToFit } from '../timeline/zoom';
 
 const ASPECTS = [
   { value: '16:9', titleKey: 'topbar.aspect.16x9' },
@@ -18,6 +33,7 @@ const ASPECTS = [
 /**
  * "New project" without a native confirm(): the first press arms the button
  * (it turns into an explicit red "Discard?"), a second press within 4s resets.
+ * Touch only - on desktop the File menu owns "New project".
  */
 function NewProjectButton() {
   const { t } = useTranslation();
@@ -65,8 +81,21 @@ export function TopBar() {
   const canUndo = useStore((s) => s.past.length > 0);
   const canRedo = useStore((s) => s.future.length > 0);
   const assetCount = useStore((s) => Object.keys(s.assets).length);
+  const hasSelection = useStore((s) => s.selectedClipIds.length > 0);
+  const snapEnabled = useStore((s) => s.snapEnabled);
   const coarse = useIsCoarsePointer();
-  const { setAspectRatio, undo, redo, setExportOpen, setLibraryOpen } = useStore.getState();
+  const {
+    setAspectRatio,
+    undo,
+    redo,
+    setExportOpen,
+    setLibraryOpen,
+    splitAtPlayhead,
+    deleteClips,
+    toggleSnap,
+    addMarkerAtPlayhead,
+    setShortcutsOpen,
+  } = useStore.getState();
 
   return (
     <header className="flex h-12 flex-none items-center gap-1 border-b border-zinc-800 bg-zinc-900 px-2 sm:gap-2 sm:px-3">
@@ -81,18 +110,84 @@ export function TopBar() {
         </div>
       )}
 
-      <div className="flex overflow-hidden rounded-lg border border-zinc-700">
-        {ASPECTS.map(({ value, titleKey }) => (
-          <Tooltip key={value} label={t(titleKey)}>
+      {/* Editing / view tools, relocated from the transport bar so the transport
+          stays a pure playback control. Touch keeps them in the bottom tool rail
+          (split/delete) and pinch-to-zoom, so this group is desktop only. */}
+      {!coarse && (
+        <>
+          <Tooltip label={t('transport.addMarker')}>
             <button
-              className={`px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 active:bg-zinc-800'}`}
-              onClick={() => setAspectRatio(value)}
+              className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+              onClick={addMarkerAtPlayhead}
             >
-              {value}
+              <Flag className="h-4 w-4" />
             </button>
           </Tooltip>
-        ))}
-      </div>
+          <Tooltip label={t('transport.split')}>
+            <button
+              className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+              onClick={() => splitAtPlayhead()}
+            >
+              <Scissors className="h-4 w-4" />
+            </button>
+          </Tooltip>
+          <Tooltip label={t('transport.delete')}>
+            <button
+              className="rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
+              disabled={!hasSelection}
+              onClick={() => deleteClips(useStore.getState().selectedClipIds, false)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </Tooltip>
+          <Tooltip label={snapEnabled ? t('transport.snapping.on') : t('transport.snapping.off')}>
+            <button
+              className={`rounded-lg p-2 ${snapEnabled ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-500'} active:bg-zinc-800`}
+              onClick={toggleSnap}
+            >
+              <Magnet className="h-4 w-4" />
+            </button>
+          </Tooltip>
+
+          <div className="mx-1 h-5 w-px bg-zinc-800" />
+
+          <Tooltip label={t('transport.zoomOut')}>
+            <button
+              className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+              onClick={() => zoomAtPlayhead(1 / 1.4)}
+            >
+              <ZoomOut className="h-4 w-4" />
+            </button>
+          </Tooltip>
+          <Tooltip label={t('transport.zoomIn')}>
+            <button
+              className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+              onClick={() => zoomAtPlayhead(1.4)}
+            >
+              <ZoomIn className="h-4 w-4" />
+            </button>
+          </Tooltip>
+          <Tooltip label={t('transport.zoomFit')}>
+            <button
+              className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+              onClick={() => zoomToFit()}
+            >
+              <StretchHorizontal className="h-4 w-4" />
+            </button>
+          </Tooltip>
+
+          <div className="mx-1 h-5 w-px bg-zinc-800" />
+
+          <Tooltip label={t('transport.shortcuts')}>
+            <button
+              className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+              onClick={() => setShortcutsOpen(true)}
+            >
+              <Keyboard className="h-4 w-4" />
+            </button>
+          </Tooltip>
+        </>
+      )}
 
       {/* Mobile: the media library lives in a drawer. */}
       {coarse && (
@@ -112,7 +207,9 @@ export function TopBar() {
 
       <div className="mx-auto" />
 
-      <NewProjectButton />
+      {/* New project + Export live in the File menu on desktop; touch has no menu
+          bar, so keep them reachable here. */}
+      {coarse && <NewProjectButton />}
 
       <Tooltip label={t('topbar.undo')} shortcut="Ctrl+Z">
         <button
@@ -133,17 +230,31 @@ export function TopBar() {
         </button>
       </Tooltip>
 
-      {/* Add / Import are covered by the Insert & File menus on desktop, and by
-          the CapCut-style bottom tool rail on touch - no toolbar duplicate here. */}
-      <Tooltip label={t('topbar.exportHint')} shortcut="Ctrl+E">
-        <button
-          className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-2.5 py-1.5 text-xs font-semibold text-white active:bg-sky-600"
-          onClick={() => setExportOpen(true)}
-        >
-          <Download className="h-4 w-4" />
-          <span className="hidden sm:inline">{t('topbar.export')}</span>
-        </button>
-      </Tooltip>
+      {coarse && (
+        <Tooltip label={t('topbar.exportHint')} shortcut="Ctrl+E">
+          <button
+            className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-2.5 py-1.5 text-xs font-semibold text-white active:bg-sky-600"
+            onClick={() => setExportOpen(true)}
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">{t('topbar.export')}</span>
+          </button>
+        </Tooltip>
+      )}
+
+      {/* Aspect ratio picker, pinned to the far right. */}
+      <div className="flex overflow-hidden rounded-lg border border-zinc-700">
+        {ASPECTS.map(({ value, titleKey }) => (
+          <Tooltip key={value} label={t(titleKey)}>
+            <button
+              className={`px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 active:bg-zinc-800'}`}
+              onClick={() => setAspectRatio(value)}
+            >
+              {value}
+            </button>
+          </Tooltip>
+        ))}
+      </div>
     </header>
   );
 }

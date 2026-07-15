@@ -1,12 +1,13 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { Film, FolderOpen, Music, Plus, Trash2, X } from 'lucide-react';
+import { Film, FolderOpen, Music, Plus, PlugZap, Trash2, X } from 'lucide-react';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
 import { MediaAsset } from '../types';
 import { formatTimeShort } from '../lib/time';
 import { ASSET_DRAG_MIME } from '../app/config';
 import { useIsCoarsePointer } from '../lib/device';
+import { openMediaPicker } from './mediaPicker';
 
 /**
  * Source explorer: every imported file lands here. From here assets are
@@ -92,15 +93,30 @@ export function MediaLibrary() {
   );
 }
 
+/**
+ * Prompt for a replacement file and reconnect the given asset to it. Used both
+ * on the card and from the restore banner (the file dialog only surfaces the
+ * OS file, so the match is the user's responsibility).
+ */
+export function reconnectAssetViaPicker(assetId: string): void {
+  openMediaPicker((files) => {
+    const file = files[0];
+    if (file) void useStore.getState().reconnectAsset(assetId, file);
+  });
+}
+
 function AssetCard({ asset }: { asset: MediaAsset }) {
   const { t } = useTranslation();
   const { addClipFromAsset, removeAsset } = useStore.getState();
   const isVideo = asset.kind === 'video';
+  const disconnected = asset.disconnected;
 
   return (
     <div
-      className="group overflow-hidden rounded-md border border-zinc-800 bg-zinc-900"
-      draggable
+      className={`group overflow-hidden rounded-md border bg-zinc-900 ${
+        disconnected ? 'border-amber-500/60' : 'border-zinc-800'
+      }`}
+      draggable={!disconnected}
       onDragStart={(e) => {
         // Desktop: drag the asset straight onto a timeline position.
         e.dataTransfer.setData(ASSET_DRAG_MIME, asset.id);
@@ -109,11 +125,28 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
     >
       <div className="relative aspect-video w-full overflow-hidden bg-zinc-950">
         {isVideo && asset.thumbnails.length ? (
-          <img src={asset.thumbnails[0]} className="h-full w-full object-cover" alt="" draggable={false} />
+          <img
+            src={asset.thumbnails[0]}
+            className={`h-full w-full object-cover ${disconnected ? 'opacity-40' : ''}`}
+            alt=""
+            draggable={false}
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-emerald-900/50 to-emerald-950">
-            <Music className="h-6 w-6 text-emerald-300" />
+            <Music className={`h-6 w-6 text-emerald-300 ${disconnected ? 'opacity-40' : ''}`} />
           </div>
+        )}
+        {disconnected && (
+          <button
+            className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-zinc-950/60 text-amber-300"
+            onClick={() => reconnectAssetViaPicker(asset.id)}
+            title={t('library.reconnect')}
+          >
+            <PlugZap className="h-5 w-5" />
+            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide">
+              {t('library.disconnected')}
+            </span>
+          </button>
         )}
         <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[9px] tabular-nums text-zinc-200">
           {formatTimeShort(asset.durationMs)}
@@ -135,18 +168,29 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
-        <Tooltip label={t('library.add')}>
-        <button
-          className="flex-none rounded bg-sky-500/15 p-1 text-sky-300 active:bg-sky-500/30"
-          onClick={() => {
-            addClipFromAsset(asset.id);
-            // Mobile drawer: close it so the freshly placed clip is visible.
-            useStore.getState().setLibraryOpen(false);
-          }}
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
-        </Tooltip>
+        {disconnected ? (
+          <Tooltip label={t('library.reconnect')}>
+            <button
+              className="flex-none rounded bg-amber-500/15 p-1 text-amber-300 active:bg-amber-500/30"
+              onClick={() => reconnectAssetViaPicker(asset.id)}
+            >
+              <PlugZap className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
+        ) : (
+          <Tooltip label={t('library.add')}>
+            <button
+              className="flex-none rounded bg-sky-500/15 p-1 text-sky-300 active:bg-sky-500/30"
+              onClick={() => {
+                addClipFromAsset(asset.id);
+                // Mobile drawer: close it so the freshly placed clip is visible.
+                useStore.getState().setLibraryOpen(false);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
+        )}
       </div>
     </div>
   );

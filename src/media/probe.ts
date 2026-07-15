@@ -19,8 +19,11 @@ export interface AssetVisualsSink {
  * Throws an Error (displayable message) if the file cannot be read.
  * The full thumbnail strip and audio peaks are filled in later by
  * ensureAssetVisuals() so importing stays fast.
+ *
+ * `reuseId` keeps an existing asset's id (and therefore its clips) when
+ * reconnecting a source whose File reference went stale between sessions.
  */
-export async function probeFile(file: File): Promise<MediaAsset> {
+export async function probeFile(file: File, reuseId?: string): Promise<MediaAsset> {
   const input = createInput(file);
   if (!(await input.canRead())) {
     input.dispose();
@@ -45,7 +48,7 @@ export async function probeFile(file: File): Promise<MediaAsset> {
   }
 
   const asset: MediaAsset = {
-    id: uid('asset'),
+    id: reuseId ?? uid('asset'),
     file,
     kind: videoTrack ? 'video' : 'audio',
     durationMs,

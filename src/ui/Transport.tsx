@@ -1,24 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  Flag,
-  Keyboard,
-  Magnet,
-  Pause,
-  Play,
-  Repeat,
-  Scissors,
-  SkipBack,
-  StretchHorizontal,
-  Trash2,
-  ZoomIn,
-  ZoomOut,
-} from 'lucide-react';
+import { Pause, Play, Repeat, SkipBack } from 'lucide-react';
 import { useStore, projectDurationMs } from '../store/store';
 import { Tooltip } from './Tooltip';
 import { formatClock, formatClockParts } from '../lib/time';
-import { useIsCoarsePointer } from '../lib/device';
-import { zoomAtPlayhead, zoomToFit } from '../timeline/zoom';
 
 /**
  * Timecode updated 60×/sec during playback - written straight to the DOM from
@@ -60,28 +45,20 @@ function TimeReadout() {
   );
 }
 
+/**
+ * The transport is a pure *playback* control (back-to-start, play/pause,
+ * timecode, loop). Editing and view tools (split, delete, snap, zoom, markers)
+ * live in the top bar so this bar stays focused on driving playback.
+ */
 export function Transport() {
   const { t } = useTranslation();
   const playing = useStore((s) => s.playing);
   const playbackRate = useStore((s) => s.playbackRate);
-  const hasSelection = useStore((s) => s.selectedClipIds.length > 0);
   const region = useStore((s) => s.loopRegion);
   const loopEnabled = useStore((s) => s.loopEnabled);
-  const snapEnabled = useStore((s) => s.snapEnabled);
   const timeFormat = useStore((s) => s.timeFormat);
   const fps = useStore((s) => s.project.fps);
-  const coarse = useIsCoarsePointer();
-  const {
-    setPlaying,
-    seek,
-    splitAtPlayhead,
-    deleteClips,
-    setShortcutsOpen,
-    toggleLoopEnabled,
-    toggleSnap,
-    addMarkerAtPlayhead,
-    setLoopRegion,
-  } = useStore.getState();
+  const { setPlaying, seek, toggleLoopEnabled, setLoopRegion } = useStore.getState();
 
   return (
     <div className="flex h-11 flex-none items-center justify-center gap-1 border-y border-zinc-800 bg-zinc-900 px-2">
@@ -95,7 +72,7 @@ export function Transport() {
       </Tooltip>
       <Tooltip label={playing ? t('transport.pause') : t('transport.play')}>
       <button
-        className="relative rounded-full bg-zinc-100 p-2.5 text-zinc-950 active:bg-white"
+        className="relative rounded-full bg-zinc-300 p-2.5 text-zinc-950 active:bg-zinc-200"
         onClick={() => setPlaying(!playing)}
       >
         {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-px" />}
@@ -119,14 +96,6 @@ export function Transport() {
           <Repeat className="h-4 w-4" />
         </button>
       </Tooltip>
-      <Tooltip label={t('transport.addMarker')}>
-        <button
-          className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
-          onClick={addMarkerAtPlayhead}
-        >
-          <Flag className="h-4 w-4" />
-        </button>
-      </Tooltip>
 
       {/* Selection readout: clicking it clears the region (like clicking the empty bar). */}
       {region && (
@@ -139,77 +108,6 @@ export function Transport() {
             {formatClock(region.endMs, fps, timeFormat)}
           </button>
         </Tooltip>
-      )}
-
-      {/* Touch devices: split/delete live in the clip action bar, zoom is pinch. */}
-      {!coarse && (
-        <>
-          <div className="mx-1 h-5 w-px bg-zinc-800" />
-
-          <Tooltip label={t('transport.split')}>
-            <button
-              className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
-              onClick={() => splitAtPlayhead()}
-            >
-              <Scissors className="h-4 w-4" />
-            </button>
-          </Tooltip>
-          <Tooltip label={t('transport.delete')}>
-            <button
-              className="rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
-              disabled={!hasSelection}
-              onClick={() => deleteClips(useStore.getState().selectedClipIds, false)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </Tooltip>
-          <Tooltip label={snapEnabled ? t('transport.snapping.on') : t('transport.snapping.off')}>
-            <button
-              className={`rounded-lg p-2 ${snapEnabled ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-500'} active:bg-zinc-800`}
-              onClick={toggleSnap}
-            >
-              <Magnet className="h-4 w-4" />
-            </button>
-          </Tooltip>
-
-          <div className="mx-1 h-5 w-px bg-zinc-800" />
-
-          <Tooltip label={t('transport.zoomOut')}>
-            <button
-              className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
-              onClick={() => zoomAtPlayhead(1 / 1.4)}
-            >
-              <ZoomOut className="h-4 w-4" />
-            </button>
-          </Tooltip>
-          <Tooltip label={t('transport.zoomIn')}>
-            <button
-              className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
-              onClick={() => zoomAtPlayhead(1.4)}
-            >
-              <ZoomIn className="h-4 w-4" />
-            </button>
-          </Tooltip>
-          <Tooltip label={t('transport.zoomFit')}>
-            <button
-              className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
-              onClick={() => zoomToFit()}
-            >
-              <StretchHorizontal className="h-4 w-4" />
-            </button>
-          </Tooltip>
-
-          <div className="mx-1 h-5 w-px bg-zinc-800" />
-
-          <Tooltip label={t('transport.shortcuts')}>
-            <button
-              className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
-              onClick={() => setShortcutsOpen(true)}
-            >
-              <Keyboard className="h-4 w-4" />
-            </button>
-          </Tooltip>
-        </>
       )}
     </div>
   );

@@ -126,11 +126,19 @@
 
   "library.add": "Add to timeline",
   "library.close": "Close",
+  "library.disconnected": "Disconnected",
+  "library.reconnect": "Reconnect source",
   "library.count_one": "{{count}} file",
   "library.count_other": "{{count}} files",
   "library.empty": "Imported files appear here. Use Import or drop files anywhere.",
   "library.remove": "Remove from library",
   "library.title": "Media",
+  "preview.disconnected": "Source disconnected — reconnect the file to see it",
+  "restore.disconnected_one": "{{count}} source is disconnected: its file could not be found.",
+  "restore.disconnected_other": "{{count}} sources are disconnected: their files could not be found.",
+  "restore.reconnect": "Reconnect files",
+  "restore.startNew": "New project",
+  "restore.startNewConfirm": "Start a new project? Your current timeline will be discarded.",
 
   "export.title": "Export",
   "export.back": "Back",
@@ -274,6 +282,7 @@
   "menu.edit.copy": "Copy",
   "menu.edit.paste": "Paste",
   "menu.edit.selectAll": "Select all",
+  "menu.edit.preferences": "Preferences…",
 
   "menu.insert.text": "Text",
   "menu.insert.color": "Solid color",
@@ -303,10 +312,14 @@
   "menu.playback.regionOut": "Set region out",
 
   "menu.help.shortcuts": "Keyboard shortcuts",
+  "menu.help.about": "About SelfCut",
 
   "menu.preferences": "Preferences",
   "preferences.title": "Preferences",
   "preferences.close": "Close",
+  "about.close": "Close",
+  "about.version": "Version",
+  "about.tagline": "A browser video editor for short-form social clips.",
   "preferences.timeFormat": "Time format",
   "preferences.timeFormat.timecode": "Timecode (m:ss:frames)",
   "preferences.timeFormat.decimal": "Decimal (m:ss.tenths)",

@@ -93,6 +93,7 @@ export const useStore = create<EditorState>((set, get) => {
     libraryOpen: false,
     shortcutsOpen: false,
     preferencesOpen: false,
+    aboutOpen: false,
     timeFormat: loadTimeFormat(),
     clipboard: null,
     exportOpen: false,

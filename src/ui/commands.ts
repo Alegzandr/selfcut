@@ -28,6 +28,8 @@ import {
   Play,
   Magnet,
   MapPin,
+  Settings,
+  Info,
 } from 'lucide-react';
 import { useStore, getSelectedClip } from '../store/store';
 import { useImport } from './useImport';
@@ -85,6 +87,7 @@ export function useEditorCommands(): Record<string, Command> {
     { id: 'edit.copy', labelKey: 'menu.edit.copy', icon: Copy, shortcut: 'Ctrl+C', disabled: !selectedId, onClick: () => selectedId && st().copyClip(selectedId) },
     { id: 'edit.paste', labelKey: 'menu.edit.paste', icon: ClipboardPaste, shortcut: 'Ctrl+V', disabled: !hasClipboard, onClick: () => st().pasteAtPlayhead() },
     { id: 'edit.selectAll', labelKey: 'menu.edit.selectAll', icon: ListChecks, shortcut: 'Ctrl+A', onClick: () => st().selectAllClips() },
+    { id: 'edit.preferences', labelKey: 'menu.edit.preferences', icon: Settings, onClick: () => st().setPreferencesOpen(true) },
 
     // ── Insert ────────────────────────────────────────────────────────────
     { id: 'insert.text', labelKey: 'menu.insert.text', icon: Type, shortcut: 'T', onClick: () => st().addTextClip() },
@@ -119,6 +122,7 @@ export function useEditorCommands(): Record<string, Command> {
 
     // ── Help ──────────────────────────────────────────────────────────────
     { id: 'help.shortcuts', labelKey: 'menu.help.shortcuts', icon: Keyboard, shortcut: '?', onClick: () => st().setShortcutsOpen(true) },
+    { id: 'help.about', labelKey: 'menu.help.about', icon: Info, onClick: () => st().setAboutOpen(true) },
   ];
 
   return Object.fromEntries(list.map((c) => [c.id, c]));

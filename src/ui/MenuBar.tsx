@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 import logoUrl from '../assets/logo.png';
 import { APP_NAME } from '../app/config';
-import { useStore } from '../store/store';
 import { useEditorCommands, type Command } from './commands';
 
 /**
@@ -18,7 +17,7 @@ const MENUS: readonly Menu[] = [
   { titleKey: 'menu.file', items: ['file.new', 'file.import', '---', 'file.export'] },
   {
     titleKey: 'menu.edit',
-    items: ['edit.undo', 'edit.redo', '---', 'edit.cut', 'edit.copy', 'edit.paste', '---', 'edit.selectAll'],
+    items: ['edit.undo', 'edit.redo', '---', 'edit.cut', 'edit.copy', 'edit.paste', '---', 'edit.selectAll', '---', 'edit.preferences'],
   },
   {
     titleKey: 'menu.insert',
@@ -36,7 +35,7 @@ const MENUS: readonly Menu[] = [
     titleKey: 'menu.playback',
     items: ['playback.playPause', 'playback.start', '---', 'playback.loop', 'playback.regionIn', 'playback.regionOut'],
   },
-  { titleKey: 'menu.help', items: ['help.shortcuts'] },
+  { titleKey: 'menu.help', items: ['help.shortcuts', '---', 'help.about'] },
 ];
 
 function MenuItem({ command, onRun }: { command: Command | undefined; onRun: () => void }) {
@@ -78,7 +77,6 @@ function MenuItem({ command, onRun }: { command: Command | undefined; onRun: () 
 export function MenuBar() {
   const { t } = useTranslation();
   const commands = useEditorCommands();
-  const { setPreferencesOpen } = useStore.getState();
   const [open, setOpen] = useState<ParseKeys | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -135,16 +133,6 @@ export function MenuBar() {
           </div>
         );
       })}
-
-      {/* Preferences is a top-level entry like the menus, but opens a dialog
-          instead of a dropdown (language + time format live better as controls). */}
-      <button
-        type="button"
-        className="rounded px-2.5 py-1 text-zinc-300 hover:bg-zinc-800/60"
-        onClick={() => setPreferencesOpen(true)}
-      >
-        {t('menu.preferences')}
-      </button>
 
       <div className="ml-auto" />
     </div>

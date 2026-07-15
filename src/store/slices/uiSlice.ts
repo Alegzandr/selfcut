@@ -17,6 +17,7 @@ export function createUiSlice(
   | 'setLibraryOpen'
   | 'setShortcutsOpen'
   | 'setPreferencesOpen'
+  | 'setAboutOpen'
   | 'setTimeFormat'
   | 'setExportOpen'
   | 'setError'
@@ -34,6 +35,7 @@ export function createUiSlice(
     setLibraryOpen: (open) => set({ libraryOpen: open }),
     setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
     setPreferencesOpen: (open) => set({ preferencesOpen: open }),
+    setAboutOpen: (open) => set({ aboutOpen: open }),
 
     setTimeFormat: (format) => {
       try {
