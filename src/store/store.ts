@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { produce, setAutoFreeze } from 'immer';
 import { Clip, LoopRegion, Marker, Project } from '../types';
 import { clipDurationMs, clipEndMs, projectDurationMs, sortedMarkers } from '../model';
-import { createEmptyProject, resolveOverlaps } from './projectOps';
+import { createEmptyProject, linkableSelection, resolveOverlaps } from './projectOps';
 import { type TimeFormat } from '../lib/time';
 import { DEFAULT_PX_PER_SEC, TIMELINE_PAD_LEFT } from '../app/config';
 import { HISTORY_LIMIT, TIME_FORMAT_KEY } from './constants';
@@ -127,6 +127,11 @@ export function getSelectedClip(state: EditorState): Clip | null {
     if (clip) return clip;
   }
   return null;
+}
+
+/** Selector: the clip pair a "Link" action would join, or null (drives the command). */
+export function getLinkTargets(state: EditorState): [string, string] | null {
+  return linkableSelection(state.project, state.selectedClipIds);
 }
 
 export { clipDurationMs, clipEndMs, projectDurationMs, sortedMarkers };

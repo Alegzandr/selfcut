@@ -6,6 +6,8 @@ import {
   createEmptyProject,
   linkedPartnerIds,
   withLinkedIds,
+  linkCandidate,
+  linkableSelection,
 } from './projectOps';
 import type { MediaClip, Project, Track } from '../types';
 
@@ -106,6 +108,61 @@ describe('A/V link helpers', () => {
     expect(withLinkedIds(linked(), ['v']).sort()).toEqual(['a', 'v']);
     expect(withLinkedIds(linked(), ['v', 'a']).sort()).toEqual(['a', 'v']);
     expect(withLinkedIds(linked(), ['solo'])).toEqual(['solo']);
+  });
+});
+
+describe('linkCandidate / linkableSelection', () => {
+  // A video and its extracted audio (same asset 'a'), both unlinked, plus an
+  // unrelated audio clip from a different source.
+  const unpaired = () =>
+    project([
+      { id: 'v1', kind: 'video', clips: [clip({ id: 'v', assetId: 'a', sourceOutMs: 4000 })] },
+      {
+        id: 'a1',
+        kind: 'audio',
+        clips: [
+          clip({ id: 'a', trackId: 'a1', assetId: 'a', sourceOutMs: 4000 }),
+          clip({ id: 'other', trackId: 'a1', assetId: 'b', timelineStartMs: 8000 }),
+        ],
+      },
+    ]);
+
+  it('pairs a clip with the same-asset clip on the opposite track', () => {
+    expect(linkCandidate(unpaired(), 'v')).toBe('a');
+    expect(linkCandidate(unpaired(), 'a')).toBe('v');
+  });
+
+  it('ignores a different-asset clip on the opposite track', () => {
+    const p = project([
+      { id: 'v1', kind: 'video', clips: [clip({ id: 'v', assetId: 'a' })] },
+      { id: 'a1', kind: 'audio', clips: [clip({ id: 'other', trackId: 'a1', assetId: 'b' })] },
+    ]);
+    expect(linkCandidate(p, 'v')).toBeNull();
+  });
+
+  it('offers no candidate for an already-linked clip', () => {
+    const p = project([
+      { id: 'v1', kind: 'video', clips: [clip({ id: 'v', assetId: 'a', linkId: 'L' })] },
+      { id: 'a1', kind: 'audio', clips: [clip({ id: 'a', trackId: 'a1', assetId: 'a' })] },
+    ]);
+    expect(linkCandidate(p, 'v')).toBeNull();
+  });
+
+  it('resolves a two-clip selection on opposite tracks', () => {
+    expect(linkableSelection(unpaired(), ['v', 'a'])).toEqual(['v', 'a']);
+  });
+
+  it('rejects two clips on the same-kind track', () => {
+    const p = project([
+      { id: 'a1', kind: 'audio', clips: [clip({ id: 'x', trackId: 'a1' }), clip({ id: 'y', trackId: 'a1', timelineStartMs: 2000 })] },
+    ]);
+    expect(linkableSelection(p, ['x', 'y'])).toBeNull();
+  });
+
+  it('auto-resolves a single-clip selection to its candidate', () => {
+    expect(linkableSelection(unpaired(), ['v'])).toEqual(['v', 'a']);
+    expect(linkableSelection(unpaired(), ['other'])).toBeNull();
+    expect(linkableSelection(unpaired(), [])).toBeNull();
   });
 });
 

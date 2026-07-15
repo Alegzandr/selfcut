@@ -1,5 +1,5 @@
 import { AspectRatio, Clip, Project, Track } from '../types';
-import { clipDurationMs } from '../model';
+import { clipDurationMs, clipEndMs } from '../model';
 import { uid } from '../lib/id';
 import { MIN_CLIP_DURATION_MS, PROJECT_FPS } from '../app/config';
 
@@ -139,4 +139,60 @@ export function withLinkedIds(project: Project, clipIds: Iterable<string>): stri
     for (const partner of linkedPartnerIds(project, id)) set.add(partner);
   }
   return [...set];
+}
+
+/**
+ * The best A/V-link partner for a lone clip, or null. Drives the single-select
+ * "Link" path: an unlinked media clip on the OPPOSITE-kind track, from the SAME
+ * asset, preferring the one that overlaps it in time (falling back to the
+ * closest start). Same-asset matching makes the unlink → re-link round trip
+ * pick the original partner back.
+ */
+export function linkCandidate(project: Project, clipId: string): string | null {
+  const found = findClip(project, clipId);
+  if (!found) return null;
+  const { clip, track } = found;
+  if (clip.linkId != null || clip.kind !== 'media' || clip.assetId === '') return null;
+  const wantKind: Track['kind'] = track.kind === 'video' ? 'audio' : 'video';
+  const start = clip.timelineStartMs;
+  const end = clipEndMs(clip);
+  let best: { id: string; overlap: number; gap: number } | null = null;
+  for (const t of project.tracks) {
+    if (t.kind !== wantKind) continue;
+    for (const c of t.clips) {
+      if (c.linkId != null || c.kind !== 'media' || c.assetId !== clip.assetId) continue;
+      const overlap = Math.max(0, Math.min(end, clipEndMs(c)) - Math.max(start, c.timelineStartMs));
+      const gap = Math.abs(c.timelineStartMs - start);
+      if (!best || overlap > best.overlap || (overlap === best.overlap && gap < best.gap)) {
+        best = { id: c.id, overlap, gap };
+      }
+    }
+  }
+  return best ? best.id : null;
+}
+
+/**
+ * Which clips a "Link" action would join, or null if the selection can't be
+ * linked. Two selected clips must sit on opposite-kind tracks and both be
+ * unlinked; a single selected clip auto-pairs with its `linkCandidate`. Used
+ * for both the command's enabled state and its handler, so they never disagree.
+ */
+export function linkableSelection(
+  project: Project,
+  selectedClipIds: string[],
+): [string, string] | null {
+  if (selectedClipIds.length === 2) {
+    const [a, b] = selectedClipIds as [string, string];
+    const fa = findClip(project, a);
+    const fb = findClip(project, b);
+    if (!fa || !fb) return null;
+    if (fa.clip.linkId != null || fb.clip.linkId != null) return null;
+    if (fa.track.kind === fb.track.kind) return null;
+    return [a, b];
+  }
+  if (selectedClipIds.length === 1) {
+    const partner = linkCandidate(project, selectedClipIds[0]!);
+    return partner ? [selectedClipIds[0]!, partner] : null;
+  }
+  return null;
 }

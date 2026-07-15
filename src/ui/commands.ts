@@ -19,6 +19,7 @@ import {
   Square,
   StretchHorizontal,
   Type,
+  Link2,
   Unlink,
   Undo2,
   Keyboard,
@@ -32,7 +33,7 @@ import {
   Settings,
   Info,
 } from 'lucide-react';
-import { useStore, getSelectedClip } from '../store/store';
+import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
 import { useImport } from './useImport';
 import { openMediaPicker } from './mediaPicker';
 import { zoomAtPlayhead, zoomToFit } from '../timeline/zoom';
@@ -73,6 +74,10 @@ export function useEditorCommands(): Record<string, Command> {
   // Stream layout only makes sense on a real media clip (not text/solid overlays).
   const canStream = selectedClip !== null && selectedClip.assetId !== '';
   const isLinked = selectedClip !== null && selectedClip.linkId != null;
+  // Link is offered when the selection resolves to a joinable A/V pair (two
+  // clips on opposite tracks, or one clip with an obvious partner from the same
+  // source). Subscribe to the boolean only - the pair is resolved in onClick.
+  const canLink = useStore((s) => getLinkTargets(s) !== null);
 
   const st = useStore.getState;
 
@@ -105,6 +110,7 @@ export function useEditorCommands(): Record<string, Command> {
     { id: 'clip.punchIn', labelKey: 'menu.clip.punchIn', icon: ZoomIn, shortcut: 'P', onClick: () => st().punchZoomSelected() },
     { id: 'clip.stream', labelKey: 'menu.clip.stream', icon: LayoutPanelTop, disabled: !canStream, onClick: () => selectedId && st().applyStreamLayout(selectedId) },
     { id: 'clip.adjust', labelKey: 'menu.clip.adjust', icon: SlidersHorizontal, disabled: !selectedId, onClick: () => st().setInspectorOpen(true) },
+    { id: 'clip.link', labelKey: 'menu.clip.link', icon: Link2, disabled: !canLink, onClick: () => { const pair = getLinkTargets(st()); if (pair) st().linkClips(pair); } },
     { id: 'clip.unlink', labelKey: 'menu.clip.unlink', icon: Unlink, disabled: !isLinked, onClick: () => selectedId && st().unlinkClip(selectedId) },
     { id: 'clip.delete', labelKey: 'menu.clip.delete', icon: Scissors, shortcut: 'Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, false) },
     { id: 'clip.rippleDelete', labelKey: 'menu.clip.rippleDelete', icon: Scissors, shortcut: 'Shift+Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, true) },

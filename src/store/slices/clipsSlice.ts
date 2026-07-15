@@ -54,6 +54,7 @@ export function createClipsSlice(
   | 'deleteClips'
   | 'duplicateClip'
   | 'unlinkClip'
+  | 'linkClips'
   | 'punchZoomSelected'
   | 'addSubtitleClips'
   | 'applyStreamLayout'
@@ -454,6 +455,23 @@ export function createClipsSlice(
             // sound. The user can raise it again or delete either clip freely.
             if (track.kind === 'video') clip.volume = 0;
             delete clip.linkId;
+          }
+        }
+      });
+    },
+
+    linkClips: (clipIds) => {
+      const ids = new Set(clipIds);
+      if (ids.size < 2) return;
+      // Join the given clips into one A/V link (fresh shared linkId), so they
+      // move/trim/split/delete together again. The mix already mutes the video
+      // side of a link, so no volume change is needed here - if the video was
+      // silenced by a prior unlink it simply stays delegated.
+      const linkId = uid('link');
+      withHistory((p) => {
+        for (const track of p.tracks) {
+          for (const clip of track.clips) {
+            if (ids.has(clip.id)) clip.linkId = linkId;
           }
         }
       });

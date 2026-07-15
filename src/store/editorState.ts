@@ -128,6 +128,13 @@ export interface EditorState {
    * audio clip; the video side is muted (volume 0) so the sound is not doubled.
    */
   unlinkClip: (clipId: string) => void;
+  /**
+   * Re-link clips into one A/V pair (fresh shared `linkId`) so they move, trim,
+   * split and delete together again. The video side is muted in the mix by the
+   * link itself, so its audio is delegated to the audio clip (never doubled).
+   * The UI resolves the target ids from the selection via `linkableSelection`.
+   */
+  linkClips: (clipIds: string[]) => void;
   copyClip: (clipId: string) => void;
   cutClip: (clipId: string) => void;
   pasteAtPlayhead: () => void;

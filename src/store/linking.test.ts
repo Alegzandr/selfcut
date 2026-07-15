@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import type { MediaAsset } from '../types';
+import { linkableSelection } from './projectOps';
 
 /**
  * A/V linking: importing a video that carries audio must drop a picture clip AND
@@ -172,5 +173,48 @@ describe('linked edits', () => {
     expect(audioClips).toHaveLength(2);
     const links = new Set([...videoClips, ...audioClips].map((c) => c.linkId));
     expect(links.size).toBe(2); // original link + the duplicate's link
+  });
+});
+
+describe('re-link', () => {
+  beforeEach(() => {
+    s().addAsset(videoAsset('v'));
+    s().addClipFromAsset('v');
+  });
+
+  it('joins two unlinked clips into one shared link', () => {
+    const { video, audio } = pair();
+    s().unlinkClip(video.id);
+    s().linkClips([video.id, audio.id]);
+    const after = pair();
+    expect(after.video.linkId).toBeTruthy();
+    expect(after.audio.linkId).toBe(after.video.linkId);
+  });
+
+  it('auto-pairs a single unlinked clip with its same-asset partner', () => {
+    const { video } = pair();
+    s().unlinkClip(video.id);
+    // Only the video is selected; its audio is resolved as the link candidate.
+    const targets = linkableSelection(s().project, [video.id]);
+    expect(targets).not.toBeNull();
+    s().linkClips(targets!);
+    const after = pair();
+    expect(after.video.linkId).toBe(after.audio.linkId);
+    expect(after.video.linkId).toBeTruthy();
+  });
+
+  it('offers no link target while the pair is already linked', () => {
+    const { video } = pair();
+    expect(linkableSelection(s().project, [video.id])).toBeNull();
+  });
+
+  it('makes re-linked clips move together again', () => {
+    const { video, audio } = pair();
+    s().unlinkClip(video.id);
+    s().linkClips([video.id, audio.id]);
+    s().moveClip(video.id, 2500);
+    const after = pair();
+    expect(after.video.timelineStartMs).toBe(2500);
+    expect(after.audio.timelineStartMs).toBe(2500);
   });
 });

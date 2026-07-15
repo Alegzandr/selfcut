@@ -13,12 +13,13 @@ import {
   Scissors,
   SlidersHorizontal,
   LayoutPanelTop,
+  Link2,
   Trash2,
   Type,
   Unlink,
   ZoomIn,
 } from 'lucide-react';
-import { useStore, getSelectedClip } from '../store/store';
+import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
 import { useIsCoarsePointer } from '../lib/device';
 import { useEditorCommands } from './commands';
 
@@ -40,6 +41,8 @@ type Tile = {
   mediaOnly?: boolean;
   /** Clip rail only: hide the tile unless the selected clip is A/V-linked. */
   linkedOnly?: boolean;
+  /** Clip rail only: hide the tile unless the selection can be A/V-linked. */
+  linkableOnly?: boolean;
 };
 
 const TOOL_TILES: readonly Tile[] = [
@@ -59,6 +62,7 @@ const CLIP_TILES: readonly Tile[] = [
   { cmd: 'clip.punchIn', icon: ZoomIn, labelKey: 'clipbar.punchIn' },
   { cmd: 'clip.stream', icon: LayoutPanelTop, labelKey: 'clipbar.stream', mediaOnly: true },
   { cmd: 'clip.adjust', icon: SlidersHorizontal, labelKey: 'clipbar.adjust' },
+  { cmd: 'clip.link', icon: Link2, labelKey: 'clipbar.link', linkableOnly: true },
   { cmd: 'clip.unlink', icon: Unlink, labelKey: 'clipbar.unlink', linkedOnly: true },
   { cmd: 'clip.rippleDelete', icon: Trash2, labelKey: 'clipbar.delete', danger: true },
 ];
@@ -94,6 +98,7 @@ function Rail({ tiles }: { tiles: readonly Tile[] }) {
 export function MobileBottomBar() {
   const coarse = useIsCoarsePointer();
   const clip = useStore(getSelectedClip);
+  const canLink = useStore((s) => getLinkTargets(s) !== null);
   const inspectorOpen = useStore((s) => s.inspectorOpen);
   if (!coarse) return null;
 
@@ -103,7 +108,9 @@ export function MobileBottomBar() {
   const tiles = showClip
     ? CLIP_TILES.filter(
         (tile) =>
-          (!tile.mediaOnly || clip.assetId !== '') && (!tile.linkedOnly || clip.linkId != null),
+          (!tile.mediaOnly || clip.assetId !== '') &&
+          (!tile.linkedOnly || clip.linkId != null) &&
+          (!tile.linkableOnly || canLink),
       )
     : TOOL_TILES;
 
