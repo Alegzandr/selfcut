@@ -20,16 +20,23 @@ import {
   sortedMarkers,
 } from '../model';
 import { uid } from '../lib/id';
+import {
+  createEmptyProject,
+  ensureTrack,
+  findClip,
+  insertTrack,
+  patchClips,
+  resolveOverlaps,
+} from './projectOps';
 import { clamp, type TimeFormat } from '../lib/time';
 import { disposeAssetResources } from '../media/mediaCache';
-import { t } from '../i18n';
+import { t as translate } from '../i18n';
 import {
   DEFAULT_PX_PER_SEC,
   MIN_CLIP_DURATION_MS,
   MIN_PX_PER_SEC,
   MAX_PX_PER_SEC,
   MIN_REGION_MS,
-  PROJECT_FPS,
   TIMELINE_PAD_LEFT,
 } from '../app/config';
 
@@ -196,99 +203,6 @@ export interface EditorState {
   setError: (msg: string | null) => void;
 }
 
-function createEmptyProject(): Project {
-  return { id: uid('proj'), aspectRatio: '16:9', fps: PROJECT_FPS, tracks: [], markers: [] };
-}
-
-/**
- * Overlap policy: two consecutive clips on a track MAY overlap - the overlap
- * is rendered as a crossfade (Vegas-style transition by sliding a clip over
- * its neighbor). What stays forbidden, with offenders pushed right:
- * - a clip overlapping the clip two positions back (no triple overlap);
- * - a clip starting less than MIN_CLIP_DURATION_MS after the previous one
- *   (each clip keeps an exposed head, so ordering stays unambiguous).
- * Copy-on-write: returns the same Project reference when nothing moved, and
- * untouched tracks/clips keep their identity.
- */
-function resolveOverlaps(p: Project, priorityClipId?: string | null): Project {
-  let projectChanged = false;
-  const tracks = p.tracks.map((track) => {
-    const sorted = [...track.clips].sort((a, b) => {
-      if (a.timelineStartMs !== b.timelineStartMs) return a.timelineStartMs - b.timelineStartMs;
-      if (a.id === priorityClipId) return -1;
-      if (b.id === priorityClipId) return 1;
-      return 0;
-    });
-    const movedTo = new Map<string, number>();
-    let prev: { start: number; end: number } | null = null;
-    let prevPrevEnd = 0;
-    for (const c of sorted) {
-      const minStart = prev ? Math.max(prevPrevEnd, prev.start + MIN_CLIP_DURATION_MS) : 0;
-      const start = Math.max(c.timelineStartMs, minStart);
-      if (start !== c.timelineStartMs) movedTo.set(c.id, start);
-      prevPrevEnd = prev ? prev.end : 0;
-      prev = { start, end: start + clipDurationMs(c) };
-    }
-    if (movedTo.size === 0) return track;
-    projectChanged = true;
-    return {
-      ...track,
-      clips: track.clips.map((c) =>
-        movedTo.has(c.id) ? { ...c, timelineStartMs: movedTo.get(c.id)! } : c,
-      ),
-    };
-  });
-  return projectChanged ? { ...p, tracks } : p;
-}
-
-/**
- * Copy-on-write clip edits: only the touched clips (and their tracks) get a
- * new identity, so memoized clip views of untouched clips skip re-rendering.
- * An edit returning the same clip is a no-op; if nothing changed, the same
- * Project reference comes back.
- */
-function patchClips(p: Project, edits: Map<string, (c: Clip) => Clip>): Project {
-  let projectChanged = false;
-  const tracks = p.tracks.map((track) => {
-    let trackChanged = false;
-    const clips = track.clips.map((c) => {
-      const edit = edits.get(c.id);
-      if (!edit) return c;
-      const next = edit(c);
-      if (next === c) return c;
-      trackChanged = true;
-      return next;
-    });
-    if (!trackChanged) return track;
-    projectChanged = true;
-    return { ...track, clips };
-  });
-  return projectChanged ? { ...p, tracks } : p;
-}
-
-/** Find (or create) the track a clip of the given kind should land on. */
-function ensureTrack(p: Project, kind: Track['kind'], preferredTrackId?: string): Track {
-  const preferred = preferredTrackId ? p.tracks.find((t) => t.id === preferredTrackId) : undefined;
-  if (preferred && preferred.kind === kind) return preferred;
-  const existing = p.tracks.find((t) => t.kind === kind);
-  if (existing) return existing;
-  const track: Track = { id: uid('track'), kind, clips: [] };
-  if (kind === 'video') {
-    const lastVideoIdx = p.tracks.map((t) => t.kind).lastIndexOf('video');
-    p.tracks.splice(lastVideoIdx + 1, 0, track);
-  } else {
-    p.tracks.push(track);
-  }
-  return track;
-}
-
-function findClip(project: Project, clipId: string): { track: Track; clip: Clip; index: number } | null {
-  for (const track of project.tracks) {
-    const index = track.clips.findIndex((c) => c.id === clipId);
-    if (index !== -1) return { track, clip: track.clips[index]!, index };
-  }
-  return null;
-}
 
 // Keep produced projects mutable (the store treats project state as immutable
 // via copy-on-write, but some code paths still read-then-mutate a fresh copy,
@@ -456,8 +370,7 @@ export const useStore = create<EditorState>((set, get) => {
           );
         if (!track) {
           track = { id: uid('track'), kind: 'video', clips: [] };
-          const lastVideoIdx = p.tracks.map((t) => t.kind).lastIndexOf('video');
-          p.tracks.splice(lastVideoIdx + 1, 0, track);
+          insertTrack(p, track);
         }
         track.clips.push({
           kind: 'text',
@@ -471,7 +384,7 @@ export const useStore = create<EditorState>((set, get) => {
           volume: 1,
           fadeInMs: 0,
           fadeOutMs: 0,
-          text: { content: t('clip.defaultText'), color: '#ffffff', sizeFrac: 0.08, bold: true },
+          text: { content: translate('clip.defaultText'), color: '#ffffff', sizeFrac: 0.08, bold: true },
         });
       }, newClipId);
       set({ selectedClipId: newClipId, selectedClipIds: [newClipId] });
@@ -492,8 +405,7 @@ export const useStore = create<EditorState>((set, get) => {
           );
         if (!track) {
           track = { id: uid('track'), kind: 'video', clips: [] };
-          const lastVideoIdx = p.tracks.map((t) => t.kind).lastIndexOf('video');
-          p.tracks.splice(lastVideoIdx + 1, 0, track);
+          insertTrack(p, track);
         }
         track.clips.push({
           kind: 'solid',
@@ -518,13 +430,7 @@ export const useStore = create<EditorState>((set, get) => {
 
     addTrack: (kind) =>
       withHistory((p) => {
-        const track: Track = { id: uid('track'), kind, clips: [] };
-        if (kind === 'video') {
-          const lastVideoIdx = p.tracks.map((t) => t.kind).lastIndexOf('video');
-          p.tracks.splice(lastVideoIdx + 1, 0, track);
-        } else {
-          p.tracks.push(track);
-        }
+        insertTrack(p, { id: uid('track'), kind, clips: [] });
       }),
 
     removeTrack: (trackId) => {
@@ -544,14 +450,14 @@ export const useStore = create<EditorState>((set, get) => {
 
     toggleTrackMuted: (trackId) =>
       withHistory((p) => {
-        const t = p.tracks.find((t) => t.id === trackId);
-        if (t) t.muted = !t.muted;
+        const track = p.tracks.find((tr) => tr.id === trackId);
+        if (track) track.muted = !track.muted;
       }),
 
     toggleTrackHidden: (trackId) =>
       withHistory((p) => {
-        const t = p.tracks.find((t) => t.id === trackId);
-        if (t) t.hidden = !t.hidden;
+        const track = p.tracks.find((tr) => tr.id === trackId);
+        if (track) track.hidden = !track.hidden;
       }),
 
     updateTrack: (trackId, patch) => {
@@ -562,8 +468,8 @@ export const useStore = create<EditorState>((set, get) => {
 
     updateTrackCommitted: (trackId, patch) =>
       withHistory((p) => {
-        const t = p.tracks.find((t) => t.id === trackId);
-        if (t) Object.assign(t, patch);
+        const track = p.tracks.find((tr) => tr.id === trackId);
+        if (track) Object.assign(track, patch);
       }),
 
     selectClip: (id) =>
