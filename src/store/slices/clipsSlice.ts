@@ -116,7 +116,8 @@ export function createClipsSlice(
       let newClipId = '';
       withHistory((p) => {
         const trackEnd = (t: Track) => t.clips.reduce((max, c) => Math.max(max, clipEndMs(c)), 0);
-        const track = ensureTrack(p, asset.kind);
+        // Stills are picture content: they land on video tracks like footage.
+        const track = ensureTrack(p, asset.kind === 'audio' ? 'audio' : 'video');
         const lanes = splitAudio
           ? asset.audioTracks.map((_, i) => ensureAudioLane(p, i))
           : [];
@@ -160,7 +161,7 @@ export function createClipsSlice(
       const start = Math.max(0, timelineMs);
       // The dropped clip keeps its position (priority) when overlaps settle.
       withHistory((p) => {
-        const track = ensureTrack(p, asset.kind, targetTrackId);
+        const track = ensureTrack(p, asset.kind === 'audio' ? 'audio' : 'video', targetTrackId);
         const linkId = splitAudio ? uid('link') : undefined;
         track.clips.push({
           kind: 'media',
@@ -345,7 +346,8 @@ export function createClipsSlice(
           };
         }
         let sourceOut = clip.sourceInMs + (timelineMs - clip.timelineStartMs) * clip.speed;
-        const maxOut = asset ? asset.durationMs : Infinity;
+        // A still has no intrinsic duration: its clips stretch without bound.
+        const maxOut = asset && asset.kind !== 'image' ? asset.durationMs : Infinity;
         sourceOut = clamp(sourceOut, clip.sourceInMs + minSourceSpan, maxOut);
         if (sourceOut === clip.sourceOutMs) return clip;
         return { ...clip, sourceOutMs: sourceOut };
@@ -364,7 +366,8 @@ export function createClipsSlice(
       // duration never change, only which part of the media plays.
       const edit = (clip: Clip): Clip => {
         const asset = assets[clip.assetId];
-        if (!asset) return clip;
+        // A still always shows the same frame: there is nothing to slip.
+        if (!asset || asset.kind === 'image') return clip;
         const span = clip.sourceOutMs - clip.sourceInMs;
         const nextIn = clamp(sourceInMs, 0, asset.durationMs - span);
         if (nextIn === clip.sourceInMs) return clip;

@@ -26,7 +26,7 @@ export function createAssetsSlice(
       try {
         // Reuse the id so the asset's clips stay linked; probe re-registers the
         // decoder input (disposing the stale one) under the same id.
-        const probed = await probeFile(file, assetId);
+        const { asset: probed, warning } = await probeFile(file, assetId);
         // The asset may have been removed while the OS file dialog was open.
         if (!get().assets[assetId]) {
           disposeAssetResources(assetId);
@@ -34,6 +34,7 @@ export function createAssetsSlice(
         }
         set({ assets: { ...get().assets, [assetId]: probed } });
         ensureAssetVisuals(probed, get());
+        if (warning) get().setError(warning);
       } catch (err) {
         get().setError(
           err instanceof Error

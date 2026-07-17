@@ -3,6 +3,7 @@ import { clipEndMs, projectDurationMs } from '../model';
 import { AUDIO_SAMPLE_RATE } from '../app/config';
 import { t } from '../i18n';
 import { audioKey, getAudioBuffer } from '../media/mediaCache';
+import { decodeImageFile } from '../media/stillImage';
 import { scheduleProjectAudio } from '../preview/audioMix';
 import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
 import { ExportErrorCode, ExportRequest, WorkerReply } from './protocol';
@@ -61,12 +62,25 @@ export function startExport(
     }
 
     const files: Record<string, File> = {};
+    const stills: Record<string, ImageBitmap> = {};
     for (const track of project.tracks) {
       for (const clip of track.clips) {
         const asset = assets[clip.assetId];
-        if (asset) files[asset.id] = asset.file;
+        if (!asset) continue;
+        files[asset.id] = asset.file;
+        // Stills are rasterized here (SVG needs the DOM, unavailable in the
+        // worker) and transferred as bitmaps. A still that fails to decode is
+        // skipped: its clips render nothing rather than killing the export.
+        if (asset.kind === 'image' && !(asset.id in stills)) {
+          try {
+            stills[asset.id] = await decodeImageFile(asset.file);
+          } catch {
+            // Fall through - the worker simply has no bitmap for this asset.
+          }
+        }
       }
     }
+    if (canceled) throw new Error(t('errors.export.canceled'));
 
     // Adapt frame rate (and, with it, bitrate) to the project's source footage
     // right before encoding, so the worker receives the exact settings to use.
@@ -78,6 +92,7 @@ export function startExport(
       type: 'export',
       project,
       files,
+      stills,
       preset: resolvedPreset,
       startMs,
       durationMs,
@@ -93,7 +108,10 @@ export function startExport(
         else reject(crashError(msg.detail));
       };
       worker!.onerror = (e) => reject(crashError(e.message));
-      const transfer = audio ? audio.channels.map((c) => c.buffer as ArrayBuffer) : [];
+      const transfer: Transferable[] = audio
+        ? audio.channels.map((c) => c.buffer as ArrayBuffer)
+        : [];
+      transfer.push(...Object.values(stills));
       worker!.postMessage(request, transfer);
     });
 

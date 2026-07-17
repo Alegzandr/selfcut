@@ -1,6 +1,6 @@
-import type { VideoSample } from 'mediabunny';
 import { Clip, ClipText, SolidClip, TextClip, Track } from '../types';
 import { DEFAULT_TRANSFORM, clipEnvelopeGainAt, clipZoomAt, isTextClip, trackCrossfades } from '../model';
+import type { DrawableFrame } from '../media/stillImage';
 
 type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -47,7 +47,7 @@ export function clipDestRect(
  */
 export function drawClipSample(
   ctx: Ctx2D,
-  sample: VideoSample,
+  sample: DrawableFrame,
   clip: Clip,
   outW: number,
   outH: number,
@@ -252,7 +252,7 @@ export function drawClip(
   timelineMs: number,
   alphaMul: number,
   xfadeInMs: number,
-  sample: VideoSample | null,
+  sample: DrawableFrame | null,
 ): void {
   if (isTextClip(clip)) {
     drawTextClip(ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs);

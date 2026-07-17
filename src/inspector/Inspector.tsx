@@ -29,7 +29,7 @@ export function Inspector() {
       <div className="w-72 flex-none space-y-3 overflow-x-hidden overflow-y-auto border-l border-zinc-800 bg-zinc-900/60 p-3">
         <InspectorBody
           clip={clip}
-          isVideo={asset?.kind === 'video'}
+          isVideo={!!asset && asset.kind !== 'audio'}
           hasAudio={asset?.hasAudio ?? false}
           name={clip.kind === 'text' ? t('inspector.textClip') : clip.kind === 'solid' ? t(`inspector.solid.${clip.solid.kind}`) : asset?.file.name ?? ''}
         />
@@ -51,7 +51,7 @@ export function Inspector() {
         >
           <InspectorBody
             clip={clip}
-            isVideo={asset?.kind === 'video'}
+            isVideo={!!asset && asset.kind !== 'audio'}
             hasAudio={asset?.hasAudio ?? false}
             name={clip.kind === 'text' ? t('inspector.textClip') : clip.kind === 'solid' ? t(`inspector.solid.${clip.solid.kind}`) : asset?.file.name ?? ''}
           />

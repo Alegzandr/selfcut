@@ -348,7 +348,8 @@ export const ClipView = memo(function ClipView({
         const sourceOut = clamp(
           d.origSourceInMs + (tMs - d.origStartMs) * clip.speed,
           d.origSourceInMs + minSpan,
-          asset ? asset.durationMs : Infinity,
+          // A still has no intrinsic duration: its clips stretch without bound.
+          asset && asset.kind !== 'image' ? asset.durationMs : Infinity,
         );
         const newEnd = d.origStartMs + (sourceOut - d.origSourceInMs) / clip.speed;
         state.trimClip(clip.id, 'right', newEnd);
@@ -599,7 +600,9 @@ export const ClipView = memo(function ClipView({
     const copyOnDrag = !coarse && (e.ctrlKey || e.metaKey) && mode === 'move';
     // Alt+drag on the body (desktop): slip edit - slide the media under a fixed
     // clip window. Only media clips have a source to slide.
-    if (!coarse && e.altKey && mode === 'move' && clip.kind === 'media' && asset) mode = 'slip';
+    if (!coarse && e.altKey && mode === 'move' && clip.kind === 'media' && asset && asset.kind !== 'image') {
+      mode = 'slip';
+    }
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
     armDragSession(el, e.pointerId);

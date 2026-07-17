@@ -51,3 +51,51 @@ describe('parseSubtitles', () => {
     expect(parseSubtitles(srt)).toEqual([{ startMs: 1000, endMs: 2000, text: 'Hi' }]);
   });
 });
+
+describe('parseSubtitles - SubStation Alpha', () => {
+  it('matches .ass and .ssa file names', () => {
+    expect(isSubtitleFile(new File([], 'a.ass'))).toBe(true);
+    expect(isSubtitleFile(new File([], 'b.SSA'))).toBe(true);
+  });
+
+  it('parses Dialogue events with the standard v4+ format', () => {
+    const ass = [
+      '[Script Info]',
+      'Title: test',
+      '',
+      '[Events]',
+      'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+      'Dialogue: 0,0:00:01.50,0:00:03.00,Default,,0,0,0,,Hello world',
+    ].join('\n');
+    expect(parseSubtitles(ass)).toEqual([{ startMs: 1500, endMs: 3000, text: 'Hello world' }]);
+  });
+
+  it('strips override tags, honors \\N line breaks and keeps commas in the text', () => {
+    const ass = [
+      '[Events]',
+      'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+      'Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,{\\b1}One, two{\\b0}\\Nthree',
+    ].join('\n');
+    expect(parseSubtitles(ass)).toEqual([{ startMs: 0, endMs: 2000, text: 'One, two\nthree' }]);
+  });
+
+  it('follows a custom Format field order', () => {
+    const ass = [
+      '[Events]',
+      'Format: Start, End, Text',
+      'Dialogue: 0:00:01.00,0:00:02.00,Short form',
+    ].join('\n');
+    expect(parseSubtitles(ass)).toEqual([{ startMs: 1000, endMs: 2000, text: 'Short form' }]);
+  });
+
+  it('skips malformed Dialogue lines and sorts by start time', () => {
+    const ass = [
+      '[Events]',
+      'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+      'Dialogue: 0,not-a-time,0:00:03.00,Default,,0,0,0,,Broken',
+      'Dialogue: 0,0:00:05.00,0:00:06.00,Default,,0,0,0,,Later',
+      'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Earlier',
+    ].join('\n');
+    expect(parseSubtitles(ass).map((c) => c.text)).toEqual(['Earlier', 'Later']);
+  });
+});

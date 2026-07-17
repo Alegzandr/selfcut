@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { Film, FolderOpen, Music, Plus, PlugZap, Trash2, X } from 'lucide-react';
+import { Film, FolderOpen, Image, Music, Plus, PlugZap, Trash2, X } from 'lucide-react';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
 import { MediaAsset } from '../types';
@@ -109,7 +109,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
   const { t } = useTranslation();
   const coarse = useIsCoarsePointer();
   const { addClipFromAsset, removeAsset } = useStore.getState();
-  const isVideo = asset.kind === 'video';
+  const hasThumbnail = asset.thumbnails.length > 0;
   const disconnected = asset.disconnected;
 
   return (
@@ -133,7 +133,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
       }}
     >
       <div className="relative aspect-video w-full overflow-hidden bg-zinc-950">
-        {isVideo && asset.thumbnails.length ? (
+        {hasThumbnail ? (
           <img
             src={asset.thumbnails[0]}
             className={`h-full w-full object-cover ${disconnected ? 'opacity-40' : ''}`}
@@ -157,11 +157,20 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
             </span>
           </button>
         )}
-        <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[9px] tabular-nums text-zinc-200">
-          {formatTimeShort(asset.durationMs)}
-        </span>
+        {/* A still has no intrinsic duration - a time badge would only mislead. */}
+        {asset.kind !== 'image' && (
+          <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[9px] tabular-nums text-zinc-200">
+            {formatTimeShort(asset.durationMs)}
+          </span>
+        )}
         <span className="absolute left-1 top-1 rounded bg-black/70 p-0.5 text-zinc-300">
-          {isVideo ? <Film className="h-3 w-3" /> : <Music className="h-3 w-3" />}
+          {asset.kind === 'video' ? (
+            <Film className="h-3 w-3" />
+          ) : asset.kind === 'image' ? (
+            <Image className="h-3 w-3" />
+          ) : (
+            <Music className="h-3 w-3" />
+          )}
         </span>
       </div>
 

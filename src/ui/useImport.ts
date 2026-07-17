@@ -28,11 +28,14 @@ export function useImport(): (files: Iterable<File>) => Promise<void> {
             addSubtitleClips(cues);
             continue;
           }
-          const asset = await probeFile(file);
+          const { asset, warning } = await probeFile(file);
           addAsset(asset);
           addClipFromAsset(asset.id);
           // Peaks and the full thumbnail strip arrive in the background.
           ensureAssetVisuals(asset, useStore.getState());
+          // Partial import (e.g. undecodable video codec, audio kept): the
+          // file landed, but the user must know what was left out.
+          if (warning) setError(warning);
         } catch (err) {
           setError(
             err instanceof Error ? err.message : t('errors.media.importFailed', { name: file.name }),

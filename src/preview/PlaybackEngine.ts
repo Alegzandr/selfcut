@@ -1,9 +1,9 @@
-import type { VideoSample } from 'mediabunny';
 import { useStore, EditorState } from '../store/store';
 import { Project } from '../types';
 import { outputDimensions, projectDurationMs, timelineToSourceMs } from '../model';
 import { PREVIEW_RESOLUTION_SCALE } from '../app/config';
-import { audioKey, getAudioBuffer } from '../media/mediaCache';
+import { audioKey, getAudioBuffer, getStillFrame } from '../media/mediaCache';
+import type { DrawableFrame } from '../media/stillImage';
 import { FrameCursor } from './FrameCursor';
 import { drawClip, visibleVideoClips } from './compositor';
 import { ScheduledSource, scheduleProjectAudio, stopScheduled } from './audioMix';
@@ -36,6 +36,12 @@ export class PlaybackEngine {
   private trackBuses = new Map<string, TrackBus>();
   private metersLive = false;
   private cursors = new Map<string, FrameCursor>();
+  /**
+   * Rasterized stills per image asset. `frame: null` marks a decode in flight
+   * (or failed) so it is kicked once, not every frame; the File reference
+   * detects a reconnected source (same id, new file) and re-rasterizes.
+   */
+  private stills = new Map<string, { file: File; frame: DrawableFrame | null }>();
   private scheduled: ScheduledSource[] = [];
   private audioBuffers = new Map<string, AudioBuffer | null>();
   private audioDirty = false;
@@ -262,19 +268,36 @@ export class PlaybackEngine {
       const alphaMul = track.opacity ?? 1;
       if (alphaMul <= 0) continue;
       for (const { clip, xfadeInMs } of visibleVideoClips(track, tMs)) {
-        let sample: VideoSample | null = null;
+        let sample: DrawableFrame | null = null;
         if (clip.kind === 'media') {
           const asset = state.assets[clip.assetId];
           if (!asset) continue;
-          let cursor = this.cursors.get(clip.id);
-          if (!cursor) {
-            cursor = new FrameCursor(asset, () => {
-              this.videoDirty = true;
-            });
-            this.cursors.set(clip.id, cursor);
+          if (asset.kind === 'image') {
+            // Stills bypass the decoder: one shared bitmap, drawn every frame.
+            let entry = this.stills.get(asset.id);
+            if (!entry || entry.file !== asset.file) {
+              const fresh = { file: asset.file, frame: null as DrawableFrame | null };
+              this.stills.set(asset.id, fresh);
+              entry = fresh;
+              void getStillFrame(asset).then((still) => {
+                if (still && this.stills.get(asset.id) === fresh) {
+                  fresh.frame = still;
+                  this.videoDirty = true;
+                }
+              });
+            }
+            sample = entry.frame;
+          } else {
+            let cursor = this.cursors.get(clip.id);
+            if (!cursor) {
+              cursor = new FrameCursor(asset, () => {
+                this.videoDirty = true;
+              });
+              this.cursors.set(clip.id, cursor);
+            }
+            cursor.request(timelineToSourceMs(clip, tMs) / 1000, this.wasPlaying);
+            sample = cursor.sample;
           }
-          cursor.request(timelineToSourceMs(clip, tMs) / 1000, this.wasPlaying);
-          sample = cursor.sample;
         }
         drawClip(this.ctx, clip, w, h, tMs, alphaMul, xfadeInMs, sample);
       }
@@ -316,6 +339,13 @@ export class PlaybackEngine {
         cursor.dispose();
         this.cursors.delete(clipId);
       }
+    }
+    // Stills of assets no longer on the timeline: drop the lookup entry (the
+    // bitmap itself is owned and closed by the media cache).
+    const liveAssetIds = new Set<string>();
+    for (const track of project.tracks) for (const clip of track.clips) liveAssetIds.add(clip.assetId);
+    for (const assetId of [...this.stills.keys()]) {
+      if (!liveAssetIds.has(assetId)) this.stills.delete(assetId);
     }
     // Decoded audio no longer referenced by any clip can be large - drop it,
     // per (asset, audio track) so one track's buffer never evicts another's.

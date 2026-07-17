@@ -12,6 +12,7 @@ Requires a browser with WebCodecs (recent Chrome/Edge, Safari 16.4+). A clean ex
 ## Features (MVP)
 
 - Multi-file import (picker + drag & drop), metadata and thumbnail extraction
+- **Wide input support**: every container mediabunny reads (MP4/M4V/MOV, WebM/MKV, MPEG-TS `.ts/.mts/.m2ts`, 3GP, MP3, WAV, Ogg/Opus, FLAC, AAC/ADTS) with any codec the browser's WebCodecs can decode; **still images** (PNG, JPEG, WebP, GIF, AVIF, BMP, SVG) as freely stretchable clips; **subtitles** in SRT, WebVTT and SubStation Alpha (.ass/.ssa) as caption clips. A file whose video codec can't be decoded but that carries decodable audio imports as audio-only (with a warning) instead of failing
 - **Media library** (source explorer): imports land there; add assets to the timeline or remove them from the panel
 - Unlimited video/audio tracks, vertically reorderable, per-track mute/hide
 - Timeline: horizontal scroll + zoom (buttons, mouse wheel, pinch on mobile), scrubbable playhead, **snapping** to clip edges and the playhead
@@ -66,6 +67,8 @@ src/
 - **Speed does not preserve pitch** (plain `playbackRate`), as scoped.
 - **A/V linking**: importing a video that has audio splits each source audio track onto its own audio clip (on its own lane), all linked to the picture by a shared `linkId` (`Clip.linkId`). Linked clips **move, trim, split, delete and duplicate together**; the video side delegates its audio to the linked audio clip (it stays silent in the mix, so the source is never doubled). Split gives each half a fresh shared link; copy/paste drops the link (a pasted clip is standalone). **Unlink** (clip menu / mobile rail) breaks the pair into independent clips: the audio stays on the audio clip and the video side is muted (volume 0) so the sound is not doubled — raise it or delete either clip freely afterwards. **Link** re-forms a pair: select a video clip and an audio clip on opposite tracks (or, with one clip selected, it auto-pairs with the same-source clip on the other track — the inverse of a prior unlink) and they share a fresh link again.
 - The export worker bundle is large (~1.8 MB) because the WASM AAC/MP3 fallback encoders are inlined; it only loads when an export starts.
+- **Import degrades instead of rejecting**: probing keeps whatever is usable. Undecodable audio tracks are skipped individually; a file whose video codec WebCodecs can't decode still imports as audio-only when it has decodable sound (the toast names the codec). Only a file with nothing decodable is refused.
+- **Still images bypass the decoder pipeline** (`src/media/stillImage.ts`): an image asset is rasterized once into an `ImageBitmap` (SVG goes through an `<img>`/canvas fallback since `createImageBitmap` rejects it) and drawn through the same compositor path as video frames via a minimal `DrawableFrame` interface that mediabunny's `VideoSample` also satisfies. Preview caches one bitmap per asset; export rasterizes on the main thread (SVG needs the DOM) and transfers the bitmaps to the worker. An image clip has no intrinsic duration: it defaults to 5 s, trims without an upper bound, and slip is a no-op. Animated GIFs import as a still of their first frame.
 
 ## Out of scope (v1)
 

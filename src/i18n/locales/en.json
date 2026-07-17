@@ -190,7 +190,8 @@
   "errors.media.invalidDuration": "Invalid duration: {{name}}",
   "errors.media.noCues": "No usable cues in {{name}}",
   "errors.media.noTrack": "No audio or video track in {{name}}",
-  "errors.media.undecodableVideo": "Video codec cannot be decoded: {{name}}",
+  "errors.media.undecodableVideo": "Video codec cannot be decoded ({{codec}}): {{name}}",
+  "errors.media.videoAudioOnly": "Video codec not supported ({{codec}}) - kept the audio of {{name}}",
   "errors.media.unsupportedFormat": "Unsupported format: {{name}}",
   "errors.persistence.saveFailed": "Your work could not be saved locally (storage full or blocked).",
 

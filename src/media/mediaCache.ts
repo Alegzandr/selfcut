@@ -7,6 +7,7 @@ import {
   InputAudioTrack,
 } from 'mediabunny';
 import { MediaAsset } from '../types';
+import { StillFrame, decodeImageFile } from './stillImage';
 
 /**
  * Cache key for a single audio track of an asset. `undefined` means the source's
@@ -34,10 +35,20 @@ export function registerInput(assetId: string, input: Input): void {
   inputs.set(assetId, input);
 }
 
-/** Release everything cached for an asset (decoder input, audio buffers, peaks). */
+/**
+ * Drop (and close) the cached still frame of an asset. Called on removal and
+ * when an image asset reconnects to a fresh file under the same id.
+ */
+export function resetStillFrame(assetId: string): void {
+  void stillPromises.get(assetId)?.then((still) => still?.close());
+  stillPromises.delete(assetId);
+}
+
+/** Release everything cached for an asset (decoder input, still frame, audio buffers, peaks). */
 export function disposeAssetResources(assetId: string): void {
   inputs.get(assetId)?.dispose();
   inputs.delete(assetId);
+  resetStillFrame(assetId);
   // Buffers/peaks are keyed per audio track (`${assetId}#…`): drop every entry
   // belonging to this asset, whatever its track index.
   const prefix = `${assetId}#`;
@@ -52,6 +63,24 @@ export function getInput(asset: MediaAsset): Input {
     inputs.set(asset.id, input);
   }
   return input;
+}
+
+const stillPromises = new Map<string, Promise<StillFrame | null>>();
+
+/**
+ * Rasterized still of an image asset, decoded once and shared by every clip
+ * (a still never changes, so one bitmap serves all cursors and repaints).
+ */
+export function getStillFrame(asset: MediaAsset): Promise<StillFrame | null> {
+  if (asset.kind !== 'image') return Promise.resolve(null);
+  let promise = stillPromises.get(asset.id);
+  if (!promise) {
+    promise = decodeImageFile(asset.file)
+      .then((bitmap) => new StillFrame(bitmap))
+      .catch(() => null);
+    stillPromises.set(asset.id, promise);
+  }
+  return promise;
 }
 
 /** Create a dedicated video sink (one per playback cursor, for independent iteration). */

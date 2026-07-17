@@ -8,6 +8,11 @@ export interface ExportRequest {
   project: Project;
   /** assetId → File, for every asset referenced by the project. */
   files: Record<string, File>;
+  /**
+   * assetId → rasterized bitmap, for every still-image asset on the timeline.
+   * Rasterized on the main thread (SVG needs the DOM) and transferred.
+   */
+  stills: Record<string, ImageBitmap>;
   preset: ExportPreset;
   /** First timeline ms to render (loop region in point, 0 for the whole project). */
   startMs: number;

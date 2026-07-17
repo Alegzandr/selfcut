@@ -10,6 +10,9 @@ export const PROJECT_FPS = 60 as const;
 /** Minimum clip duration on the timeline (ms). */
 export const MIN_CLIP_DURATION_MS = 100;
 
+/** Default timeline duration of a still-image clip (a still has no intrinsic length). */
+export const IMAGE_CLIP_DEFAULT_MS = 5000;
+
 /** Snapping threshold in screen pixels. */
 export const SNAP_THRESHOLD_PX = 8;
 

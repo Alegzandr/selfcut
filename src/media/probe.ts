@@ -1,7 +1,17 @@
 import { CanvasSink, Input } from 'mediabunny';
 import { AudioTrackInfo, MediaAsset } from '../types';
 import { uid } from '../lib/id';
-import { createInput, expectedPeakBins, getInput, getPeaks, registerInput, warmAudio } from './mediaCache';
+import { IMAGE_CLIP_DEFAULT_MS } from '../app/config';
+import {
+  createInput,
+  expectedPeakBins,
+  getInput,
+  getPeaks,
+  registerInput,
+  resetStillFrame,
+  warmAudio,
+} from './mediaCache';
+import { decodeImageFile, isImageFile } from './stillImage';
 import { t } from '../i18n';
 
 /**
@@ -52,15 +62,31 @@ async function probeFrameRate(
 }
 
 /**
+ * Result of probing a file: the asset, plus an optional non-fatal warning to
+ * surface (e.g. the video codec is not decodable but the audio was kept).
+ */
+export interface ProbeResult {
+  asset: MediaAsset;
+  warning?: string;
+}
+
+/**
  * Probe an imported file: metadata + a first quick thumbnail.
  * Throws an Error (displayable message) if the file cannot be read.
  * The full thumbnail strip and audio peaks are filled in later by
  * ensureAssetVisuals() so importing stays fast.
  *
+ * Degrades instead of rejecting whenever something usable remains: a file
+ * whose video codec the browser cannot decode still imports as audio-only
+ * when it carries decodable audio (with a warning naming the codec).
+ *
  * `reuseId` keeps an existing asset's id (and therefore its clips) when
  * reconnecting a source whose File reference went stale between sessions.
  */
-export async function probeFile(file: File, reuseId?: string): Promise<MediaAsset> {
+export async function probeFile(file: File, reuseId?: string): Promise<ProbeResult> {
+  // Still images have no decoder pipeline: rasterize once, no mediabunny input.
+  if (isImageFile(file)) return { asset: await probeImageFile(file, reuseId) };
+
   const input = createInput(file);
   if (!(await input.canRead())) {
     input.dispose();
@@ -73,10 +99,16 @@ export async function probeFile(file: File, reuseId?: string): Promise<MediaAsse
     input.dispose();
     throw new Error(t('errors.media.noTrack', { name: file.name }));
   }
-  if (videoTrack && !(await videoTrack.canDecode())) {
+  const videoDecodable = videoTrack ? await videoTrack.canDecode() : false;
+  if (videoTrack && !videoDecodable && audioTracks.length === 0) {
     input.dispose();
-    throw new Error(t('errors.media.undecodableVideo', { name: file.name }));
+    throw new Error(
+      t('errors.media.undecodableVideo', { name: file.name, codec: videoTrack.codec ?? '?' }),
+    );
   }
+  // Undecodable picture but decodable sound: keep the audio rather than
+  // rejecting the whole file (common with exotic-codec MKV/AVI-era footage).
+  const decodableVideo = videoTrack && videoDecodable ? videoTrack : null;
 
   const durationMs = (await input.computeDuration()) * 1000;
   if (!isFinite(durationMs) || durationMs <= 0) {
@@ -87,11 +119,11 @@ export async function probeFile(file: File, reuseId?: string): Promise<MediaAsse
   const asset: MediaAsset = {
     id: reuseId ?? uid('asset'),
     file,
-    kind: videoTrack ? 'video' : 'audio',
+    kind: decodableVideo ? 'video' : 'audio',
     durationMs,
-    width: videoTrack ? await videoTrack.getDisplayWidth() : undefined,
-    height: videoTrack ? await videoTrack.getDisplayHeight() : undefined,
-    fps: videoTrack ? await probeFrameRate(videoTrack) : undefined,
+    width: decodableVideo ? await decodableVideo.getDisplayWidth() : undefined,
+    height: decodableVideo ? await decodableVideo.getDisplayHeight() : undefined,
+    fps: decodableVideo ? await probeFrameRate(decodableVideo) : undefined,
     hasAudio: audioTracks.length > 0,
     audioTracks,
     thumbnails: [],
@@ -99,10 +131,10 @@ export async function probeFile(file: File, reuseId?: string): Promise<MediaAsse
 
   registerInput(asset.id, input);
 
-  if (videoTrack) {
+  if (decodableVideo) {
     try {
       // One quick frame so the asset card shows something right away.
-      asset.thumbnails = await extractThumbnails(videoTrack, asset, [
+      asset.thumbnails = await extractThumbnails(decodableVideo, asset, [
         Math.min(1, durationMs / 2000),
       ]);
     } catch {
@@ -111,7 +143,59 @@ export async function probeFile(file: File, reuseId?: string): Promise<MediaAsse
   }
 
   warmAudio(asset);
+  return {
+    asset,
+    warning:
+      videoTrack && !videoDecodable
+        ? t('errors.media.videoAudioOnly', { name: file.name, codec: videoTrack.codec ?? '?' })
+        : undefined,
+  };
+}
+
+/**
+ * Probe a still image: rasterize it once for its dimensions and thumbnail.
+ * The bitmap is discarded here - preview and export rasterize on demand
+ * through their own caches.
+ */
+async function probeImageFile(file: File, reuseId?: string): Promise<MediaAsset> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await decodeImageFile(file);
+  } catch {
+    throw new Error(t('errors.media.unsupportedFormat', { name: file.name }));
+  }
+  // Reconnecting under an existing id: the cached still belongs to the stale
+  // file - drop it so the preview rasterizes the new one.
+  if (reuseId) resetStillFrame(reuseId);
+  const asset: MediaAsset = {
+    id: reuseId ?? uid('asset'),
+    file,
+    kind: 'image',
+    durationMs: IMAGE_CLIP_DEFAULT_MS,
+    width: bitmap.width,
+    height: bitmap.height,
+    hasAudio: false,
+    audioTracks: [],
+    thumbnails: [],
+  };
+  try {
+    asset.thumbnails = [stillThumbnail(bitmap)];
+  } catch {
+    // Thumbnails are cosmetic: keep going without them.
+  }
+  bitmap.close();
   return asset;
+}
+
+/** One 160px-wide JPEG tile of the still, same shape as video thumbnails. */
+function stillThumbnail(bitmap: ImageBitmap): string {
+  const w = 160;
+  const h = Math.max(16, Math.round((w * bitmap.height) / Math.max(1, bitmap.width)));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', 0.7);
 }
 
 /** Thumbnails to cover an asset's duration (filmstrip tiles pick the closest one). */

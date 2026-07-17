@@ -59,7 +59,15 @@ export interface AudioTrackInfo {
 export interface MediaAsset {
   id: string;
   file: File;
-  kind: 'video' | 'audio';
+  /**
+   * 'image' is a still (photo, logo, SVG…): no intrinsic duration, its clips
+   * can be stretched freely on the timeline and always show the same frame.
+   */
+  kind: 'video' | 'audio' | 'image';
+  /**
+   * For a still image this is only the DEFAULT clip length (a still has no
+   * intrinsic duration) - trimming an image clip is never bounded by it.
+   */
   durationMs: number;
   width?: number;
   height?: number;

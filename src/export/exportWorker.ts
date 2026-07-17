@@ -18,6 +18,7 @@ import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
 import { Clip } from '../types';
 import { timelineToSourceMs } from '../model';
 import { drawClip, visibleVideoClips } from '../preview/compositor';
+import { StillFrame, type DrawableFrame } from '../media/stillImage';
 import type { Mp4Preset } from './presets';
 import { ExportErrorCode, ExportRequest, WorkerReply } from './protocol';
 
@@ -68,6 +69,10 @@ function postProgress(value: number): void {
 
 async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   const { project, files, startMs, durationMs, audio } = req;
+  // Still-image assets arrive pre-rasterized from the main thread.
+  const stills = new Map<string, StillFrame>(
+    Object.entries(req.stills).map(([assetId, bitmap]) => [assetId, new StillFrame(bitmap)]),
+  );
   const width = preset.width;
   const height = preset.height;
 
@@ -126,8 +131,13 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
     let sink: VideoSampleSink | null = null;
     const input = getInput(clip.assetId);
     if (input) {
-      const track = await input.getPrimaryVideoTrack();
-      if (track && (await track.canDecode())) sink = new VideoSampleSink(track);
+      try {
+        const track = await input.getPrimaryVideoTrack();
+        if (track && (await track.canDecode())) sink = new VideoSampleSink(track);
+      } catch {
+        // Unreadable source (e.g. a still that failed to rasterize): the clip
+        // renders nothing rather than killing the whole export.
+      }
     }
     sinks.set(clip.id, sink);
     return sink;
@@ -154,17 +164,23 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
       // Earliest-first: during a crossfade the incoming clip composites over
       // the outgoing one with rising alpha (same as the preview).
       for (const { clip, xfadeInMs } of visibleVideoClips(track, tMs)) {
-        let sample: VideoSample | null = null;
+        let sample: DrawableFrame | null = null;
         if (clip.kind === 'media') {
-          const sink = await getSink(clip);
-          if (!sink) continue;
-          const sourceSec = timelineToSourceMs(clip, tMs) / 1000;
-          const decoded = await sink.getSample(Math.max(0, sourceSec));
-          if (decoded) {
-            lastSamples.get(clip.id)?.close();
-            lastSamples.set(clip.id, decoded);
+          const still = stills.get(clip.assetId);
+          if (still) {
+            // A still is the same frame at every output time - nothing to decode.
+            sample = still;
+          } else {
+            const sink = await getSink(clip);
+            if (!sink) continue;
+            const sourceSec = timelineToSourceMs(clip, tMs) / 1000;
+            const decoded = await sink.getSample(Math.max(0, sourceSec));
+            if (decoded) {
+              lastSamples.get(clip.id)?.close();
+              lastSamples.set(clip.id, decoded);
+            }
+            sample = decoded ?? lastSamples.get(clip.id) ?? null;
           }
-          sample = decoded ?? lastSamples.get(clip.id) ?? null;
         }
         drawClip(ctx, clip, width, height, tMs, alphaMul, xfadeInMs, sample);
       }
@@ -175,6 +191,7 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   }
 
   for (const sample of lastSamples.values()) sample.close();
+  for (const still of stills.values()) still.close();
   videoSource.close();
 
   if (audioSource && audio) {
