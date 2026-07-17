@@ -109,12 +109,32 @@ export interface EditorState {
   selectAllClips: () => void;
   /** Ctrl/Cmd+click: add/remove a clip from the multi-selection. */
   toggleSelectClip: (id: string) => void;
+  /** Replace the whole selection (marquee / rubber-band select). */
+  setSelectedClips: (ids: string[]) => void;
+  /**
+   * Shift+click: select every clip in the rectangle spanned by the anchor
+   * (primary selection) and the target - rows between them, anchor→target time span.
+   */
+  selectClipRange: (anchorId: string, targetId: string) => void;
   updateClip: (clipId: string, patch: Partial<Clip>) => void;
   updateClipCommitted: (clipId: string, patch: Partial<Clip>) => void;
   moveClip: (clipId: string, timelineStartMs: number, targetTrackId?: string) => void;
   /** Batch position update (multi-selection drag), no history - wrap with begin/endGesture. */
   moveClips: (entries: { clipId: string; timelineStartMs: number }[]) => void;
   trimClip: (clipId: string, edge: 'left' | 'right', timelineMs: number) => void;
+  /**
+   * Slip edit (Alt+drag on a clip body): slide the source window while the
+   * clip's timeline position and duration stay fixed. Live - wrap with
+   * begin/endGesture. Linked partners slip in lockstep.
+   */
+  slipClip: (clipId: string, sourceInMs: number) => void;
+  /**
+   * Ctrl+drag copy: clone the given clips (and their linked partners, re-paired
+   * under fresh linkIds) in place, select the clones, and return the
+   * original→clone id map so the drag can move the clones. No history: the
+   * surrounding gesture commits clone+move as one undo step.
+   */
+  cloneClipsForDrag: (clipIds: string[]) => Record<string, string>;
   splitAtPlayhead: () => void;
   deleteClip: (clipId: string) => void;
   /** Delete a clip and close the gap: later clips on the same track shift left. */

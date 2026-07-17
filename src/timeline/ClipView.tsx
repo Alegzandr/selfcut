@@ -7,14 +7,14 @@ import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { collectSnapPoints, snapMove, snapTime } from './snapping';
 import { msFromClientX, msFromContentX, timelineContentEl } from './coords';
-import { SNAP_THRESHOLD_PX, TRACK_HEIGHT_PX } from '../app/config';
+import { MIN_CLIP_DURATION_MS, SNAP_THRESHOLD_PX, TRACK_HEIGHT_PX } from '../app/config';
 import { clamp } from '../lib/time';
 import { useIsCoarsePointer } from '../lib/device';
 import { hapticOnSnap } from '../lib/haptics';
 import { Waveform } from './Waveform';
 
 interface DragState {
-  mode: 'move' | 'trim-left' | 'trim-right' | 'fade-in' | 'fade-out';
+  mode: 'move' | 'trim-left' | 'trim-right' | 'fade-in' | 'fade-out' | 'slip';
   startX: number;
   startY: number;
   origStartMs: number;
@@ -28,6 +28,15 @@ interface DragState {
   groupStarts: Map<string, number>;
   /** Timeline time (ms) under the pointer at press, to seek on a click without drag. */
   downMs: number;
+  /** The clip the drag actually edits (a Ctrl+drag clone replaces the pressed clip). */
+  targetClipId: string;
+  /** Ctrl held on the body at press: the first movement clones the selection and drags the copies. */
+  copyOnDrag: boolean;
+  /** Source window at press (slip / ripple math works from these, not live state). */
+  origSourceInMs: number;
+  origSourceOutMs: number;
+  /** Ripple trim (Ctrl on a trim handle): same-track downstream clips and their original starts. */
+  ripple: { id: string; startMs: number }[] | null;
 }
 
 interface Props {
@@ -120,24 +129,46 @@ export const ClipView = memo(function ClipView({
     if (coarse && !selected) return;
     e.stopPropagation();
     const state = useStore.getState();
-    // Ctrl/Cmd+click (desktop): toggle membership in the multi-selection, no drag.
-    if (!coarse && (e.ctrlKey || e.metaKey) && mode === 'move') {
-      state.toggleSelectClip(clip.id);
+    // Shift+click (desktop): select the whole range between the primary clip and this one.
+    if (!coarse && e.shiftKey && !e.ctrlKey && !e.metaKey && mode === 'move') {
+      if (state.selectedClipId && state.selectedClipId !== clip.id) {
+        state.selectClipRange(state.selectedClipId, clip.id);
+      } else {
+        state.selectClip(clip.id);
+      }
       return;
     }
+    // Ctrl/Cmd on the body (desktop): a plain click toggles multi-selection
+    // membership (on release), a held drag peels off a COPY (Vegas-style).
+    const copyOnDrag = !coarse && (e.ctrlKey || e.metaKey) && mode === 'move';
+    // Alt+drag on the body (desktop): slip edit - slide the media under a fixed
+    // clip window. Only media clips have a source to slide.
+    if (!coarse && e.altKey && mode === 'move' && clip.kind === 'media' && asset) mode = 'slip';
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     // Dragging a clip that belongs to a multi-selection moves the whole group.
     const multi =
       mode === 'move' && state.selectedClipIds.length > 1 && state.selectedClipIds.includes(clip.id);
-    if (!multi) state.selectClip(clip.id);
+    if (!multi && !copyOnDrag) state.selectClip(clip.id);
     state.beginGesture();
-    const groupIds = multi ? state.selectedClipIds : [clip.id];
+    const groupIds =
+      multi || (copyOnDrag && state.selectedClipIds.includes(clip.id) && state.selectedClipIds.length > 1)
+        ? state.selectedClipIds
+        : [clip.id];
     const groupStarts = new Map<string, number>();
     for (const tr of state.project.tracks) {
       for (const c of tr.clips) {
         if (groupIds.includes(c.id)) groupStarts.set(c.id, c.timelineStartMs);
       }
     }
+    // Ctrl on a trim handle: ripple trim - downstream clips on this track follow
+    // the edited edge, keeping their distance to it (their partners tag along).
+    const ripple =
+      !coarse && (e.ctrlKey || e.metaKey) && (mode === 'trim-left' || mode === 'trim-right')
+        ? (state.project.tracks
+            .find((tr) => tr.id === clip.trackId)
+            ?.clips.filter((c) => c.id !== clip.id && c.timelineStartMs > clip.timelineStartMs)
+            .map((c) => ({ id: c.id, startMs: c.timelineStartMs })) ?? [])
+        : null;
     // Time under the pointer at press: a plain click (no drag) on a clip moves
     // the playhead there, like a classic NLE.
     const contentEl = timelineContentEl(e.currentTarget as HTMLElement);
@@ -154,6 +185,11 @@ export const ClipView = memo(function ClipView({
       lastSnap: null,
       groupStarts,
       downMs,
+      targetClipId: clip.id,
+      copyOnDrag,
+      origSourceInMs: clip.sourceInMs,
+      origSourceOutMs: clip.sourceOutMs,
+      ripple,
     };
   };
 
@@ -163,12 +199,28 @@ export const ClipView = memo(function ClipView({
     const dx = e.clientX - d.startX;
     const dy = e.clientY - d.startY;
     if (!d.moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+    if (!d.moved && d.copyOnDrag) {
+      // First movement of a Ctrl+drag: clone the group in place and switch the
+      // drag over to the clones - the originals stay where they are.
+      const state = useStore.getState();
+      const idMap = state.cloneClipsForDrag([...d.groupStarts.keys()]);
+      d.targetClipId = idMap[clip.id] ?? clip.id;
+      d.groupStarts = new Map([...d.groupStarts].map(([id, ms]) => [idMap[id] ?? id, ms]));
+      // Re-collect snap points excluding the clones: the originals' edges are
+      // now valid snap targets (a copy often lands right against its source).
+      d.points = collectSnapPoints(
+        state.project,
+        Object.values(idMap),
+        state.currentTimeMs,
+        state.loopRegion,
+      );
+    }
     d.moved = true;
 
     const state = useStore.getState();
     const pxMs = state.pxPerSec / 1000;
-    // N toggles snapping globally; holding Shift (or Alt) inverts it for the current drag.
-    const snapActive = e.shiftKey || e.altKey ? !state.snapEnabled : state.snapEnabled;
+    // N toggles snapping globally; holding Shift inverts it for the current drag.
+    const snapActive = e.shiftKey ? !state.snapEnabled : state.snapEnabled;
     const snapThresholdMs = snapActive ? SNAP_THRESHOLD_PX / pxMs : 0;
 
     if (d.mode === 'move') {
@@ -191,8 +243,11 @@ export const ClipView = memo(function ClipView({
         const targetIdx = clamp(d.origTrackIndex + deltaRows, 0, tracks.length - 1);
         if (tracks[targetIdx]?.kind === trackKind) targetTrackId = tracks[targetIdx].id;
 
-        state.moveClip(clip.id, proposed, targetTrackId);
+        state.moveClip(d.targetClipId, proposed, targetTrackId);
       }
+    } else if (d.mode === 'slip') {
+      // Slip: dragging right shows earlier media (the source window slides left).
+      state.slipClip(d.targetClipId, d.origSourceInMs - (dx / pxMs) * clip.speed);
     } else if (d.mode === 'fade-in' || d.mode === 'fade-out') {
       // Fade handles: drag inward from a clip edge to fade from/to black (and silence).
       const tMs = msFromClientX(e.currentTarget as HTMLElement, e.clientX);
@@ -206,7 +261,46 @@ export const ClipView = memo(function ClipView({
     } else {
       const raw = msFromClientX(e.currentTarget as HTMLElement, e.clientX);
       const tMs = hapticOnSnap(raw, snapTime(raw, d.points, snapThresholdMs), d);
-      state.trimClip(clip.id, d.mode === 'trim-left' ? 'left' : 'right', tMs);
+      if (!d.ripple) {
+        state.trimClip(clip.id, d.mode === 'trim-left' ? 'left' : 'right', tMs);
+        return;
+      }
+      // Ripple trim: downstream clips keep their distance to the edited edge.
+      // All deltas derive from the source window captured at press, so each
+      // move is absolute (no per-event drift).
+      const minSpan = MIN_CLIP_DURATION_MS * clip.speed;
+      if (d.mode === 'trim-right') {
+        const sourceOut = clamp(
+          d.origSourceInMs + (tMs - d.origStartMs) * clip.speed,
+          d.origSourceInMs + minSpan,
+          asset ? asset.durationMs : Infinity,
+        );
+        const newEnd = d.origStartMs + (sourceOut - d.origSourceInMs) / clip.speed;
+        state.trimClip(clip.id, 'right', newEnd);
+        const delta = newEnd - (d.origStartMs + d.durMs);
+        state.moveClips(d.ripple.map((r) => ({ clipId: r.id, timelineStartMs: r.startMs + delta })));
+      } else {
+        const sourceIn = clamp(
+          d.origSourceInMs + (tMs - d.origStartMs) * clip.speed,
+          0,
+          d.origSourceOutMs - minSpan,
+        );
+        const removedMs = (sourceIn - d.origSourceInMs) / clip.speed;
+        // trimClip works from the clip's CURRENT geometry: derive the absolute
+        // target that lands on `sourceIn` from the live store state (the `clip`
+        // prop can lag a render), then pull the trimmed clip back to its
+        // original start - ripple keeps the edit point still, the downstream
+        // content closes the gap instead.
+        const live = state.project.tracks
+          .flatMap((tr) => tr.clips)
+          .find((c) => c.id === clip.id);
+        if (!live) return;
+        state.trimClip(clip.id, 'left', live.timelineStartMs + (sourceIn - live.sourceInMs) / clip.speed);
+        state.moveClips([
+          { clipId: clip.id, timelineStartMs: d.origStartMs },
+          ...d.ripple.map((r) => ({ clipId: r.id, timelineStartMs: r.startMs - removedMs })),
+        ]);
+      }
     }
   };
 
@@ -215,8 +309,12 @@ export const ClipView = memo(function ClipView({
     if (!d) return;
     const state = useStore.getState();
     state.endGesture();
-    // A click on a clip that didn't turn into a drag moves the playhead there.
-    if (!coarse && !d.moved && d.mode === 'move') state.seek(Math.max(0, d.downMs));
+    if (!coarse && !d.moved) {
+      // Ctrl+click that never dragged: toggle multi-selection membership.
+      if (d.copyOnDrag) state.toggleSelectClip(clip.id);
+      // A plain click on a clip that didn't turn into a drag moves the playhead there.
+      else if (d.mode === 'move') state.seek(Math.max(0, d.downMs));
+    }
     drag.current = null;
   };
 
@@ -241,6 +339,15 @@ export const ClipView = memo(function ClipView({
       onPointerCancel={onPointerUp}
       onClick={() => {
         if (coarse && !selected) useStore.getState().selectClip(clip.id);
+      }}
+      onDoubleClick={(e) => {
+        if (coarse) return;
+        e.stopPropagation();
+        // Vegas-style: double-click turns the clip's bounds into the selection
+        // region (yellow corners) - ready to loop, review or export that span.
+        useStore
+          .getState()
+          .setLoopRegion({ startMs: clip.timelineStartMs, endMs: clip.timelineStartMs + durMs });
       }}
       onContextMenu={(e) => {
         if (coarse) return; // Desktop only: leave the native menu on touch long-press.

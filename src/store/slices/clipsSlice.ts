@@ -89,6 +89,8 @@ export function createClipsSlice(
   | 'moveClip'
   | 'moveClips'
   | 'trimClip'
+  | 'slipClip'
+  | 'cloneClipsForDrag'
   | 'splitAtPlayhead'
   | 'deleteClip'
   | 'rippleDeleteClip'
@@ -354,6 +356,62 @@ export function createClipsSlice(
       const edits = new Map<string, (c: Clip) => Clip>([[clipId, edit]]);
       for (const id of linkedPartnerIds(p, clipId)) edits.set(id, edit);
       set({ project: patchClips(p, edits) });
+    },
+
+    slipClip: (clipId, sourceInMs) => {
+      const assets = get().assets;
+      // Slide the source window under a fixed timeline footprint: position and
+      // duration never change, only which part of the media plays.
+      const edit = (clip: Clip): Clip => {
+        const asset = assets[clip.assetId];
+        if (!asset) return clip;
+        const span = clip.sourceOutMs - clip.sourceInMs;
+        const nextIn = clamp(sourceInMs, 0, asset.durationMs - span);
+        if (nextIn === clip.sourceInMs) return clip;
+        return { ...clip, sourceInMs: nextIn, sourceOutMs: nextIn + span };
+      };
+      const p = get().project;
+      // Linked partners share the source geometry: slip both sides in lockstep.
+      const edits = new Map<string, (c: Clip) => Clip>([[clipId, edit]]);
+      for (const id of linkedPartnerIds(p, clipId)) edits.set(id, edit);
+      set({ project: patchClips(p, edits) });
+    },
+
+    cloneClipsForDrag: (clipIds) => {
+      // Ctrl+drag (Vegas-style copy drag): clone the clips in place - the drag
+      // then moves the clones while the originals stay put. Linked partners are
+      // cloned along, re-paired under a fresh linkId per group. No history here:
+      // the caller's begin/endGesture makes clone+move one undo step.
+      const p = get().project;
+      const all = withLinkedIds(p, clipIds);
+      const idMap: Record<string, string> = {};
+      const linkMap = new Map<string, string>();
+      const tracks = p.tracks.map((track) => {
+        const copies: Clip[] = [];
+        for (const clip of track.clips) {
+          if (!all.includes(clip.id)) continue;
+          const copy: Clip = { ...structuredClone(clip), id: uid('clip') };
+          if (clip.linkId) {
+            let nextLink = linkMap.get(clip.linkId);
+            if (!nextLink) {
+              nextLink = uid('link');
+              linkMap.set(clip.linkId, nextLink);
+            }
+            copy.linkId = nextLink;
+          }
+          idMap[clip.id] = copy.id;
+          copies.push(copy);
+        }
+        return copies.length ? { ...track, clips: [...track.clips, ...copies] } : track;
+      });
+      const primaries = clipIds.map((id) => idMap[id]).filter((id): id is string => !!id);
+      set({
+        project: { ...p, tracks },
+        selectedClipIds: primaries,
+        selectedClipId: primaries[primaries.length - 1] ?? null,
+        cropEditing: false,
+      });
+      return idMap;
     },
 
     splitAtPlayhead: () => {
