@@ -86,6 +86,7 @@ const GROUPS: readonly Group[] = [
       ['[ / ]', 'shortcuts.edit.trim'],
       ['N', 'shortcuts.edit.snap'],
       ['{{shift}} + {{drag}}', 'shortcuts.edit.invertSnap'],
+      ['{{esc}}', 'shortcuts.edit.cancelDrag'],
       ['{{ctrl}} + C / X / V', 'shortcuts.edit.clipboard'],
       ['{{ctrl}} + D', 'shortcuts.edit.duplicate'],
       ['{{ctrl}} + Z / Y', 'shortcuts.edit.undoRedo'],

@@ -89,6 +89,7 @@ export const useStore = create<EditorState>((set, get) => {
     pxPerSec: DEFAULT_PX_PER_SEC,
     timelinePadLeft: TIMELINE_PAD_LEFT,
     snapEnabled: true,
+    snapGuideMs: null,
     inspectorOpen: false,
     libraryOpen: false,
     shortcutsOpen: false,

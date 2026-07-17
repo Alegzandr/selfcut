@@ -52,8 +52,10 @@ export interface EditorState {
   pxPerSec: number;
   /** Left padding of the timeline content in px (half the viewport on mobile, fixed on desktop). */
   timelinePadLeft: number;
-  /** Clip-drag snapping (N toggles it; Alt inverts it for the current drag). */
+  /** Clip-drag snapping (N toggles it; Shift inverts it for the current drag). */
   snapEnabled: boolean;
+  /** Timeline time (ms) a drag is currently snapped to - drawn as a guide line. */
+  snapGuideMs: number | null;
   /** Mobile only: the inspector opens on demand (Adjust button), not on every selection. */
   inspectorOpen: boolean;
   /** Mobile only: the media library lives in a drawer (desktop docks it permanently). */
@@ -182,8 +184,12 @@ export interface EditorState {
 
   beginGesture: () => void;
   endGesture: () => void;
+  /** Escape during a drag: restore the pre-gesture project and drop the snapshot. */
+  cancelGesture: () => void;
   undo: () => void;
   redo: () => void;
+  /** Publish/clear the snap guide line while a drag is snapped to a point. */
+  setSnapGuide: (ms: number | null) => void;
 
   seek: (ms: number) => void;
   setCurrentTimeFromEngine: (ms: number) => void;

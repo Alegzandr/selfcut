@@ -253,6 +253,7 @@
   "shortcuts.edit.trim": "Découper le début/la fin du clip sur la tête de lecture",
   "shortcuts.edit.snap": "Activer/désactiver l'accrochage",
   "shortcuts.edit.invertSnap": "Inverser l'accrochage pour ce déplacement",
+  "shortcuts.edit.cancelDrag": "Annuler le glissement en cours",
   "shortcuts.edit.clipboard": "Copier/couper/coller le clip",
   "shortcuts.edit.duplicate": "Extrait en double",
   "shortcuts.edit.undoRedo": "Annuler/rétablir",

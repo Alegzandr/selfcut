@@ -272,6 +272,7 @@
   "shortcuts.edit.trim": "Trim clip start / end to playhead",
   "shortcuts.edit.snap": "Toggle snapping",
   "shortcuts.edit.invertSnap": "Invert snapping for this drag",
+  "shortcuts.edit.cancelDrag": "Cancel the drag in progress",
   "shortcuts.edit.clipboard": "Copy / cut / paste clip",
   "shortcuts.edit.duplicate": "Duplicate clip",
   "shortcuts.edit.undoRedo": "Undo / redo",

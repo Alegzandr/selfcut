@@ -17,6 +17,20 @@ import { usePinchZoom } from './hooks/usePinchZoom';
 import { useMobileScrubSync } from './hooks/useMobileScrubSync';
 import { useAssetDrop } from './hooks/useAssetDrop';
 
+/** Vertical guide at the point a drag is currently snapped to (all NLEs flash one). */
+function SnapGuide() {
+  const snapGuideMs = useStore((s) => s.snapGuideMs);
+  const padLeft = useStore((s) => s.timelinePadLeft);
+  const pxPerSec = useStore((s) => s.pxPerSec);
+  if (snapGuideMs === null) return null;
+  return (
+    <div
+      className="pointer-events-none absolute inset-y-0 z-20 w-px bg-sky-300/90"
+      style={{ left: padLeft + snapGuideMs * (pxPerSec / 1000) }}
+    />
+  );
+}
+
 export function Timeline() {
   const { t } = useTranslation();
   const project = useStore((s) => s.project);
@@ -34,7 +48,36 @@ export function Timeline() {
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(
     null,
   );
-  const marqueeRef = useRef<{ x0: number; y0: number; base: string[] } | null>(null);
+  const marqueeRef = useRef<{
+    x0: number;
+    y0: number;
+    base: string[];
+    el: HTMLElement;
+    pointerId: number;
+  } | null>(null);
+  const marqueeActive = marquee !== null;
+
+  // Escape aborts an in-flight marquee: box gone, selection back to the base.
+  useEffect(() => {
+    if (!marqueeActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      const mq = marqueeRef.current;
+      if (mq) {
+        useStore.getState().setSelectedClips(mq.base);
+        try {
+          mq.el.releasePointerCapture(mq.pointerId);
+        } catch {
+          // already released
+        }
+      }
+      marqueeRef.current = null;
+      setMarquee(null);
+    };
+    window.addEventListener('keydown', onKey, { capture: true });
+    return () => window.removeEventListener('keydown', onKey, { capture: true });
+  }, [marqueeActive]);
 
   const empty = project.tracks.length === 0;
   const pxPerMs = pxPerSec / 1000;
@@ -142,11 +185,14 @@ export function Timeline() {
     // Ctrl/Cmd+drag on the background (desktop): marquee / rubber-band select.
     // Shift on top keeps the existing selection and adds the boxed clips to it.
     if (!coarse && e.button === 0 && (e.ctrlKey || e.metaKey)) {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      const el = e.currentTarget as HTMLElement;
+      el.setPointerCapture(e.pointerId);
       marqueeRef.current = {
         x0: e.clientX,
         y0: e.clientY,
         base: e.shiftKey ? useStore.getState().selectedClipIds : [],
+        el,
+        pointerId: e.pointerId,
       };
       return;
     }
@@ -182,6 +228,11 @@ export function Timeline() {
           data-timeline-content
           className="relative min-h-full"
           style={{ width: contentWidth, minWidth: '100%' }}
+          onPointerDown={(e) => {
+            // Empty space below the tracks: pressing it drops the selection,
+            // like every NLE (rows handle their own background separately).
+            if (e.target === e.currentTarget) selectClip(null);
+          }}
         >
           <MarkerBar pxPerMs={pxPerMs} />
           <Ruler durationMs={durationMs} pxPerMs={pxPerMs} overscanMs={coarse ? 0 : 30_000} />
@@ -203,6 +254,7 @@ export function Timeline() {
           </div>
           {/* Region shading + marker lines: after the tracks, so they paint over the clips. */}
           <TimelineOverlay pxPerMs={pxPerMs} trackCount={project.tracks.length} />
+          <SnapGuide />
 
           <div className="sticky left-0 flex w-fit gap-2 p-2">
             <button

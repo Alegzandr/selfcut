@@ -11,6 +11,7 @@ export function createUiSlice(
 ): Pick<
   EditorState,
   | 'toggleSnap'
+  | 'setSnapGuide'
   | 'setPxPerSec'
   | 'setTimelinePadLeft'
   | 'setInspectorOpen'
@@ -27,6 +28,10 @@ export function createUiSlice(
 > {
   return {
     toggleSnap: () => set({ snapEnabled: !get().snapEnabled }),
+
+    setSnapGuide: (ms) => {
+      if (get().snapGuideMs !== ms) set({ snapGuideMs: ms });
+    },
 
     setPxPerSec: (v) => set({ pxPerSec: clamp(v, MIN_PX_PER_SEC, MAX_PX_PER_SEC) }),
 

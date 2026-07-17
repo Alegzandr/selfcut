@@ -253,6 +253,7 @@
   "shortcuts.edit.trim": "Recortar el inicio/final del clip al cabezal de reproducción",
   "shortcuts.edit.snap": "Alternar ajuste",
   "shortcuts.edit.invertSnap": "Ajuste invertido para este arrastre",
+  "shortcuts.edit.cancelDrag": "Cancelar el arrastre en curso",
   "shortcuts.edit.clipboard": "Copiar/cortar/pegar clip",
   "shortcuts.edit.duplicate": "Clip duplicado",
   "shortcuts.edit.undoRedo": "Deshacer/rehacer",

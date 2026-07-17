@@ -1,4 +1,4 @@
-import { memo, useRef } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link2, Music, Type } from 'lucide-react';
 import { Clip, MediaAsset } from '../types';
@@ -7,14 +7,21 @@ import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { collectSnapPoints, snapMove, snapTime } from './snapping';
 import { msFromClientX, msFromContentX, timelineContentEl } from './coords';
-import { MIN_CLIP_DURATION_MS, SNAP_THRESHOLD_PX, TRACK_HEIGHT_PX } from '../app/config';
-import { clamp } from '../lib/time';
+import {
+  MIN_CLIP_DURATION_MS,
+  SNAP_THRESHOLD_PX,
+  TRACK_HEADER_WIDTH_PX,
+  TRACK_HEIGHT_PX,
+} from '../app/config';
+import { clamp, formatTime } from '../lib/time';
 import { useIsCoarsePointer } from '../lib/device';
-import { hapticOnSnap } from '../lib/haptics';
+import { hapticOnSnap, snapTick } from '../lib/haptics';
 import { Waveform } from './Waveform';
 
 interface DragState {
   mode: 'move' | 'trim-left' | 'trim-right' | 'fade-in' | 'fade-out' | 'slip';
+  /** The element that captured the pointer - drag math resolves coords from it. */
+  el: HTMLElement;
   startX: number;
   startY: number;
   origStartMs: number;
@@ -105,6 +112,25 @@ export const ClipView = memo(function ClipView({
   const padLeft = useStore((s) => s.timelinePadLeft);
   const coarse = useIsCoarsePointer();
   const drag = useRef<DragState | null>(null);
+  /** Last pointer position, so edge autoscroll can re-apply the drag per frame. */
+  const lastPointer = useRef<{ x: number; y: number; shift: boolean } | null>(null);
+  const autoScrollRaf = useRef<number | null>(null);
+  /** Pending long-press pick-up (touch, unselected clip): timer + press point. */
+  const longPress = useRef<{ timer: number; x: number; y: number } | null>(null);
+  /** Teardown for per-drag listeners (Escape cancel, touch scroll blocker). */
+  const sessionCleanup = useRef<(() => void) | null>(null);
+  /** Mode of the in-flight drag - drives the floating time badge. */
+  const [liveDragMode, setLiveDragMode] = useState<DragState['mode'] | null>(null);
+
+  // Unmount mid-drag: drop every session listener and timer.
+  useEffect(
+    () => () => {
+      sessionCleanup.current?.();
+      if (autoScrollRaf.current != null) cancelAnimationFrame(autoScrollRaf.current);
+      if (longPress.current) clearTimeout(longPress.current.timer);
+    },
+    [],
+  );
 
   const durMs = clipDurationMs(clip);
   const left = padLeft + clip.timelineStartMs * pxPerMs;
@@ -122,111 +148,63 @@ export const ClipView = memo(function ClipView({
         t('clip.audioTrack', { n: asset.audioTracks.indexOf(audioInfo) + 1 }))
       : null;
 
-  const beginDrag = (e: React.PointerEvent, mode: DragState['mode']) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    // Mobile (CapCut-style): an unselected clip lets the timeline scroll; tap selects it
-    // (via onClick), and only a selected clip can be dragged.
-    if (coarse && !selected) return;
-    e.stopPropagation();
-    const state = useStore.getState();
-    // Shift+click (desktop): select the whole range between the primary clip and this one.
-    if (!coarse && e.shiftKey && !e.ctrlKey && !e.metaKey && mode === 'move') {
-      if (state.selectedClipId && state.selectedClipId !== clip.id) {
-        state.selectClipRange(state.selectedClipId, clip.id);
-      } else {
-        state.selectClip(clip.id);
-      }
-      return;
-    }
-    // Ctrl/Cmd on the body (desktop): a plain click toggles multi-selection
-    // membership (on release), a held drag peels off a COPY (Vegas-style).
-    const copyOnDrag = !coarse && (e.ctrlKey || e.metaKey) && mode === 'move';
-    // Alt+drag on the body (desktop): slip edit - slide the media under a fixed
-    // clip window. Only media clips have a source to slide.
-    if (!coarse && e.altKey && mode === 'move' && clip.kind === 'media' && asset) mode = 'slip';
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    // Dragging a clip that belongs to a multi-selection moves the whole group.
-    const multi =
-      mode === 'move' && state.selectedClipIds.length > 1 && state.selectedClipIds.includes(clip.id);
-    if (!multi && !copyOnDrag) state.selectClip(clip.id);
-    state.beginGesture();
-    const groupIds =
-      multi || (copyOnDrag && state.selectedClipIds.includes(clip.id) && state.selectedClipIds.length > 1)
-        ? state.selectedClipIds
-        : [clip.id];
-    const groupStarts = new Map<string, number>();
-    for (const tr of state.project.tracks) {
-      for (const c of tr.clips) {
-        if (groupIds.includes(c.id)) groupStarts.set(c.id, c.timelineStartMs);
-      }
-    }
-    // Ctrl on a trim handle: ripple trim - downstream clips on this track follow
-    // the edited edge, keeping their distance to it (their partners tag along).
-    const ripple =
-      !coarse && (e.ctrlKey || e.metaKey) && (mode === 'trim-left' || mode === 'trim-right')
-        ? (state.project.tracks
-            .find((tr) => tr.id === clip.trackId)
-            ?.clips.filter((c) => c.id !== clip.id && c.timelineStartMs > clip.timelineStartMs)
-            .map((c) => ({ id: c.id, startMs: c.timelineStartMs })) ?? [])
-        : null;
-    // Time under the pointer at press: a plain click (no drag) on a clip moves
-    // the playhead there, like a classic NLE.
-    const contentEl = timelineContentEl(e.currentTarget as HTMLElement);
-    const downMs = contentEl ? msFromContentX(contentEl, e.clientX) : clip.timelineStartMs;
-    drag.current = {
-      mode,
-      startX: e.clientX,
-      startY: e.clientY,
-      origStartMs: clip.timelineStartMs,
-      durMs,
-      origTrackIndex: state.project.tracks.findIndex((tr) => tr.id === clip.trackId),
-      points: collectSnapPoints(state.project, groupIds, state.currentTimeMs, state.loopRegion),
-      moved: false,
-      lastSnap: null,
-      groupStarts,
-      downMs,
-      targetClipId: clip.id,
-      copyOnDrag,
-      origSourceInMs: clip.sourceInMs,
-      origSourceOutMs: clip.sourceOutMs,
-      ripple,
-    };
+  /** Tear down the drag session: listeners, autoscroll loop, guide line, badge. */
+  const endDragSession = () => {
+    sessionCleanup.current?.();
+    sessionCleanup.current = null;
+    if (autoScrollRaf.current != null) cancelAnimationFrame(autoScrollRaf.current);
+    autoScrollRaf.current = null;
+    useStore.getState().setSnapGuide(null);
+    setLiveDragMode(null);
+    drag.current = null;
   };
 
-  const onPointerMove = (e: React.PointerEvent) => {
+  /** Per-drag listeners: Escape cancels the whole gesture (classic NLE). */
+  const armDragSession = (el: HTMLElement, pointerId: number) => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      // Swallow it before the global hotkeys deselect anything.
+      ev.stopImmediatePropagation();
+      useStore.getState().cancelGesture();
+      try {
+        el.releasePointerCapture(pointerId);
+      } catch {
+        // already released
+      }
+      endDragSession();
+    };
+    window.addEventListener('keydown', onKey, { capture: true });
+    sessionCleanup.current = () => window.removeEventListener('keydown', onKey, { capture: true });
+  };
+
+  /**
+   * One drag step at the given pointer position. Split from the pointermove
+   * handler so edge autoscroll can re-run it every frame while the pointer
+   * rests against a viewport edge and the content slides underneath.
+   */
+  const applyDrag = (clientX: number, clientY: number, shiftKey: boolean) => {
     const d = drag.current;
     if (!d) return;
-    const dx = e.clientX - d.startX;
-    const dy = e.clientY - d.startY;
-    if (!d.moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
-    if (!d.moved && d.copyOnDrag) {
-      // First movement of a Ctrl+drag: clone the group in place and switch the
-      // drag over to the clones - the originals stay where they are.
-      const state = useStore.getState();
-      const idMap = state.cloneClipsForDrag([...d.groupStarts.keys()]);
-      d.targetClipId = idMap[clip.id] ?? clip.id;
-      d.groupStarts = new Map([...d.groupStarts].map(([id, ms]) => [idMap[id] ?? id, ms]));
-      // Re-collect snap points excluding the clones: the originals' edges are
-      // now valid snap targets (a copy often lands right against its source).
-      d.points = collectSnapPoints(
-        state.project,
-        Object.values(idMap),
-        state.currentTimeMs,
-        state.loopRegion,
-      );
-    }
-    d.moved = true;
-
     const state = useStore.getState();
     const pxMs = state.pxPerSec / 1000;
     // N toggles snapping globally; holding Shift inverts it for the current drag.
-    const snapActive = e.shiftKey ? !state.snapEnabled : state.snapEnabled;
+    const snapActive = shiftKey ? !state.snapEnabled : state.snapEnabled;
     const snapThresholdMs = snapActive ? SNAP_THRESHOLD_PX / pxMs : 0;
 
     if (d.mode === 'move') {
-      const raw = d.origStartMs + dx / pxMs;
+      // Pointer-anchored: the grabbed spot stays glued under the pointer even
+      // while autoscroll moves the content.
+      const raw = msFromClientX(d.el, clientX) - (d.downMs - d.origStartMs);
       let proposed = hapticOnSnap(raw, snapMove(raw, d.durMs, d.points, snapThresholdMs), d);
       proposed = Math.max(0, proposed);
+      // Guide line at whichever point captured the clip's start or end.
+      const guide =
+        proposed !== raw
+          ? d.points.find(
+              (p) => Math.abs(p - proposed) < 0.5 || Math.abs(p - (proposed + d.durMs)) < 0.5,
+            )
+          : undefined;
+      state.setSnapGuide(guide ?? null);
 
       if (d.groupStarts.size > 1) {
         // Group drag: same delta for everyone, clamped so no clip crosses t=0.
@@ -239,7 +217,7 @@ export const ClipView = memo(function ClipView({
       } else {
         let targetTrackId: string | undefined;
         const tracks = state.project.tracks;
-        const deltaRows = Math.round(dy / TRACK_HEIGHT_PX);
+        const deltaRows = Math.round((clientY - d.startY) / TRACK_HEIGHT_PX);
         const targetIdx = clamp(d.origTrackIndex + deltaRows, 0, tracks.length - 1);
         if (tracks[targetIdx]?.kind === trackKind) targetTrackId = tracks[targetIdx].id;
 
@@ -247,10 +225,11 @@ export const ClipView = memo(function ClipView({
       }
     } else if (d.mode === 'slip') {
       // Slip: dragging right shows earlier media (the source window slides left).
+      const dx = clientX - d.startX;
       state.slipClip(d.targetClipId, d.origSourceInMs - (dx / pxMs) * clip.speed);
     } else if (d.mode === 'fade-in' || d.mode === 'fade-out') {
       // Fade handles: drag inward from a clip edge to fade from/to black (and silence).
-      const tMs = msFromClientX(e.currentTarget as HTMLElement, e.clientX);
+      const tMs = msFromClientX(d.el, clientX);
       if (d.mode === 'fade-in') {
         const v = Math.round(clamp(tMs - d.origStartMs, 0, d.durMs) / 10) * 10;
         state.updateClip(clip.id, { fadeInMs: v });
@@ -259,8 +238,9 @@ export const ClipView = memo(function ClipView({
         state.updateClip(clip.id, { fadeOutMs: v });
       }
     } else {
-      const raw = msFromClientX(e.currentTarget as HTMLElement, e.clientX);
+      const raw = msFromClientX(d.el, clientX);
       const tMs = hapticOnSnap(raw, snapTime(raw, d.points, snapThresholdMs), d);
+      state.setSnapGuide(tMs !== raw ? tMs : null);
       if (!d.ripple) {
         state.trimClip(clip.id, d.mode === 'trim-left' ? 'left' : 'right', tMs);
         return;
@@ -304,7 +284,239 @@ export const ClipView = memo(function ClipView({
     }
   };
 
+  /**
+   * Edge autoscroll (rAF): dragging against the viewport edge scrolls the
+   * timeline and keeps applying the drag, like every pro NLE. Runs only for
+   * move/trim modes - slip and fades act on a stationary clip.
+   */
+  const startAutoScroll = () => {
+    if (autoScrollRaf.current != null) return;
+    const step = () => {
+      const d = drag.current;
+      if (!d) {
+        autoScrollRaf.current = null;
+        return;
+      }
+      const lp = lastPointer.current;
+      const scroller = d.el.closest<HTMLElement>('.timeline-scroller');
+      if (lp && scroller && d.mode !== 'slip' && d.mode !== 'fade-in' && d.mode !== 'fade-out') {
+        const rect = scroller.getBoundingClientRect();
+        // The desktop gutter (sticky track headers) covers the scroller's left
+        // side - autoscroll must kick in before the pointer dives under it.
+        const leftEdge = rect.left + (coarse ? 0 : TRACK_HEADER_WIDTH_PX) + 40;
+        const rightEdge = rect.right - 40;
+        const speed =
+          lp.x < leftEdge
+            ? Math.max(-24, (lp.x - leftEdge) / 3)
+            : lp.x > rightEdge
+              ? Math.min(24, (lp.x - rightEdge) / 3)
+              : 0;
+        if (speed !== 0) {
+          const before = scroller.scrollLeft;
+          scroller.scrollLeft = before + speed;
+          if (scroller.scrollLeft !== before) applyDrag(lp.x, lp.y, lp.shift);
+        }
+      }
+      autoScrollRaf.current = requestAnimationFrame(step);
+    };
+    autoScrollRaf.current = requestAnimationFrame(step);
+  };
+
+  const clearLongPress = () => {
+    if (longPress.current) {
+      clearTimeout(longPress.current.timer);
+      longPress.current = null;
+    }
+  };
+
+  /** Long-press pick-up (touch): select the clip and start a move drag in place. */
+  const pickUpClip = (el: HTMLElement, pointerId: number, clientX: number, clientY: number) => {
+    longPress.current = null;
+    const state = useStore.getState();
+    state.selectClip(clip.id);
+    state.beginGesture();
+    try {
+      el.setPointerCapture(pointerId);
+    } catch {
+      state.endGesture();
+      return;
+    }
+    armDragSession(el, pointerId);
+    // The press started on a pannable surface, so the browser still owns the
+    // scroll gesture - a non-passive blocker keeps it from stealing the drag.
+    const prevCleanup = sessionCleanup.current;
+    const blockScroll = (ev: TouchEvent) => ev.preventDefault();
+    window.addEventListener('touchmove', blockScroll, { passive: false });
+    sessionCleanup.current = () => {
+      prevCleanup?.();
+      window.removeEventListener('touchmove', blockScroll);
+    };
+    snapTick();
+    const contentEl = timelineContentEl(el);
+    const downMs = contentEl ? msFromContentX(contentEl, clientX) : clip.timelineStartMs;
+    lastPointer.current = { x: clientX, y: clientY, shift: false };
+    drag.current = {
+      mode: 'move',
+      el,
+      startX: clientX,
+      startY: clientY,
+      origStartMs: clip.timelineStartMs,
+      durMs,
+      origTrackIndex: state.project.tracks.findIndex((tr) => tr.id === clip.trackId),
+      points: collectSnapPoints(state.project, [clip.id], state.currentTimeMs, state.loopRegion),
+      moved: false,
+      lastSnap: null,
+      groupStarts: new Map([[clip.id, clip.timelineStartMs]]),
+      downMs,
+      targetClipId: clip.id,
+      copyOnDrag: false,
+      origSourceInMs: clip.sourceInMs,
+      origSourceOutMs: clip.sourceOutMs,
+      ripple: null,
+    };
+    setLiveDragMode('move');
+    startAutoScroll();
+  };
+
+  /** Floating badge: position (move), duration (trim) or source offset (slip) + delta. */
+  const badgeText = () => {
+    const d = drag.current;
+    if (!d) return '';
+    const signed = (v: number) => `${v < 0 ? '−' : '+'}${formatTime(Math.abs(v))}`;
+    if (d.mode === 'move')
+      return `${formatTime(clip.timelineStartMs)} (${signed(clip.timelineStartMs - d.origStartMs)})`;
+    if (d.mode === 'slip') return signed(clip.sourceInMs - d.origSourceInMs);
+    return `${formatTime(durMs)} (${signed(durMs - d.durMs)})`;
+  };
+
+  const beginDrag = (e: React.PointerEvent, mode: DragState['mode']) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    // Mobile (CapCut-style): an unselected clip lets the timeline scroll and a
+    // tap selects it (via onClick) - but a STILL long-press picks the clip up
+    // for an immediate drag, with a haptic tick.
+    if (coarse && !selected) {
+      if (mode === 'move' && e.pointerType === 'touch') {
+        const el = e.currentTarget as HTMLElement;
+        const { pointerId, clientX, clientY } = e;
+        clearLongPress();
+        longPress.current = {
+          x: clientX,
+          y: clientY,
+          timer: window.setTimeout(() => pickUpClip(el, pointerId, clientX, clientY), 350),
+        };
+      }
+      return;
+    }
+    e.stopPropagation();
+    const state = useStore.getState();
+    // Shift+click (desktop): select the whole range between the primary clip and this one.
+    if (!coarse && e.shiftKey && !e.ctrlKey && !e.metaKey && mode === 'move') {
+      if (state.selectedClipId && state.selectedClipId !== clip.id) {
+        state.selectClipRange(state.selectedClipId, clip.id);
+      } else {
+        state.selectClip(clip.id);
+      }
+      return;
+    }
+    // Ctrl/Cmd on the body (desktop): a plain click toggles multi-selection
+    // membership (on release), a held drag peels off a COPY (Vegas-style).
+    const copyOnDrag = !coarse && (e.ctrlKey || e.metaKey) && mode === 'move';
+    // Alt+drag on the body (desktop): slip edit - slide the media under a fixed
+    // clip window. Only media clips have a source to slide.
+    if (!coarse && e.altKey && mode === 'move' && clip.kind === 'media' && asset) mode = 'slip';
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    armDragSession(el, e.pointerId);
+    lastPointer.current = { x: e.clientX, y: e.clientY, shift: e.shiftKey };
+    // Dragging a clip that belongs to a multi-selection moves the whole group.
+    const multi =
+      mode === 'move' && state.selectedClipIds.length > 1 && state.selectedClipIds.includes(clip.id);
+    if (!multi && !copyOnDrag) state.selectClip(clip.id);
+    state.beginGesture();
+    const groupIds =
+      multi || (copyOnDrag && state.selectedClipIds.includes(clip.id) && state.selectedClipIds.length > 1)
+        ? state.selectedClipIds
+        : [clip.id];
+    const groupStarts = new Map<string, number>();
+    for (const tr of state.project.tracks) {
+      for (const c of tr.clips) {
+        if (groupIds.includes(c.id)) groupStarts.set(c.id, c.timelineStartMs);
+      }
+    }
+    // Ctrl on a trim handle: ripple trim - downstream clips on this track follow
+    // the edited edge, keeping their distance to it (their partners tag along).
+    const ripple =
+      !coarse && (e.ctrlKey || e.metaKey) && (mode === 'trim-left' || mode === 'trim-right')
+        ? (state.project.tracks
+            .find((tr) => tr.id === clip.trackId)
+            ?.clips.filter((c) => c.id !== clip.id && c.timelineStartMs > clip.timelineStartMs)
+            .map((c) => ({ id: c.id, startMs: c.timelineStartMs })) ?? [])
+        : null;
+    // Time under the pointer at press: a plain click (no drag) on a clip moves
+    // the playhead there, like a classic NLE.
+    const contentEl = timelineContentEl(e.currentTarget as HTMLElement);
+    const downMs = contentEl ? msFromContentX(contentEl, e.clientX) : clip.timelineStartMs;
+    drag.current = {
+      mode,
+      el,
+      startX: e.clientX,
+      startY: e.clientY,
+      origStartMs: clip.timelineStartMs,
+      durMs,
+      origTrackIndex: state.project.tracks.findIndex((tr) => tr.id === clip.trackId),
+      points: collectSnapPoints(state.project, groupIds, state.currentTimeMs, state.loopRegion),
+      moved: false,
+      lastSnap: null,
+      groupStarts,
+      downMs,
+      targetClipId: clip.id,
+      copyOnDrag,
+      origSourceInMs: clip.sourceInMs,
+      origSourceOutMs: clip.sourceOutMs,
+      ripple,
+    };
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    // A pending long-press dies as soon as the finger wanders: the pan wins.
+    if (!drag.current && longPress.current) {
+      if (Math.hypot(e.clientX - longPress.current.x, e.clientY - longPress.current.y) > 8) {
+        clearLongPress();
+      }
+      return;
+    }
+    const d = drag.current;
+    if (!d) return;
+    lastPointer.current = { x: e.clientX, y: e.clientY, shift: e.shiftKey };
+    if (!d.moved && Math.abs(e.clientX - d.startX) < 4 && Math.abs(e.clientY - d.startY) < 4) {
+      return;
+    }
+    if (!d.moved) {
+      if (d.copyOnDrag) {
+        // First movement of a Ctrl+drag: clone the group in place and switch
+        // the drag over to the clones - the originals stay where they are.
+        const state = useStore.getState();
+        const idMap = state.cloneClipsForDrag([...d.groupStarts.keys()]);
+        d.targetClipId = idMap[clip.id] ?? clip.id;
+        d.groupStarts = new Map([...d.groupStarts].map(([id, ms]) => [idMap[id] ?? id, ms]));
+        // Re-collect snap points excluding the clones: the originals' edges are
+        // now valid snap targets (a copy often lands right against its source).
+        d.points = collectSnapPoints(
+          state.project,
+          Object.values(idMap),
+          state.currentTimeMs,
+          state.loopRegion,
+        );
+      }
+      setLiveDragMode(d.mode);
+      startAutoScroll();
+    }
+    d.moved = true;
+    applyDrag(e.clientX, e.clientY, e.shiftKey);
+  };
+
   const onPointerUp = () => {
+    clearLongPress();
     const d = drag.current;
     if (!d) return;
     const state = useStore.getState();
@@ -315,7 +527,7 @@ export const ClipView = memo(function ClipView({
       // A plain click on a clip that didn't turn into a drag moves the playhead there.
       else if (d.mode === 'move') state.seek(Math.max(0, d.downMs));
     }
-    drag.current = null;
+    endDragSession();
   };
 
   const isVideo = trackKind === 'video';
@@ -425,6 +637,15 @@ export const ClipView = memo(function ClipView({
           {clip.speed !== 1 ? `${clip.speed}×` : ''}
           {clip.speed !== 1 && clip.volume !== 1 ? ' · ' : ''}
           {clip.volume !== 1 ? `${Math.round(clip.volume * 100)}%` : ''}
+        </div>
+      )}
+
+      {/* Live drag readout: position (move), duration (trim) or source offset
+          (slip) with the delta since the press - CapCut's trim bubble and the
+          pro-NLE numeric feedback in one. */}
+      {liveDragMode && liveDragMode !== 'fade-in' && liveDragMode !== 'fade-out' && (
+        <div className="pointer-events-none absolute left-1/2 top-1 z-30 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-950/85 px-1.5 py-0.5 font-mono text-[10px] leading-tight text-zinc-100 shadow">
+          {badgeText()}
         </div>
       )}
 

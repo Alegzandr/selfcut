@@ -151,6 +151,37 @@ describe('selectClipRange', () => {
   });
 });
 
+describe('cancelGesture', () => {
+  it('restores the pre-gesture project and leaves no undo entry', () => {
+    s().addAsset(videoAsset('v', 2000, 0));
+    s().addClipFromAsset('v');
+    const clip = s().project.tracks[0]!.clips[0]!;
+    const pastLen = s().past.length;
+
+    s().beginGesture();
+    s().moveClip(clip.id, 5000);
+    expect(s().project.tracks[0]!.clips[0]!.timelineStartMs).toBe(5000);
+    s().cancelGesture();
+
+    expect(s().project.tracks[0]!.clips[0]!.timelineStartMs).toBe(0);
+    expect(s().gestureSnapshot).toBeNull();
+    expect(s().past.length).toBe(pastLen);
+  });
+
+  it('cancels a Ctrl+drag copy wholesale (the clone vanishes)', () => {
+    s().addAsset(videoAsset('v'));
+    s().addClipFromAsset('v');
+    const before = s().project.tracks.flatMap((t) => t.clips).length;
+
+    s().beginGesture();
+    const idMap = s().cloneClipsForDrag([s().project.tracks[0]!.clips[0]!.id]);
+    s().moveClip(Object.values(idMap)[0]!, 9000);
+    s().cancelGesture();
+
+    expect(s().project.tracks.flatMap((t) => t.clips).length).toBe(before);
+  });
+});
+
 describe('setSelectedClips', () => {
   it('replaces the selection and clears it with an empty list', () => {
     s().addAsset(videoAsset('v', 2000, 0));

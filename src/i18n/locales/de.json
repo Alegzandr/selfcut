@@ -253,6 +253,7 @@
   "shortcuts.edit.trim": "Anfang/Ende des Clips auf den Abspielkopf zuschneiden",
   "shortcuts.edit.snap": "Einrasten umschalten",
   "shortcuts.edit.invertSnap": "Kehren Sie das Einrasten für dieses Ziehen um",
+  "shortcuts.edit.cancelDrag": "Das laufende Ziehen abbrechen",
   "shortcuts.edit.clipboard": "Clip kopieren/ausschneiden/einfügen",
   "shortcuts.edit.duplicate": "Clip duplizieren",
   "shortcuts.edit.undoRedo": "Rückgängig machen/Wiederholen",

@@ -7,9 +7,14 @@ export function createHistorySlice(
   set: StoreSet,
   get: StoreGet,
   _helpers: SliceHelpers,
-): Pick<EditorState, 'beginGesture' | 'endGesture' | 'undo' | 'redo'> {
+): Pick<EditorState, 'beginGesture' | 'endGesture' | 'cancelGesture' | 'undo' | 'redo'> {
   return {
     beginGesture: () => set({ gestureSnapshot: get().project }),
+
+    cancelGesture: () => {
+      const snap = get().gestureSnapshot;
+      if (snap) set({ project: snap, gestureSnapshot: null });
+    },
 
     endGesture: () => {
       // Settle any illegal overlap created during the gesture (drag/trim);
