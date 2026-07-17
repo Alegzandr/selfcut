@@ -133,8 +133,6 @@
   "preview.disconnected": "Source déconnectée — reconnectez le fichier pour l’afficher",
   "preview.quality.title": "Résolution de la preview",
   "preview.quality.hint": "Réduisez-la pour une lecture plus fluide sur les machines modestes",
-  "preview.quality.auto": "Auto",
-  "preview.quality.autoDesc": "S’adapte à votre machine",
   "preview.quality.full": "Pleine",
   "restore.disconnected_one": "{{count}} source est déconnectée : son fichier est introuvable.",
   "restore.disconnected_other": "{{count}} sources sont déconnectées : leurs fichiers sont introuvables.",

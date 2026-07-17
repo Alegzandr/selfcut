@@ -133,8 +133,6 @@
   "preview.disconnected": "Quelle getrennt – Datei neu verbinden, um sie anzuzeigen",
   "preview.quality.title": "Vorschau-Auflösung",
   "preview.quality.hint": "Für flüssigere Wiedergabe auf schwächeren Geräten verringern",
-  "preview.quality.auto": "Auto",
-  "preview.quality.autoDesc": "Passt sich an dein Gerät an",
   "preview.quality.full": "Voll",
   "restore.disconnected_one": "{{count}} Quelle ist getrennt: Ihre Datei wurde nicht gefunden.",
   "restore.disconnected_other": "{{count}} Quellen sind getrennt: Ihre Dateien wurden nicht gefunden.",

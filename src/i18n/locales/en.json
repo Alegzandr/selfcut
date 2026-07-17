@@ -142,8 +142,6 @@
   "preview.disconnected": "Source disconnected — reconnect the file to see it",
   "preview.quality.title": "Preview resolution",
   "preview.quality.hint": "Lower it for smoother playback on slower machines",
-  "preview.quality.auto": "Auto",
-  "preview.quality.autoDesc": "Adapts to your machine",
   "preview.quality.full": "Full",
   "restore.disconnected_one": "{{count}} source is disconnected: its file could not be found.",
   "restore.disconnected_other": "{{count}} sources are disconnected: their files could not be found.",

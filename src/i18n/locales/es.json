@@ -133,8 +133,6 @@
   "preview.disconnected": "Fuente desconectada: vuelve a conectar el archivo para verla",
   "preview.quality.title": "Resolución de vista previa",
   "preview.quality.hint": "Redúcela para una reproducción más fluida en equipos lentos",
-  "preview.quality.auto": "Auto",
-  "preview.quality.autoDesc": "Se adapta a tu equipo",
   "preview.quality.full": "Completa",
   "restore.disconnected_one": "{{count}} fuente está desconectada: no se encontró su archivo.",
   "restore.disconnected_other": "{{count}} fuentes están desconectadas: no se encontraron sus archivos.",

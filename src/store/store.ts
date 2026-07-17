@@ -8,8 +8,6 @@ import {
   DEFAULT_PX_PER_SEC,
   TIMELINE_PAD_LEFT,
   DEFAULT_PREVIEW_RESOLUTION,
-  PREVIEW_AUTO_DEFAULT_SCALE,
-  PREVIEW_RESOLUTION_SCALE,
   type PreviewResolutionMode,
 } from '../app/config';
 import { HISTORY_LIMIT, TIME_FORMAT_KEY, PREVIEW_RESOLUTION_KEY } from './constants';
@@ -38,7 +36,7 @@ function loadTimeFormat(): TimeFormat {
 function loadPreviewResolution(): PreviewResolutionMode {
   try {
     const v = localStorage.getItem(PREVIEW_RESOLUTION_KEY);
-    if (v === 'auto' || v === 'full' || v === 'half' || v === 'quarter' || v === 'eighth') return v;
+    if (v === 'full' || v === 'half' || v === 'quarter' || v === 'eighth') return v;
   } catch {
     /* private mode / no storage - fall through to the default */
   }
@@ -92,8 +90,6 @@ export const useStore = create<EditorState>((set, get) => {
 
   const helpers = { withHistory, pruneSelection };
 
-  const previewResolution = loadPreviewResolution();
-
   return {
     project: createEmptyProject(),
     assets: {},
@@ -116,11 +112,7 @@ export const useStore = create<EditorState>((set, get) => {
     contextMenu: null,
     renamingMarkerId: null,
     timeFormat: loadTimeFormat(),
-    previewResolution,
-    previewActiveScale:
-      previewResolution === 'auto'
-        ? PREVIEW_AUTO_DEFAULT_SCALE
-        : PREVIEW_RESOLUTION_SCALE[previewResolution],
+    previewResolution: loadPreviewResolution(),
     clipboard: null,
     exportOpen: false,
     importing: false,

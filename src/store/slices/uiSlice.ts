@@ -23,7 +23,6 @@ export function createUiSlice(
   | 'setRenamingMarker'
   | 'setTimeFormat'
   | 'setPreviewResolution'
-  | 'setPreviewActiveScale'
   | 'setExportOpen'
   | 'setError'
 > {
@@ -64,10 +63,6 @@ export function createUiSlice(
         /* private mode / no storage - the choice just won't persist */
       }
       set({ previewResolution: mode });
-    },
-
-    setPreviewActiveScale: (scale) => {
-      if (get().previewActiveScale !== scale) set({ previewActiveScale: scale });
     },
 
     setExportOpen: (open) => set({ exportOpen: open }),
