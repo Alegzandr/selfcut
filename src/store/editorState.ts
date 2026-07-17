@@ -53,8 +53,16 @@ export interface EditorState {
   pxPerSec: number;
   /** Left padding of the timeline content in px (half the viewport on mobile, fixed on desktop). */
   timelinePadLeft: number;
-  /** Clip-drag snapping (N toggles it; Alt inverts it for the current drag). */
+  /** Clip-drag snapping (N toggles it; Shift inverts it for the current drag). */
   snapEnabled: boolean;
+  /** Timeline time (ms) a drag is currently snapped to - drawn as a guide line. */
+  snapGuideMs: number | null;
+  /**
+   * Floating readout of the in-flight drag (position/duration/offset + delta),
+   * keyed to the edited clip. Lives in the store - not in the clip's component -
+   * so it survives the remount when a drag crosses onto another track.
+   */
+  dragBadge: { clipId: string; text: string } | null;
   /** Mobile only: the inspector opens on demand (Adjust button), not on every selection. */
   inspectorOpen: boolean;
   /** Mobile only: the media library lives in a drawer (desktop docks it permanently). */
@@ -112,12 +120,32 @@ export interface EditorState {
   selectAllClips: () => void;
   /** Ctrl/Cmd+click: add/remove a clip from the multi-selection. */
   toggleSelectClip: (id: string) => void;
+  /** Replace the whole selection (marquee / rubber-band select). */
+  setSelectedClips: (ids: string[]) => void;
+  /**
+   * Shift+click: select every clip in the rectangle spanned by the anchor
+   * (primary selection) and the target - rows between them, anchor→target time span.
+   */
+  selectClipRange: (anchorId: string, targetId: string) => void;
   updateClip: (clipId: string, patch: Partial<Clip>) => void;
   updateClipCommitted: (clipId: string, patch: Partial<Clip>) => void;
   moveClip: (clipId: string, timelineStartMs: number, targetTrackId?: string) => void;
   /** Batch position update (multi-selection drag), no history - wrap with begin/endGesture. */
   moveClips: (entries: { clipId: string; timelineStartMs: number }[]) => void;
   trimClip: (clipId: string, edge: 'left' | 'right', timelineMs: number) => void;
+  /**
+   * Slip edit (Alt+drag on a clip body): slide the source window while the
+   * clip's timeline position and duration stay fixed. Live - wrap with
+   * begin/endGesture. Linked partners slip in lockstep.
+   */
+  slipClip: (clipId: string, sourceInMs: number) => void;
+  /**
+   * Ctrl+drag copy: clone the given clips (and their linked partners, re-paired
+   * under fresh linkIds) in place, select the clones, and return the
+   * original→clone id map so the drag can move the clones. No history: the
+   * surrounding gesture commits clone+move as one undo step.
+   */
+  cloneClipsForDrag: (clipIds: string[]) => Record<string, string>;
   splitAtPlayhead: () => void;
   deleteClip: (clipId: string) => void;
   /** Delete a clip and close the gap: later clips on the same track shift left. */
@@ -165,8 +193,14 @@ export interface EditorState {
 
   beginGesture: () => void;
   endGesture: () => void;
+  /** Escape during a drag: restore the pre-gesture project and drop the snapshot. */
+  cancelGesture: () => void;
   undo: () => void;
   redo: () => void;
+  /** Publish/clear the snap guide line while a drag is snapped to a point. */
+  setSnapGuide: (ms: number | null) => void;
+  /** Publish/clear the floating drag readout for a clip. */
+  setDragBadge: (badge: { clipId: string; text: string } | null) => void;
 
   seek: (ms: number) => void;
   setCurrentTimeFromEngine: (ms: number) => void;
