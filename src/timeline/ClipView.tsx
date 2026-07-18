@@ -20,6 +20,7 @@ import { clamp, formatTime } from '../lib/time';
 import { useIsCoarsePointer } from '../lib/device';
 import { hapticOnSnap, snapTick } from '../lib/haptics';
 import { Waveform } from './Waveform';
+import { useTimelineViewport } from './viewport';
 
 interface DragState {
   mode: 'move' | 'trim-left' | 'trim-right' | 'fade-in' | 'fade-out' | 'slip';
@@ -80,7 +81,6 @@ const signedMs = (v: number) => `${v < 0 ? '−' : '+'}${formatTime(Math.abs(v))
 interface Props {
   clip: Clip;
   trackKind: 'video' | 'audio';
-  selected: boolean;
   pxPerMs: number;
   /** Overlap with the neighboring clips (crossfade windows), for the visuals. */
   xfadeInMs?: number;
@@ -95,20 +95,40 @@ const Filmstrip = memo(function Filmstrip({
   asset,
   clip,
   widthPx,
+  clipLeftPx,
 }: {
   asset: MediaAsset;
   clip: Clip;
   widthPx: number;
+  /** Content-x of the clip's left edge, to intersect the filmstrip with the viewport. */
+  clipLeftPx: number;
 }) {
+  const viewport = useTimelineViewport();
   const aspect = asset.width && asset.height ? asset.width / asset.height : 16 / 9;
   const tileW = Math.max(24, Math.round((TRACK_HEIGHT_PX - 8) * aspect));
-  const count = Math.min(1000, Math.max(1, Math.ceil(widthPx / tileW)));
+  const total = Math.max(1, Math.ceil(widthPx / tileW));
   const spanMs = clip.sourceOutMs - clip.sourceInMs;
   const thumbs = asset.thumbnails;
+
+  // Only the tiles inside the visible window are put in the DOM: a long clip at
+  // deep zoom is otherwise up to thousands of <img> nodes, rebuilt on every
+  // zoom. Until the viewport is known, render a bounded prefix (the virtualized
+  // pass corrects it on the same commit).
+  let startTile = 0;
+  let endTile = viewport ? total : Math.min(total, 400);
+  if (viewport) {
+    startTile = Math.max(0, Math.floor((viewport.left - clipLeftPx) / tileW));
+    endTile = Math.min(total, Math.max(0, Math.ceil((viewport.right - clipLeftPx) / tileW)));
+  }
+  if (endTile <= startTile) return <div className="h-full w-full" />;
+
+  const tiles: number[] = [];
+  for (let i = startTile; i < endTile; i++) tiles.push(i);
+
   return (
-    <div className="flex h-full w-full overflow-hidden">
-      {Array.from({ length: count }, (_, i) => {
-        const srcMs = clip.sourceInMs + ((i + 0.5) / count) * spanMs;
+    <div className="relative h-full w-full overflow-hidden">
+      {tiles.map((i) => {
+        const srcMs = clip.sourceInMs + ((i + 0.5) / total) * spanMs;
         const idx = Math.min(
           thumbs.length - 1,
           Math.max(0, Math.round((srcMs / asset.durationMs) * (thumbs.length - 1))),
@@ -117,11 +137,10 @@ const Filmstrip = memo(function Filmstrip({
           <img
             key={i}
             src={thumbs[idx]}
-            className="h-full flex-none object-cover"
-            style={{ width: tileW }}
+            className="absolute top-0 h-full object-cover"
+            style={{ left: i * tileW, width: tileW }}
             alt=""
             draggable={false}
-            loading="lazy"
             decoding="async"
           />
         );
@@ -133,12 +152,15 @@ const Filmstrip = memo(function Filmstrip({
 export const ClipView = memo(function ClipView({
   clip,
   trackKind,
-  selected,
   pxPerMs,
   xfadeInMs = 0,
   xfadeOutMs = 0,
 }: Props) {
   const { t } = useTranslation();
+  // Subscribe to just this clip's selected flag, so a selection change (or a
+  // marquee drag) only re-renders the clips whose membership actually flipped -
+  // not every clip on every track through the parent row.
+  const selected = useStore((s) => s.selectedClipIds.includes(clip.id));
   const asset = useStore((s) => s.assets[clip.assetId]);
   const padLeft = useStore((s) => s.timelinePadLeft);
   const coarse = useIsCoarsePointer();
@@ -237,7 +259,7 @@ export const ClipView = memo(function ClipView({
     const findLive = (id: string) =>
       useStore
         .getState()
-        .project.tracks.flatMap((t) => t.clips)
+        .project.tracks.flatMap((tr) => tr.clips)
         .find((c) => c.id === id);
 
     if (d.mode === 'move') {
@@ -655,27 +677,28 @@ export const ClipView = memo(function ClipView({
           : siblings
               .filter((c) => c.id !== clip.id && c.timelineStartMs < clip.timelineStartMs)
               .sort((a, b) => b.timelineStartMs - a.timelineStartMs)[0];
-      const left = mode === 'trim-right' ? clip : neighbor;
-      const right = mode === 'trim-right' ? neighbor : clip;
-      if (left && right && right.timelineStartMs <= clipEndMs(left) + 1) {
-        const leftAsset = state.assets[left.assetId];
+      const leftClip = mode === 'trim-right' ? clip : neighbor;
+      const rightClip = mode === 'trim-right' ? neighbor : clip;
+      if (leftClip && rightClip && rightClip.timelineStartMs <= clipEndMs(leftClip) + 1) {
+        const leftAsset = state.assets[leftClip.assetId];
         // Delta bounds: the left clip's out point can move within its source
         // headroom, the right clip's in point within its own - the cut only
         // rolls as far as BOTH sides allow.
         const minDelta = Math.max(
-          (left.sourceInMs + MIN_CLIP_DURATION_MS * left.speed - left.sourceOutMs) / left.speed,
-          -right.sourceInMs / right.speed,
+          (leftClip.sourceInMs + MIN_CLIP_DURATION_MS * leftClip.speed - leftClip.sourceOutMs) /
+            leftClip.speed,
+          -rightClip.sourceInMs / rightClip.speed,
         );
         const maxDelta = Math.min(
-          ((leftAsset?.durationMs ?? Infinity) - left.sourceOutMs) / left.speed,
-          (right.sourceOutMs - right.sourceInMs - MIN_CLIP_DURATION_MS * right.speed) /
-            right.speed,
+          ((leftAsset?.durationMs ?? Infinity) - leftClip.sourceOutMs) / leftClip.speed,
+          (rightClip.sourceOutMs - rightClip.sourceInMs - MIN_CLIP_DURATION_MS * rightClip.speed) /
+            rightClip.speed,
         );
         roll = {
-          leftId: left.id,
-          rightId: right.id,
-          origLeftEndMs: clipEndMs(left),
-          origRightStartMs: right.timelineStartMs,
+          leftId: leftClip.id,
+          rightId: rightClip.id,
+          origLeftEndMs: clipEndMs(leftClip),
+          origRightStartMs: rightClip.timelineStartMs,
           edge0Ms: mode === 'trim-right' ? clipEndMs(clip) : clip.timelineStartMs,
           minDelta,
           maxDelta,
@@ -821,11 +844,11 @@ export const ClipView = memo(function ClipView({
         </div>
       ) : isVideo && asset?.thumbnails.length ? (
         <div className="pointer-events-none h-full w-full">
-          <Filmstrip asset={asset} clip={clip} widthPx={width} />
+          <Filmstrip asset={asset} clip={clip} widthPx={width} clipLeftPx={left} />
           {/* Audio envelope under the thumbnails - cutting to sound needs to be visual. */}
           {hasPeaks && (
             <div className="absolute inset-x-0 bottom-0 h-1/3 bg-black/40">
-              <Waveform asset={asset} clip={clip} widthPx={width} color="rgba(255,255,255,0.85)" />
+              <Waveform asset={asset} clip={clip} widthPx={width} clipLeftPx={left} color="rgba(255,255,255,0.85)" />
             </div>
           )}
         </div>
@@ -833,7 +856,7 @@ export const ClipView = memo(function ClipView({
         <div className="pointer-events-none relative h-full w-full bg-gradient-to-b from-emerald-900/60 to-emerald-950">
           {hasPeaks && asset && (
             <div className="absolute inset-0">
-              <Waveform asset={asset} clip={clip} widthPx={width} color="rgba(110,231,183,0.65)" />
+              <Waveform asset={asset} clip={clip} widthPx={width} clipLeftPx={left} color="rgba(110,231,183,0.65)" />
             </div>
           )}
           <div className="absolute left-0 top-0 flex max-w-full items-center gap-1 px-1.5 py-0.5">

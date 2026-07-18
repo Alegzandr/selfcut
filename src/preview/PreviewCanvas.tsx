@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PlugZap } from 'lucide-react';
 import { PlaybackEngine } from './PlaybackEngine';
 import { useStore, getSelectedClip } from '../store/store';
-import { Clip, ClipTransform, MediaAsset } from '../types';
+import { Clip, ClipTransform, MediaAsset, Project } from '../types';
 import {
   DEFAULT_TRANSFORM,
   clipEndMs,
@@ -178,40 +178,189 @@ interface PreviewResize {
   startDist: number;
 }
 
+/** Bounding rect of a clip in output coordinates at a timeline time (null when unknown). */
+function clipRectAt(
+  clip: Clip,
+  assets: Record<string, MediaAsset>,
+  outW: number,
+  outH: number,
+  timeMs: number,
+): DestRect | null {
+  if (isTextClip(clip)) return textClipRect(clip, outW, outH);
+  if (clip.kind === 'solid') return { dx: 0, dy: 0, dw: outW, dh: outH };
+  const asset = assets[clip.assetId];
+  // The dest rect only depends on the source aspect ratio, known from the probe.
+  if (!asset?.width || !asset?.height) return null;
+  return clipDestRect(clip, asset.width, asset.height, outW, outH, timeMs);
+}
+
+/**
+ * Time-driven overlays (selection outline + handles, disconnected-source badge).
+ * Split into its own component that subscribes to `currentTimeMs` so that only
+ * this small subtree re-renders each playback frame - the parent `PreviewCanvas`
+ * (canvas, effects, drag handlers) stays off the 60fps path, matching how
+ * `Playhead` and the transport timecode already avoid per-frame React work.
+ */
+function PreviewOverlays({
+  project,
+  assets,
+  selectedClip,
+  cropping,
+  outW,
+  outH,
+  stageRef,
+}: {
+  project: Project;
+  assets: Record<string, MediaAsset>;
+  selectedClip: Clip | null;
+  cropping: boolean;
+  outW: number;
+  outH: number;
+  stageRef: RefObject<HTMLDivElement | null>;
+}) {
+  const { t } = useTranslation();
+  const currentTimeMs = useStore((s) => s.currentTimeMs);
+  const resize = useRef<PreviewResize | null>(null);
+
+  const normPoint = (e: React.PointerEvent): { nx: number; ny: number } => {
+    const rect = stageRef.current!.getBoundingClientRect();
+    return { nx: (e.clientX - rect.left) / rect.width, ny: (e.clientY - rect.top) / rect.height };
+  };
+
+  // A media clip visible right now that points at a disconnected source: the
+  // canvas would otherwise just render black with no explanation. Plain scan
+  // (no sort/alloc) since it runs every frame.
+  const disconnectedNow =
+    !cropping &&
+    project.tracks.some(
+      (tr) =>
+        tr.kind === 'video' &&
+        !tr.hidden &&
+        tr.clips.some(
+          (c) =>
+            !isGeneratedClip(c) &&
+            assets[c.assetId]?.disconnected &&
+            currentTimeMs >= c.timelineStartMs &&
+            currentTimeMs < clipEndMs(c),
+        ),
+    );
+
+  // Selection outline: only when the selected clip is actually on screen now
+  // (and not while the crop overlay covers the stage).
+  const selectedRect =
+    !cropping &&
+    selectedClip &&
+    currentTimeMs >= selectedClip.timelineStartMs &&
+    currentTimeMs < clipEndMs(selectedClip) &&
+    project.tracks.some(
+      (tr) => tr.kind === 'video' && !tr.hidden && tr.clips.some((c) => c.id === selectedClip.id),
+    )
+      ? clipRectAt(selectedClip, assets, outW, outH, currentTimeMs)
+      : null;
+
+  /** Corner handle drag: rescale the clip around its center. */
+  const onHandleDown = (e: React.PointerEvent, rect: DestRect, clip: Clip) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const state = useStore.getState();
+    state.beginGesture();
+    const { nx, ny } = normPoint(e);
+    const centerNx = (rect.dx + rect.dw / 2) / outW;
+    const centerNy = (rect.dy + rect.dh / 2) / outH;
+    resize.current = {
+      clipId: clip.id,
+      origScale: (clip.transform ?? DEFAULT_TRANSFORM).scale,
+      centerNx,
+      centerNy,
+      startDist: Math.max(0.01, Math.hypot(nx - centerNx, ny - centerNy)),
+    };
+  };
+
+  const onHandleMove = (e: React.PointerEvent) => {
+    const r = resize.current;
+    if (!r) return;
+    const { nx, ny } = normPoint(e);
+    const dist = Math.hypot(nx - r.centerNx, ny - r.centerNy);
+    let scale = Math.min(8, Math.max(0.05, (r.origScale * dist) / r.startDist));
+    // Magnetism: snap to the natural "fit-to-frame" scale (1.0) unless Shift is held.
+    if (!e.shiftKey && Math.abs(scale - 1) < 0.03) scale = 1;
+    const state = useStore.getState();
+    const clip = state.project.tracks.flatMap((tr) => tr.clips).find((c) => c.id === r.clipId);
+    if (!clip) return;
+    const tf = clip.transform ?? DEFAULT_TRANSFORM;
+    state.updateClip(r.clipId, { transform: { ...tf, scale } });
+  };
+
+  const onHandleUp = () => {
+    if (!resize.current) return;
+    useStore.getState().endGesture();
+    resize.current = null;
+  };
+
+  return (
+    <>
+      {disconnectedNow && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg bg-zinc-950/70 px-4 text-center">
+          <PlugZap className="h-7 w-7 text-amber-300" />
+          <p className="text-xs font-medium text-amber-100">{t('preview.disconnected')}</p>
+        </div>
+      )}
+      {selectedRect && (
+        <div
+          className="pointer-events-none absolute rounded-sm ring-2 ring-sky-400/90"
+          style={{
+            left: `${(selectedRect.dx / outW) * 100}%`,
+            top: `${(selectedRect.dy / outH) * 100}%`,
+            width: `${(selectedRect.dw / outW) * 100}%`,
+            height: `${(selectedRect.dh / outH) * 100}%`,
+          }}
+        >
+          {/* Corner handles: drag to rescale the clip around its center. */}
+          {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
+            <div
+              key={corner}
+              className={`pointer-events-auto absolute h-3 w-3 rounded-sm border border-zinc-900 bg-sky-400 shadow ${
+                corner[0] === 'n' ? '-top-1.5' : '-bottom-1.5'
+              } ${corner[1] === 'w' ? '-left-1.5' : '-right-1.5'} ${
+                corner === 'nw' || corner === 'se' ? 'cursor-nwse-resize' : 'cursor-nesw-resize'
+              } touch-none`}
+              onPointerDown={(e) => onHandleDown(e, selectedRect, selectedClip!)}
+              onPointerMove={onHandleMove}
+              onPointerUp={onHandleUp}
+              onPointerCancel={onHandleUp}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 /**
  * Output monitor + direct manipulation: dragging a clip in the preview moves
  * its transform position, the wheel over the preview scales the selected clip.
  * The hit-test and the selection outline reuse the compositor's dest-rect math,
  * expressed in % of the canvas so no pixel measuring is needed.
+ *
+ * The parent deliberately does NOT subscribe to `currentTimeMs`: the canvas is
+ * painted imperatively by `PlaybackEngine`, so the only per-frame React work
+ * belongs to `PreviewOverlays`. Handlers read the live time via getState().
  */
 export function PreviewCanvas() {
-  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<PreviewDrag | null>(null);
-  const resize = useRef<PreviewResize | null>(null);
   const wheelGesture = useRef<number | null>(null);
   // Alignment guides drawn while dragging in the preview (normalized stage coords).
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
 
   const project = useStore((s) => s.project);
   const assets = useStore((s) => s.assets);
-  const currentTimeMs = useStore((s) => s.currentTimeMs);
   const selectedClip = useStore(getSelectedClip);
   const cropEditing = useStore((s) => s.cropEditing);
 
   const { width: outW, height: outH } = outputDimensions(project.aspectRatio);
-
-  // Whether a media clip visible right now points at a disconnected source:
-  // the canvas would otherwise just render black with no explanation.
-  const disconnectedNow = project.tracks.some(
-    (tr) =>
-      tr.kind === 'video' &&
-      !tr.hidden &&
-      clipsAt(tr.clips, currentTimeMs).some(
-        (c) => !isGeneratedClip(c) && assets[c.assetId]?.disconnected,
-      ),
-  );
 
   // Crop mode only makes sense for a media clip whose source we can show.
   const cropAsset = selectedClip && !isGeneratedClip(selectedClip) ? assets[selectedClip.assetId] : undefined;
@@ -222,26 +371,17 @@ export function PreviewCanvas() {
     return () => engine.dispose();
   }, []);
 
-  /** Bounding rect of a clip in output coordinates (null when unknown). */
-  const rectOf = (clip: Clip): DestRect | null => {
-    if (isTextClip(clip)) return textClipRect(clip, outW, outH);
-    if (clip.kind === 'solid') return { dx: 0, dy: 0, dw: outW, dh: outH };
-    const asset = assets[clip.assetId];
-    // The dest rect only depends on the source aspect ratio, known from the probe.
-    if (!asset?.width || !asset?.height) return null;
-    return clipDestRect(clip, asset.width, asset.height, outW, outH, currentTimeMs);
-  };
-
   /** Topmost visible clip under a normalized point at the current time. */
   const hitTest = (nx: number, ny: number): Clip | null => {
+    const timeMs = useStore.getState().currentTimeMs;
     const px = nx * outW;
     const py = ny * outH;
     for (const track of [...project.tracks].reverse()) {
       if (track.kind !== 'video' || track.hidden || (track.opacity ?? 1) <= 0) continue;
-      const visible = clipsAt(track.clips, currentTimeMs);
+      const visible = clipsAt(track.clips, timeMs);
       for (let i = visible.length - 1; i >= 0; i--) {
         const clip = visible[i]!;
-        const r = rectOf(clip);
+        const r = clipRectAt(clip, assets, outW, outH, timeMs);
         if (r && px >= r.dx && px <= r.dx + r.dw && py >= r.dy && py <= r.dy + r.dh) {
           return clip;
         }
@@ -277,7 +417,7 @@ export function PreviewCanvas() {
     if (!d.moved && Math.abs(nx - d.startNx) < 0.004 && Math.abs(ny - d.startNy) < 0.004) return;
     d.moved = true;
     const state = useStore.getState();
-    const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === d.clipId);
+    const clip = state.project.tracks.flatMap((tr) => tr.clips).find((c) => c.id === d.clipId);
     if (!clip) return;
     const tf = clip.transform ?? DEFAULT_TRANSFORM;
     let x = d.origX + (nx - d.startNx);
@@ -286,7 +426,7 @@ export function PreviewCanvas() {
     // Smart guides: the transform x/y IS the clip's normalized center, so snap
     // it to the frame center and to the frame edges (via the clip's half-size).
     // Holding Shift disables the magnetism. Fuchsia lines mark each active snap.
-    const rect = rectOf(clip);
+    const rect = clipRectAt(clip, assets, outW, outH, state.currentTimeMs);
     const vLines: number[] = [];
     const hLines: number[] = [];
     if (!e.shiftKey && rect) {
@@ -336,46 +476,6 @@ export function PreviewCanvas() {
     setGuides({ v: [], h: [] });
   };
 
-  /** Corner handle drag: rescale the clip around its center. */
-  const onHandleDown = (e: React.PointerEvent, rect: DestRect, clip: Clip) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    const state = useStore.getState();
-    state.beginGesture();
-    const { nx, ny } = normPoint(e);
-    const centerNx = (rect.dx + rect.dw / 2) / outW;
-    const centerNy = (rect.dy + rect.dh / 2) / outH;
-    resize.current = {
-      clipId: clip.id,
-      origScale: (clip.transform ?? DEFAULT_TRANSFORM).scale,
-      centerNx,
-      centerNy,
-      startDist: Math.max(0.01, Math.hypot(nx - centerNx, ny - centerNy)),
-    };
-  };
-
-  const onHandleMove = (e: React.PointerEvent) => {
-    const r = resize.current;
-    if (!r) return;
-    const { nx, ny } = normPoint(e);
-    const dist = Math.hypot(nx - r.centerNx, ny - r.centerNy);
-    let scale = Math.min(8, Math.max(0.05, (r.origScale * dist) / r.startDist));
-    // Magnetism: snap to the natural "fit-to-frame" scale (1.0) unless Shift is held.
-    if (!e.shiftKey && Math.abs(scale - 1) < 0.03) scale = 1;
-    const state = useStore.getState();
-    const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === r.clipId);
-    if (!clip) return;
-    const tf = clip.transform ?? DEFAULT_TRANSFORM;
-    state.updateClip(r.clipId, { transform: { ...tf, scale } });
-  };
-
-  const onHandleUp = () => {
-    if (!resize.current) return;
-    useStore.getState().endGesture();
-    resize.current = null;
-  };
-
   // Wheel over the preview scales the selected clip. Native listener: React's
   // onWheel is passive, and scaling must preventDefault to not scroll the page.
   useEffect(() => {
@@ -400,19 +500,6 @@ export function PreviewCanvas() {
     return () => stage.removeEventListener('wheel', onWheel);
   }, []);
 
-  // Selection outline: only when the selected clip is actually on screen now
-  // (and not while the crop overlay covers the stage).
-  const selectedRect =
-    !croppingClip &&
-    selectedClip &&
-    currentTimeMs >= selectedClip.timelineStartMs &&
-    currentTimeMs < clipEndMs(selectedClip) &&
-    project.tracks.some(
-      (tr) => tr.kind === 'video' && !tr.hidden && tr.clips.some((c) => c.id === selectedClip.id),
-    )
-      ? rectOf(selectedClip)
-      : null;
-
   return (
     <div
       className="flex h-full w-full items-center justify-center overflow-hidden bg-zinc-950 p-1"
@@ -434,12 +521,6 @@ export function PreviewCanvas() {
         onPointerCancel={onPointerUp}
       >
         <canvas ref={canvasRef} className="h-full w-full rounded-lg shadow-lg shadow-black/50" />
-        {disconnectedNow && !croppingClip && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg bg-zinc-950/70 px-4 text-center">
-            <PlugZap className="h-7 w-7 text-amber-300" />
-            <p className="text-xs font-medium text-amber-100">{t('preview.disconnected')}</p>
-          </div>
-        )}
         {croppingClip && cropAsset && <CropOverlay clip={croppingClip} asset={cropAsset} />}
         {/* Smart-guide lines while dragging a clip in the preview. */}
         {(guides.v.length > 0 || guides.h.length > 0) && (
@@ -460,33 +541,15 @@ export function PreviewCanvas() {
             ))}
           </div>
         )}
-        {selectedRect && (
-          <div
-            className="pointer-events-none absolute rounded-sm ring-2 ring-sky-400/90"
-            style={{
-              left: `${(selectedRect.dx / outW) * 100}%`,
-              top: `${(selectedRect.dy / outH) * 100}%`,
-              width: `${(selectedRect.dw / outW) * 100}%`,
-              height: `${(selectedRect.dh / outH) * 100}%`,
-            }}
-          >
-            {/* Corner handles: drag to rescale the clip around its center. */}
-            {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
-              <div
-                key={corner}
-                className={`pointer-events-auto absolute h-3 w-3 rounded-sm border border-zinc-900 bg-sky-400 shadow ${
-                  corner[0] === 'n' ? '-top-1.5' : '-bottom-1.5'
-                } ${corner[1] === 'w' ? '-left-1.5' : '-right-1.5'} ${
-                  corner === 'nw' || corner === 'se' ? 'cursor-nwse-resize' : 'cursor-nesw-resize'
-                } touch-none`}
-                onPointerDown={(e) => onHandleDown(e, selectedRect, selectedClip!)}
-                onPointerMove={onHandleMove}
-                onPointerUp={onHandleUp}
-                onPointerCancel={onHandleUp}
-              />
-            ))}
-          </div>
-        )}
+        <PreviewOverlays
+          project={project}
+          assets={assets}
+          selectedClip={selectedClip}
+          cropping={croppingClip !== null}
+          outW={outW}
+          outH={outH}
+          stageRef={stageRef}
+        />
       </div>
     </div>
   );

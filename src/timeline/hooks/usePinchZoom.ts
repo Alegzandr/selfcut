@@ -17,6 +17,16 @@ export function usePinchZoom(
     let pinchStartDist = 0;
     let pinchStartPxPerSec = 0;
 
+    // Coalesce the per-pointermove zoom write into one store commit per frame:
+    // a pinch fires moves ~100/sec, and each setPxPerSec re-renders the whole
+    // timeline. Flush the latest target once in rAF instead.
+    let pendingPxPerSec = 0;
+    let raf = 0;
+    const flush = () => {
+      raf = 0;
+      if (pendingPxPerSec > 0) useStore.getState().setPxPerSec(pendingPxPerSec);
+    };
+
     const onDown = (e: PointerEvent) => {
       if (coarse && e.pointerType === 'touch') {
         const s = useStore.getState();
@@ -40,7 +50,8 @@ export function usePinchZoom(
         const a = pts[0]!;
         const b = pts[1]!;
         const dist = Math.hypot(a.x - b.x, a.y - b.y);
-        useStore.getState().setPxPerSec(pinchStartPxPerSec * (dist / pinchStartDist));
+        pendingPxPerSec = pinchStartPxPerSec * (dist / pinchStartDist);
+        if (raf === 0) raf = requestAnimationFrame(flush);
       }
     };
     const onUp = (e: PointerEvent) => {
@@ -56,6 +67,7 @@ export function usePinchZoom(
     scroller.addEventListener('pointerup', onUp);
     scroller.addEventListener('pointercancel', onUp);
     return () => {
+      if (raf !== 0) cancelAnimationFrame(raf);
       scroller.removeEventListener('pointerdown', onDown);
       scroller.removeEventListener('pointermove', onMove);
       scroller.removeEventListener('pointerup', onUp);

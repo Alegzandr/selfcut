@@ -17,7 +17,6 @@ interface Props {
 
 export const TrackRow = memo(function TrackRow({ track, pxPerMs }: Props) {
   const { t } = useTranslation();
-  const selectedClipIds = useStore((s) => s.selectedClipIds);
   const coarse = useIsCoarsePointer();
   const { toggleTrackMuted, toggleTrackHidden, moveTrack, removeTrack, updateTrack, beginGesture, endGesture } =
     useStore.getState();
@@ -136,7 +135,6 @@ export const TrackRow = memo(function TrackRow({ track, pxPerMs }: Props) {
           key={clip.id}
           clip={clip}
           trackKind={track.kind}
-          selected={selectedClipIds.includes(clip.id)}
           pxPerMs={pxPerMs}
           xfadeInMs={xfades.get(clip.id)?.inMs ?? 0}
           xfadeOutMs={xfades.get(clip.id)?.outMs ?? 0}

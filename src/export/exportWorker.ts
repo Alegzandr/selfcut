@@ -157,63 +157,93 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   const frameDur = 1 / preset.fps;
   const videoWeight = audio ? 0.92 : 0.98;
 
-  for (let i = 0; i < totalFrames; i++) {
-    // Output time i/fps maps to timeline time startMs + i/fps: exporting a
-    // region shifts what we read, never where the frame lands in the file.
-    const tMs = startMs + (i * 1000) / preset.fps;
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, width, height);
+  let finished = false;
+  try {
+    for (let i = 0; i < totalFrames; i++) {
+      // Output time i/fps maps to timeline time startMs + i/fps: exporting a
+      // region shifts what we read, never where the frame lands in the file.
+      const tMs = startMs + (i * 1000) / preset.fps;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, width, height);
 
-    for (const track of project.tracks) {
-      const alphaMul = track.opacity ?? 1;
-      if (alphaMul <= 0) continue;
-      // Earliest-first: during a crossfade the incoming clip composites over
-      // the outgoing one with rising alpha (same as the preview).
-      for (const { clip, xfadeInMs } of visibleVideoClips(track, tMs)) {
-        let sample: DrawableFrame | null = null;
-        if (clip.kind === 'media') {
-          const still = stills.get(clip.assetId);
-          if (still) {
-            // A still is the same frame at every output time - nothing to decode.
-            sample = still;
-          } else {
-            const sink = await getSink(clip);
-            if (!sink) continue;
-            const sourceSec = timelineToSourceMs(clip, tMs) / 1000;
-            const decoded = await sink.getSample(Math.max(0, sourceSec));
-            if (decoded) {
-              lastSamples.get(clip.id)?.close();
-              lastSamples.set(clip.id, decoded);
+      for (const track of project.tracks) {
+        const alphaMul = track.opacity ?? 1;
+        if (alphaMul <= 0) continue;
+        // Earliest-first: during a crossfade the incoming clip composites over
+        // the outgoing one with rising alpha (same as the preview).
+        for (const { clip, xfadeInMs } of visibleVideoClips(track, tMs)) {
+          let sample: DrawableFrame | null = null;
+          if (clip.kind === 'media') {
+            const still = stills.get(clip.assetId);
+            if (still) {
+              // A still is the same frame at every output time - nothing to decode.
+              sample = still;
+            } else {
+              const sink = await getSink(clip);
+              if (!sink) continue;
+              const sourceSec = timelineToSourceMs(clip, tMs) / 1000;
+              const decoded = await sink.getSample(Math.max(0, sourceSec));
+              if (decoded) {
+                lastSamples.get(clip.id)?.close();
+                lastSamples.set(clip.id, decoded);
+              }
+              sample = decoded ?? lastSamples.get(clip.id) ?? null;
             }
-            sample = decoded ?? lastSamples.get(clip.id) ?? null;
           }
+          drawClip(ctx, clip, width, height, tMs, alphaMul, xfadeInMs, sample);
         }
-        drawClip(ctx, clip, width, height, tMs, alphaMul, xfadeInMs, sample);
       }
+
+      await videoSource.add(i * frameDur, frameDur);
+      // Post every 5th frame, but always on the last one, so a very short
+      // (<5-frame) region still advances the bar past the video phase instead
+      // of jumping straight from 0 to finalize.
+      if (i % 5 === 0 || i === totalFrames - 1) postProgress((i / totalFrames) * videoWeight);
     }
 
-    await videoSource.add(i * frameDur, frameDur);
-    if (i % 5 === 0) postProgress((i / totalFrames) * videoWeight);
+    for (const sample of lastSamples.values()) sample.close();
+    lastSamples.clear();
+    for (const still of stills.values()) still.close();
+    stills.clear();
+    videoSource.close();
+
+    if (audioSource && audio) {
+      await pushAudioMix(audioSource, audio, (v) => postProgress(videoWeight + v * 0.06));
+      audioSource.close();
+    }
+
+    postProgress(0.99);
+    await output.finalize();
+    finished = true;
+
+    worker.postMessage(
+      { type: 'done', buffer: target.buffer!, mime: 'video/mp4' },
+      { transfer: [target.buffer!] },
+    );
+  } finally {
+    // On any failure path, release the decoded frames and rasterized stills the
+    // success path would have closed (WebCodecs frames are scarce), and always
+    // dispose the source inputs. The success path already cleared these maps, so
+    // this only does work when the render threw.
+    if (!finished) {
+      for (const sample of lastSamples.values()) {
+        try {
+          sample.close();
+        } catch {
+          /* already closed */
+        }
+      }
+      for (const still of stills.values()) {
+        try {
+          still.close();
+        } catch {
+          /* already closed */
+        }
+      }
+    }
+    for (const input of inputs.values()) input.dispose();
   }
-
-  for (const sample of lastSamples.values()) sample.close();
-  for (const still of stills.values()) still.close();
-  videoSource.close();
-
-  if (audioSource && audio) {
-    await pushAudioMix(audioSource, audio, (v) => postProgress(videoWeight + v * 0.06));
-    audioSource.close();
-  }
-
-  postProgress(0.99);
-  await output.finalize();
-  for (const input of inputs.values()) input.dispose();
-
-  worker.postMessage(
-    { type: 'done', buffer: target.buffer!, mime: 'video/mp4' },
-    { transfer: [target.buffer!] },
-  );
 }
 
 async function exportMp3(req: ExportRequest): Promise<void> {

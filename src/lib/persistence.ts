@@ -54,6 +54,20 @@ function requestDone<T>(req: IDBRequest<T>): Promise<T> {
   });
 }
 
+/**
+ * Resolve when a write transaction actually commits. Firing put/delete and
+ * returning is not enough: the write can still fail at commit time (quota
+ * exceeded, disk full), and only the transaction's own events report it - so a
+ * silent data-loss would otherwise go unnoticed.
+ */
+function txDone(tx: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 // Guards against a stale or corrupted database (older schema, interrupted
 // write): a project that fails the check is discarded instead of crashing
 // hydration, and invalid assets are dropped individually.
@@ -145,7 +159,9 @@ function scheduleProjectSave(project: Project): void {
 async function writeProject(project: Project): Promise<void> {
   try {
     const d = await db();
-    d.transaction(PROJECT_STORE, 'readwrite').objectStore(PROJECT_STORE).put(project, PROJECT_KEY);
+    const tx = d.transaction(PROJECT_STORE, 'readwrite');
+    tx.objectStore(PROJECT_STORE).put(project, PROJECT_KEY);
+    await txDone(tx);
   } catch (err) {
     reportSaveFailure(err);
   }
@@ -157,13 +173,15 @@ async function syncAssets(
 ): Promise<void> {
   try {
     const d = await db();
-    const store = d.transaction(ASSETS_STORE, 'readwrite').objectStore(ASSETS_STORE);
+    const tx = d.transaction(ASSETS_STORE, 'readwrite');
+    const store = tx.objectStore(ASSETS_STORE);
     for (const [id, asset] of Object.entries(next)) {
       if (prev[id] !== asset) store.put(asset);
     }
     for (const id of Object.keys(prev)) {
       if (!(id in next)) store.delete(id);
     }
+    await txDone(tx);
   } catch (err) {
     reportSaveFailure(err);
   }
