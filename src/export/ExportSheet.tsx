@@ -111,9 +111,14 @@ export function ExportSheet() {
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-zinc-100">{t('export.title')}</h2>
               <button
-                className="touch-hit rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2.5"
+                className="touch-hit rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800 disabled:opacity-40 pointer-coarse:p-2.5"
                 aria-label={t('export.close')}
-                onClick={close}
+                // Mid-render the X must not silently throw the export away, same
+                // as Escape and the backdrop: cancel stays an explicit button.
+                disabled={phase.kind === 'rendering'}
+                onClick={() => {
+                  if (phase.kind !== 'rendering') close();
+                }}
               >
                 <X className="h-4 w-4" />
               </button>

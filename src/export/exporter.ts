@@ -50,6 +50,10 @@ export function startExport(
   const cancelation = new Promise<never>((_, reject) => {
     rejectCanceled = reject;
   });
+  // Settles the in-flight worker-reply promise on cancel: terminate() alone kills
+  // onmessage/onerror, so without this the inner promise (and the whole `run`
+  // closure it retains: project, files, audio buffers) would leak on every cancel.
+  let rejectWorkerReply: ((e: Error) => void) | null = null;
 
   const run = (async () => {
     const projectMs = projectDurationMs(project);
@@ -69,30 +73,14 @@ export function startExport(
       throw new Error(t(ERROR_KEYS.noAudibleAudio));
     }
 
-    const files: Record<string, File> = {};
-    const stills: Record<string, ImageBitmap> = {};
+    // A disconnected source would crash the worker mid-render (or silently drop
+    // audio from the mp3 mix) when it reads the stale File: refuse upfront with
+    // a clear message. Cheap scan, so it runs for every preset.
     const disconnected = new Set<string>();
     for (const track of project.tracks) {
       for (const clip of track.clips) {
         const asset = assets[clip.assetId];
-        if (!asset) continue;
-        // A disconnected source would crash the worker mid-render when it
-        // tries to read the stale File: refuse upfront with a clear message.
-        if (asset.disconnected) {
-          disconnected.add(asset.file.name);
-          continue;
-        }
-        files[asset.id] = asset.file;
-        // Stills are rasterized here (SVG needs the DOM, unavailable in the
-        // worker) and transferred as bitmaps. A still that fails to decode is
-        // skipped: its clips render nothing rather than killing the export.
-        if (asset.kind === 'image' && !(asset.id in stills)) {
-          try {
-            stills[asset.id] = await decodeImageFile(asset.file);
-          } catch {
-            // Fall through - the worker simply has no bitmap for this asset.
-          }
-        }
+        if (asset?.disconnected) disconnected.add(asset.file.name);
       }
     }
     if (disconnected.size > 0) {
@@ -100,12 +88,46 @@ export function startExport(
         t('errors.export.disconnectedSources', { names: [...disconnected].join(', ') }),
       );
     }
-    if (canceled) throw new Error(t('errors.export.canceled'));
 
     // Adapt frame rate (and, with it, bitrate) to the project's source footage
     // right before encoding, so the worker receives the exact settings to use.
     const resolvedPreset =
       preset.kind === 'mp4' ? resolveMp4Preset(preset, project, assets) : preset;
+
+    // Only the video path needs source files and rasterized stills; an mp3
+    // export renders entirely from the already-mixed audio, so gathering (and
+    // GPU-decoding every still) for it is pure waste.
+    const files: Record<string, File> = {};
+    const stills: Record<string, ImageBitmap> = {};
+    if (resolvedPreset.kind === 'mp4') {
+      try {
+        for (const track of project.tracks) {
+          for (const clip of track.clips) {
+            if (canceled) throw new Error(t('errors.export.canceled'));
+            const asset = assets[clip.assetId];
+            if (!asset) continue;
+            files[asset.id] = asset.file;
+            // Stills are rasterized here (SVG needs the DOM, unavailable in the
+            // worker) and transferred as bitmaps. A still that fails to decode is
+            // skipped: its clips render nothing rather than killing the export.
+            if (asset.kind === 'image' && !(asset.id in stills)) {
+              try {
+                stills[asset.id] = await decodeImageFile(asset.file);
+              } catch {
+                // Fall through - the worker simply has no bitmap for this asset.
+              }
+            }
+          }
+        }
+        if (canceled) throw new Error(t('errors.export.canceled'));
+      } catch (err) {
+        // Release every bitmap decoded before the abort - they are GPU-backed
+        // and are otherwise only ever freed by being transferred to the worker,
+        // so a cancel here would leak one per still, every attempt.
+        for (const bitmap of Object.values(stills)) bitmap.close();
+        throw err;
+      }
+    }
 
     worker = new Worker(new URL('./exportWorker.ts', import.meta.url), { type: 'module' });
     const request: ExportRequest = {
@@ -120,6 +142,7 @@ export function startExport(
     };
 
     const buffer = await new Promise<{ buffer: ArrayBuffer; mime: string }>((resolve, reject) => {
+      rejectWorkerReply = reject;
       worker!.onmessage = (e: MessageEvent<WorkerReply>) => {
         const msg = e.data;
         if (msg.type === 'progress') onProgress(0.1 + msg.value * 0.9);
@@ -134,6 +157,7 @@ export function startExport(
       transfer.push(...Object.values(stills));
       worker!.postMessage(request, transfer);
     });
+    rejectWorkerReply = null;
 
     onProgress(1);
     return { blob: new Blob([buffer.buffer], { type: buffer.mime }), filename: exportFileName(preset) };
@@ -150,6 +174,11 @@ export function startExport(
     promise,
     cancel: () => {
       canceled = true;
+      // Settle the inner worker-reply promise before terminating: terminate()
+      // kills the message handlers, so `run` would otherwise hang and leak its
+      // closure. Both rejections carry the same "canceled" message.
+      rejectWorkerReply?.(new Error(t('errors.export.canceled')));
+      rejectWorkerReply = null;
       worker?.terminate();
       worker = null;
       rejectCanceled(new Error(t('errors.export.canceled')));
