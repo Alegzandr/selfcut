@@ -14,7 +14,7 @@ export function ToggleButton({
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
-      className={`rounded-md px-2 py-1 ${active ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'} ${className}`}
+      className={`touch-hit rounded-md px-2 py-1 pointer-coarse:px-3 pointer-coarse:py-1.5 ${active ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'} ${className}`}
       onClick={onClick}
       {...rest}
     >

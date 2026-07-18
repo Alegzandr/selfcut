@@ -24,6 +24,7 @@ type CropHandle = 'move' | 'nw' | 'ne' | 'sw' | 'se';
  * dragged and resized directly on it, in source-normalized coordinates.
  */
 function CropOverlay({ clip, asset }: { clip: Clip; asset: MediaAsset }) {
+  const { t } = useTranslation();
   const frameRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{
     handle: CropHandle;
@@ -151,7 +152,7 @@ function CropOverlay({ clip, asset }: { clip: Clip; asset: MediaAsset }) {
         </div>
 
         <span className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-zinc-900/90 px-2.5 py-1 text-[11px] text-amber-200">
-          Drag the rectangle to crop the source
+          {t('inspector.crop.hint')}
         </span>
       </div>
     </div>
@@ -407,7 +408,7 @@ export function PreviewCanvas() {
     currentTimeMs >= selectedClip.timelineStartMs &&
     currentTimeMs < clipEndMs(selectedClip) &&
     project.tracks.some(
-      (t) => t.kind === 'video' && !t.hidden && t.clips.some((c) => c.id === selectedClip.id),
+      (tr) => tr.kind === 'video' && !tr.hidden && tr.clips.some((c) => c.id === selectedClip.id),
     )
       ? rectOf(selectedClip)
       : null;

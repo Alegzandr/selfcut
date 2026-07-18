@@ -27,7 +27,7 @@ export interface ExportRequest {
  * and knows nothing about the user locale, so it never sends a human message:
  * it sends a code, and the main thread turns it into a translated string.
  */
-export type ExportErrorCode = 'noAudibleAudio';
+export type ExportErrorCode = 'noAudibleAudio' | 'videoEncoderUnsupported';
 
 export type WorkerReply =
   | { type: 'progress'; value: number }

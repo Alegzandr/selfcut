@@ -50,7 +50,7 @@ export const Ruler = memo(function Ruler({ durationMs, pxPerMs, overscanMs }: Pr
           style={{ left: padLeft + tMs * pxPerMs }}
         >
           <div className="h-full w-px bg-zinc-700" />
-          <span className="pl-1 text-[9px] leading-6 text-zinc-500">{formatTimeShort(tMs)}</span>
+          <span className="pl-1 text-[10px] leading-6 text-zinc-400">{formatTimeShort(tMs)}</span>
         </div>
       ))}
     </div>

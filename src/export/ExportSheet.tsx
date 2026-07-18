@@ -24,6 +24,9 @@ export function ExportSheet() {
   const [regionOnly, setRegionOnly] = useState(true);
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const handleRef = useRef<ExportHandle | null>(null);
+  // Set when the user cancels: the promise then rejects with "canceled", which
+  // must land back on the idle screen, not on the error screen.
+  const canceledRef = useRef(false);
 
   const presets = presetsForAspect(aspectRatio);
   // presetsForAspect always returns the aspect-agnostic mp3 presets, so it is never empty.
@@ -34,6 +37,7 @@ export function ExportSheet() {
   const exportedRegion = region && regionOnly ? region : null;
 
   const close = () => {
+    canceledRef.current = true;
     handleRef.current?.cancel();
     handleRef.current = null;
     setPhase({ kind: 'idle' });
@@ -55,6 +59,7 @@ export function ExportSheet() {
   }, [open, phase.kind]);
 
   const run = (preset: ExportPreset) => {
+    canceledRef.current = false;
     setPhase({ kind: 'rendering', progress: 0 });
     const handle = startExport(
       project,
@@ -70,6 +75,7 @@ export function ExportSheet() {
         setPhase({ kind: 'done', filename, blob });
       })
       .catch((err: unknown) => {
+        if (canceledRef.current) return; // user-initiated: back to idle, not an error
         setPhase({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
       })
       .finally(() => {
@@ -86,18 +92,29 @@ export function ExportSheet() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-40 bg-black/60"
-            onClick={close}
+            // Mid-render, a stray tap outside the sheet must not silently kill
+            // an export: cancel stays an explicit button press.
+            onClick={() => {
+              if (phase.kind !== 'rendering') close();
+            }}
           />
           <motion.div
             initial={{ y: '110%' }}
             animate={{ y: 0 }}
             exit={{ y: '110%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('export.title')}
             className="fixed inset-x-0 bottom-0 z-50 space-y-3 rounded-t-2xl border-t border-zinc-800 bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:bottom-8 md:w-[26rem] md:-translate-x-1/2 md:rounded-2xl md:border"
           >
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-zinc-100">{t('export.title')}</h2>
-              <button className="rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800" onClick={close}>
+              <button
+                className="touch-hit rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2.5"
+                aria-label={t('export.close')}
+                onClick={close}
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -114,7 +131,7 @@ export function ExportSheet() {
                       <div className="text-sm font-medium text-zinc-100">
                         {t(preset.labelKey)}{preset.qualityKey && ` · ${t(preset.qualityKey)}`}
                       </div>
-                      <div className="mt-0.5 text-xs text-zinc-500">
+                      <div className="mt-0.5 text-xs text-zinc-400">
                         {preset.kind === 'mp4'
                           ? t(preset.descriptionKey, {
                               fps: exportFps,
@@ -154,7 +171,7 @@ export function ExportSheet() {
                     preset: `${t(selected.labelKey)}${selected.qualityKey ? ` · ${t(selected.qualityKey)}` : ''}`,
                   })}
                 </button>
-                <p className="text-center text-[11px] text-zinc-600">{t('export.privacy')}</p>
+                <p className="text-center text-[11px] text-zinc-400">{t('export.privacy')}</p>
               </>
             )}
 
@@ -164,7 +181,14 @@ export function ExportSheet() {
                   <Loader2 className="h-4 w-4 animate-spin text-sky-400" />
                   {t('export.rendering', { pct: Math.round(phase.progress * 100) })}
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-2 overflow-hidden rounded-full bg-zinc-800"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(phase.progress * 100)}
+                  aria-label={t('export.rendering', { pct: Math.round(phase.progress * 100) })}
+                >
                   <div
                     className="h-full rounded-full bg-sky-500 transition-[width] duration-200"
                     style={{ width: `${phase.progress * 100}%` }}
@@ -173,6 +197,7 @@ export function ExportSheet() {
                 <button
                   className="w-full rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 active:bg-zinc-800"
                   onClick={() => {
+                    canceledRef.current = true;
                     handleRef.current?.cancel();
                     handleRef.current = null;
                     setPhase({ kind: 'idle' });

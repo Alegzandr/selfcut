@@ -4,15 +4,14 @@ import type { MediaAsset } from '../types';
 /**
  * Pro timeline interactions: slip edit (Alt+drag), Ctrl+drag copy
  * (cloneClipsForDrag) and range / marquee selection. Store bootstrapped like
- * linking.test.ts: node environment, so document/structuredClone are stubbed.
+ * linking.test.ts: node environment, so document is stubbed.
  */
 
 let useStore: typeof import('./store').useStore;
 
 beforeAll(async () => {
-  const g = globalThis as { document?: unknown; structuredClone: typeof structuredClone };
+  const g = globalThis as { document?: unknown };
   g.document ??= { documentElement: {} };
-  g.structuredClone = (<T>(v: T): T => JSON.parse(JSON.stringify(v)) as T) as typeof structuredClone;
   ({ useStore } = await import('./store'));
 });
 

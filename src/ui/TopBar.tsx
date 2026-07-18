@@ -66,7 +66,7 @@ function NewProjectButton() {
   return (
     <Tooltip label={t('topbar.newProject.title')}>
       <button
-        className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+        className="touch-hit rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
         onClick={() => setArmed(true)}
       >
         <FileX2 className="h-4 w-4" />
@@ -133,7 +133,7 @@ export function TopBar() {
           </Tooltip>
           <Tooltip label={t('transport.delete')}>
             <button
-              className="rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
+              className="touch-hit rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
               disabled={!hasSelection}
               onClick={() => deleteClips(useStore.getState().selectedClipIds, false)}
             >
@@ -192,13 +192,19 @@ export function TopBar() {
       {/* Mobile: the media library lives in a drawer. */}
       {coarse && (
         <button
-          className="relative rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+          className="touch-hit relative rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
           onClick={() => setLibraryOpen(true)}
+          // aria-label, not title: with a title alone the badge text becomes
+          // the accessible name (a screen reader hears "3" for this button).
+          aria-label={t('topbar.library')}
           title={t('topbar.library')}
         >
           <FolderOpen className="h-4 w-4" />
           {assetCount > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 rounded-full bg-sky-500 px-1 text-[9px] font-bold leading-3.5 text-white">
+            <span
+              aria-hidden="true"
+              className="absolute -right-0.5 -top-0.5 rounded-full bg-sky-500 px-1 text-[9px] font-bold leading-3.5 text-white"
+            >
               {assetCount}
             </span>
           )}
@@ -213,7 +219,7 @@ export function TopBar() {
 
       <Tooltip label={t('topbar.undo')} shortcut="Ctrl+Z">
         <button
-          className="rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
+          className="touch-hit rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
           disabled={!canUndo}
           onClick={undo}
         >
@@ -222,7 +228,7 @@ export function TopBar() {
       </Tooltip>
       <Tooltip label={t('topbar.redo')} shortcut="Ctrl+Shift+Z">
         <button
-          className="rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
+          className="touch-hit rounded-lg p-2 text-zinc-400 enabled:active:bg-zinc-800 disabled:opacity-30"
           disabled={!canRedo}
           onClick={redo}
         >
@@ -233,7 +239,7 @@ export function TopBar() {
       {coarse && (
         <Tooltip label={t('topbar.exportHint')} shortcut="Ctrl+E">
           <button
-            className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-2.5 py-1.5 text-xs font-semibold text-white active:bg-sky-600"
+            className="touch-hit flex items-center gap-1.5 rounded-lg bg-sky-500 px-2.5 py-1.5 text-xs font-semibold text-white active:bg-sky-600"
             onClick={() => setExportOpen(true)}
           >
             <Download className="h-4 w-4" />
@@ -247,7 +253,7 @@ export function TopBar() {
         {ASPECTS.map(({ value, titleKey }) => (
           <Tooltip key={value} label={t(titleKey)}>
             <button
-              className={`px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 active:bg-zinc-800'}`}
+              className={`touch-hit px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 active:bg-zinc-800'}`}
               onClick={() => setAspectRatio(value)}
             >
               {value}

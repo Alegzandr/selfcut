@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -38,6 +38,20 @@ export function Preferences() {
   const { setPreferencesOpen, setTimeFormat } = useStore.getState();
   const currentLang = (i18n.resolvedLanguage ?? 'en') as Locale;
 
+  // Escape closes the dialog (the tooltip advertises it); capture phase so the
+  // global editor hotkeys never see the keystroke.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setPreferencesOpen(false);
+    };
+    window.addEventListener('keydown', onKey, { capture: true });
+    return () => window.removeEventListener('keydown', onKey, { capture: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -52,6 +66,9 @@ export function Preferences() {
             initial={{ scale: 0.96, y: 8 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.96, y: 8 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('preferences.title')}
             className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl shadow-black"
             onClick={(e) => e.stopPropagation()}
           >

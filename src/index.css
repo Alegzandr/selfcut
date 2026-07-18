@@ -16,8 +16,8 @@ textarea {
   user-select: text;
 }
 
-/* Barres de defilement fines, calees sur le theme sombre (toute l'app).
-   Le thumb "flotte" grace a une bordure transparente + background-clip. */
+/* Thin scrollbars matched to the dark theme (app-wide).
+   The thumb "floats" thanks to a transparent border + background-clip. */
 * {
   scrollbar-width: thin;
   scrollbar-color: rgb(63 63 70) transparent;
@@ -45,8 +45,23 @@ textarea {
   background: transparent;
 }
 
-/* Timeline : scrollbar un peu plus fine, meme teinte. */
+/* Timeline: slightly thinner scrollbar, same tint. */
 .timeline-scroller::-webkit-scrollbar {
   height: 10px;
   width: 10px;
+}
+
+/* Extended touch target: on coarse pointers, an invisible clickable zone
+   surrounds small buttons to approach the 44px WCAG target size without
+   growing the visuals. The element must be position:relative (the ::after is
+   clickable because it belongs to the button's box). */
+@media (pointer: coarse) {
+  .touch-hit {
+    position: relative;
+  }
+  .touch-hit::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
 }

@@ -134,7 +134,7 @@ export function Timeline() {
           />
         </label>
         {!coarse && !importing && (
-          <p className="text-xs text-zinc-600">
+          <p className="text-xs text-zinc-400">
             {/* One sentence, one key: the <kbd> keycaps are markup inside the translation,
                 so translators keep control of the word order around them. */}
             <Trans
@@ -258,14 +258,14 @@ export function Timeline() {
 
           <div className="sticky left-0 flex w-fit gap-2 p-2">
             <button
-              className="rounded-md border border-dashed border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800"
+              className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800 pointer-coarse:py-2"
               onClick={() => addTrack('video')}
             >
               <Plus className="mr-1 inline h-3 w-3" />
               {t('timeline.addVideoTrack')}
             </button>
             <button
-              className="rounded-md border border-dashed border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800"
+              className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800 pointer-coarse:py-2"
               onClick={() => addTrack('audio')}
             >
               <Plus className="mr-1 inline h-3 w-3" />

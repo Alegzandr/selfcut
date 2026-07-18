@@ -16,6 +16,7 @@ export interface ExportHandle {
 /** The worker speaks in codes; the main thread owns the locale and the wording. */
 const ERROR_KEYS = {
   noAudibleAudio: 'errors.export.noAudibleAudio',
+  videoEncoderUnsupported: 'errors.export.videoEncoderUnsupported',
 } as const satisfies Record<ExportErrorCode, string>;
 
 /**
@@ -43,8 +44,14 @@ export function startExport(
 ): ExportHandle {
   let worker: Worker | null = null;
   let canceled = false;
+  // Cancellation settles the promise immediately: terminating the worker kills
+  // its onmessage path, which would otherwise leave the promise pending forever.
+  let rejectCanceled: (e: Error) => void = () => {};
+  const cancelation = new Promise<never>((_, reject) => {
+    rejectCanceled = reject;
+  });
 
-  const promise = (async () => {
+  const run = (async () => {
     const projectMs = projectDurationMs(project);
     if (projectMs <= 0) throw new Error(t('errors.export.emptyProject'));
 
@@ -54,19 +61,27 @@ export function startExport(
       throw new Error(t('errors.export.emptyRegion'));
     }
 
-    onProgress(0.01);
+    onProgress(0.02);
     const audio = await renderAudioMix(project, assets, startMs, durationMs);
     if (canceled) throw new Error(t('errors.export.canceled'));
+    onProgress(0.1);
     if (preset.kind === 'mp3' && !audio) {
       throw new Error(t(ERROR_KEYS.noAudibleAudio));
     }
 
     const files: Record<string, File> = {};
     const stills: Record<string, ImageBitmap> = {};
+    const disconnected = new Set<string>();
     for (const track of project.tracks) {
       for (const clip of track.clips) {
         const asset = assets[clip.assetId];
         if (!asset) continue;
+        // A disconnected source would crash the worker mid-render when it
+        // tries to read the stale File: refuse upfront with a clear message.
+        if (asset.disconnected) {
+          disconnected.add(asset.file.name);
+          continue;
+        }
         files[asset.id] = asset.file;
         // Stills are rasterized here (SVG needs the DOM, unavailable in the
         // worker) and transferred as bitmaps. A still that fails to decode is
@@ -79,6 +94,11 @@ export function startExport(
           }
         }
       }
+    }
+    if (disconnected.size > 0) {
+      throw new Error(
+        t('errors.export.disconnectedSources', { names: [...disconnected].join(', ') }),
+      );
     }
     if (canceled) throw new Error(t('errors.export.canceled'));
 
@@ -102,7 +122,7 @@ export function startExport(
     const buffer = await new Promise<{ buffer: ArrayBuffer; mime: string }>((resolve, reject) => {
       worker!.onmessage = (e: MessageEvent<WorkerReply>) => {
         const msg = e.data;
-        if (msg.type === 'progress') onProgress(0.02 + msg.value * 0.98);
+        if (msg.type === 'progress') onProgress(0.1 + msg.value * 0.9);
         else if (msg.type === 'done') resolve({ buffer: msg.buffer, mime: msg.mime });
         else if (msg.type === 'error') reject(new Error(t(ERROR_KEYS[msg.code])));
         else reject(crashError(msg.detail));
@@ -117,10 +137,14 @@ export function startExport(
 
     onProgress(1);
     return { blob: new Blob([buffer.buffer], { type: buffer.mime }), filename: exportFileName(preset) };
-  })().finally(() => {
+  })();
+
+  const promise = Promise.race([run, cancelation]).finally(() => {
     worker?.terminate();
     worker = null;
   });
+  // The raced-out branch must not surface as an unhandled rejection.
+  run.catch(() => {});
 
   return {
     promise,
@@ -128,6 +152,7 @@ export function startExport(
       canceled = true;
       worker?.terminate();
       worker = null;
+      rejectCanceled(new Error(t('errors.export.canceled')));
     },
   };
 }
@@ -145,6 +170,10 @@ async function renderAudioMix(
   for (const track of project.tracks) {
     if (track.muted) continue;
     for (const clip of track.clips) {
+      // A linked video clip delegates its sound to its audio partner: the mix
+      // never schedules it, so don't decode its track (twice) nor let it count
+      // as audible (it would force a silent AAC track into the file).
+      if (track.kind === 'video' && clip.linkId) continue;
       // Clips ending before the span, or starting after it, are silent here.
       if (clip.volume <= 0 || clipEndMs(clip) <= startMs) continue;
       if (clip.timelineStartMs >= startMs + durationMs) continue;

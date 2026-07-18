@@ -17,6 +17,9 @@ export function useImport(): (files: Iterable<File>) => Promise<void> {
     // (value = '') right after calling us - awaiting first would empty it.
     const list = [...files];
     setImporting(true);
+    // Collect failures and report them once: successive setError calls replace
+    // the toast, so a per-file report would only ever show the last failure.
+    const failures: string[] = [];
     try {
       for (const file of list) {
         try {
@@ -37,13 +40,14 @@ export function useImport(): (files: Iterable<File>) => Promise<void> {
           // file landed, but the user must know what was left out.
           if (warning) setError(warning);
         } catch (err) {
-          setError(
+          failures.push(
             err instanceof Error ? err.message : t('errors.media.importFailed', { name: file.name }),
           );
         }
       }
     } finally {
       setImporting(false);
+      if (failures.length > 0) setError(failures.join('\n'));
     }
   }, []);
 }

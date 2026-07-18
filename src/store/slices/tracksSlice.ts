@@ -25,6 +25,17 @@ export function createTracksSlice(
     removeTrack: (trackId) => {
       withHistory((p) => {
         p.tracks = p.tracks.filter((t) => t.id !== trackId);
+        // Dissolve the A/V links the removal left partnerless: an orphaned
+        // linkId keeps delegating a video's audio to a clip that no longer
+        // exists (silent forever, and neither Unlink nor Link applies). A link
+        // still shared by 2+ clips (multi-lane audio group) stays intact.
+        const linkCounts = new Map<string, number>();
+        for (const track of p.tracks)
+          for (const clip of track.clips)
+            if (clip.linkId) linkCounts.set(clip.linkId, (linkCounts.get(clip.linkId) ?? 0) + 1);
+        for (const track of p.tracks)
+          for (const clip of track.clips)
+            if (clip.linkId && (linkCounts.get(clip.linkId) ?? 0) < 2) delete clip.linkId;
       });
       pruneSelection();
     },

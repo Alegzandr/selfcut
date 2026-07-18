@@ -39,7 +39,7 @@ function TimeReadout() {
     <Tooltip label={t('transport.timecode')}>
       <span className="min-w-[118px] text-center font-mono text-xs tabular-nums text-zinc-400">
         <span ref={currentRef} className="text-zinc-100" />
-        <span ref={framesRef} className="text-[10px] text-zinc-500" /> / <span ref={totalRef} />
+        <span ref={framesRef} className="text-[10px] text-zinc-400" /> / <span ref={totalRef} />
       </span>
     </Tooltip>
   );
@@ -64,7 +64,7 @@ export function Transport() {
     <div className="flex h-11 flex-none items-center justify-center gap-1 border-y border-zinc-800 bg-zinc-900 px-2">
       <Tooltip label={t('transport.backToStart')}>
         <button
-          className="rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+          className="touch-hit rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
           onClick={() => seek(0)}
         >
           <SkipBack className="h-4 w-4" />
@@ -72,7 +72,7 @@ export function Transport() {
       </Tooltip>
       <Tooltip label={playing ? t('transport.pause') : t('transport.play')}>
       <button
-        className="relative rounded-full bg-zinc-300 p-2.5 text-zinc-950 active:bg-zinc-200"
+        className="touch-hit relative rounded-full bg-zinc-300 p-2.5 text-zinc-950 active:bg-zinc-200"
         onClick={() => setPlaying(!playing)}
       >
         {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-px" />}
@@ -90,7 +90,7 @@ export function Transport() {
 
       <Tooltip label={t('transport.loop')}>
         <button
-          className={`rounded-lg p-2 ${loopEnabled ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400'} active:bg-zinc-800`}
+          className={`touch-hit rounded-lg p-2 ${loopEnabled ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400'} active:bg-zinc-800`}
           onClick={toggleLoopEnabled}
         >
           <Repeat className="h-4 w-4" />
@@ -101,7 +101,7 @@ export function Transport() {
       {region && (
         <Tooltip label={t('transport.region.clear')}>
           <button
-            className="rounded-lg px-2 py-1 font-mono text-[11px] tabular-nums text-amber-300 active:bg-zinc-800"
+            className="touch-hit rounded-lg px-2 py-1 font-mono text-[11px] tabular-nums text-amber-300 active:bg-zinc-800"
             onClick={() => setLoopRegion(null)}
           >
             {formatClock(region.startMs, fps, timeFormat)} →{' '}

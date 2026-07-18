@@ -9,7 +9,7 @@ product
 Monteurs vidéo amateurs et créateurs de contenu court (YouTube, TikTok). Deux contextes distincts :
 
 - **Mobile (pointeur grossier)** : montage au pouce, debout ou en déplacement, attentes calquées sur CapCut — barre d'actions contextuelle, gestes tactiles, une action à la fois.
-- **Desktop (pointeur fin)** : montage assis, attentes calquées sur Vegas / Premiere — timeline dense, raccourcis clavier (P punch-in, N snap, Ctrl+E split, Ctrl+A), panneaux fixes, inspecteur permanent.
+- **Desktop (pointeur fin)** : montage assis, attentes calquées sur Vegas / Premiere — timeline dense, raccourcis clavier (P punch-in, N snap, S split, Ctrl+E export, Ctrl+A), panneaux fixes, inspecteur permanent.
 
 Le job : importer des rushes, découper/arranger sur la timeline, ajuster (volume, vitesse, fades, crop), exporter vers YouTube 16:9, TikTok 9:16 ou MP3. Sessions courtes, montage de forme courte.
 

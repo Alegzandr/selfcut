@@ -12,6 +12,7 @@ import {
   AudioSampleSource,
   AudioSample,
   canEncodeAudio,
+  canEncodeVideo,
 } from 'mediabunny';
 import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
@@ -76,6 +77,12 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   const width = preset.width;
   const height = preset.height;
 
+  // Fail fast with a translatable message when this browser cannot encode
+  // H.264 at the requested size - otherwise the failure surfaces mid-render as
+  // a raw native crash string.
+  if (!(await canEncodeVideo('avc', { width, height }))) {
+    throw new ExportError('videoEncoderUnsupported');
+  }
   if (audio && !(await canEncodeAudio('aac'))) registerAacEncoder();
 
   const target = new BufferTarget();

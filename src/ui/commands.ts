@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { ParseKeys } from 'i18next';
+import { t } from '../i18n';
 import {
   Blend,
   Copy,
@@ -83,7 +84,16 @@ export function useEditorCommands(): Record<string, Command> {
 
   const list: Command[] = [
     // ── File ──────────────────────────────────────────────────────────────
-    { id: 'file.new', labelKey: 'menu.file.new', icon: FileX2, danger: true, onClick: () => st().resetProject() },
+    {
+      id: 'file.new',
+      labelKey: 'menu.file.new',
+      icon: FileX2,
+      danger: true,
+      // Destroys the whole project AND its saved state: never without a confirm.
+      onClick: () => {
+        if (window.confirm(t('restore.startNewConfirm'))) st().resetProject();
+      },
+    },
     { id: 'file.import', labelKey: 'menu.file.import', icon: FilePlus, onClick: () => openMediaPicker(importFiles) },
     { id: 'file.export', labelKey: 'menu.file.export', icon: Download, shortcut: 'Ctrl+E', onClick: () => st().setExportOpen(true) },
 

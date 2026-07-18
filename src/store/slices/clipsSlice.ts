@@ -5,6 +5,7 @@ import {
   DEFAULT_TRANSFORM,
   clipDurationMs,
   clipEndMs,
+  cloneClip,
   outputDimensions,
   timelineToSourceMs,
 } from '../../model';
@@ -279,7 +280,16 @@ export function createClipsSlice(
     updateClipCommitted: (clipId, patch) =>
       withHistory((p) => {
         const found = findClip(p, clipId);
-        if (found) Object.assign(found.clip, patch);
+        if (!found) return;
+        Object.assign(found.clip, patch);
+        // Speed changes a clip's timeline duration; linked partners must take
+        // the same speed or picture and sound drift apart immediately.
+        if (patch.speed !== undefined) {
+          for (const pid of linkedPartnerIds(p, clipId)) {
+            const partner = findClip(p, pid);
+            if (partner) partner.clip.speed = patch.speed;
+          }
+        }
       }),
 
     moveClip: (clipId, timelineStartMs, targetTrackId) => {
@@ -393,7 +403,7 @@ export function createClipsSlice(
         const copies: Clip[] = [];
         for (const clip of track.clips) {
           if (!all.includes(clip.id)) continue;
-          const copy: Clip = { ...structuredClone(clip), id: uid('clip') };
+          const copy: Clip = { ...cloneClip(clip), id: uid('clip') };
           if (clip.linkId) {
             let nextLink = linkMap.get(clip.linkId);
             if (!nextLink) {
@@ -419,8 +429,12 @@ export function createClipsSlice(
 
     splitAtPlayhead: () => {
       const { currentTimeMs, selectedClipId, project } = get();
+      // Keep the playhead at least a minimum clip length away from both edges:
+      // splitting closer would leave a sliver half under MIN_CLIP_DURATION_MS
+      // that resolveOverlaps then shoves around (gap + content jump).
       const crosses = (clip: Clip) =>
-        currentTimeMs > clip.timelineStartMs + 1 && currentTimeMs < clipEndMs(clip) - 1;
+        currentTimeMs >= clip.timelineStartMs + MIN_CLIP_DURATION_MS &&
+        currentTimeMs <= clipEndMs(clip) - MIN_CLIP_DURATION_MS;
       // Target: the selected clip if the playhead is inside it, otherwise every clip under it.
       const collect = (onlySelected: boolean): string[] => {
         const out: string[] = [];
@@ -453,7 +467,7 @@ export function createClipsSlice(
             if (!targetSet.has(clip.id)) continue;
             const splitSource = timelineToSourceMs(clip, currentTimeMs);
             const right: Clip = {
-              ...structuredClone(clip),
+              ...cloneClip(clip),
               id: uid('clip'),
               timelineStartMs: currentTimeMs,
               sourceInMs: splitSource,
@@ -517,7 +531,7 @@ export function createClipsSlice(
           const found = findClip(p, id);
           if (!found) continue;
           const copy: Clip = {
-            ...structuredClone(found.clip),
+            ...cloneClip(found.clip),
             id: uid('clip'),
             timelineStartMs: clipEndMs(found.clip),
             ...(newLinkId ? { linkId: newLinkId } : {}),
@@ -664,7 +678,7 @@ export function createClipsSlice(
         const idx = p.tracks.findIndex((t) => t.id === inner.track.id);
         p.tracks.splice(idx, 0, camTrack);
         camTrack.clips.push({
-          ...structuredClone(inner.clip),
+          ...cloneClip(inner.clip),
           id: camClipId,
           trackId: camTrack.id,
           // The facecam layer is a picture layer: it must not add audio on top.

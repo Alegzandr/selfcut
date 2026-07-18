@@ -15,12 +15,8 @@ import { linkableSelection } from './projectOps';
 let useStore: typeof import('./store').useStore;
 
 beforeAll(async () => {
-  const g = globalThis as { document?: unknown; structuredClone: typeof structuredClone };
+  const g = globalThis as { document?: unknown };
   g.document ??= { documentElement: {} };
-  // Node's structuredClone rejects Immer draft proxies (the browser's accepts
-  // them); split/duplicate clone drafts inside produce(). Clips are plain JSON
-  // data, so a JSON clone is an equivalent stand-in for this node-env suite.
-  g.structuredClone = (<T>(v: T): T => JSON.parse(JSON.stringify(v)) as T) as typeof structuredClone;
   ({ useStore } = await import('./store'));
 });
 

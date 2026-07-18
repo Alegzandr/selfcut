@@ -14,13 +14,14 @@ export function MenuItemRow({ command, onRun }: { command: Command; onRun: () =>
   const { t } = useTranslation();
   const Icon = command.icon;
   const color = command.disabled
-    ? 'text-zinc-600'
+    ? 'text-zinc-500'
     : command.danger
       ? 'text-red-300 hover:bg-red-500/10'
       : 'text-zinc-200 hover:bg-zinc-800';
   return (
     <button
       type="button"
+      role="menuitem"
       disabled={command.disabled}
       className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs ${color}`}
       onClick={() => {
@@ -37,7 +38,7 @@ export function MenuItemRow({ command, onRun }: { command: Command; onRun: () =>
       </span>
       <span className="flex-1 whitespace-nowrap">{t(command.labelKey)}</span>
       {command.shortcut && (
-        <span className="flex-none pl-4 font-mono text-[10px] tracking-tight text-zinc-500">
+        <span className="flex-none pl-4 font-mono text-[10px] tracking-tight text-zinc-400">
           {command.shortcut}
         </span>
       )}

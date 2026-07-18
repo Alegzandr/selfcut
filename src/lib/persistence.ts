@@ -63,10 +63,11 @@ function isValidProject(p: unknown): p is Project {
   return (
     typeof proj.id === 'string' &&
     typeof proj.fps === 'number' &&
-    Array.isArray(proj.markers) &&
+    // Absent on projects saved before markers existed - hydrate() defaults it.
+    (proj.markers === undefined || Array.isArray(proj.markers)) &&
     Array.isArray(proj.tracks) &&
     proj.tracks.every(
-      (t) => typeof t?.id === 'string' && Array.isArray(t.clips) && t.clips.every((c) => typeof c?.id === 'string'),
+      (tr) => typeof tr?.id === 'string' && Array.isArray(tr.clips) && tr.clips.every((c) => typeof c?.id === 'string'),
     )
   );
 }

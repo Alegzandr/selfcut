@@ -4,6 +4,7 @@ import { Link2, Music, Type } from 'lucide-react';
 import { Clip, MediaAsset } from '../types';
 import { audioTrackForClip, clipDurationMs, clipEndMs } from '../model';
 import { useStore } from '../store/store';
+import { linkedPartnerIds } from '../store/projectOps';
 import { Tooltip } from '../ui/Tooltip';
 import { collectSnapPoints, snapMove, snapTime } from './snapping';
 import { msFromClientX, msFromContentX, timelineContentEl } from './coords';
@@ -546,7 +547,14 @@ export const ClipView = memo(function ClipView({
       origStartMs: clip.timelineStartMs,
       durMs,
       origTrackIndex: state.project.tracks.findIndex((tr) => tr.id === clip.trackId),
-      points: collectSnapPoints(state.project, [clip.id], state.currentTimeMs, state.loopRegion),
+      // Linked partners move along with the clip: their edges must not be snap
+      // targets or the drag keeps sticking to its own starting position.
+      points: collectSnapPoints(
+        state.project,
+        [clip.id, ...linkedPartnerIds(state.project, clip.id)],
+        state.currentTimeMs,
+        state.loopRegion,
+      ),
       moved: false,
       lastSnap: null,
       groupStarts: new Map([[clip.id, clip.timelineStartMs]]),
@@ -678,9 +686,14 @@ export const ClipView = memo(function ClipView({
     // the playhead there, like a classic NLE.
     const contentEl = timelineContentEl(e.currentTarget as HTMLElement);
     const downMs = contentEl ? msFromContentX(contentEl, e.clientX) : clip.timelineStartMs;
-    // Snap points: exclude the dragged group - and for a roll also the
-    // neighbor, whose edge sits ON the cut and would pin the roll in place.
-    const excluded = roll ? [...groupIds, roll.leftId, roll.rightId] : groupIds;
+    // Snap points: exclude the dragged group AND its linked partners (they
+    // follow the drag, so their edges are moving targets that would pin the
+    // clip to its own starting position) - and for a roll also the neighbor,
+    // whose edge sits ON the cut and would pin the roll in place.
+    const withPartners = [
+      ...new Set(groupIds.flatMap((id) => [id, ...linkedPartnerIds(state.project, id)])),
+    ];
+    const excluded = roll ? [...withPartners, roll.leftId, roll.rightId] : withPartners;
     drag.current = {
       mode,
       el,
@@ -740,7 +753,25 @@ export const ClipView = memo(function ClipView({
     <div
       data-clip-id={clip.id}
       data-clip-kind={trackKind}
-      className={`absolute top-1 bottom-1 overflow-hidden rounded-md border ${touch} ${border} ${isVideo ? 'bg-sky-950' : 'bg-emerald-950'}`}
+      // Minimal screen-reader/keyboard surface: the clip is focusable, named,
+      // and Enter/Space selects it so the keyboard shortcuts have a target.
+      role="button"
+      tabIndex={0}
+      aria-label={`${
+        clip.kind === 'text'
+          ? clip.text.content
+          : clip.kind === 'solid'
+            ? t(`clip.solid.${clip.solid.kind}`)
+            : asset?.file.name ?? ''
+      } · ${formatTime(clip.timelineStartMs)} – ${formatTime(clip.timelineStartMs + durMs)}`}
+      aria-pressed={selected}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        e.stopPropagation();
+        useStore.getState().selectClip(clip.id);
+      }}
+      className={`absolute top-1 bottom-1 overflow-hidden rounded-md border focus-visible:ring-2 focus-visible:ring-sky-300 ${touch} ${border} ${isVideo ? 'bg-sky-950' : 'bg-emerald-950'}`}
       style={{ left, width }}
       onPointerDown={(e) => beginDrag(e, 'move')}
       onPointerMove={onPointerMove}
@@ -851,7 +882,7 @@ export const ClipView = memo(function ClipView({
       {(!coarse || selected) && (
         <>
           <div
-            className={`absolute inset-y-0 left-0 cursor-ew-resize touch-none ${coarse ? 'w-4' : 'w-3'} ${selected ? 'bg-sky-400/80' : 'bg-white/10'}`}
+            className={`absolute inset-y-0 left-0 cursor-ew-resize touch-none ${coarse ? 'w-6' : 'w-3'} ${selected ? 'bg-sky-400/80' : 'bg-white/10'}`}
             onPointerDown={(e) => beginDrag(e, 'trim-left')}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -862,7 +893,7 @@ export const ClipView = memo(function ClipView({
             )}
           </div>
           <div
-            className={`absolute inset-y-0 right-0 cursor-ew-resize touch-none ${coarse ? 'w-4' : 'w-3'} ${selected ? 'bg-sky-400/80' : 'bg-white/10'}`}
+            className={`absolute inset-y-0 right-0 cursor-ew-resize touch-none ${coarse ? 'w-6' : 'w-3'} ${selected ? 'bg-sky-400/80' : 'bg-white/10'}`}
             onPointerDown={(e) => beginDrag(e, 'trim-right')}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}

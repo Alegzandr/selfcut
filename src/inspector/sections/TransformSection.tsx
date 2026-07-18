@@ -23,7 +23,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
           {t('inspector.transform')}
         </h3>
         <button
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800"
+          className="touch-hit flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800"
           onClick={() => updateClipCommitted(clip.id, { transform: undefined })}
         >
           <RotateCcw className="h-3 w-3" />
@@ -43,7 +43,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
           </Tooltip>
           <Tooltip label={t('inspector.streamLayout.hint')}>
             <button
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-zinc-800 px-2 py-1.5 text-[11px] font-medium text-zinc-300 active:bg-zinc-700"
+              className="touch-hit flex flex-1 items-center justify-center gap-1.5 rounded-md bg-zinc-800 px-2 py-1.5 text-[11px] font-medium text-zinc-300 active:bg-zinc-700"
               onClick={() => useStore.getState().applyStreamLayout(clip.id)}
             >
               <LayoutPanelTop className="h-3.5 w-3.5" />

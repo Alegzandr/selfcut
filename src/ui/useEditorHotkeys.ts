@@ -78,13 +78,24 @@ export function useEditorHotkeys() {
       const s = useStore.getState();
       const mod = e.ctrlKey || e.metaKey;
 
-      // Export dialog open: the timeline must go inert - a stray Space or
-      // Delete must not edit behind the modal. The sheet handles Escape itself.
-      if (s.exportOpen) return;
+      // A modal dialog open: the timeline must go inert - a stray Space or
+      // Delete must not edit behind it. Each dialog handles Escape itself.
+      if (s.exportOpen || s.preferencesOpen || s.aboutOpen) return;
 
       if (e.code === 'Space') {
+        // A focused button owns Space (activation): stealing it would make the
+        // whole app un-drivable with the keyboard.
+        if (target.closest?.('button')) return;
         e.preventDefault();
         s.setPlaying(!s.playing);
+        return;
+      }
+
+      // AZERTY (Windows): [ and ] are typed with AltGr, which reports
+      // ctrlKey=true - route them to trim before the Ctrl-shortcut branch
+      // swallows them.
+      if (e.ctrlKey && e.altKey && (e.key === '[' || e.key === ']')) {
+        trimSelectedToPlayhead(e.key === '[' ? 'left' : 'right');
         return;
       }
 
@@ -129,6 +140,11 @@ export function useEditorHotkeys() {
             e.preventDefault();
             s.setExportOpen(true);
             return;
+          case 's':
+            // Muscle memory from desktop NLEs: the project autosaves, so just
+            // keep the browser's "Save page as…" dialog out of the way.
+            e.preventDefault();
+            return;
           case 'arrowleft':
             e.preventDefault();
             jumpToEdge(-1);
@@ -141,9 +157,12 @@ export function useEditorHotkeys() {
         return;
       }
 
-      // 1…9: jump to the n-th marker (Vegas-style cue keys).
-      if (/^[1-9]$/.test(e.key)) {
-        const marker = sortedMarkers(s.project)[Number(e.key) - 1];
+      // 1…9: jump to the n-th marker (Vegas-style cue keys). Matched on
+      // e.code so the digit row works on AZERTY too (where unshifted e.key
+      // is "&", "é", …), plus the numpad.
+      const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+      if (digit) {
+        const marker = sortedMarkers(s.project)[Number(digit[1]) - 1];
         if (marker) s.seek(marker.timeMs);
         return;
       }
@@ -206,6 +225,10 @@ export function useEditorHotkeys() {
           nudgeSelected(1);
           return;
       }
+
+      // Action letters run once per physical press: a held S must not machine-gun
+      // splits, a held L must not shoot the shuttle rate to 8x.
+      if (e.repeat) return;
 
       switch (e.key.toLowerCase()) {
         case 's':

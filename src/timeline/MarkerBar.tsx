@@ -240,7 +240,7 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
           placeholder={t('marker.placeholder', {
             n: markers.findIndex((m) => m.id === editing.id) + 1,
           })}
-          className="absolute top-0 z-20 h-full w-32 rounded-sm border border-cyan-400 bg-zinc-950 px-1 text-[10px] text-cyan-100 outline-none"
+          className="absolute top-0 z-20 h-full w-32 rounded-sm border border-cyan-400 bg-zinc-950 px-1 text-[10px] text-cyan-100 outline-none focus:border-cyan-200 focus:ring-1 focus:ring-cyan-300"
           style={{ left: xOf(editing.timeMs) }}
           onPointerDown={(e) => e.stopPropagation()}
           onBlur={(e) => commitRename(e.target.value)}

@@ -13,7 +13,7 @@ Requires a browser with WebCodecs (recent Chrome/Edge, Safari 16.4+). A clean ex
 
 - Multi-file import (picker + drag & drop), metadata and thumbnail extraction
 - **Wide input support**: every container mediabunny reads (MP4/M4V/MOV, WebM/MKV, MPEG-TS `.ts/.mts/.m2ts`, 3GP, MP3, WAV, Ogg/Opus, FLAC, AAC/ADTS) with any codec the browser's WebCodecs can decode; **still images** (PNG, JPEG, WebP, GIF, AVIF, BMP, SVG) as freely stretchable clips; **subtitles** in SRT, WebVTT and SubStation Alpha (.ass/.ssa) as caption clips. A file whose video codec can't be decoded but that carries decodable audio imports as audio-only (with a warning) instead of failing
-- **Media library** (source explorer): imports land there; add assets to the timeline or remove them from the panel
+- **Media library** (source explorer): every import is registered there AND appended to the timeline (dropping five rushes gives a rough cut); from the panel you can re-add assets or remove them
 - Unlimited video/audio tracks, vertically reorderable, per-track mute/hide
 - Timeline: horizontal scroll + zoom (buttons, mouse wheel, pinch on mobile), scrubbable playhead, **snapping** to clip edges and the playhead
 - **Split** at playhead, **move** (in time and across tracks), **trim** with handles, delete
@@ -21,10 +21,9 @@ Requires a browser with WebCodecs (recent Chrome/Edge, Safari 16.4+). A clean ex
 - Crop + position + scale set in the inspector
 - 16:9 ↔ 9:16 toggle: preview and export presets reconfigure
 - Real-time preview with synchronized audio
-- Export presets:
-  - **YouTube 16:9** - 1920×1080 @ 60, H.264 ~12 Mbps, AAC 192 kbps, MP4 fast start
-  - **TikTok 9:16** - 1080×1920 @ 60, H.264 ~10 Mbps, AAC 192 kbps, MP4 fast start
-  - **MP3** - full mix, 320 kbps
+- Export presets (see `src/export/presets.ts`):
+  - **YouTube 16:9**, **TikTok/Reels/Shorts 9:16**, **Instagram 1:1 / 4:5** - H.264 + AAC MP4 (fast start), quality rungs from 720p to 4K, frame rate adapted to the source footage
+  - **MP3** - full mix, 128/192/320 kbps
 
 ## Architecture
 
@@ -57,11 +56,11 @@ src/
 
 - **`SelfCut` is a constant** - `APP_NAME` in `src/app/config.ts`.
 - **Undo/redo** snapshots the whole project (small plain object). Drag gestures are wrapped in a transaction (`beginGesture`/`endGesture`) so one drag = one history entry. History capped at 50 entries.
-- **Import goes to the media library**, not straight to the timeline. From the library, "Add to timeline" appends the asset at the end of the first track of the matching kind (created if needed). A **video that carries audio lands as an A/V-linked group**: the picture on a video track, and **every** decodable source audio track split onto its own audio lane, all tied to the video by a shared `linkId` (see below). A video that multiplexes several audio tracks (VO + dub, commentary, discrete channels) explodes into one linked audio clip per track, each addressing its source track via `Clip.audioTrackIndex`. Removing an asset also removes its clips; if an undo later restores clips whose asset is gone, they simply render nothing (all asset lookups are guarded).
+- **Import lands in the media library AND on the timeline.** From the library, "Add to timeline" re-appends the asset at the end of the first track of the matching kind (created if needed). A **video that carries audio lands as an A/V-linked group**: the picture on a video track, and **every** decodable source audio track split onto its own audio lane, all tied to the video by a shared `linkId` (see below). A video that multiplexes several audio tracks (VO + dub, commentary, discrete channels) explodes into one linked audio clip per track, each addressing its source track via `Clip.audioTrackIndex`. Removing an asset also removes its clips; if an undo later restores clips whose asset is gone, they simply render nothing (all asset lookups are guarded).
 - **Overlaps are allowed** within a track; at a given time the latest-starting clip wins. Keeping it permissive avoids fighting the user during drags.
 - **Track reordering** uses up/down buttons in the track header (simpler and more reliable than vertical drag on mobile).
 - **Transform semantics**: crop is normalized over the source; the cropped region is "contain"-fitted into the output, then scaled by `scale` and centered at (`x`, `y`) in normalized output coordinates. Default = centered, fit, no crop.
-- **Wheel = zoom** on the timeline (anchored at the cursor); horizontal panning via drag/trackpad/scrollbar. Pinch zoom on touch.
+- **Wheel = pan, Ctrl/Cmd+wheel = zoom** on the timeline (zoom anchored at the cursor, Vegas-style; also covers trackpad pinch). Pinch zoom on touch.
 - **Variable preview resolution** - the monitor composites at a fraction of the export size (Full / ½ / ¼ / ⅛, default ½), picked from the quality menu in the monitor's bottom-right corner (Vegas / Premiere convention). A lower rung composites fewer pixels; when even that can't keep up, frames are dropped with audio as the clock - the sharpness never pumps mid-playback (which is why we chose a manual pick over an adaptive "auto" that ramps resolution up and down). The **paused still refines to full resolution** once the playhead settles (draft while scrubbing so weak machines stay responsive, sharp when it stops) - Premiere's "Paused Resolution = Full". The choice persists (`selfcut.previewResolution`); export is unaffected.
 - **Audio decode strategy**: each source audio track is decoded once into a full `AudioBuffer`, memoized per `(asset, audioTrackIndex)` so a multi-track video's tracks never share or evict one another's buffer. Simple and instant to schedule; the trade-off is memory (~23 MB per stereo minute per track), fine for short-form editing this MVP targets.
 - **Speed does not preserve pitch** (plain `playbackRate`), as scoped.
@@ -72,7 +71,7 @@ src/
 
 ## Out of scope (v1)
 
-Text/titles, filters, transitions other than fades, keyframes, HDR, pitch preservation, multi-project, waveforms, autosave, direct-manipulation crop handles on the preview. The data model already accommodates several of these.
+Filters, transitions other than fades, keyframes, HDR, pitch preservation, multi-project. The data model already accommodates several of these. (Text/titles, waveforms, autosave and preview crop handles have since shipped.)
 
 ## Deploying to GitHub Pages
 

@@ -49,7 +49,7 @@ export function PreviewQualityMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full right-0 mb-1.5 w-32 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900/95 py-1 shadow-xl shadow-black/50 backdrop-blur"
+          className="touch-hit absolute bottom-full right-0 mb-1.5 w-32 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900/95 py-1 shadow-xl shadow-black/50 backdrop-blur"
         >
           {OPTIONS.map((opt) => (
             <button

@@ -19,11 +19,14 @@ export function Toast() {
           initial={{ y: 24, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 24, opacity: 0 }}
+          role="alert"
+          aria-live="assertive"
           className="fixed bottom-4 left-1/2 z-50 flex max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-xl border border-red-900 bg-red-950 px-4 py-2.5 text-sm text-red-200 shadow-xl"
           onClick={() => useStore.getState().setError(null)}
         >
           <AlertTriangle className="h-4 w-4 flex-none text-red-400" />
-          <span className="min-w-0 truncate">{error}</span>
+          {/* Multi-file import failures arrive as several lines: show them all. */}
+          <span className="min-w-0 whitespace-pre-line">{error}</span>
         </motion.div>
       )}
     </AnimatePresence>

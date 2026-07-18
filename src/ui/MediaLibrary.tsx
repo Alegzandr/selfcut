@@ -30,7 +30,7 @@ export function MediaLibrary() {
         {/* Bare count badge: no unit to translate, but it needs a spoken label. */}
         {list.length > 0 && (
           <span
-            className="ml-auto font-normal text-zinc-500"
+            className="ml-auto font-normal text-zinc-400"
             aria-label={t('library.count', { count: list.length })}
           >
             {list.length}
@@ -38,7 +38,7 @@ export function MediaLibrary() {
         )}
         {coarse && (
           <button
-            className="-mr-1 rounded p-1 text-zinc-400 active:bg-zinc-800"
+            className="touch-hit -mr-1 rounded p-1 text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2"
             onClick={() => useStore.getState().setLibraryOpen(false)}
             title={t('library.close')}
           >
@@ -48,7 +48,7 @@ export function MediaLibrary() {
       </div>
 
       {list.length === 0 ? (
-        <p className="p-3 text-[11px] leading-relaxed text-zinc-500">{t('library.empty')}</p>
+        <p className="p-3 text-[11px] leading-relaxed text-zinc-400">{t('library.empty')}</p>
       ) : (
         <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-1.5">
           {list.map((asset) => (
@@ -180,7 +180,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
         </span>
         <Tooltip label={t('library.remove')}>
           <button
-            className="flex-none rounded p-1 text-zinc-500 active:bg-zinc-800 active:text-red-400"
+            className="touch-hit flex-none rounded p-1 text-zinc-400 active:bg-zinc-800 active:text-red-400 pointer-coarse:p-2"
             onClick={() => removeAsset(asset.id)}
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -189,7 +189,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
         {disconnected ? (
           <Tooltip label={t('library.reconnect')}>
             <button
-              className="flex-none rounded bg-amber-500/15 p-1 text-amber-300 active:bg-amber-500/30"
+              className="touch-hit flex-none rounded bg-amber-500/15 p-1 text-amber-300 active:bg-amber-500/30 pointer-coarse:p-2"
               onClick={() => reconnectAssetViaPicker(asset.id)}
             >
               <PlugZap className="h-3.5 w-3.5" />
@@ -198,7 +198,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
         ) : (
           <Tooltip label={t('library.add')}>
             <button
-              className="flex-none rounded bg-sky-500/15 p-1 text-sky-300 active:bg-sky-500/30"
+              className="touch-hit flex-none rounded bg-sky-500/15 p-1 text-sky-300 active:bg-sky-500/30 pointer-coarse:p-2"
               onClick={() => {
                 addClipFromAsset(asset.id);
                 // Mobile drawer: close it so the freshly placed clip is visible.

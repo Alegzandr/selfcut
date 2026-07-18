@@ -23,7 +23,7 @@ export const TrackRow = memo(function TrackRow({ track, pxPerMs }: Props) {
     useStore.getState();
 
   const btn =
-    'flex h-4.5 w-4.5 items-center justify-center rounded text-zinc-500 active:bg-zinc-700 pointer-coarse:h-5 pointer-coarse:w-5';
+    'touch-hit flex h-4.5 w-4.5 items-center justify-center rounded text-zinc-500 active:bg-zinc-700 pointer-coarse:h-7 pointer-coarse:w-7';
   const slider = 'h-1 w-full min-w-0 cursor-ew-resize';
 
   const xfades = trackCrossfades(track.clips);

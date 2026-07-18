@@ -19,6 +19,18 @@ export function Inspector() {
   const asset = useStore((s) => (clip ? s.assets[clip.assetId] : undefined));
   const coarse = useIsCoarsePointer();
   const inspectorOpen = useStore((s) => s.inspectorOpen);
+  // A linked video clip delegates its sound to the audio clip on the lane
+  // below (it is silent in the mix): audio edits must target that partner,
+  // otherwise the volume/balance controls are dead knobs.
+  const audioClip = useStore((s) => {
+    if (!clip?.linkId) return clip;
+    for (const track of s.project.tracks) {
+      if (track.kind !== 'audio') continue;
+      const partner = track.clips.find((c) => c.linkId === clip.linkId && c.id !== clip.id);
+      if (partner) return partner;
+    }
+    return clip;
+  });
 
   // Desktop: docked column next to the preview - it must never cover the
   // timeline, that is where the cutting happens. Mobile: bottom sheet opened
@@ -29,6 +41,7 @@ export function Inspector() {
       <div className="w-72 flex-none space-y-3 overflow-x-hidden overflow-y-auto border-l border-zinc-800 bg-zinc-900/60 p-3">
         <InspectorBody
           clip={clip}
+          audioClip={audioClip ?? clip}
           isVideo={!!asset && asset.kind !== 'audio'}
           hasAudio={asset?.hasAudio ?? false}
           name={clip.kind === 'text' ? t('inspector.textClip') : clip.kind === 'solid' ? t(`inspector.solid.${clip.solid.kind}`) : asset?.file.name ?? ''}
@@ -51,6 +64,7 @@ export function Inspector() {
         >
           <InspectorBody
             clip={clip}
+            audioClip={audioClip ?? clip}
             isVideo={!!asset && asset.kind !== 'audio'}
             hasAudio={asset?.hasAudio ?? false}
             name={clip.kind === 'text' ? t('inspector.textClip') : clip.kind === 'solid' ? t(`inspector.solid.${clip.solid.kind}`) : asset?.file.name ?? ''}
@@ -63,11 +77,14 @@ export function Inspector() {
 
 function InspectorBody({
   clip,
+  audioClip,
   isVideo,
   hasAudio,
   name,
 }: {
   clip: Clip;
+  /** The clip whose audio the controls edit: the linked audio partner of a video clip, else the clip itself. */
+  audioClip: Clip;
   isVideo: boolean;
   hasAudio: boolean;
   name: string;
@@ -83,7 +100,7 @@ function InspectorBody({
         <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-100">{name}</h2>
         <Tooltip label={t('inspector.deleteClip')}>
           <button
-            className="rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800"
+            className="touch-hit rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2.5"
             onClick={() => deleteClip(clip.id)}
           >
             <Trash2 className="h-4 w-4" />
@@ -91,7 +108,7 @@ function InspectorBody({
         </Tooltip>
         <Tooltip label={t('inspector.close')}>
           <button
-            className="rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800"
+            className="touch-hit rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2.5"
             onClick={() => (coarse ? setInspectorOpen(false) : selectClip(null))}
           >
             <X className="h-4 w-4" />
@@ -102,7 +119,7 @@ function InspectorBody({
       {clip.kind === 'text' && <TextSection clip={clip} />}
       {clip.kind === 'solid' && <SolidSection clip={clip} />}
 
-      {hasAudio && <AudioSection clip={clip} />}
+      {hasAudio && <AudioSection clip={audioClip} />}
       {!isText && <SpeedControl clip={clip} />}
       <FadeSection clip={clip} />
 

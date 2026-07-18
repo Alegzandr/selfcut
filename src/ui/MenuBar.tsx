@@ -84,7 +84,7 @@ export function MenuBar() {
               {t(menu.titleKey)}
             </button>
             {isOpen && (
-              <div className="absolute left-0 top-full z-50 mt-0.5 min-w-56 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl shadow-black/50">
+              <div role="menu" className="absolute left-0 top-full z-50 mt-0.5 min-w-56 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl shadow-black/50">
                 <MenuList
                   items={menu.items
                     .map((item): MenuEntry | null => (item === '---' ? '---' : commands[item] ?? null))

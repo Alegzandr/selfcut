@@ -121,6 +121,10 @@ export class PlaybackEngine {
     // yet - a multi-track clip pulls its own source track, keyed independently.
     for (const track of state.project.tracks) {
       for (const clip of track.clips) {
+        // A linked video clip delegates its sound to its audio partner and is
+        // never scheduled (see audioMix): decoding its primary track here would
+        // duplicate the partner's buffer (~23 MB per stereo minute, twice).
+        if (track.kind === 'video' && clip.linkId) continue;
         const asset = state.assets[clip.assetId];
         if (!asset?.hasAudio) continue;
         const key = audioKey(asset.id, clip.audioTrackIndex);

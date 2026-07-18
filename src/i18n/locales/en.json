@@ -2,29 +2,19 @@
   "app.drop.title": "Drop your media files",
   "app.importing": "Importing media…",
   "app.split.handle": "Drag to resize - double-click to reset",
-
   "topbar.aspect.16x9": "Landscape 16:9 - YouTube",
   "topbar.aspect.9x16": "Portrait 9:16 - TikTok, Reels, Shorts",
   "topbar.aspect.1x1": "Square 1:1 - Instagram feed",
   "topbar.aspect.4x5": "Portrait 4:5 - Instagram feed",
-  "topbar.addText": "Add a text clip at the playhead (T)",
-  "topbar.add": "Add",
-  "topbar.addHint": "Add a text or color clip",
-  "topbar.solidColor": "Solid color",
-  "topbar.solidGradient": "Gradient",
   "topbar.export": "Export",
   "topbar.exportHint": "Export your video",
-  "topbar.import": "Import",
-  "topbar.importHint": "Import media files",
   "topbar.language": "Language",
   "topbar.library": "Media library",
   "topbar.newProject.armed": "Discard?",
   "topbar.newProject.confirm": "Press again to discard the whole project",
   "topbar.newProject.title": "New project (discard everything)",
   "topbar.redo": "Redo",
-  "topbar.text": "Text",
   "topbar.undo": "Undo",
-
   "transport.addMarker": "Add a marker at the playhead (M)",
   "transport.backToStart": "Back to start (Home)",
   "transport.delete": "Delete selected clips (Del)",
@@ -40,14 +30,12 @@
   "transport.zoomFit": "Fit project in view (Shift+Z)",
   "transport.zoomIn": "Zoom in (↑)",
   "transport.zoomOut": "Zoom out (↓)",
-
   "timeline.dropzone.title": "Drop your clips here - they line up on the timeline, ready to cut.",
   "timeline.dropzone.choose": "Choose files",
   "timeline.hint": "Then: <kbd>Space</kbd> play · <kbd>S</kbd> cut · <kbd>P</kbd> punch-in · <kbd>?</kbd> all shortcuts",
   "timeline.importing": "Importing…",
   "timeline.addVideoTrack": "Video track",
   "timeline.addAudioTrack": "Audio track",
-
   "track.delete": "Delete track",
   "track.hide": "Hide track",
   "track.moveDown": "Move track down",
@@ -56,7 +44,6 @@
   "track.opacity": "Track opacity - {{pct}}%",
   "track.volume": "Track volume - {{pct}}%",
   "track.meter.title": "Level (dB) - red dot = clipping",
-
   "marker.barHint": "Drag to select a region · double-click a marker to rename · right-click for options",
   "marker.placeholder": "Marker {{n}}",
   "marker.regionIn": "Region in point (I)",
@@ -66,7 +53,6 @@
   "ctx.marker.goto": "Go to marker",
   "ctx.marker.rename": "Rename…",
   "ctx.marker.delete": "Delete marker",
-
   "clip.audioTrack": "A{{n}}",
   "clip.defaultText": "Title",
   "clip.solid.color": "Solid color",
@@ -74,7 +60,6 @@
   "clip.fadeIn": "Fade in",
   "clip.fadeOut": "Fade out",
   "clip.text.placeholder": "Text",
-
   "clipbar.adjust": "Adjust",
   "clipbar.link": "Link",
   "clipbar.unlink": "Unlink",
@@ -82,7 +67,6 @@
   "clipbar.duplicate": "Duplicate",
   "clipbar.punchIn": "Punch in",
   "clipbar.split": "Split",
-
   "inspector.balance": "Balance",
   "inspector.bold": "Bold",
   "inspector.bold.short": "B",
@@ -129,7 +113,6 @@
   "inspector.transform": "Transform",
   "inspector.zoomAnim": "Zoom anim",
   "inspector.volume": "Volume",
-
   "library.add": "Add to timeline",
   "library.close": "Close",
   "library.disconnected": "Disconnected",
@@ -148,7 +131,6 @@
   "restore.reconnect": "Reconnect files",
   "restore.startNew": "New project",
   "restore.startNewConfirm": "Start a new project? Your current timeline will be discarded.",
-
   "export.title": "Export",
   "export.back": "Back",
   "export.cancel": "Cancel",
@@ -179,7 +161,6 @@
   "export.quality.1440": "1440p",
   "export.quality.4k": "4K",
   "export.quality.mp3_320": "320 kbps",
-
   "errors.export.canceled": "Export canceled.",
   "errors.export.emptyProject": "The project is empty - add clips to the timeline first.",
   "errors.export.emptyRegion": "The selected region is empty - it sits past the end of the project.",
@@ -194,11 +175,9 @@
   "errors.media.videoAudioOnly": "Video codec not supported ({{codec}}) - kept the audio of {{name}}",
   "errors.media.unsupportedFormat": "Unsupported format: {{name}}",
   "errors.persistence.saveFailed": "Your work could not be saved locally (storage full or blocked).",
-
   "unsupported.title": "{{app}} can't run in this browser",
   "unsupported.reason": "{{app}} relies on <api>WebCodecs</api> to decode and encode video entirely on your device - no upload, no server. This browser doesn't expose that API.",
   "unsupported.browsers": "Try a recent version of <name>Chrome</name>, <name>Edge</name> or <name>Safari 16.4+</name>, over HTTPS.",
-
   "shortcuts.title": "Keyboard shortcuts",
   "shortcuts.close": "Close",
   "shortcuts.group.playback": "Playback",
@@ -206,7 +185,6 @@
   "shortcuts.group.region": "Region & markers",
   "shortcuts.group.zoom": "Zoom & view",
   "shortcuts.group.edit": "Edit",
-
   "shortcuts.key.alt": "Alt",
   "shortcuts.key.backspace": "Backspace",
   "shortcuts.key.click": "Click",
@@ -230,18 +208,15 @@
   "shortcuts.key.shift": "Shift",
   "shortcuts.key.space": "Space",
   "shortcuts.key.wheel": "Wheel",
-
   "shortcuts.playback.playPause": "Play / pause",
   "shortcuts.playback.pause": "Pause",
   "shortcuts.playback.shuttle": "Play - repeat: shuttle ×2 ×4 ×8",
   "shortcuts.playback.reverse": "Playing: slow shuttle - paused: back 1s",
-
   "shortcuts.navigate.frame": "Previous / next frame",
   "shortcuts.navigate.second": "Back / forward 1s",
   "shortcuts.navigate.cutPoint": "Previous / next cut point",
   "shortcuts.navigate.marker": "Jump to marker n",
   "shortcuts.navigate.bounds": "Start / end of project",
-
   "shortcuts.region.select": "Select a region (yellow corners)",
   "shortcuts.region.clear": "Clear the region",
   "shortcuts.region.inOut": "Region in / out at playhead",
@@ -251,13 +226,11 @@
   "shortcuts.region.renameMarker": "Rename it",
   "shortcuts.region.deleteMarker": "Delete it",
   "shortcuts.region.fromClip": "Region from the clip's bounds",
-
   "shortcuts.zoom.inOut": "Zoom in / out at playhead",
   "shortcuts.zoom.fit": "Zoom to fit project",
   "shortcuts.zoom.cursor": "Zoom at cursor",
   "shortcuts.zoom.pan": "Pan timeline",
   "shortcuts.zoom.scrollTracks": "Scroll tracks vertically",
-
   "shortcuts.edit.split": "Split at playhead",
   "shortcuts.edit.punchIn": "Punch-in zoom: cycle 100 / 120 / 140 %",
   "shortcuts.edit.textClip": "Add a text clip at playhead",
@@ -284,7 +257,6 @@
   "shortcuts.edit.export": "Export",
   "shortcuts.edit.deselect": "Deselect",
   "shortcuts.edit.togglePanel": "Toggle this panel",
-
   "menu.file": "File",
   "menu.edit": "Edit",
   "menu.insert": "Insert",
@@ -292,11 +264,9 @@
   "menu.view": "View",
   "menu.playback": "Playback",
   "menu.help": "Help",
-
   "menu.file.new": "New project",
   "menu.file.import": "Import media…",
   "menu.file.export": "Export…",
-
   "menu.edit.undo": "Undo",
   "menu.edit.redo": "Redo",
   "menu.edit.cut": "Cut",
@@ -304,14 +274,12 @@
   "menu.edit.paste": "Paste",
   "menu.edit.selectAll": "Select all",
   "menu.edit.preferences": "Preferences…",
-
   "menu.insert.text": "Text",
   "menu.insert.color": "Solid color",
   "menu.insert.gradient": "Gradient",
   "menu.insert.videoTrack": "Video track",
   "menu.insert.audioTrack": "Audio track",
   "menu.insert.marker": "Marker at playhead",
-
   "menu.clip.split": "Split at playhead",
   "menu.clip.duplicate": "Duplicate",
   "menu.clip.punchIn": "Punch-in zoom",
@@ -321,23 +289,18 @@
   "menu.clip.unlink": "Unlink audio",
   "menu.clip.delete": "Delete",
   "menu.clip.rippleDelete": "Ripple delete",
-
   "menu.view.zoomIn": "Zoom in",
   "menu.view.zoomOut": "Zoom out",
   "menu.view.zoomFit": "Zoom to fit",
   "menu.view.snap": "Snapping",
   "menu.view.shortcuts": "Keyboard shortcuts",
-
   "menu.playback.playPause": "Play / pause",
   "menu.playback.start": "Back to start",
   "menu.playback.loop": "Loop region",
   "menu.playback.regionIn": "Set region in",
   "menu.playback.regionOut": "Set region out",
-
   "menu.help.shortcuts": "Keyboard shortcuts",
   "menu.help.about": "About SelfCut",
-
-  "menu.preferences": "Preferences",
   "preferences.title": "Preferences",
   "preferences.close": "Close",
   "about.close": "Close",
@@ -346,7 +309,6 @@
   "preferences.timeFormat": "Time format",
   "preferences.timeFormat.timecode": "Timecode (m:ss:frames)",
   "preferences.timeFormat.decimal": "Decimal (m:ss.tenths)",
-
   "mobile.media": "Media",
   "mobile.text": "Text",
   "mobile.color": "Color",
@@ -354,7 +316,12 @@
   "mobile.audio": "Audio",
   "mobile.video": "Video",
   "mobile.marker": "Marker",
-
   "clipbar.copy": "Copy",
-  "clipbar.stream": "Layout"
+  "clipbar.stream": "Layout",
+  "errors.export.videoEncoderUnsupported": "This browser can't encode H.264 video at this resolution. Try a lower-resolution preset, or a browser with H.264 support (Chrome, Edge, Safari).",
+  "errors.export.disconnectedSources": "Some source files are disconnected: {{names}}. Reconnect them before exporting.",
+  "export.close": "Close",
+  "mobile.settings": "Settings",
+  "clipbar.paste": "Paste",
+  "clipbar.rippleDelete": "Ripple delete"
 }

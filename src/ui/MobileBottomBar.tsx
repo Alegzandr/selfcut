@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import {
   Blend,
+  ClipboardPaste,
   Copy,
   CopyPlus,
   Film,
@@ -11,6 +12,7 @@ import {
   MapPin,
   Music,
   Scissors,
+  Settings,
   SlidersHorizontal,
   LayoutPanelTop,
   Link2,
@@ -47,24 +49,31 @@ type Tile = {
 
 const TOOL_TILES: readonly Tile[] = [
   { cmd: 'file.import', icon: FolderPlus, labelKey: 'mobile.media' },
+  { cmd: 'edit.paste', icon: ClipboardPaste, labelKey: 'clipbar.paste' },
   { cmd: 'insert.text', icon: Type, labelKey: 'mobile.text' },
   { cmd: 'insert.color', icon: Blend, labelKey: 'mobile.color' },
   { cmd: 'insert.gradient', icon: Blend, labelKey: 'mobile.gradient' },
   { cmd: 'insert.audioTrack', icon: Music, labelKey: 'mobile.audio' },
   { cmd: 'insert.videoTrack', icon: Film, labelKey: 'mobile.video' },
   { cmd: 'insert.marker', icon: MapPin, labelKey: 'mobile.marker' },
+  // Touch has no menu bar: preferences (language, time format) need a tile.
+  { cmd: 'edit.preferences', icon: Settings, labelKey: 'mobile.settings' },
 ];
 
 const CLIP_TILES: readonly Tile[] = [
   { cmd: 'clip.split', icon: Scissors, labelKey: 'clipbar.split' },
   { cmd: 'edit.copy', icon: Copy, labelKey: 'clipbar.copy' },
+  { cmd: 'edit.paste', icon: ClipboardPaste, labelKey: 'clipbar.paste' },
   { cmd: 'clip.duplicate', icon: CopyPlus, labelKey: 'clipbar.duplicate' },
   { cmd: 'clip.punchIn', icon: ZoomIn, labelKey: 'clipbar.punchIn' },
   { cmd: 'clip.stream', icon: LayoutPanelTop, labelKey: 'clipbar.stream', mediaOnly: true },
   { cmd: 'clip.adjust', icon: SlidersHorizontal, labelKey: 'clipbar.adjust' },
   { cmd: 'clip.link', icon: Link2, labelKey: 'clipbar.link', linkableOnly: true },
   { cmd: 'clip.unlink', icon: Unlink, labelKey: 'clipbar.unlink', linkedOnly: true },
-  { cmd: 'clip.rippleDelete', icon: Trash2, labelKey: 'clipbar.delete', danger: true },
+  // Plain delete AND ripple delete, correctly labelled - the old rail sold a
+  // ripple delete under the plain "Delete" label.
+  { cmd: 'clip.delete', icon: Trash2, labelKey: 'clipbar.delete', danger: true },
+  { cmd: 'clip.rippleDelete', icon: Trash2, labelKey: 'clipbar.rippleDelete', danger: true },
 ];
 
 function Rail({ tiles }: { tiles: readonly Tile[] }) {

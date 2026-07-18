@@ -6,22 +6,14 @@
   "topbar.aspect.9x16": "Retrato 9:16 — TikTok, Reels, Shorts",
   "topbar.aspect.1x1": "Cuadrado 1:1 - Feed de Instagram",
   "topbar.aspect.4x5": "Retrato 4:5 - Feed de Instagram",
-  "topbar.addText": "Agregar un clip de texto en el cabezal de reproducción (T)",
-  "topbar.add": "Añadir",
-  "topbar.addHint": "Agregar un clip de texto o de color",
-  "topbar.solidColor": "Color sólido",
-  "topbar.solidGradient": "Degradado",
   "topbar.export": "Exportar",
   "topbar.exportHint": "Exportar tu vídeo",
-  "topbar.import": "Importar",
-  "topbar.importHint": "Importar archivos multimedia",
   "topbar.language": "Idioma",
   "topbar.library": "Biblioteca multimedia",
   "topbar.newProject.armed": "¿Descartar?",
   "topbar.newProject.confirm": "Presione nuevamente para descartar todo el proyecto.",
   "topbar.newProject.title": "Nuevo proyecto (descartar todo)",
   "topbar.redo": "Rehacer",
-  "topbar.text": "Texto",
   "topbar.undo": "Deshacer",
   "transport.addMarker": "Añade un marcador en el cabezal de reproducción (M)",
   "transport.backToStart": "Volver al inicio (Inicio)",
@@ -265,7 +257,6 @@
   "shortcuts.edit.export": "Exportar",
   "shortcuts.edit.deselect": "Deseleccionar",
   "shortcuts.edit.togglePanel": "Alternar este panel",
-
   "menu.file": "Archivo",
   "menu.edit": "Edición",
   "menu.insert": "Insertar",
@@ -273,11 +264,9 @@
   "menu.view": "Ver",
   "menu.playback": "Reproducción",
   "menu.help": "Ayuda",
-
   "menu.file.new": "Nuevo proyecto",
   "menu.file.import": "Importar medios…",
   "menu.file.export": "Exportar…",
-
   "menu.edit.undo": "Deshacer",
   "menu.edit.redo": "Rehacer",
   "menu.edit.cut": "Cortar",
@@ -285,14 +274,12 @@
   "menu.edit.paste": "Pegar",
   "menu.edit.selectAll": "Seleccionar todo",
   "menu.edit.preferences": "Preferencias…",
-
   "menu.insert.text": "Texto",
   "menu.insert.color": "Color sólido",
   "menu.insert.gradient": "Degradado",
   "menu.insert.videoTrack": "Pista de vídeo",
   "menu.insert.audioTrack": "Pista de audio",
   "menu.insert.marker": "Marcador en el cursor",
-
   "menu.clip.split": "Dividir en el cursor",
   "menu.clip.duplicate": "Duplicar",
   "menu.clip.punchIn": "Zoom punch-in",
@@ -302,23 +289,18 @@
   "menu.clip.unlink": "Desvincular audio",
   "menu.clip.delete": "Eliminar",
   "menu.clip.rippleDelete": "Eliminar y cerrar hueco",
-
   "menu.view.zoomIn": "Acercar",
   "menu.view.zoomOut": "Alejar",
   "menu.view.zoomFit": "Ajustar a la vista",
   "menu.view.snap": "Ajuste magnético",
   "menu.view.shortcuts": "Atajos de teclado",
-
   "menu.playback.playPause": "Reproducir / pausar",
   "menu.playback.start": "Volver al inicio",
   "menu.playback.loop": "Repetir región",
   "menu.playback.regionIn": "Punto de entrada de región",
   "menu.playback.regionOut": "Punto de salida de región",
-
   "menu.help.shortcuts": "Atajos de teclado",
   "menu.help.about": "Acerca de SelfCut",
-
-  "menu.preferences": "Preferencias",
   "preferences.title": "Preferencias",
   "preferences.close": "Cerrar",
   "about.close": "Cerrar",
@@ -327,7 +309,6 @@
   "preferences.timeFormat": "Formato de tiempo",
   "preferences.timeFormat.timecode": "Código de tiempo (m:ss:fotogramas)",
   "preferences.timeFormat.decimal": "Decimal (m:ss.décimas)",
-
   "mobile.media": "Medios",
   "mobile.text": "Texto",
   "mobile.color": "Color",
@@ -335,7 +316,12 @@
   "mobile.audio": "Audio",
   "mobile.video": "Vídeo",
   "mobile.marker": "Marcador",
-
   "clipbar.copy": "Copiar",
-  "clipbar.stream": "Diseño"
+  "clipbar.stream": "Diseño",
+  "errors.export.videoEncoderUnsupported": "Este navegador no puede codificar vídeo H.264 a esta resolución. Prueba un ajuste de menor resolución o un navegador compatible con H.264 (Chrome, Edge, Safari).",
+  "errors.export.disconnectedSources": "Algunos archivos de origen están desconectados: {{names}}. Vuelve a conectarlos antes de exportar.",
+  "export.close": "Cerrar",
+  "mobile.settings": "Ajustes",
+  "clipbar.paste": "Pegar",
+  "clipbar.rippleDelete": "Borrar y cerrar hueco"
 }

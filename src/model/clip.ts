@@ -19,6 +19,16 @@ export function isTextClip(clip: Clip): clip is TextClip {
 }
 
 /**
+ * Deep-copy a clip. Clips are plain JSON data, so a JSON round-trip is enough —
+ * and unlike `structuredClone` it also accepts Immer draft proxies, which every
+ * browser's `structuredClone` rejects (DataCloneError). Always use this to
+ * copy a clip inside a store mutation.
+ */
+export function cloneClip<T extends Clip>(clip: T): T {
+  return JSON.parse(JSON.stringify(clip)) as T;
+}
+
+/**
  * The source audio track a clip draws its sound (and waveform) from: the one
  * whose `index` matches `clip.audioTrackIndex`, or the asset's first track when
  * the clip doesn't pin a track (undefined index = primary). Returns undefined

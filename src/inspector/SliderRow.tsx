@@ -27,7 +27,7 @@ export function SliderRow({
         max={max}
         step={step}
         value={value}
-        className="min-w-0 flex-1 accent-sky-500"
+        className="min-w-0 flex-1 accent-sky-500 pointer-coarse:h-8"
         onPointerDown={beginGesture}
         onPointerUp={endGesture}
         onChange={(e) => onChange(Number(e.target.value))}

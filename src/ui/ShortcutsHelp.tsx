@@ -174,14 +174,14 @@ export function ShortcutsHelp() {
             <div className="grid gap-4 sm:grid-cols-2">
               {GROUPS.map((g) => (
                 <div key={g.title}>
-                  <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                  <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
                     {t(g.title)}
                   </h3>
                   <dl className="space-y-1">
                     {g.rows.map(([keys, desc]) => (
                       <div key={desc} className="flex items-baseline justify-between gap-3 text-xs">
                         <dt className="font-mono text-zinc-300">{formatKeys(keys, labels)}</dt>
-                        <dd className="text-right text-zinc-500">{t(desc)}</dd>
+                        <dd className="text-right text-zinc-400">{t(desc)}</dd>
                       </div>
                     ))}
                   </dl>
