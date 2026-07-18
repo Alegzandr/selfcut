@@ -12,14 +12,24 @@ export function sortedMarkers(project: Project): Marker[] {
   return [...project.markers].sort((a, b) => a.timeMs - b.timeMs);
 }
 
+// Memoized by project identity: copy-on-write means an unchanged project keeps
+// its reference across frames, so the 60fps playback tick, the timecode readout
+// and the seek clamp reuse the result instead of re-scanning every clip every
+// frame; an edit yields a new Project and recomputes. WeakMap so entries are
+// GC'd with their project.
+const durationCache = new WeakMap<Project, number>();
+
 /** Total project duration (end of the last clip), in ms. */
 export function projectDurationMs(project: Project): number {
+  const cached = durationCache.get(project);
+  if (cached !== undefined) return cached;
   let max = 0;
   for (const track of project.tracks) {
     for (const clip of track.clips) {
       max = Math.max(max, clipEndMs(clip));
     }
   }
+  durationCache.set(project, max);
   return max;
 }
 

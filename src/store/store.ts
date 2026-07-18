@@ -137,19 +137,59 @@ export const useStore = create<EditorState>((set, get) => {
   };
 });
 
+// These two selectors scan the whole project, and Zustand re-runs every
+// subscribed selector on each store commit - which happens ~60×/s during
+// playback (the engine writes currentTimeMs each frame). Their inputs (project,
+// selection) are stable across those frames, so a one-entry cache keyed on the
+// exact inputs returns instantly and the scan runs only when the selection or
+// the project actually changes. Every consumer sees the same state object per
+// commit, so a single slot serves them all. Correctness is guaranteed by the
+// identity checks: a miss simply recomputes.
+let selectedClipCache: { project: Project; id: string | null; clip: Clip | null } | null = null;
+
 /** Selector: the currently selected clip (or null). */
 export function getSelectedClip(state: EditorState): Clip | null {
-  if (!state.selectedClipId) return null;
-  for (const track of state.project.tracks) {
-    const clip = track.clips.find((c) => c.id === state.selectedClipId);
-    if (clip) return clip;
+  const { project, selectedClipId } = state;
+  if (
+    selectedClipCache &&
+    selectedClipCache.project === project &&
+    selectedClipCache.id === selectedClipId
+  ) {
+    return selectedClipCache.clip;
   }
-  return null;
+  let clip: Clip | null = null;
+  if (selectedClipId) {
+    for (const track of project.tracks) {
+      const found = track.clips.find((c) => c.id === selectedClipId);
+      if (found) {
+        clip = found;
+        break;
+      }
+    }
+  }
+  selectedClipCache = { project, id: selectedClipId, clip };
+  return clip;
 }
+
+let linkTargetsCache: {
+  project: Project;
+  ids: string[];
+  targets: [string, string] | null;
+} | null = null;
 
 /** Selector: the clip pair a "Link" action would join, or null (drives the command). */
 export function getLinkTargets(state: EditorState): [string, string] | null {
-  return linkableSelection(state.project, state.selectedClipIds);
+  const { project, selectedClipIds } = state;
+  if (
+    linkTargetsCache &&
+    linkTargetsCache.project === project &&
+    linkTargetsCache.ids === selectedClipIds
+  ) {
+    return linkTargetsCache.targets;
+  }
+  const targets = linkableSelection(project, selectedClipIds);
+  linkTargetsCache = { project, ids: selectedClipIds, targets };
+  return targets;
 }
 
 export { clipDurationMs, clipEndMs, projectDurationMs, sortedMarkers };
