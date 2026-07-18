@@ -322,6 +322,5 @@
   "errors.export.disconnectedSources": "Algunos archivos de origen están desconectados: {{names}}. Vuelve a conectarlos antes de exportar.",
   "export.close": "Cerrar",
   "mobile.settings": "Ajustes",
-  "clipbar.paste": "Pegar",
-  "clipbar.rippleDelete": "Borrar y cerrar hueco"
+  "clipbar.paste": "Pegar"
 }

@@ -322,6 +322,5 @@
   "errors.export.disconnectedSources": "Des fichiers sources sont déconnectés : {{names}}. Reconnectez-les avant d'exporter.",
   "export.close": "Fermer",
   "mobile.settings": "Réglages",
-  "clipbar.paste": "Coller",
-  "clipbar.rippleDelete": "Suppr. ripple"
+  "clipbar.paste": "Coller"
 }

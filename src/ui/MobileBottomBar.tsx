@@ -70,10 +70,12 @@ const CLIP_TILES: readonly Tile[] = [
   { cmd: 'clip.adjust', icon: SlidersHorizontal, labelKey: 'clipbar.adjust' },
   { cmd: 'clip.link', icon: Link2, labelKey: 'clipbar.link', linkableOnly: true },
   { cmd: 'clip.unlink', icon: Unlink, labelKey: 'clipbar.unlink', linkedOnly: true },
-  // Plain delete AND ripple delete, correctly labelled - the old rail sold a
-  // ripple delete under the plain "Delete" label.
-  { cmd: 'clip.delete', icon: Trash2, labelKey: 'clipbar.delete', danger: true },
-  { cmd: 'clip.rippleDelete', icon: Trash2, labelKey: 'clipbar.rippleDelete', danger: true },
+  // Touch gets a single "Delete" that closes the gap (ripple), matching the
+  // CapCut-style expectation. The plain "leave a gap" delete stays desktop-only
+  // where a monteur has the keyboard shortcut (Del vs Shift+Del) and the mental
+  // model for it - two identical trash icons and the word "ripple" only confuse
+  // a casual mobile user.
+  { cmd: 'clip.rippleDelete', icon: Trash2, labelKey: 'clipbar.delete', danger: true },
 ];
 
 function Rail({ tiles }: { tiles: readonly Tile[] }) {

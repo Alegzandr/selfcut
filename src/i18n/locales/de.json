@@ -322,6 +322,5 @@
   "errors.export.disconnectedSources": "Einige Quelldateien sind getrennt: {{names}}. Verbinden Sie sie vor dem Export erneut.",
   "export.close": "Schließen",
   "mobile.settings": "Einstellungen",
-  "clipbar.paste": "Einfügen",
-  "clipbar.rippleDelete": "Ripple löschen"
+  "clipbar.paste": "Einfügen"
 }
