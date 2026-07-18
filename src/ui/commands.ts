@@ -10,6 +10,8 @@ import {
   FileX2,
   Film,
   Flag,
+  Focus,
+  FoldHorizontal,
   ListChecks,
   Music,
   Redo2,
@@ -19,6 +21,7 @@ import {
   SlidersHorizontal,
   Square,
   StretchHorizontal,
+  Trash2,
   Type,
   Link2,
   Unlink,
@@ -117,13 +120,13 @@ export function useEditorCommands(): Record<string, Command> {
     // ── Clip ──────────────────────────────────────────────────────────────
     { id: 'clip.split', labelKey: 'menu.clip.split', icon: Scissors, shortcut: 'S', onClick: () => st().splitAtPlayhead() },
     { id: 'clip.duplicate', labelKey: 'menu.clip.duplicate', icon: CopyPlus, shortcut: 'Ctrl+D', disabled: !selectedId, onClick: () => selectedId && st().duplicateClip(selectedId) },
-    { id: 'clip.punchIn', labelKey: 'menu.clip.punchIn', icon: ZoomIn, shortcut: 'P', onClick: () => st().punchZoomSelected() },
+    { id: 'clip.punchIn', labelKey: 'menu.clip.punchIn', icon: Focus, shortcut: 'P', disabled: !selectedId, onClick: () => st().punchZoomSelected() },
     { id: 'clip.stream', labelKey: 'menu.clip.stream', icon: LayoutPanelTop, disabled: !canStream, onClick: () => selectedId && st().applyStreamLayout(selectedId) },
     { id: 'clip.adjust', labelKey: 'menu.clip.adjust', icon: SlidersHorizontal, disabled: !selectedId, onClick: () => st().setInspectorOpen(true) },
     { id: 'clip.link', labelKey: 'menu.clip.link', icon: Link2, disabled: !canLink, onClick: () => { const pair = getLinkTargets(st()); if (pair) st().linkClips(pair); } },
     { id: 'clip.unlink', labelKey: 'menu.clip.unlink', icon: Unlink, disabled: !isLinked, onClick: () => selectedId && st().unlinkClip(selectedId) },
-    { id: 'clip.delete', labelKey: 'menu.clip.delete', icon: Scissors, shortcut: 'Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, false) },
-    { id: 'clip.rippleDelete', labelKey: 'menu.clip.rippleDelete', icon: Scissors, shortcut: 'Shift+Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, true) },
+    { id: 'clip.delete', labelKey: 'menu.clip.delete', icon: Trash2, shortcut: 'Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, false) },
+    { id: 'clip.rippleDelete', labelKey: 'menu.clip.rippleDelete', icon: FoldHorizontal, shortcut: 'Shift+Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, true) },
 
     // ── View ──────────────────────────────────────────────────────────────
     { id: 'view.zoomIn', labelKey: 'menu.view.zoomIn', icon: ZoomIn, shortcut: '+', onClick: () => zoomAtPlayhead(1.25) },
