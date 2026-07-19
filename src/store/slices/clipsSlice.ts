@@ -6,6 +6,7 @@ import {
   clipDurationMs,
   clipEndMs,
   cloneClip,
+  delegatedLinkIds,
   outputDimensions,
   timelineToSourceMs,
 } from '../../model';
@@ -547,14 +548,19 @@ export function createClipsSlice(
       const partners = linkedPartnerIds(get().project, clipId);
       if (partners.length === 0) return;
       const ids = new Set([clipId, ...partners]);
+      // Whether the group delegated its sound at all: a group of video clips
+      // alone never did, so unlinking it must not silence anything.
+      const wasDelegating = delegatedLinkIds(get().project).has(
+        findClip(get().project, clipId)!.clip.linkId!,
+      );
       withHistory((p) => {
         for (const track of p.tracks) {
           for (const clip of track.clips) {
             if (!ids.has(clip.id)) continue;
-            // The extracted audio stays on the audio clip, so silence the video
+            // The extracted audio stays on the audio clips, so silence the video
             // side (volume 0) - otherwise dropping the link would double the
             // sound. The user can raise it again or delete either clip freely.
-            if (track.kind === 'video') clip.volume = 0;
+            if (wasDelegating && track.kind === 'video') clip.volume = 0;
             delete clip.linkId;
           }
         }
@@ -564,11 +570,23 @@ export function createClipsSlice(
     linkClips: (clipIds) => {
       const ids = new Set(clipIds);
       if (ids.size < 2) return;
-      // Join the given clips into one A/V link (fresh shared linkId), so they
-      // move/trim/split/delete together again. The mix already mutes the video
-      // side of a link, so no volume change is needed here - if the video was
-      // silenced by a prior unlink it simply stays delegated.
-      const linkId = uid('link');
+      // Join the given clips into one link group, so they move/trim/split/delete
+      // together again. A group is generic: any number of clips on video and
+      // audio tracks, no master side. When some of them already share a group,
+      // reuse that id so the others are ADDED to it rather than re-grouped under
+      // a new id (which would orphan the members left out of the selection).
+      // The mix already mutes the video side of a group that holds audio, so no
+      // volume change is needed here - if the video was silenced by a prior
+      // unlink it simply stays delegated.
+      const existing = new Set<string>();
+      for (const track of get().project.tracks) {
+        for (const clip of track.clips) {
+          if (ids.has(clip.id) && clip.linkId != null) existing.add(clip.linkId);
+        }
+      }
+      // Straddling two groups would silently merge them - refuse.
+      if (existing.size > 1) return;
+      const linkId = existing.size === 1 ? [...existing][0]! : uid('link');
       withHistory((p) => {
         for (const track of p.tracks) {
           for (const clip of track.clips) {

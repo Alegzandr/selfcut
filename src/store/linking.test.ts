@@ -255,3 +255,69 @@ describe('re-link', () => {
     expect(after.audio.timelineStartMs).toBe(2500);
   });
 });
+
+/**
+ * A link group is generic: any number of clips on video and audio tracks, no
+ * master side. Linking a clip to a group that already exists must ADD it,
+ * keeping the group whole rather than re-grouping a subset under a new id.
+ */
+describe('multi-clip link groups', () => {
+  const allClips = () => s().project.tracks.flatMap((t) => t.clips);
+
+  it('adds a third audio clip to an existing two-clip group', () => {
+    s().addAsset(videoAsset('v'));
+    s().addClipFromAsset('v');
+    const { video, audio } = pair();
+    const groupId = video.linkId;
+
+    // A second audio clip from another asset, linked into the same group.
+    s().addAsset({ ...videoAsset('w'), id: 'w', kind: 'audio' } as MediaAsset);
+    s().addClipFromAsset('w');
+    const extra = allClips().find((c) => c.assetId === 'w')!;
+
+    s().linkClips([audio.id, extra.id]);
+
+    const after = allClips();
+    // The group id is preserved, so the video that was not selected stays in.
+    expect(after.filter((c) => c.linkId === groupId)).toHaveLength(3);
+  });
+
+  it('keeps the group whole when linking through linkableSelection', () => {
+    s().addAsset(videoAsset('v', 5000, 2));
+    s().addClipFromAsset('v');
+    const clips = allClips();
+    const groupId = clips[0]!.linkId;
+    expect(clips.filter((c) => c.linkId === groupId)).toHaveLength(3);
+
+    // Unlink, then re-link from the video alone: both audio lanes come back.
+    s().unlinkClip(clips[0]!.id);
+    const targets = linkableSelection(s().project, [clips[0]!.id]);
+    expect(targets).toHaveLength(3);
+    s().linkClips(targets!);
+    const after = allClips();
+    expect(after.filter((c) => c.linkId === after[0]!.linkId)).toHaveLength(3);
+  });
+
+  it('moves every member of a three-clip group together', () => {
+    s().addAsset(videoAsset('v', 5000, 2));
+    s().addClipFromAsset('v');
+    const first = allClips()[0]!;
+    s().moveClip(first.id, 3000);
+    for (const c of allClips()) expect(c.timelineStartMs).toBe(3000);
+  });
+
+  it('does not silence a group that holds no audio-track clip', () => {
+    // Two video clips linked together delegate nothing: unlinking them must
+    // leave their volume alone, unlike the video side of an A/V group.
+    s().addAsset(videoAsset('v', 5000, 0));
+    s().addClipFromAsset('v');
+    s().addClipFromAsset('v');
+    const clips = allClips();
+    expect(clips).toHaveLength(2);
+    expect(clips.every((c) => c.linkId == null)).toBe(true);
+
+    s().linkClips([clips[0]!.id, clips[1]!.id]);
+    s().unlinkClip(clips[0]!.id);
+    for (const c of allClips()) expect(c.volume).toBeGreaterThan(0);
+  });
+});

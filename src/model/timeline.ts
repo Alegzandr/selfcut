@@ -33,6 +33,31 @@ export function projectDurationMs(project: Project): number {
   return max;
 }
 
+const delegatedLinksCache = new WeakMap<Project, Set<string>>();
+
+/**
+ * The link groups whose video side must stay silent in the mix: those holding
+ * at least one clip on an audio track, which carries the extracted sound -
+ * playing the video side too would double it. A group made of video clips alone
+ * is absent from the set, so it keeps its own audio.
+ *
+ * Built in one pass and cached per project: the mix loops over every clip, and
+ * scanning the project once per clip would be quadratic.
+ */
+export function delegatedLinkIds(project: Project): Set<string> {
+  const cached = delegatedLinksCache.get(project);
+  if (cached !== undefined) return cached;
+  const out = new Set<string>();
+  for (const track of project.tracks) {
+    if (track.kind !== 'audio') continue;
+    for (const clip of track.clips) {
+      if (clip.linkId != null) out.add(clip.linkId);
+    }
+  }
+  delegatedLinksCache.set(project, out);
+  return out;
+}
+
 export interface CrossfadeWindows {
   /** Overlap with the previous clip on the track (ramp-in duration), ms. */
   inMs: number;

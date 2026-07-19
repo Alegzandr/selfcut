@@ -1,9 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://selfcut.alegzandr.com/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://selfcut.alegzandr.com/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://selfcut.alegzandr.com/en/" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://selfcut.alegzandr.com/es/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://selfcut.alegzandr.com/de/" />
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://selfcut.alegzandr.com/pt-BR/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://selfcut.alegzandr.com/en/" />
+  </url>
+  <url>
+    <loc>https://selfcut.alegzandr.com/en/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://selfcut.alegzandr.com/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://selfcut.alegzandr.com/en/" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://selfcut.alegzandr.com/es/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://selfcut.alegzandr.com/de/" />
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://selfcut.alegzandr.com/pt-BR/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://selfcut.alegzandr.com/en/" />
+  </url>
+  <url>
+    <loc>https://selfcut.alegzandr.com/es/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://selfcut.alegzandr.com/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://selfcut.alegzandr.com/en/" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://selfcut.alegzandr.com/es/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://selfcut.alegzandr.com/de/" />
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://selfcut.alegzandr.com/pt-BR/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://selfcut.alegzandr.com/en/" />
+  </url>
+  <url>
+    <loc>https://selfcut.alegzandr.com/de/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://selfcut.alegzandr.com/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://selfcut.alegzandr.com/en/" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://selfcut.alegzandr.com/es/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://selfcut.alegzandr.com/de/" />
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://selfcut.alegzandr.com/pt-BR/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://selfcut.alegzandr.com/en/" />
+  </url>
+  <url>
+    <loc>https://selfcut.alegzandr.com/pt-BR/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://selfcut.alegzandr.com/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://selfcut.alegzandr.com/en/" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://selfcut.alegzandr.com/es/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://selfcut.alegzandr.com/de/" />
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://selfcut.alegzandr.com/pt-BR/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://selfcut.alegzandr.com/en/" />
   </url>
   <url>
     <loc>https://selfcut.alegzandr.com/app/</loc>

@@ -149,10 +149,13 @@ interface BaseClip {
   /** Downmix the clip's audio to mono. */
   mono?: boolean;
   /**
-   * A/V link: a video clip and the audio clip extracted from the same source on
-   * import share one `linkId`. Linked clips move, trim, split and delete
-   * together. The audio lives on the audio clip, so the video side of a link
-   * delegates its audio (it stays silent in the mix). Undefined = not linked.
+   * Link group: every clip sharing one `linkId` moves, trims, splits and
+   * deletes together. A group is generic and holds any number of clips on video
+   * and audio tracks, with no master side - an import puts the video clip and
+   * one clip per extracted audio stream in the same group, and clips can be
+   * added to an existing group later. When a group holds at least one clip on
+   * an audio track, that clip carries the sound and the video side stays silent
+   * in the mix (see `delegatedLinkIds`). Undefined = not linked.
    */
   linkId?: string;
   /**

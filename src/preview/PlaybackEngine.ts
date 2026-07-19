@@ -1,6 +1,6 @@
 import { useStore, EditorState } from '../store/store';
 import { Project } from '../types';
-import { outputDimensions, projectDurationMs, timelineToSourceMs } from '../model';
+import { delegatedLinkIds, outputDimensions, projectDurationMs, timelineToSourceMs } from '../model';
 import { PREVIEW_RESOLUTION_SCALE } from '../app/config';
 import { audioKey, getAudioBuffer, getStillFrame } from '../media/mediaCache';
 import type { DrawableFrame } from '../media/stillImage';
@@ -119,12 +119,13 @@ export class PlaybackEngine {
 
     // Kick decoding for any (asset, audio track) pair we don't have a buffer for
     // yet - a multi-track clip pulls its own source track, keyed independently.
+    const delegated = delegatedLinkIds(state.project);
     for (const track of state.project.tracks) {
       for (const clip of track.clips) {
-        // A linked video clip delegates its sound to its audio partner and is
+        // A linked video clip delegates its sound to its audio partners and is
         // never scheduled (see audioMix): decoding its primary track here would
-        // duplicate the partner's buffer (~23 MB per stereo minute, twice).
-        if (track.kind === 'video' && clip.linkId) continue;
+        // duplicate their buffers (~23 MB per stereo minute, twice).
+        if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
         const asset = state.assets[clip.assetId];
         if (!asset?.hasAudio) continue;
         const key = audioKey(asset.id, clip.audioTrackIndex);

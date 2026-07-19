@@ -168,24 +168,51 @@ describe('linkCandidates / linkableSelection', () => {
     expect(linkableSelection(unpaired(), ['v', 'a'])).toEqual(['v', 'a']);
   });
 
-  it('rejects two clips on the same-kind track', () => {
+  it('accepts two clips on the same-kind track', () => {
     const p = project([
       { id: 'a1', kind: 'audio', clips: [clip({ id: 'x', trackId: 'a1' }), clip({ id: 'y', trackId: 'a1', timelineStartMs: 2000 })] },
     ]);
-    expect(linkableSelection(p, ['x', 'y'])).toBeNull();
+    expect(linkableSelection(p, ['x', 'y'])).toEqual(['x', 'y']);
   });
 
   it('resolves a video plus several audio lanes', () => {
     expect(linkableSelection(multiLane(), ['v', 'a', 'b'])).toEqual(['v', 'a', 'b']);
   });
 
-  it('rejects a selection holding more than one video side', () => {
+  it('accepts a selection holding several video sides', () => {
     const p = project([
       { id: 'v1', kind: 'video', clips: [clip({ id: 'v', assetId: 'a' })] },
       { id: 'v2', kind: 'video', clips: [clip({ id: 'w', trackId: 'v2', assetId: 'a' })] },
       { id: 'a1', kind: 'audio', clips: [clip({ id: 'a', trackId: 'a1', assetId: 'a' })] },
     ]);
-    expect(linkableSelection(p, ['v', 'w', 'a'])).toBeNull();
+    expect(linkableSelection(p, ['v', 'w', 'a'])).toEqual(['v', 'w', 'a']);
+  });
+
+  it('adds a clip to an existing group, carrying its unselected members', () => {
+    const p = project([
+      { id: 'v1', kind: 'video', clips: [clip({ id: 'v', assetId: 'a', linkId: 'L' })] },
+      { id: 'a1', kind: 'audio', clips: [clip({ id: 'a', trackId: 'a1', assetId: 'a', linkId: 'L' })] },
+      { id: 'a2', kind: 'audio', clips: [clip({ id: 'b', trackId: 'a2', assetId: 'a' })] },
+    ]);
+    // 'v' stays in even though only 'a' and 'b' were selected.
+    expect(new Set(linkableSelection(p, ['a', 'b']))).toEqual(new Set(['v', 'a', 'b']));
+  });
+
+  it('rejects a selection already wholly inside one group', () => {
+    const p = project([
+      { id: 'v1', kind: 'video', clips: [clip({ id: 'v', assetId: 'a', linkId: 'L' })] },
+      { id: 'a1', kind: 'audio', clips: [clip({ id: 'a', trackId: 'a1', assetId: 'a', linkId: 'L' })] },
+    ]);
+    expect(linkableSelection(p, ['v', 'a'])).toBeNull();
+  });
+
+  it('refuses to merge two existing groups', () => {
+    const p = project([
+      { id: 'v1', kind: 'video', clips: [clip({ id: 'v', assetId: 'a', linkId: 'L' })] },
+      { id: 'a1', kind: 'audio', clips: [clip({ id: 'a', trackId: 'a1', assetId: 'a', linkId: 'M' })] },
+      { id: 'a2', kind: 'audio', clips: [clip({ id: 'b', trackId: 'a2', assetId: 'a' })] },
+    ]);
+    expect(linkableSelection(p, ['v', 'a', 'b'])).toBeNull();
   });
 
   it('auto-resolves a single-clip selection to its candidates', () => {

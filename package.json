@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && node scripts/spa-fallback.mjs",
+    "predev": "node scripts/build-landing.mjs",
+    "landing": "node scripts/build-landing.mjs",
+    "build": "node scripts/build-landing.mjs && tsc && vite build && node scripts/spa-fallback.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "lint": "oxlint",

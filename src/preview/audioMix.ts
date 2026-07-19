@@ -1,5 +1,11 @@
 import { Clip, Project } from '../types';
-import { clipEndMs, clipEnvelopeGainAt, isGeneratedClip, trackCrossfades } from '../model';
+import {
+  clipEndMs,
+  clipEnvelopeGainAt,
+  delegatedLinkIds,
+  isGeneratedClip,
+  trackCrossfades,
+} from '../model';
 
 export interface ScheduledSource {
   source: AudioBufferSourceNode;
@@ -26,6 +32,7 @@ export function scheduleProjectAudio(
   rate = 1,
 ): ScheduledSource[] {
   const scheduled: ScheduledSource[] = [];
+  const delegated = delegatedLinkIds(project);
 
   for (const track of project.tracks) {
     if (track.muted) continue;
@@ -35,9 +42,10 @@ export function scheduleProjectAudio(
     const dest = typeof destination === 'function' ? destination(track.id) : destination;
     for (const clip of track.clips) {
       if (isGeneratedClip(clip)) continue;
-      // The video side of an A/V link delegates its audio to the linked audio
-      // clip; playing it here too would double the source.
-      if (track.kind === 'video' && clip.linkId) continue;
+      // The video side of a link delegates its audio to the group's audio
+      // clips; playing it here too would double the source. A group without any
+      // audio-track member delegates nothing and stays audible.
+      if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
       if (clip.volume <= 0) continue;
       if (clipEndMs(clip) <= fromMs) continue;
       const buffer = getBuffer(clip.assetId, clip.audioTrackIndex);

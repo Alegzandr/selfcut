@@ -1,5 +1,5 @@
 import { LoopRegion, MediaAsset, Project } from '../types';
-import { clipEndMs, projectDurationMs } from '../model';
+import { clipEndMs, delegatedLinkIds, projectDurationMs } from '../model';
 import { AUDIO_SAMPLE_RATE } from '../app/config';
 import { t } from '../i18n';
 import { audioKey, getAudioBuffer } from '../media/mediaCache';
@@ -196,13 +196,14 @@ async function renderAudioMix(
   const buffers = new Map<string, AudioBuffer | null>();
   let hasAudibleClip = false;
 
+  const delegated = delegatedLinkIds(project);
   for (const track of project.tracks) {
     if (track.muted) continue;
     for (const clip of track.clips) {
-      // A linked video clip delegates its sound to its audio partner: the mix
+      // A linked video clip delegates its sound to its audio partners: the mix
       // never schedules it, so don't decode its track (twice) nor let it count
       // as audible (it would force a silent AAC track into the file).
-      if (track.kind === 'video' && clip.linkId) continue;
+      if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
       // Clips ending before the span, or starting after it, are silent here.
       if (clip.volume <= 0 || clipEndMs(clip) <= startMs) continue;
       if (clip.timelineStartMs >= startMs + durationMs) continue;

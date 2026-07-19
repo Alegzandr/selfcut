@@ -143,14 +143,16 @@ export function withLinkedIds(project: Project, clipIds: Iterable<string>): stri
 
 /**
  * The A/V-link partners for a lone clip (empty if none). Drives the
- * single-select "Link" path: unlinked media clips on the OPPOSITE-kind tracks,
- * from the SAME asset, preferring the one that overlaps it in time (falling
- * back to the closest start). Same-asset matching makes the unlink → re-link
- * round trip pick the original partners back.
+ * single-select "Link" path: media clips on the OPPOSITE-kind tracks, from the
+ * SAME asset, preferring the one that overlaps it in time (falling back to the
+ * closest start). Same-asset matching makes the unlink → re-link round trip
+ * pick the original partners back.
  *
- * A video clip takes the best candidate from EACH audio track, because an
- * import splits a multi-stream source into one audio lane per stream and all of
- * them belong to the same group. An audio clip takes a single video partner.
+ * The best candidate from EACH opposite-kind track is taken, in both
+ * directions: an import splits a multi-stream source into one audio lane per
+ * stream, and a group may equally hold several video clips. Candidates that
+ * already carry a `linkId` are kept only when they all belong to the SAME
+ * group, so linking joins that existing group instead of tearing it apart.
  */
 export function linkCandidates(project: Project, clipId: string): string[] {
   const found = findClip(project, clipId);
@@ -160,54 +162,73 @@ export function linkCandidates(project: Project, clipId: string): string[] {
   const wantKind: Track['kind'] = track.kind === 'video' ? 'audio' : 'video';
   const start = clip.timelineStartMs;
   const end = clipEndMs(clip);
-  const perTrack: { id: string; overlap: number; gap: number }[] = [];
+  const perTrack: { id: string; overlap: number; gap: number; linkId?: string }[] = [];
   for (const t of project.tracks) {
     if (t.kind !== wantKind) continue;
-    let best: { id: string; overlap: number; gap: number } | null = null;
+    let best: { id: string; overlap: number; gap: number; linkId?: string } | null = null;
     for (const c of t.clips) {
-      if (c.linkId != null || c.kind !== 'media' || c.assetId !== clip.assetId) continue;
+      if (c.kind !== 'media' || c.assetId !== clip.assetId) continue;
       const overlap = Math.max(0, Math.min(end, clipEndMs(c)) - Math.max(start, c.timelineStartMs));
       const gap = Math.abs(c.timelineStartMs - start);
       if (!best || overlap > best.overlap || (overlap === best.overlap && gap < best.gap)) {
-        best = { id: c.id, overlap, gap };
+        best = { id: c.id, overlap, gap, linkId: c.linkId };
       }
     }
     if (best) perTrack.push(best);
   }
   if (perTrack.length === 0) return [];
-  // Only one video side per link: keep the single best when pairing up from audio.
-  if (wantKind === 'video') {
-    let best = perTrack[0]!;
-    for (const cand of perTrack) {
-      if (cand.overlap > best.overlap || (cand.overlap === best.overlap && cand.gap < best.gap)) {
-        best = cand;
+  // Joining is only unambiguous when the candidates are all free or all in one
+  // group - straddling two groups would silently merge them.
+  const groups = new Set(perTrack.map((c) => c.linkId).filter((id) => id != null));
+  if (groups.size > 1) return [];
+  if (groups.size === 1) {
+    // Pull in the whole group, including members on tracks that held no
+    // candidate of their own, so the result is the full merged set.
+    const linkId = [...groups][0]!;
+    const out = new Set(perTrack.map((c) => c.id));
+    for (const t of project.tracks) {
+      for (const c of t.clips) {
+        if (c.linkId === linkId) out.add(c.id);
       }
     }
-    return [best.id];
+    return [...out];
   }
   return perTrack.map((c) => c.id);
 }
 
 /**
  * Which clips a "Link" action would join, or null if the selection can't be
- * linked. A multi-clip selection must be entirely unlinked and hold exactly one
- * clip on a video track plus at least one on an audio track (an A/V group is
- * one video side with one lane per audio stream); a single selected clip
- * auto-pairs with its `linkCandidates`. Used for both the command's enabled
- * state and its handler, so they never disagree.
+ * linked. A link group is generic: any mix of clips on video and audio tracks,
+ * with no master side. A multi-clip selection must hold at least one clip that
+ * is not already in the group and must not straddle two existing groups (that
+ * would silently merge them); a single selected clip auto-pairs with its
+ * `linkCandidates`. Used for both the command's enabled state and its handler,
+ * so they never disagree.
  */
 export function linkableSelection(project: Project, selectedClipIds: string[]): string[] | null {
   if (selectedClipIds.length >= 2) {
-    let videoCount = 0;
-    let audioCount = 0;
+    const groups = new Set<string>();
+    let unlinked = 0;
     for (const id of selectedClipIds) {
       const found = findClip(project, id);
-      if (!found || found.clip.linkId != null) return null;
-      if (found.track.kind === 'video') videoCount++;
-      else audioCount++;
+      if (!found) return null;
+      if (found.clip.linkId != null) groups.add(found.clip.linkId);
+      else unlinked++;
     }
-    if (videoCount !== 1 || audioCount === 0) return null;
-    return [...selectedClipIds];
+    if (groups.size > 1) return null;
+    // Everything already in the same group: nothing left to join.
+    if (unlinked === 0) return null;
+    if (groups.size === 0) return [...selectedClipIds];
+    // Adding to an existing group: carry along the members not selected, so the
+    // group stays whole rather than splitting off a subset.
+    const linkId = [...groups][0]!;
+    const out = new Set(selectedClipIds);
+    for (const track of project.tracks) {
+      for (const c of track.clips) {
+        if (c.linkId === linkId) out.add(c.id);
+      }
+    }
+    return [...out];
   }
   if (selectedClipIds.length === 1) {
     const partners = linkCandidates(project, selectedClipIds[0]!);
@@ -215,3 +236,4 @@ export function linkableSelection(project: Project, selectedClipIds: string[]): 
   }
   return null;
 }
+
