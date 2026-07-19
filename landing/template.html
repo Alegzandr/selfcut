@@ -231,234 +231,80 @@
         font-size: 0.95rem;
       }
 
-      /* Timeline stage. This is a still of the real editor, not a generic
-         "video app" drawing: gutter width, row height, ruler height and the
-         clip palette are lifted from the app itself (TRACK_HEADER_WIDTH_PX
-         112, TRACK_HEIGHT_PX 64, RULER_HEIGHT_PX 24 in src/app/config.ts;
-         Tailwind sky-950 / emerald-950 clips in src/timeline/ClipView.tsx,
-         translated to oklch here). Keep the two in sync when either moves. */
       .scene {
-        --tl-line: oklch(0.274 0.006 286); /* zinc-800 */
-        --tl-tick: oklch(0.37 0.013 286); /* zinc-700 */
-        --tl-dim: oklch(0.705 0.015 286); /* zinc-400 */
-        --tl-icon: oklch(0.552 0.014 286); /* zinc-500 */
-        --tl-video: oklch(0.293 0.066 243); /* sky-950 */
-        --tl-video-line: oklch(0.391 0.09 241); /* sky-900 */
-        --tl-select: oklch(0.746 0.16 233); /* sky-400 */
-        --tl-audio: oklch(0.262 0.051 173); /* emerald-950 */
-        --tl-audio-line: oklch(0.378 0.077 169); /* emerald-900 */
-        --tl-audio-ink: oklch(0.95 0.052 163); /* emerald-100 */
         border-block: 1px solid var(--line-soft);
-        background: oklch(0.21 0.006 286); /* zinc-900, the editor chrome */
+        background: var(--bg-deep);
         padding-block: clamp(1rem, 3vw, 2rem);
         overflow: hidden;
       }
-      /* Icon + waveform definitions, referenced by <use> so each glyph and the
-         800-point waveform path ship exactly once. */
-      .tl-defs {
-        position: absolute;
-        width: 0;
-        height: 0;
-      }
       .timeline {
-        display: grid;
-        grid-template-columns: 7rem 1fr;
+        position: relative;
         min-width: 46rem;
       }
-      /* Phones see the app's coarse-pointer layout: a 44px header strip with
-         icons only, and a shorter stage so the sweeping playhead spends less
-         of its loop clipped off-screen. */
+      /* Phones see a shorter stage so the sweeping playhead spends less of
+         its loop clipped off-screen. */
       @media (max-width: 40rem) {
         .timeline {
-          grid-template-columns: 2.75rem 1fr;
           min-width: 34rem;
         }
       }
-
-      .gutter {
-        border-right: 1px solid var(--tl-line);
-      }
-      .gutter-top {
-        height: 1.5rem;
-        border-bottom: 1px solid var(--tl-line);
-      }
-      .thead {
-        display: flex;
-        align-items: center;
-        gap: 0.35rem;
-        height: 4rem;
-        padding-inline: 0.25rem;
-        border-bottom: 1px solid var(--tl-line);
-        color: var(--tl-icon);
-      }
-      .thead-btns {
-        flex: none;
-        display: grid;
-        grid-template-columns: repeat(2, 0.85rem);
-        gap: 2px;
-      }
-      .thead-btns svg {
-        width: 0.75rem;
-        height: 0.75rem;
-        justify-self: center;
-      }
-      .thead-faders {
-        flex: 1;
-        min-width: 0;
-        display: grid;
-        gap: 0.45rem;
-        padding-right: 0.15rem;
-      }
-      .fader {
-        position: relative;
-        height: 4px;
-        border-radius: 9999px;
-        background: var(--tl-tick);
-      }
-      .fader::after {
-        content: '';
-        position: absolute;
-        top: 50%;
-        width: 10px;
-        height: 10px;
-        translate: -50% -50%;
-        border-radius: 9999px;
-        background: currentColor;
-      }
-      /* Volume rides at unity, pan sits centred: the app's resting state. */
-      .fader.vol::after {
-        left: calc(100% - 5px);
-      }
-      .fader.pan::after {
-        left: 50%;
-      }
-      .fader.vol {
-        color: oklch(0.685 0.169 237); /* sky-500 */
-      }
-      .thead.audio .fader.vol {
-        color: oklch(0.696 0.17 163); /* emerald-500 */
-      }
-      .fader.pan {
-        color: var(--tl-dim);
-      }
-      @media (max-width: 40rem) {
-        .thead {
-          justify-content: center;
-        }
-        .thead-faders {
-          display: none;
-        }
-      }
-
-      .lanes {
-        position: relative;
-      }
       .ruler {
-        position: relative;
-        height: 1.5rem;
-        border-bottom: 1px solid var(--tl-line);
+        display: flex;
+        height: 1.6rem;
+        border-bottom: 1px solid var(--line-soft);
+        background-image: repeating-linear-gradient(
+          90deg,
+          var(--line-soft) 0 1px,
+          transparent 1px 5%
+        );
       }
       .ruler span {
-        position: absolute;
-        top: 0;
-        height: 100%;
-        padding-left: 4px;
-        border-left: 1px solid var(--tl-tick);
-        font-size: 10px;
-        line-height: 1.5rem;
+        flex: 1;
+        padding: 0.2rem 0 0 0.4rem;
+        font-size: 0.72rem;
         font-variant-numeric: tabular-nums;
-        color: var(--tl-dim);
+        color: var(--faint);
       }
       .track {
-        position: relative;
-        height: 4rem;
-        border-bottom: 1px solid var(--tl-line);
+        display: flex;
+        gap: 4px;
+        height: 3.6rem;
+        padding-block: 5px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .track.audio {
+        height: 2.9rem;
       }
       .clip {
-        position: absolute;
-        top: 4px;
-        bottom: 4px;
-        border-radius: 6px;
-        border: 1px solid var(--tl-video-line);
-        background: var(--tl-video);
+        position: relative;
+        border-radius: 4px;
+        border: 1px solid var(--line);
+        background: var(--surface);
         overflow: hidden;
+        display: flex;
+        align-items: flex-end;
+      }
+      .clip .label {
+        padding: 0.15rem 0.5rem;
+        font-size: 0.72rem;
+        font-weight: 550;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .clip.video {
+        background-image: repeating-linear-gradient(
+          90deg,
+          oklch(0.26 0.012 250) 0 44px,
+          oklch(0.31 0.014 250) 44px 46px
+        );
       }
       .scene .clip {
         cursor: grab;
       }
-      /* Filmstrip: the app tiles decoded thumbnails edge to edge and hairlines
-         fall between frames. At this size the tint drift sells "footage" and
-         the hairlines sell "frames". */
-      .strip {
-        position: absolute;
-        inset: 0;
-        background-image:
-          repeating-linear-gradient(90deg, oklch(0 0 0 / 0.45) 0 1px, transparent 1px 42px),
-          linear-gradient(
-            105deg,
-            oklch(0.42 0.05 250),
-            oklch(0.3 0.04 215) 38%,
-            oklch(0.46 0.06 60) 62%,
-            oklch(0.32 0.045 250)
-          );
-      }
-      /* Adjacent clips are different rushes, so shift the tint per clip:
-         without it the three cuts on a lane read as one continuous shot. */
-      .track .clip:nth-child(2) .strip {
-        filter: brightness(0.84) saturate(0.7);
-      }
-      .track .clip:nth-child(3) .strip {
-        filter: hue-rotate(-26deg) saturate(1.1);
-      }
-      .track:nth-child(3) .strip {
-        filter: hue-rotate(-14deg) brightness(1.06);
-      }
-
-      /* The clip's own audio envelope, painted over the bottom third. */
-      .band {
-        position: absolute;
-        inset-inline: 0;
-        bottom: 0;
-        height: 33.33%;
-        background: oklch(0 0 0 / 0.4);
-        color: oklch(1 0 0 / 0.85);
-      }
-      .clip svg {
-        display: block;
-        width: 100%;
-        height: 100%;
-      }
-      .clip.audio-clip {
-        border-color: var(--tl-audio-line);
-        background: linear-gradient(to bottom, oklch(0.378 0.077 169 / 0.6), var(--tl-audio));
-        color: oklch(0.845 0.143 165 / 0.65);
-      }
-      .clip-label {
-        position: absolute;
-        left: 0;
-        top: 0;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        max-width: 100%;
-        padding: 1px 6px;
-        font-size: 10px;
-        color: var(--tl-audio-ink);
-        white-space: nowrap;
-      }
-      .clip-label svg {
-        width: 12px;
-        height: 12px;
-        flex: none;
-        color: oklch(0.845 0.143 165); /* emerald-300 */
-      }
-      /* Selection: a sky ring plus the two trim handles, each with the darker
-         grip line the app draws down their middle. */
       .clip.selected,
       .scene .clip:hover {
-        z-index: 2;
-        border-color: transparent;
-        box-shadow: 0 0 0 2px var(--tl-select);
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
       }
       .clip.selected::before,
       .clip.selected::after,
@@ -466,20 +312,34 @@
       .scene .clip:hover::after {
         content: '';
         position: absolute;
-        inset-block: 0;
-        z-index: 3;
-        width: 12px;
-        background:
-          linear-gradient(oklch(0.21 0.006 286 / 0.7) 0 0) 50% 50% / 2px calc(100% - 16px) no-repeat,
-          oklch(0.746 0.16 233 / 0.8);
+        top: 50%;
+        translate: 0 -50%;
+        width: 4px;
+        height: 55%;
+        border-radius: 2px;
+        background: var(--accent);
       }
       .clip.selected::before,
       .scene .clip:hover::before {
-        left: 0;
+        left: 3px;
       }
       .clip.selected::after,
       .scene .clip:hover::after {
-        right: 0;
+        right: 3px;
+      }
+      .clip.audio-clip {
+        background: oklch(0.22 0.03 237);
+        border-color: var(--accent-dim);
+        align-items: stretch;
+      }
+      .clip.audio-clip svg {
+        width: 100%;
+        height: 100%;
+        color: var(--accent);
+        opacity: 0.85;
+      }
+      .gap {
+        flex-shrink: 0;
       }
 
       .playhead {
@@ -487,9 +347,7 @@
         top: 0;
         bottom: 0;
         left: 18%;
-        z-index: 4;
-        width: 2px;
-        margin-left: -1px;
+        width: 1.5px;
         background: var(--playhead);
         pointer-events: none;
       }
@@ -497,12 +355,10 @@
         content: '';
         position: absolute;
         top: 0;
-        left: 1px;
+        left: 50%;
         translate: -50% 0;
-        width: 16px;
-        height: 20px;
-        border-radius: 0 0 6px 6px;
-        background: var(--playhead);
+        border: 6px solid transparent;
+        border-top: 8px solid var(--playhead);
       }
       @media (prefers-reduced-motion: no-preference) {
         .playhead {
@@ -533,7 +389,7 @@
         .track:nth-child(3) .clip {
           animation: play-broll 14s linear infinite;
         }
-        .track.audio .clip > svg {
+        .track.audio .clip svg {
           animation: play-wave 14s linear infinite;
         }
         @keyframes play-a {
@@ -776,26 +632,6 @@
         color: var(--text);
         font-weight: 700;
       }
-      .format .net {
-        display: flex;
-        align-items: center;
-        gap: 0.45rem;
-        margin-bottom: 0.35rem;
-        color: var(--faint);
-      }
-      .format .net svg {
-        width: 1.15rem;
-        height: 1.15rem;
-        flex: none;
-      }
-      .format:hover .net {
-        color: var(--text);
-      }
-      @media (prefers-reduced-motion: no-preference) {
-        .format .net {
-          transition: color 0.2s ease;
-        }
-      }
 
       .faq-list {
         margin-top: 2rem;
@@ -999,113 +835,27 @@
         </div>
 
         <div class="scene" aria-hidden="true">
-          <svg class="tl-defs">
-            <defs>
-              <symbol id="ic-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></symbol>
-              <symbol id="ic-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></symbol>
-              <symbol id="ic-volume" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4.7a.7.7 0 0 0-1.2-.5L6.4 7.6a1.4 1.4 0 0 1-1 .4H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.4a1.4 1.4 0 0 1 1 .4l3.4 3.4a.7.7 0 0 0 1.2-.5z" /><path d="M16 9a5 5 0 0 1 0 6" /><path d="M19.4 18.4a9 9 0 0 0 0-12.8" /></symbol>
-              <symbol id="ic-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.1 12.3a1 1 0 0 1 0-.7 10.8 10.8 0 0 1 19.8 0 1 1 0 0 1 0 .7 10.8 10.8 0 0 1-19.8 0" /><circle cx="12" cy="12" r="3" /></symbol>
-              <symbol id="ic-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6" /></symbol>
-              <symbol id="ic-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></symbol>
-              <symbol id="ic-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></symbol>
-              <symbol id="ic-youtube" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.9a3 3 0 0 0-2.1-2.1C19.5 4.3 12 4.3 12 4.3s-7.5 0-9.4.5A3 3 0 0 0 .5 6.9C0 8.8 0 12 0 12s0 3.2.5 5.1a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.1.5-5.1s0-3.2-.5-5.1M9.6 15.6V8.4l6.2 3.6z" /></symbol>
-              <symbol id="ic-tiktok" viewBox="0 0 24 24" fill="currentColor"><path d="M16.6 5.8a4.8 4.8 0 0 1-1.1-3.1h-3.4v13.5a2.9 2.9 0 1 1-2-2.8V10a6.3 6.3 0 1 0 5.4 6.2V9.1a8.2 8.2 0 0 0 4.8 1.5V7.2a4.8 4.8 0 0 1-3.7-1.4" /></symbol>
-              <symbol id="ic-instagram" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5" /><circle cx="12" cy="12" r="4.2" /><circle cx="17.6" cy="6.4" r="1.2" fill="currentColor" stroke="none" /></symbol>
-              <path id="wave" d="M0 11.1L1 11.6L2 12.8L3 13L4 10.8L5 13L6 11.1L7 10.1L8 8.9L9 11.1L10 4.5L11 7.2L12 8.7L13 8.7L14 7.1L15 5.2L16 9L17 6.4L18 4.4L19 10.7L20 9.2L21 6.2L22 8.3L23 3.2L24 3.9L25 1L26 6L27 10.4L28 8L29 10.4L30 11.7L31 10.9L32 9.2L33 8.2L34 6.2L35 9L36 6.3L37 12.3L38 7.3L39 9L40 9.2L41 8.6L42 12.6L43 11L44 13.2L45 12.8L46 13.2L47 13.6L48 12.6L49 12.4L50 10.1L51 14.7L52 15L53 13.7L54 15.1L55 14.3L56 14.2L57 14.9L58 15.1L59 13.6L60 14.1L61 14.7L62 14.6L63 15.1L64 13.7L65 14.4L66 13.8L67 13.9L68 14.4L69 13.2L70 13.2L71 13.8L72 14.1L73 13.1L74 13.2L75 12.8L76 11.5L77 12.6L78 11.1L79 10.1L80 12.7L81 11.8L82 11.6L83 8.3L84 11.8L85 8.2L86 6.8L87 9L88 11.3L89 7.4L90 9.4L91 12.2L92 11.9L93 8L94 8.3L95 7L96 10.3L97 10.5L98 5.6L99 12.3L100 7.3L101 10.8L102 9.3L103 7.3L104 8.7L105 12.4L106 6.4L107 7.3L108 11.3L109 7.6L110 9.3L111 8.5L112 9L113 13.4L114 12.6L115 6.7L116 13.8L117 10.1L118 12.9L119 12.7L120 12.7L121 13L122 12.9L123 13.6L124 12.1L125 11.3L126 11.4L127 9.7L128 9.8L129 9.1L130 10.5L131 11L132 7.7L133 7.7L134 6.8L135 9.9L136 10.5L137 9.7L138 8.4L139 5.6L140 9.2L141 8.7L142 3L143 7.7L144 4.7L145 10.5L146 2.7L147 5.4L148 2.7L149 4.1L150 3.6L151 9.2L152 10.7L153 4.9L154 9.8L155 10.5L156 10L157 11.1L158 12.8L159 9L160 10.4L161 10.9L162 11.3L163 14.2L164 11.9L165 12.2L166 11.5L167 13.2L168 15L169 14.5L170 14.5L171 11.7L172 12.4L173 13.1L174 11.3L175 11.2L176 12.5L177 11.9L178 12.3L179 11.5L180 9.7L181 9.6L182 7.8L183 11L184 8.1L185 8.7L186 9.5L187 7.8L188 10.2L189 9.8L190 11.3L191 9.1L192 6.6L193 5.7L194 10.4L195 11.6L196 5.1L197 10.8L198 8.1L199 6.5L200 7.9L201 4.9L202 8.5L203 4.9L204 11L205 6.7L206 8.8L207 6.2L208 8.8L209 10L210 9L211 7.9L212 10.2L213 12.4L214 11.9L215 11.3L216 13.4L217 14.1L218 11.8L219 13.3L220 10.5L221 12.8L222 13.7L223 14.1L224 13.5L225 14.9L226 14.2L227 13.6L228 14.7L229 14.9L230 14.2L231 13.6L232 14.4L233 14.4L234 13.9L235 14.1L236 13.9L237 14.2L238 14.9L239 13.8L240 14.7L241 14.8L242 13.6L243 12.9L244 13.5L245 10.9L246 12.8L247 10.9L248 12.6L249 10.5L250 11.5L251 9.2L252 8.1L253 11.5L254 8.3L255 9.7L256 3L257 6.5L258 5.5L259 1L260 3.7L261 2.9L262 8.8L263 6.5L264 6L265 7.4L266 6.3L267 9.2L268 3.5L269 8.6L270 6.8L271 7.5L272 12.1L273 12.7L274 11.5L275 11.6L276 12.1L277 11.1L278 10.7L279 10.8L280 11.4L281 13L282 13.5L283 14.4L284 13.8L285 14.4L286 14.6L287 14.3L288 14.2L289 13.5L290 14.2L291 13.8L292 13.8L293 14.4L294 13.8L295 14.6L296 14.7L297 14.9L298 13.9L299 14.4L300 14.1L301 14L302 14.9L303 14.2L304 14.1L305 13.7L306 14.8L307 13.2L308 12.5L309 12.5L310 11.7L311 12.4L312 13.1L313 12.5L314 9.3L315 9.6L316 11.6L317 7.7L318 11.9L319 8.4L320 8.9L321 5.6L322 4.8L323 10.3L324 11.1L325 10.5L326 11.5L327 9.4L328 5.1L329 2.2L330 11L331 11.8L332 9.3L333 12L334 9.6L335 8.3L336 12.3L337 8.6L338 10.4L339 10.6L340 13.7L341 11.8L342 13.7L343 11.9L344 8.9L345 10.3L346 12.5L347 10.8L348 7.8L349 8.1L350 10L351 9.6L352 8.2L353 5.7L354 9.1L355 5.8L356 7.1L357 7.3L358 8.2L359 9.8L360 9.1L361 7.2L362 10.8L363 1L364 8.7L365 7.5L366 7.3L367 7.3L368 8.4L369 10.4L370 6.1L371 10.3L372 11.3L373 10.6L374 10.8L375 10.4L376 3.8L377 9.1L378 12.6L379 8.1L380 9.5L381 7.3L382 9.6L383 12.7L384 12.7L385 12.1L386 11.5L387 11.8L388 13.1L389 12.9L390 12.7L391 12.9L392 14.7L393 14.7L394 14.5L395 14.5L396 15L397 13.5L398 14L399 13.6L400 13.4L401 13.2L402 14.3L403 14.7L404 13.3L405 13.7L406 11.3L407 12.6L408 11.5L409 11.3L410 12.6L411 10.6L412 12.4L413 3L414 7.7L415 8.8L416 9.8L417 7.7L418 7.1L419 11.5L420 6.3L421 8.3L422 7L423 11.5L424 11.2L425 6.9L426 6L427 8.8L428 9.8L429 6.3L430 11.6L431 10.4L432 11L433 6.2L434 9.1L435 6.9L436 9.8L437 9.4L438 6.9L439 11.4L440 7.8L441 12.8L442 9.4L443 9.4L444 9.4L445 10.2L446 13.7L447 11.4L448 12.1L449 13.1L450 12L451 14L452 13.9L453 12.6L454 12.3L455 12L456 13.5L457 11L458 10.9L459 11.1L460 10.8L461 12.2L462 13.2L463 10.9L464 8.2L465 12.2L466 12.3L467 5.7L468 8.4L469 9.5L470 7.4L471 5.8L472 3.5L473 7.3L474 3.5L475 10.3L476 8.6L477 9.4L478 10.9L479 11.1L480 4.4L481 9.2L482 8.3L483 7.6L484 8.7L485 9.6L486 5.9L487 10.4L488 11.8L489 6.5L490 9.4L491 9L492 9.1L493 10.9L494 11.3L495 12.7L496 13.3L497 12.5L498 7.2L499 12.1L500 12.1L501 13.5L502 14.4L503 13L504 13.6L505 13.4L506 14.5L507 14.8L508 14L509 14.3L510 15.1L511 14L512 15.1L513 14L514 14.7L515 13.7L516 15L517 13.9L518 13.7L519 13.7L520 11.5L521 12.5L522 10.9L523 13.9L524 12.4L525 9.6L526 12L527 13.2L528 11.6L529 9.1L530 9.9L531 11.4L532 7.4L533 10.7L534 8.2L535 7.9L536 11.2L537 10L538 12.1L539 12.6L540 12L541 11.3L542 11.4L543 10.2L544 12.8L545 12.3L546 12.4L547 12.3L548 13.9L549 14L550 12.5L551 13.6L552 14.2L553 14.1L554 13.6L555 13.7L556 14.1L557 14L558 15L559 13.5L560 15L561 14.6L562 14.9L563 13L564 13.4L565 13.3L566 13L567 13.9L568 12L569 12.1L570 13.3L571 11.2L572 4L573 9.1L574 10.3L575 11.1L576 7.5L577 7.7L578 7.4L579 11.7L580 8.7L581 8.7L582 8.1L583 9.2L584 7.5L585 4.8L586 7.2L587 8.5L588 11.7L589 7.7L590 7.8L591 5L592 7.7L593 7.6L594 10.8L595 10.6L596 8L597 10L598 12L599 9.1L600 9.5L601 13.1L602 11.1L603 5.6L604 12.8L605 6.4L606 12.5L607 10.9L608 11.8L609 14.2L610 14.2L611 14.7L612 14.6L613 13.5L614 14.4L615 13.5L616 14.4L617 13.9L618 13.5L619 13.5L620 14.2L621 12.5L622 15L623 14.1L624 14.6L625 14.8L626 14.8L627 15L628 14.6L629 13.8L630 14L631 13.4L632 14.2L633 13.7L634 12.4L635 13.8L636 12.5L637 12.9L638 13.4L639 13.1L640 10.5L641 8.5L642 10.7L643 10.7L644 9.3L645 10.9L646 11.9L647 5.1L648 6.2L649 9.5L650 6.4L651 10.9L652 6.1L653 11.5L654 6.2L655 7.8L656 5.2L657 7.2L658 5.7L659 11.1L660 10.6L661 10.4L662 6.2L663 11.3L664 11.3L665 10.1L666 9.5L667 8.1L668 9.5L669 12.7L670 12.1L671 9.9L672 11.5L673 12.8L674 10.2L675 11.2L676 11.8L677 13.3L678 12.1L679 13.8L680 12.7L681 13.4L682 13.3L683 13.7L684 13.7L685 13.9L686 14L687 13.4L688 12.9L689 14.1L690 12.9L691 13.7L692 11.7L693 10.2L694 9.9L695 9.2L696 11.8L697 8L698 13L699 8.4L700 11.5L701 11.4L702 8.1L703 9.5L704 5.3L705 10.6L706 4.2L707 9.8L708 4L709 9.8L710 6.8L711 4.8L712 6.6L713 2.6L714 10.7L715 6.3L716 7.4L717 2.3L718 8.7L719 3.9L720 10.6L721 6.3L722 8.5L723 7.8L724 9.6L725 7.1L726 4.4L727 8.1L728 1.5L729 6.4L730 12L731 8.9L732 7.7L733 13L734 8L735 12.3L736 11L737 10.6L738 11.2L739 11.5L740 7.6L741 10L742 12.6L743 13.5L744 12.7L745 14.3L746 14.5L747 14.4L748 14.1L749 14.3L750 14.7L751 13.8L752 14.3L753 15.1L754 14.5L755 14.8L756 13.5L757 14.7L758 14.2L759 13.8L760 11.7L761 14L762 14.3L763 12.1L764 13.8L765 10.7L766 13.6L767 11.9L768 13L769 11.8L770 9.4L771 11.2L772 7.3L773 12.8L774 12.1L775 10.5L776 8.9L777 9.9L778 8.4L779 8.2L780 12.6L781 6.4L782 9.1L783 12.2L784 10.3L785 13L786 9.7L787 9.8L788 12.5L789 10.5L790 11.5L791 13L792 14.3L793 11.7L794 12.8L795 14.6L796 14.8L797 14.6L798 14L799 13.7L799 18.3L798 18L797 17.4L796 17.2L795 17.4L794 19.2L793 20.3L792 17.7L791 19L790 20.5L789 21.5L788 19.5L787 22.2L786 22.3L785 19L784 21.7L783 19.8L782 22.9L781 25.6L780 19.4L779 23.8L778 23.6L777 22.1L776 23.1L775 21.5L774 19.9L773 19.2L772 24.7L771 20.8L770 22.6L769 20.2L768 19L767 20.1L766 18.4L765 21.3L764 18.2L763 19.9L762 17.7L761 18L760 20.3L759 18.2L758 17.8L757 17.3L756 18.5L755 17.2L754 17.5L753 16.9L752 17.7L751 18.2L750 17.3L749 17.7L748 17.9L747 17.6L746 17.5L745 17.7L744 19.3L743 18.5L742 19.4L741 22L740 24.4L739 20.5L738 20.8L737 21.4L736 21L735 19.7L734 24L733 19L732 24.3L731 23.1L730 20L729 25.6L728 30.5L727 23.9L726 27.6L725 24.9L724 22.4L723 24.2L722 23.5L721 25.7L720 21.4L719 28.1L718 23.3L717 29.7L716 24.6L715 25.7L714 21.3L713 29.4L712 25.4L711 27.2L710 25.2L709 22.2L708 28L707 22.2L706 27.8L705 21.4L704 26.7L703 22.5L702 23.9L701 20.6L700 20.5L699 23.6L698 19L697 24L696 20.2L695 22.8L694 22.1L693 21.8L692 20.3L691 18.3L690 19.1L689 17.9L688 19.1L687 18.6L686 18L685 18.1L684 18.3L683 18.3L682 18.7L681 18.6L680 19.3L679 18.2L678 19.9L677 18.7L676 20.2L675 20.8L674 21.8L673 19.2L672 20.5L671 22.1L670 19.9L669 19.3L668 22.5L667 23.9L666 22.5L665 21.9L664 20.7L663 20.7L662 25.8L661 21.6L660 21.4L659 20.9L658 26.3L657 24.8L656 26.8L655 24.2L654 25.8L653 20.5L652 25.9L651 21.1L650 25.6L649 22.5L648 25.8L647 26.9L646 20.1L645 21.1L644 22.7L643 21.3L642 21.3L641 23.5L640 21.5L639 18.9L638 18.6L637 19.1L636 19.5L635 18.2L634 19.6L633 18.3L632 17.8L631 18.6L630 18L629 18.2L628 17.4L627 17L626 17.2L625 17.2L624 17.4L623 17.9L622 17L621 19.5L620 17.8L619 18.5L618 18.5L617 18.1L616 17.6L615 18.5L614 17.6L613 18.5L612 17.4L611 17.3L610 17.8L609 17.8L608 20.2L607 21.1L606 19.5L605 25.6L604 19.2L603 26.4L602 20.9L601 18.9L600 22.5L599 22.9L598 20L597 22L596 24L595 21.4L594 21.2L593 24.4L592 24.3L591 27L590 24.2L589 24.3L588 20.3L587 23.5L586 24.8L585 27.2L584 24.5L583 22.8L582 23.9L581 23.3L580 23.3L579 20.3L578 24.6L577 24.3L576 24.5L575 20.9L574 21.7L573 22.9L572 28L571 20.8L570 18.7L569 19.9L568 20L567 18.1L566 19L565 18.7L564 18.6L563 19L562 17.1L561 17.4L560 17L559 18.5L558 17L557 18L556 17.9L555 18.3L554 18.4L553 17.9L552 17.8L551 18.4L550 19.5L549 18L548 18.1L547 19.7L546 19.6L545 19.7L544 19.2L543 21.8L542 20.6L541 20.7L540 20L539 19.4L538 19.9L537 22L536 20.8L535 24.1L534 23.8L533 21.3L532 24.6L531 20.6L530 22.1L529 22.9L528 20.4L527 18.8L526 20L525 22.4L524 19.6L523 18.1L522 21.1L521 19.5L520 20.5L519 18.3L518 18.3L517 18.1L516 17L515 18.3L514 17.3L513 18L512 16.9L511 18L510 16.9L509 17.7L508 18L507 17.2L506 17.5L505 18.6L504 18.4L503 19L502 17.6L501 18.5L500 19.9L499 19.9L498 24.8L497 19.5L496 18.7L495 19.3L494 20.7L493 21.1L492 22.9L491 23L490 22.6L489 25.5L488 20.2L487 21.6L486 26.1L485 22.4L484 23.3L483 24.4L482 23.7L481 22.8L480 27.6L479 20.9L478 21.1L477 22.6L476 23.4L475 21.7L474 28.5L473 24.7L472 28.5L471 26.2L470 24.6L469 22.5L468 23.6L467 26.3L466 19.7L465 19.8L464 23.8L463 21.1L462 18.8L461 19.8L460 21.2L459 20.9L458 21.1L457 21L456 18.5L455 20L454 19.7L453 19.4L452 18.1L451 18L450 20L449 18.9L448 19.9L447 20.6L446 18.3L445 21.8L444 22.6L443 22.6L442 22.6L441 19.2L440 24.2L439 20.6L438 25.1L437 22.6L436 22.2L435 25.1L434 22.9L433 25.8L432 21L431 21.6L430 20.4L429 25.7L428 22.2L427 23.2L426 26L425 25.1L424 20.8L423 20.5L422 25L421 23.7L420 25.7L419 20.5L418 24.9L417 24.3L416 22.2L415 23.2L414 24.3L413 29L412 19.6L411 21.4L410 19.4L409 20.7L408 20.5L407 19.4L406 20.7L405 18.3L404 18.7L403 17.3L402 17.7L401 18.8L400 18.6L399 18.4L398 18L397 18.5L396 17L395 17.5L394 17.5L393 17.3L392 17.3L391 19.1L390 19.3L389 19.1L388 18.9L387 20.2L386 20.5L385 19.9L384 19.3L383 19.3L382 22.4L381 24.7L380 22.5L379 23.9L378 19.4L377 22.9L376 28.2L375 21.6L374 21.2L373 21.4L372 20.7L371 21.7L370 25.9L369 21.6L368 23.6L367 24.7L366 24.7L365 24.5L364 23.3L363 31L362 21.2L361 24.8L360 22.9L359 22.2L358 23.8L357 24.7L356 24.9L355 26.2L354 22.9L353 26.3L352 23.8L351 22.4L350 22L349 23.9L348 24.2L347 21.2L346 19.5L345 21.7L344 23.1L343 20.1L342 18.3L341 20.2L340 18.3L339 21.4L338 21.6L337 23.4L336 19.7L335 23.7L334 22.4L333 20L332 22.7L331 20.2L330 21L329 29.8L328 26.9L327 22.6L326 20.5L325 21.5L324 20.9L323 21.7L322 27.2L321 26.4L320 23.1L319 23.6L318 20.1L317 24.3L316 20.4L315 22.4L314 22.7L313 19.5L312 18.9L311 19.6L310 20.3L309 19.5L308 19.5L307 18.8L306 17.2L305 18.3L304 17.9L303 17.8L302 17.1L301 18L300 17.9L299 17.6L298 18.1L297 17.1L296 17.3L295 17.4L294 18.2L293 17.6L292 18.2L291 18.2L290 17.8L289 18.5L288 17.8L287 17.7L286 17.4L285 17.6L284 18.2L283 17.6L282 18.5L281 19L280 20.6L279 21.2L278 21.3L277 20.9L276 19.9L275 20.4L274 20.5L273 19.3L272 19.9L271 24.5L270 25.2L269 23.4L268 28.5L267 22.8L266 25.7L265 24.6L264 26L263 25.5L262 23.2L261 29.1L260 28.3L259 31L258 26.5L257 25.5L256 29L255 22.3L254 23.7L253 20.5L252 23.9L251 22.8L250 20.5L249 21.5L248 19.4L247 21.1L246 19.2L245 21.1L244 18.5L243 19.1L242 18.4L241 17.2L240 17.3L239 18.2L238 17.1L237 17.8L236 18.1L235 17.9L234 18.1L233 17.6L232 17.6L231 18.4L230 17.8L229 17.1L228 17.3L227 18.4L226 17.8L225 17.1L224 18.5L223 17.9L222 18.3L221 19.2L220 21.5L219 18.7L218 20.2L217 17.9L216 18.6L215 20.7L214 20.1L213 19.6L212 21.8L211 24.1L210 23L209 22L208 23.2L207 25.8L206 23.2L205 25.3L204 21L203 27.1L202 23.5L201 27.1L200 24.1L199 25.5L198 23.9L197 21.2L196 26.9L195 20.4L194 21.6L193 26.3L192 25.4L191 22.9L190 20.7L189 22.2L188 21.8L187 24.2L186 22.5L185 23.3L184 23.9L183 21L182 24.2L181 22.4L180 22.3L179 20.5L178 19.7L177 20.1L176 19.5L175 20.8L174 20.7L173 18.9L172 19.6L171 20.3L170 17.5L169 17.5L168 17L167 18.8L166 20.5L165 19.8L164 20.1L163 17.8L162 20.7L161 21.1L160 21.6L159 23L158 19.2L157 20.9L156 22L155 21.5L154 22.2L153 27.1L152 21.3L151 22.8L150 28.4L149 27.9L148 29.3L147 26.6L146 29.3L145 21.5L144 27.3L143 24.3L142 29L141 23.3L140 22.8L139 26.4L138 23.6L137 22.3L136 21.5L135 22.1L134 25.2L133 24.3L132 24.3L131 21L130 21.5L129 22.9L128 22.2L127 22.3L126 20.6L125 20.7L124 19.9L123 18.4L122 19.1L121 19L120 19.3L119 19.3L118 19.1L117 21.9L116 18.2L115 25.3L114 19.4L113 18.6L112 23L111 23.5L110 22.7L109 24.4L108 20.7L107 24.7L106 25.6L105 19.6L104 23.3L103 24.7L102 22.7L101 21.2L100 24.7L99 19.7L98 26.4L97 21.5L96 21.7L95 25L94 23.7L93 24L92 20.1L91 19.8L90 22.6L89 24.6L88 20.7L87 23L86 25.2L85 23.8L84 20.2L83 23.7L82 20.4L81 20.2L80 19.3L79 21.9L78 20.9L77 19.4L76 20.5L75 19.2L74 18.8L73 18.9L72 17.9L71 18.2L70 18.8L69 18.8L68 17.6L67 18.1L66 18.2L65 17.6L64 18.3L63 16.9L62 17.4L61 17.3L60 17.9L59 18.4L58 16.9L57 17.1L56 17.8L55 17.7L54 16.9L53 18.3L52 17L51 17.3L50 21.9L49 19.6L48 19.4L47 18.4L46 18.8L45 19.2L44 18.8L43 21L42 19.4L41 23.4L40 22.8L39 23L38 24.7L37 19.7L36 25.7L35 23L34 25.8L33 23.8L32 22.8L31 21.1L30 20.3L29 21.6L28 24L27 21.6L26 26L25 31L24 28.1L23 28.8L22 23.7L21 25.8L20 22.8L19 21.3L18 27.6L17 25.6L16 23L15 26.8L14 24.9L13 23.3L12 23.3L11 24.8L10 27.5L9 20.9L8 23.1L7 21.9L6 20.9L5 19L4 21.2L3 19L2 19.2L1 20.4L0 20.9Z" />
-              <path id="wave-vo" d="M0 14.4L1 14.8L2 14.8L3 13.2L4 13.6L5 13.4L6 12.9L7 13L8 10.7L9 12.8L10 9.3L11 12.5L12 10.7L13 9.1L14 10.1L15 11.7L16 7.1L17 4.8L18 5.4L19 7.1L20 6.6L21 3.8L22 5.1L23 10.4L24 8.8L25 2.4L26 3.6L27 8.7L28 5.4L29 7.9L30 11.1L31 4.6L32 11.3L33 8.2L34 11.5L35 10.5L36 12.7L37 11.5L38 12L39 12.1L40 11.5L41 13.3L42 14.4L43 13.9L44 13.8L45 13.7L46 14.2L47 15.1L48 14.4L49 15.1L50 15.5L51 15.2L52 15.1L53 15.1L54 14.9L55 14.8L56 15.2L57 14.6L58 14.9L59 13.5L60 14.6L61 13.6L62 11.6L63 13L64 12.6L65 10.6L66 11.3L67 8.8L68 8.5L69 9.7L70 8.1L71 6.4L72 5.5L73 6L74 7L75 10.9L76 9.8L77 5.4L78 7.2L79 9L80 11.5L81 9.4L82 9.5L83 10.3L84 4.6L85 10.4L86 11.5L87 8.6L88 11.8L89 11.5L90 9.7L91 12.7L92 11.5L93 12.3L94 8.5L95 9.3L96 9.7L97 13.9L98 13.1L99 13.8L100 13.4L101 12.4L102 14.5L103 14.4L104 14.7L105 14L106 14.8L107 14.5L108 15L109 15.1L110 15.5L111 15.5L112 14.5L113 15L114 14.8L115 15.2L116 13.8L117 14.1L118 13.3L119 13.6L120 14.3L121 12.8L122 13.1L123 11L124 12.3L125 13.5L126 10.8L127 8.7L128 10.1L129 7.1L130 12L131 6.1L132 8.6L133 6.1L134 7.8L135 6L136 9.8L137 6.6L138 5.8L139 8.4L140 1L141 3.6L142 9.6L143 7.8L144 6.4L145 10.3L146 1.6L147 6.1L148 7.8L149 9.7L150 11.4L151 11.9L152 10.4L153 9.8L154 10.3L155 11L156 13.2L157 10.6L158 12.5L159 11.9L160 13.7L161 13.9L162 13.6L163 14L164 15L165 14.1L166 13.3L167 13.9L168 12.5L169 13.5L170 10.4L171 13.4L172 12.6L173 12.9L174 9.1L175 8.8L176 12.2L177 11.8L178 10.3L179 10.5L180 10.5L181 7.8L182 9.5L183 10.4L184 10.4L185 5.8L186 11.1L187 7.3L188 11.1L189 9.3L190 8.2L191 10.7L192 9.6L193 13.3L194 11.7L195 10.8L196 12.6L197 13.2L198 11.8L199 13.7L200 13.8L201 13.6L202 14.6L203 14.4L204 14.5L205 14.9L206 15.5L207 15.5L208 15.5L209 15.5L210 15.5L211 15.5L212 15.5L213 15.5L214 15.5L215 15.5L216 15.5L217 15.5L218 15.5L219 15.5L220 15.5L221 15.5L222 15.5L223 15.5L224 15.5L225 15.5L226 15.5L227 15.5L228 15.5L229 15.5L230 15.5L231 15.5L232 15.5L233 15.5L234 15.5L235 15.4L236 14.8L237 14.7L238 15.4L239 14.7L240 14.7L241 14.9L242 14.7L243 13.1L244 14.3L245 12.1L246 11.1L247 11.1L248 13.9L249 10.4L250 9.8L251 11.8L252 13L253 8.4L254 5.7L255 7.9L256 7.6L257 6.6L258 11.4L259 8.5L260 10.8L261 10.1L262 8.1L263 10.9L264 12.4L265 10.1L266 9.1L267 13L268 13L269 11.7L270 11.3L271 11.5L272 12.4L273 12.3L274 13.7L275 13.3L276 15.1L277 15L278 14.4L279 15.1L280 15L281 15.2L282 15.4L283 15.3L284 15.4L285 15.3L286 15.2L287 14.5L288 15.2L289 15.2L290 13.7L291 13.5L292 14L293 12.8L294 13.9L295 13.6L296 11.7L297 11.6L298 12.3L299 13.9L300 9.6L301 10.5L302 10.1L303 8.7L304 7.8L305 8L306 7.3L307 9.1L308 7.4L309 5L310 5.4L311 7.2L312 5.2L313 7.9L314 9.2L315 10.7L316 8.1L317 8.4L318 5.3L319 1.6L320 9.2L321 3.7L322 8.7L323 4.5L324 10.6L325 7.7L326 4.3L327 4.5L328 6.3L329 6.9L330 11.7L331 7.2L332 5.2L333 11.8L334 8.6L335 12L336 8.6L337 11L338 11.4L339 13.5L340 12.1L341 11.7L342 14.1L343 11.3L344 12.2L345 12.3L346 13.1L347 12.4L348 13.7L349 10.9L350 13.5L351 10.3L352 6.5L353 10.8L354 11.5L355 9.3L356 6.5L357 5.9L358 8L359 4.2L360 11.6L361 10.1L362 5L363 6L364 2.9L365 7.1L366 4.2L367 5.9L368 6.9L369 1L370 8.5L371 10.2L372 7.9L373 8L374 5.5L375 8.6L376 12.3L377 8.6L378 9.8L379 10L380 11.3L381 12.3L382 12.5L383 12L384 11.1L385 13.9L386 11.9L387 9.6L388 11.6L389 10.7L390 4.2L391 10.2L392 12.3L393 7L394 11.8L395 11.9L396 11.2L397 9.6L398 11.3L399 6.8L400 11.5L401 9.2L402 5.9L403 10.3L404 7.6L405 5.3L406 11.6L407 8L408 11.2L409 7.1L410 7.2L411 9L412 5.5L413 6.4L414 12.3L415 12.4L416 12.3L417 8.4L418 7.3L419 7.2L420 10.7L421 11.7L422 12.8L423 13.1L424 13.2L425 11.8L426 12.5L427 14.1L428 12.1L429 13.1L430 12.1L431 14.4L432 13.9L433 14.7L434 12.6L435 12.2L436 12.9L437 13.6L438 11.2L439 11L440 11.9L441 13L442 10.8L443 8.9L444 8.7L445 12.1L446 9.2L447 11.6L448 11.3L449 6.9L450 12.5L451 5.7L452 6.6L453 8.8L454 10.8L455 5.8L456 5.3L457 8.2L458 7.1L459 6.3L460 10L461 1L462 6.7L463 7.3L464 8.7L465 7.3L466 1L467 4.3L468 6.1L469 5L470 6.3L471 7.7L472 5.7L473 10.5L474 9L475 9.8L476 9.5L477 8.1L478 10.5L479 10.6L480 11L481 9.4L482 12.6L483 10L484 11.8L485 12.6L486 14.3L487 14L488 13.4L489 14.2L490 14.8L491 13.4L492 14L493 14.6L494 14.1L495 14.8L496 14.2L497 14.7L498 15.2L499 15.1L499 16.9L498 16.8L497 17.3L496 17.8L495 17.2L494 17.9L493 17.4L492 18L491 18.6L490 17.2L489 17.8L488 18.6L487 18L486 17.7L485 19.4L484 20.2L483 22L482 19.4L481 22.6L480 21L479 21.4L478 21.5L477 23.9L476 22.5L475 22.2L474 23L473 21.5L472 26.3L471 24.3L470 25.7L469 27L468 25.9L467 27.7L466 31L465 24.7L464 23.3L463 24.7L462 25.3L461 31L460 22L459 25.7L458 24.9L457 23.8L456 26.7L455 26.2L454 21.2L453 23.2L452 25.4L451 26.3L450 19.5L449 25.1L448 20.7L447 20.4L446 22.8L445 19.9L444 23.3L443 23.1L442 21.2L441 19L440 20.1L439 21L438 20.8L437 18.4L436 19.1L435 19.8L434 19.4L433 17.3L432 18.1L431 17.6L430 19.9L429 18.9L428 19.9L427 17.9L426 19.5L425 20.2L424 18.8L423 18.9L422 19.2L421 20.3L420 21.3L419 24.8L418 24.7L417 23.6L416 19.7L415 19.6L414 19.7L413 25.6L412 26.5L411 23L410 24.8L409 24.9L408 20.8L407 24L406 20.4L405 26.7L404 24.4L403 21.7L402 26.1L401 22.8L400 20.5L399 25.2L398 20.7L397 22.4L396 20.8L395 20.1L394 20.2L393 25L392 19.7L391 21.8L390 27.8L389 21.3L388 20.4L387 22.4L386 20.1L385 18.1L384 20.9L383 20L382 19.5L381 19.7L380 20.7L379 22L378 22.2L377 23.4L376 19.7L375 23.4L374 26.5L373 24L372 24.1L371 21.8L370 23.5L369 31L368 25.1L367 26.1L366 27.8L365 24.9L364 29.1L363 26L362 27L361 21.9L360 20.4L359 27.8L358 24L357 26.1L356 25.5L355 22.7L354 20.5L353 21.2L352 25.5L351 21.7L350 18.5L349 21.1L348 18.3L347 19.6L346 18.9L345 19.7L344 19.8L343 20.7L342 17.9L341 20.3L340 19.9L339 18.5L338 20.6L337 21L336 23.4L335 20L334 23.4L333 20.2L332 26.8L331 24.8L330 20.3L329 25.1L328 25.7L327 27.5L326 27.7L325 24.3L324 21.4L323 27.5L322 23.3L321 28.3L320 22.8L319 30.4L318 26.7L317 23.6L316 23.9L315 21.3L314 22.8L313 24.1L312 26.8L311 24.8L310 26.6L309 27L308 24.6L307 22.9L306 24.7L305 24L304 24.2L303 23.3L302 21.9L301 21.5L300 22.4L299 18.1L298 19.7L297 20.4L296 20.3L295 18.4L294 18.1L293 19.2L292 18L291 18.5L290 18.3L289 16.8L288 16.8L287 17.5L286 16.8L285 16.7L284 16.6L283 16.7L282 16.6L281 16.8L280 17L279 16.9L278 17.6L277 17L276 16.9L275 18.7L274 18.3L273 19.7L272 19.6L271 20.5L270 20.7L269 20.3L268 19L267 19L266 22.9L265 21.9L264 19.6L263 21.1L262 23.9L261 21.9L260 21.2L259 23.5L258 20.6L257 25.4L256 24.4L255 24.1L254 26.3L253 23.6L252 19L251 20.2L250 22.2L249 21.6L248 18.1L247 20.9L246 20.9L245 19.9L244 17.7L243 18.9L242 17.3L241 17.1L240 17.3L239 17.3L238 16.6L237 17.3L236 17.2L235 16.6L234 16.5L233 16.5L232 16.5L231 16.5L230 16.5L229 16.5L228 16.5L227 16.5L226 16.5L225 16.5L224 16.5L223 16.5L222 16.5L221 16.5L220 16.5L219 16.5L218 16.5L217 16.5L216 16.5L215 16.5L214 16.5L213 16.5L212 16.5L211 16.5L210 16.5L209 16.5L208 16.5L207 16.5L206 16.5L205 17.1L204 17.5L203 17.6L202 17.4L201 18.4L200 18.2L199 18.3L198 20.2L197 18.8L196 19.4L195 21.2L194 20.3L193 18.7L192 22.4L191 21.3L190 23.8L189 22.7L188 20.9L187 24.7L186 20.9L185 26.2L184 21.6L183 21.6L182 22.5L181 24.2L180 21.5L179 21.5L178 21.7L177 20.2L176 19.8L175 23.2L174 22.9L173 19.1L172 19.4L171 18.6L170 21.6L169 18.5L168 19.5L167 18.1L166 18.7L165 17.9L164 17L163 18L162 18.4L161 18.1L160 18.3L159 20.1L158 19.5L157 21.4L156 18.8L155 21L154 21.7L153 22.2L152 21.6L151 20.1L150 20.6L149 22.3L148 24.2L147 25.9L146 30.4L145 21.7L144 25.6L143 24.2L142 22.4L141 28.4L140 31L139 23.6L138 26.2L137 25.4L136 22.2L135 26L134 24.2L133 25.9L132 23.4L131 25.9L130 20L129 24.9L128 21.9L127 23.3L126 21.2L125 18.5L124 19.7L123 21L122 18.9L121 19.2L120 17.7L119 18.4L118 18.7L117 17.9L116 18.2L115 16.8L114 17.2L113 17L112 17.5L111 16.5L110 16.5L109 16.9L108 17L107 17.5L106 17.2L105 18L104 17.3L103 17.6L102 17.5L101 19.6L100 18.6L99 18.2L98 18.9L97 18.1L96 22.3L95 22.7L94 23.5L93 19.7L92 20.5L91 19.3L90 22.3L89 20.5L88 20.2L87 23.4L86 20.5L85 21.6L84 27.4L83 21.7L82 22.5L81 22.6L80 20.5L79 23L78 24.8L77 26.6L76 22.2L75 21.1L74 25L73 26L72 26.5L71 25.6L70 23.9L69 22.3L68 23.5L67 23.2L66 20.7L65 21.4L64 19.4L63 19L62 20.4L61 18.4L60 17.4L59 18.5L58 17.1L57 17.4L56 16.8L55 17.2L54 17.1L53 16.9L52 16.9L51 16.8L50 16.5L49 16.9L48 17.6L47 16.9L46 17.8L45 18.3L44 18.2L43 18.1L42 17.6L41 18.7L40 20.5L39 19.9L38 20L37 20.5L36 19.3L35 21.5L34 20.5L33 23.8L32 20.7L31 27.4L30 20.9L29 24.1L28 26.6L27 23.3L26 28.4L25 29.6L24 23.2L23 21.6L22 26.9L21 28.2L20 25.4L19 24.9L18 26.6L17 27.2L16 24.9L15 20.3L14 21.9L13 22.9L12 21.3L11 19.5L10 22.7L9 19.2L8 21.3L7 19L6 19.1L5 18.6L4 18.4L3 18.8L2 17.2L1 17.2L0 17.6Z" />
-            </defs>
-          </svg>
-
           <div class="timeline">
-            <div class="gutter">
-              <div class="gutter-top"></div>
-              <div class="thead">
-                <div class="thead-btns">
-                  <svg><use href="#ic-lock" /></svg><svg><use href="#ic-trash" /></svg>
-                  <svg><use href="#ic-volume" /></svg><svg><use href="#ic-eye" /></svg>
-                  <svg><use href="#ic-up" /></svg><svg><use href="#ic-down" /></svg>
-                </div>
-                <div class="thead-faders">
-                  <div class="fader vol"></div>
-                  <div class="fader pan"></div>
-                </div>
-              </div>
-              <div class="thead">
-                <div class="thead-btns">
-                  <svg><use href="#ic-lock" /></svg><svg><use href="#ic-trash" /></svg>
-                  <svg><use href="#ic-volume" /></svg><svg><use href="#ic-eye" /></svg>
-                  <svg><use href="#ic-up" /></svg><svg><use href="#ic-down" /></svg>
-                </div>
-                <div class="thead-faders">
-                  <div class="fader vol"></div>
-                  <div class="fader pan"></div>
-                </div>
-              </div>
-              <!-- Audio lanes have nothing to show or hide, so the app leaves
-                   that cell empty rather than shifting the grid. -->
-              <div class="thead audio">
-                <div class="thead-btns">
-                  <svg><use href="#ic-lock" /></svg><svg><use href="#ic-trash" /></svg>
-                  <svg><use href="#ic-volume" /></svg><span></span>
-                  <svg><use href="#ic-up" /></svg><svg><use href="#ic-down" /></svg>
-                </div>
-                <div class="thead-faders">
-                  <div class="fader vol"></div>
-                  <div class="fader pan"></div>
-                </div>
+            <div class="ruler">
+              <span>00:00</span><span>00:05</span><span>00:10</span><span>00:15</span><span>00:20</span>
+            </div>
+            <div class="track">
+              <div class="clip video" style="width: 26%"><span class="label">intro.mp4</span></div>
+              <div class="clip video selected" style="width: 34%"><span class="label">rush_04.mp4</span></div>
+              <div class="clip video" style="width: 22%"><span class="label">rush_05.mp4</span></div>
+            </div>
+            <div class="track">
+              <div class="gap" style="width: 12%"></div>
+              <div class="clip video" style="width: 30%"><span class="label">b-roll.mp4</span></div>
+            </div>
+            <div class="track audio">
+              <div class="clip audio-clip" style="width: 88%">
+                <svg viewBox="0 0 800 32" preserveAspectRatio="none" fill="currentColor">
+                  <path id="wave" d="M0 11.1L1 11.6L2 12.8L3 13L4 10.8L5 13L6 11.1L7 10.1L8 8.9L9 11.1L10 4.5L11 7.2L12 8.7L13 8.7L14 7.1L15 5.2L16 9L17 6.4L18 4.4L19 10.7L20 9.2L21 6.2L22 8.3L23 3.2L24 3.9L25 1L26 6L27 10.4L28 8L29 10.4L30 11.7L31 10.9L32 9.2L33 8.2L34 6.2L35 9L36 6.3L37 12.3L38 7.3L39 9L40 9.2L41 8.6L42 12.6L43 11L44 13.2L45 12.8L46 13.2L47 13.6L48 12.6L49 12.4L50 10.1L51 14.7L52 15L53 13.7L54 15.1L55 14.3L56 14.2L57 14.9L58 15.1L59 13.6L60 14.1L61 14.7L62 14.6L63 15.1L64 13.7L65 14.4L66 13.8L67 13.9L68 14.4L69 13.2L70 13.2L71 13.8L72 14.1L73 13.1L74 13.2L75 12.8L76 11.5L77 12.6L78 11.1L79 10.1L80 12.7L81 11.8L82 11.6L83 8.3L84 11.8L85 8.2L86 6.8L87 9L88 11.3L89 7.4L90 9.4L91 12.2L92 11.9L93 8L94 8.3L95 7L96 10.3L97 10.5L98 5.6L99 12.3L100 7.3L101 10.8L102 9.3L103 7.3L104 8.7L105 12.4L106 6.4L107 7.3L108 11.3L109 7.6L110 9.3L111 8.5L112 9L113 13.4L114 12.6L115 6.7L116 13.8L117 10.1L118 12.9L119 12.7L120 12.7L121 13L122 12.9L123 13.6L124 12.1L125 11.3L126 11.4L127 9.7L128 9.8L129 9.1L130 10.5L131 11L132 7.7L133 7.7L134 6.8L135 9.9L136 10.5L137 9.7L138 8.4L139 5.6L140 9.2L141 8.7L142 3L143 7.7L144 4.7L145 10.5L146 2.7L147 5.4L148 2.7L149 4.1L150 3.6L151 9.2L152 10.7L153 4.9L154 9.8L155 10.5L156 10L157 11.1L158 12.8L159 9L160 10.4L161 10.9L162 11.3L163 14.2L164 11.9L165 12.2L166 11.5L167 13.2L168 15L169 14.5L170 14.5L171 11.7L172 12.4L173 13.1L174 11.3L175 11.2L176 12.5L177 11.9L178 12.3L179 11.5L180 9.7L181 9.6L182 7.8L183 11L184 8.1L185 8.7L186 9.5L187 7.8L188 10.2L189 9.8L190 11.3L191 9.1L192 6.6L193 5.7L194 10.4L195 11.6L196 5.1L197 10.8L198 8.1L199 6.5L200 7.9L201 4.9L202 8.5L203 4.9L204 11L205 6.7L206 8.8L207 6.2L208 8.8L209 10L210 9L211 7.9L212 10.2L213 12.4L214 11.9L215 11.3L216 13.4L217 14.1L218 11.8L219 13.3L220 10.5L221 12.8L222 13.7L223 14.1L224 13.5L225 14.9L226 14.2L227 13.6L228 14.7L229 14.9L230 14.2L231 13.6L232 14.4L233 14.4L234 13.9L235 14.1L236 13.9L237 14.2L238 14.9L239 13.8L240 14.7L241 14.8L242 13.6L243 12.9L244 13.5L245 10.9L246 12.8L247 10.9L248 12.6L249 10.5L250 11.5L251 9.2L252 8.1L253 11.5L254 8.3L255 9.7L256 3L257 6.5L258 5.5L259 1L260 3.7L261 2.9L262 8.8L263 6.5L264 6L265 7.4L266 6.3L267 9.2L268 3.5L269 8.6L270 6.8L271 7.5L272 12.1L273 12.7L274 11.5L275 11.6L276 12.1L277 11.1L278 10.7L279 10.8L280 11.4L281 13L282 13.5L283 14.4L284 13.8L285 14.4L286 14.6L287 14.3L288 14.2L289 13.5L290 14.2L291 13.8L292 13.8L293 14.4L294 13.8L295 14.6L296 14.7L297 14.9L298 13.9L299 14.4L300 14.1L301 14L302 14.9L303 14.2L304 14.1L305 13.7L306 14.8L307 13.2L308 12.5L309 12.5L310 11.7L311 12.4L312 13.1L313 12.5L314 9.3L315 9.6L316 11.6L317 7.7L318 11.9L319 8.4L320 8.9L321 5.6L322 4.8L323 10.3L324 11.1L325 10.5L326 11.5L327 9.4L328 5.1L329 2.2L330 11L331 11.8L332 9.3L333 12L334 9.6L335 8.3L336 12.3L337 8.6L338 10.4L339 10.6L340 13.7L341 11.8L342 13.7L343 11.9L344 8.9L345 10.3L346 12.5L347 10.8L348 7.8L349 8.1L350 10L351 9.6L352 8.2L353 5.7L354 9.1L355 5.8L356 7.1L357 7.3L358 8.2L359 9.8L360 9.1L361 7.2L362 10.8L363 1L364 8.7L365 7.5L366 7.3L367 7.3L368 8.4L369 10.4L370 6.1L371 10.3L372 11.3L373 10.6L374 10.8L375 10.4L376 3.8L377 9.1L378 12.6L379 8.1L380 9.5L381 7.3L382 9.6L383 12.7L384 12.7L385 12.1L386 11.5L387 11.8L388 13.1L389 12.9L390 12.7L391 12.9L392 14.7L393 14.7L394 14.5L395 14.5L396 15L397 13.5L398 14L399 13.6L400 13.4L401 13.2L402 14.3L403 14.7L404 13.3L405 13.7L406 11.3L407 12.6L408 11.5L409 11.3L410 12.6L411 10.6L412 12.4L413 3L414 7.7L415 8.8L416 9.8L417 7.7L418 7.1L419 11.5L420 6.3L421 8.3L422 7L423 11.5L424 11.2L425 6.9L426 6L427 8.8L428 9.8L429 6.3L430 11.6L431 10.4L432 11L433 6.2L434 9.1L435 6.9L436 9.8L437 9.4L438 6.9L439 11.4L440 7.8L441 12.8L442 9.4L443 9.4L444 9.4L445 10.2L446 13.7L447 11.4L448 12.1L449 13.1L450 12L451 14L452 13.9L453 12.6L454 12.3L455 12L456 13.5L457 11L458 10.9L459 11.1L460 10.8L461 12.2L462 13.2L463 10.9L464 8.2L465 12.2L466 12.3L467 5.7L468 8.4L469 9.5L470 7.4L471 5.8L472 3.5L473 7.3L474 3.5L475 10.3L476 8.6L477 9.4L478 10.9L479 11.1L480 4.4L481 9.2L482 8.3L483 7.6L484 8.7L485 9.6L486 5.9L487 10.4L488 11.8L489 6.5L490 9.4L491 9L492 9.1L493 10.9L494 11.3L495 12.7L496 13.3L497 12.5L498 7.2L499 12.1L500 12.1L501 13.5L502 14.4L503 13L504 13.6L505 13.4L506 14.5L507 14.8L508 14L509 14.3L510 15.1L511 14L512 15.1L513 14L514 14.7L515 13.7L516 15L517 13.9L518 13.7L519 13.7L520 11.5L521 12.5L522 10.9L523 13.9L524 12.4L525 9.6L526 12L527 13.2L528 11.6L529 9.1L530 9.9L531 11.4L532 7.4L533 10.7L534 8.2L535 7.9L536 11.2L537 10L538 12.1L539 12.6L540 12L541 11.3L542 11.4L543 10.2L544 12.8L545 12.3L546 12.4L547 12.3L548 13.9L549 14L550 12.5L551 13.6L552 14.2L553 14.1L554 13.6L555 13.7L556 14.1L557 14L558 15L559 13.5L560 15L561 14.6L562 14.9L563 13L564 13.4L565 13.3L566 13L567 13.9L568 12L569 12.1L570 13.3L571 11.2L572 4L573 9.1L574 10.3L575 11.1L576 7.5L577 7.7L578 7.4L579 11.7L580 8.7L581 8.7L582 8.1L583 9.2L584 7.5L585 4.8L586 7.2L587 8.5L588 11.7L589 7.7L590 7.8L591 5L592 7.7L593 7.6L594 10.8L595 10.6L596 8L597 10L598 12L599 9.1L600 9.5L601 13.1L602 11.1L603 5.6L604 12.8L605 6.4L606 12.5L607 10.9L608 11.8L609 14.2L610 14.2L611 14.7L612 14.6L613 13.5L614 14.4L615 13.5L616 14.4L617 13.9L618 13.5L619 13.5L620 14.2L621 12.5L622 15L623 14.1L624 14.6L625 14.8L626 14.8L627 15L628 14.6L629 13.8L630 14L631 13.4L632 14.2L633 13.7L634 12.4L635 13.8L636 12.5L637 12.9L638 13.4L639 13.1L640 10.5L641 8.5L642 10.7L643 10.7L644 9.3L645 10.9L646 11.9L647 5.1L648 6.2L649 9.5L650 6.4L651 10.9L652 6.1L653 11.5L654 6.2L655 7.8L656 5.2L657 7.2L658 5.7L659 11.1L660 10.6L661 10.4L662 6.2L663 11.3L664 11.3L665 10.1L666 9.5L667 8.1L668 9.5L669 12.7L670 12.1L671 9.9L672 11.5L673 12.8L674 10.2L675 11.2L676 11.8L677 13.3L678 12.1L679 13.8L680 12.7L681 13.4L682 13.3L683 13.7L684 13.7L685 13.9L686 14L687 13.4L688 12.9L689 14.1L690 12.9L691 13.7L692 11.7L693 10.2L694 9.9L695 9.2L696 11.8L697 8L698 13L699 8.4L700 11.5L701 11.4L702 8.1L703 9.5L704 5.3L705 10.6L706 4.2L707 9.8L708 4L709 9.8L710 6.8L711 4.8L712 6.6L713 2.6L714 10.7L715 6.3L716 7.4L717 2.3L718 8.7L719 3.9L720 10.6L721 6.3L722 8.5L723 7.8L724 9.6L725 7.1L726 4.4L727 8.1L728 1.5L729 6.4L730 12L731 8.9L732 7.7L733 13L734 8L735 12.3L736 11L737 10.6L738 11.2L739 11.5L740 7.6L741 10L742 12.6L743 13.5L744 12.7L745 14.3L746 14.5L747 14.4L748 14.1L749 14.3L750 14.7L751 13.8L752 14.3L753 15.1L754 14.5L755 14.8L756 13.5L757 14.7L758 14.2L759 13.8L760 11.7L761 14L762 14.3L763 12.1L764 13.8L765 10.7L766 13.6L767 11.9L768 13L769 11.8L770 9.4L771 11.2L772 7.3L773 12.8L774 12.1L775 10.5L776 8.9L777 9.9L778 8.4L779 8.2L780 12.6L781 6.4L782 9.1L783 12.2L784 10.3L785 13L786 9.7L787 9.8L788 12.5L789 10.5L790 11.5L791 13L792 14.3L793 11.7L794 12.8L795 14.6L796 14.8L797 14.6L798 14L799 13.7L799 18.3L798 18L797 17.4L796 17.2L795 17.4L794 19.2L793 20.3L792 17.7L791 19L790 20.5L789 21.5L788 19.5L787 22.2L786 22.3L785 19L784 21.7L783 19.8L782 22.9L781 25.6L780 19.4L779 23.8L778 23.6L777 22.1L776 23.1L775 21.5L774 19.9L773 19.2L772 24.7L771 20.8L770 22.6L769 20.2L768 19L767 20.1L766 18.4L765 21.3L764 18.2L763 19.9L762 17.7L761 18L760 20.3L759 18.2L758 17.8L757 17.3L756 18.5L755 17.2L754 17.5L753 16.9L752 17.7L751 18.2L750 17.3L749 17.7L748 17.9L747 17.6L746 17.5L745 17.7L744 19.3L743 18.5L742 19.4L741 22L740 24.4L739 20.5L738 20.8L737 21.4L736 21L735 19.7L734 24L733 19L732 24.3L731 23.1L730 20L729 25.6L728 30.5L727 23.9L726 27.6L725 24.9L724 22.4L723 24.2L722 23.5L721 25.7L720 21.4L719 28.1L718 23.3L717 29.7L716 24.6L715 25.7L714 21.3L713 29.4L712 25.4L711 27.2L710 25.2L709 22.2L708 28L707 22.2L706 27.8L705 21.4L704 26.7L703 22.5L702 23.9L701 20.6L700 20.5L699 23.6L698 19L697 24L696 20.2L695 22.8L694 22.1L693 21.8L692 20.3L691 18.3L690 19.1L689 17.9L688 19.1L687 18.6L686 18L685 18.1L684 18.3L683 18.3L682 18.7L681 18.6L680 19.3L679 18.2L678 19.9L677 18.7L676 20.2L675 20.8L674 21.8L673 19.2L672 20.5L671 22.1L670 19.9L669 19.3L668 22.5L667 23.9L666 22.5L665 21.9L664 20.7L663 20.7L662 25.8L661 21.6L660 21.4L659 20.9L658 26.3L657 24.8L656 26.8L655 24.2L654 25.8L653 20.5L652 25.9L651 21.1L650 25.6L649 22.5L648 25.8L647 26.9L646 20.1L645 21.1L644 22.7L643 21.3L642 21.3L641 23.5L640 21.5L639 18.9L638 18.6L637 19.1L636 19.5L635 18.2L634 19.6L633 18.3L632 17.8L631 18.6L630 18L629 18.2L628 17.4L627 17L626 17.2L625 17.2L624 17.4L623 17.9L622 17L621 19.5L620 17.8L619 18.5L618 18.5L617 18.1L616 17.6L615 18.5L614 17.6L613 18.5L612 17.4L611 17.3L610 17.8L609 17.8L608 20.2L607 21.1L606 19.5L605 25.6L604 19.2L603 26.4L602 20.9L601 18.9L600 22.5L599 22.9L598 20L597 22L596 24L595 21.4L594 21.2L593 24.4L592 24.3L591 27L590 24.2L589 24.3L588 20.3L587 23.5L586 24.8L585 27.2L584 24.5L583 22.8L582 23.9L581 23.3L580 23.3L579 20.3L578 24.6L577 24.3L576 24.5L575 20.9L574 21.7L573 22.9L572 28L571 20.8L570 18.7L569 19.9L568 20L567 18.1L566 19L565 18.7L564 18.6L563 19L562 17.1L561 17.4L560 17L559 18.5L558 17L557 18L556 17.9L555 18.3L554 18.4L553 17.9L552 17.8L551 18.4L550 19.5L549 18L548 18.1L547 19.7L546 19.6L545 19.7L544 19.2L543 21.8L542 20.6L541 20.7L540 20L539 19.4L538 19.9L537 22L536 20.8L535 24.1L534 23.8L533 21.3L532 24.6L531 20.6L530 22.1L529 22.9L528 20.4L527 18.8L526 20L525 22.4L524 19.6L523 18.1L522 21.1L521 19.5L520 20.5L519 18.3L518 18.3L517 18.1L516 17L515 18.3L514 17.3L513 18L512 16.9L511 18L510 16.9L509 17.7L508 18L507 17.2L506 17.5L505 18.6L504 18.4L503 19L502 17.6L501 18.5L500 19.9L499 19.9L498 24.8L497 19.5L496 18.7L495 19.3L494 20.7L493 21.1L492 22.9L491 23L490 22.6L489 25.5L488 20.2L487 21.6L486 26.1L485 22.4L484 23.3L483 24.4L482 23.7L481 22.8L480 27.6L479 20.9L478 21.1L477 22.6L476 23.4L475 21.7L474 28.5L473 24.7L472 28.5L471 26.2L470 24.6L469 22.5L468 23.6L467 26.3L466 19.7L465 19.8L464 23.8L463 21.1L462 18.8L461 19.8L460 21.2L459 20.9L458 21.1L457 21L456 18.5L455 20L454 19.7L453 19.4L452 18.1L451 18L450 20L449 18.9L448 19.9L447 20.6L446 18.3L445 21.8L444 22.6L443 22.6L442 22.6L441 19.2L440 24.2L439 20.6L438 25.1L437 22.6L436 22.2L435 25.1L434 22.9L433 25.8L432 21L431 21.6L430 20.4L429 25.7L428 22.2L427 23.2L426 26L425 25.1L424 20.8L423 20.5L422 25L421 23.7L420 25.7L419 20.5L418 24.9L417 24.3L416 22.2L415 23.2L414 24.3L413 29L412 19.6L411 21.4L410 19.4L409 20.7L408 20.5L407 19.4L406 20.7L405 18.3L404 18.7L403 17.3L402 17.7L401 18.8L400 18.6L399 18.4L398 18L397 18.5L396 17L395 17.5L394 17.5L393 17.3L392 17.3L391 19.1L390 19.3L389 19.1L388 18.9L387 20.2L386 20.5L385 19.9L384 19.3L383 19.3L382 22.4L381 24.7L380 22.5L379 23.9L378 19.4L377 22.9L376 28.2L375 21.6L374 21.2L373 21.4L372 20.7L371 21.7L370 25.9L369 21.6L368 23.6L367 24.7L366 24.7L365 24.5L364 23.3L363 31L362 21.2L361 24.8L360 22.9L359 22.2L358 23.8L357 24.7L356 24.9L355 26.2L354 22.9L353 26.3L352 23.8L351 22.4L350 22L349 23.9L348 24.2L347 21.2L346 19.5L345 21.7L344 23.1L343 20.1L342 18.3L341 20.2L340 18.3L339 21.4L338 21.6L337 23.4L336 19.7L335 23.7L334 22.4L333 20L332 22.7L331 20.2L330 21L329 29.8L328 26.9L327 22.6L326 20.5L325 21.5L324 20.9L323 21.7L322 27.2L321 26.4L320 23.1L319 23.6L318 20.1L317 24.3L316 20.4L315 22.4L314 22.7L313 19.5L312 18.9L311 19.6L310 20.3L309 19.5L308 19.5L307 18.8L306 17.2L305 18.3L304 17.9L303 17.8L302 17.1L301 18L300 17.9L299 17.6L298 18.1L297 17.1L296 17.3L295 17.4L294 18.2L293 17.6L292 18.2L291 18.2L290 17.8L289 18.5L288 17.8L287 17.7L286 17.4L285 17.6L284 18.2L283 17.6L282 18.5L281 19L280 20.6L279 21.2L278 21.3L277 20.9L276 19.9L275 20.4L274 20.5L273 19.3L272 19.9L271 24.5L270 25.2L269 23.4L268 28.5L267 22.8L266 25.7L265 24.6L264 26L263 25.5L262 23.2L261 29.1L260 28.3L259 31L258 26.5L257 25.5L256 29L255 22.3L254 23.7L253 20.5L252 23.9L251 22.8L250 20.5L249 21.5L248 19.4L247 21.1L246 19.2L245 21.1L244 18.5L243 19.1L242 18.4L241 17.2L240 17.3L239 18.2L238 17.1L237 17.8L236 18.1L235 17.9L234 18.1L233 17.6L232 17.6L231 18.4L230 17.8L229 17.1L228 17.3L227 18.4L226 17.8L225 17.1L224 18.5L223 17.9L222 18.3L221 19.2L220 21.5L219 18.7L218 20.2L217 17.9L216 18.6L215 20.7L214 20.1L213 19.6L212 21.8L211 24.1L210 23L209 22L208 23.2L207 25.8L206 23.2L205 25.3L204 21L203 27.1L202 23.5L201 27.1L200 24.1L199 25.5L198 23.9L197 21.2L196 26.9L195 20.4L194 21.6L193 26.3L192 25.4L191 22.9L190 20.7L189 22.2L188 21.8L187 24.2L186 22.5L185 23.3L184 23.9L183 21L182 24.2L181 22.4L180 22.3L179 20.5L178 19.7L177 20.1L176 19.5L175 20.8L174 20.7L173 18.9L172 19.6L171 20.3L170 17.5L169 17.5L168 17L167 18.8L166 20.5L165 19.8L164 20.1L163 17.8L162 20.7L161 21.1L160 21.6L159 23L158 19.2L157 20.9L156 22L155 21.5L154 22.2L153 27.1L152 21.3L151 22.8L150 28.4L149 27.9L148 29.3L147 26.6L146 29.3L145 21.5L144 27.3L143 24.3L142 29L141 23.3L140 22.8L139 26.4L138 23.6L137 22.3L136 21.5L135 22.1L134 25.2L133 24.3L132 24.3L131 21L130 21.5L129 22.9L128 22.2L127 22.3L126 20.6L125 20.7L124 19.9L123 18.4L122 19.1L121 19L120 19.3L119 19.3L118 19.1L117 21.9L116 18.2L115 25.3L114 19.4L113 18.6L112 23L111 23.5L110 22.7L109 24.4L108 20.7L107 24.7L106 25.6L105 19.6L104 23.3L103 24.7L102 22.7L101 21.2L100 24.7L99 19.7L98 26.4L97 21.5L96 21.7L95 25L94 23.7L93 24L92 20.1L91 19.8L90 22.6L89 24.6L88 20.7L87 23L86 25.2L85 23.8L84 20.2L83 23.7L82 20.4L81 20.2L80 19.3L79 21.9L78 20.9L77 19.4L76 20.5L75 19.2L74 18.8L73 18.9L72 17.9L71 18.2L70 18.8L69 18.8L68 17.6L67 18.1L66 18.2L65 17.6L64 18.3L63 16.9L62 17.4L61 17.3L60 17.9L59 18.4L58 16.9L57 17.1L56 17.8L55 17.7L54 16.9L53 18.3L52 17L51 17.3L50 21.9L49 19.6L48 19.4L47 18.4L46 18.8L45 19.2L44 18.8L43 21L42 19.4L41 23.4L40 22.8L39 23L38 24.7L37 19.7L36 25.7L35 23L34 25.8L33 23.8L32 22.8L31 21.1L30 20.3L29 21.6L28 24L27 21.6L26 26L25 31L24 28.1L23 28.8L22 23.7L21 25.8L20 22.8L19 21.3L18 27.6L17 25.6L16 23L15 26.8L14 24.9L13 23.3L12 23.3L11 24.8L10 27.5L9 20.9L8 23.1L7 21.9L6 20.9L5 19L4 21.2L3 19L2 19.2L1 20.4L0 20.9Z" />
+                </svg>
               </div>
             </div>
-
-            <div class="lanes">
-              <div class="ruler">
-                <span style="left: 0%">0:00</span><span style="left: 20%">0:05</span
-                ><span style="left: 40%">0:10</span><span style="left: 60%">0:15</span
-                ><span style="left: 80%">0:20</span>
-              </div>
-              <div class="track">
-                <div class="clip video" style="left: 0%; width: 26%">
-                  <span class="strip"></span>
-                  <span class="band"
-                    ><svg viewBox="0 0 240 32" preserveAspectRatio="none" fill="currentColor">
-                      <use href="#wave" /></svg
-                  ></span>
-                </div>
-                <div class="clip video selected" style="left: 26%; width: 34%">
-                  <span class="strip"></span>
-                  <span class="band"
-                    ><svg viewBox="260 0 300 32" preserveAspectRatio="none" fill="currentColor">
-                      <use href="#wave" /></svg
-                  ></span>
-                </div>
-                <div class="clip video" style="left: 60%; width: 22%">
-                  <span class="strip"></span>
-                  <span class="band"
-                    ><svg viewBox="580 0 200 32" preserveAspectRatio="none" fill="currentColor">
-                      <use href="#wave" /></svg
-                  ></span>
-                </div>
-              </div>
-              <div class="track">
-                <div class="clip video" style="left: 12%; width: 30%">
-                  <span class="strip"></span>
-                  <span class="band"
-                    ><svg viewBox="330 0 260 32" preserveAspectRatio="none" fill="currentColor">
-                      <use href="#wave" /></svg
-                  ></span>
-                </div>
-              </div>
-              <div class="track audio">
-                <div class="clip audio-clip" style="left: 0%; width: 88%">
-                  <svg viewBox="0 0 500 32" preserveAspectRatio="none" fill="currentColor">
-                    <use href="#wave-vo" />
-                  </svg>
-                  <span class="clip-label"
-                    ><svg viewBox="0 0 24 24"><use href="#ic-music" /></svg>voiceover.wav</span
-                  >
-                </div>
-              </div>
-              <div class="playhead"></div>
-            </div>
+            <div class="playhead"></div>
           </div>
         </div>
 
@@ -1179,23 +929,11 @@
           <div class="formats">
             <figure class="format">
               <div class="shape landscape">16:9</div>
-              <figcaption>
-                <span class="net" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><use href="#ic-youtube" /></svg>
-                </span>
-                <strong>YouTube</strong>{{exports.youtube}}
-              </figcaption>
+              <figcaption><strong>YouTube</strong>{{exports.youtube}}</figcaption>
             </figure>
             <figure class="format">
               <div class="shape portrait">9:16</div>
-              <figcaption>
-                <span class="net" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><use href="#ic-tiktok" /></svg>
-                  <svg viewBox="0 0 24 24"><use href="#ic-instagram" /></svg>
-                  <svg viewBox="0 0 24 24"><use href="#ic-youtube" /></svg>
-                </span>
-                <strong>TikTok · Reels · Shorts</strong>{{exports.vertical}}
-              </figcaption>
+              <figcaption><strong>TikTok · Reels · Shorts</strong>{{exports.vertical}}</figcaption>
             </figure>
             <figure class="format">
               <div class="shape audio">
@@ -1203,12 +941,7 @@
                   <use href="#wave" />
                 </svg>
               </div>
-              <figcaption>
-                <span class="net" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><use href="#ic-music" /></svg>
-                </span>
-                <strong>MP3</strong>{{exports.mp3}}
-              </figcaption>
+              <figcaption><strong>MP3</strong>{{exports.mp3}}</figcaption>
             </figure>
           </div>
         </section>
