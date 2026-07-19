@@ -75,7 +75,7 @@ export function PreviewQualityMenu() {
 
       <button
         aria-label={t('preview.quality.title')}
-        title={`${t('preview.quality.title')} — ${t('preview.quality.hint')}`}
+        title={`${t('preview.quality.title')} · ${t('preview.quality.hint')}`}
         aria-haspopup="menu"
         aria-expanded={open}
         className={`touch-hit flex items-center gap-1.5 rounded-md border border-zinc-700/70 bg-zinc-900/70 px-2 py-1 text-[11px] font-medium tabular-nums backdrop-blur transition-colors hover:bg-zinc-800/80 ${

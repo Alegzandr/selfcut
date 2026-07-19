@@ -31,7 +31,7 @@ export interface Track {
   clips: Clip[];
   muted?: boolean;
   hidden?: boolean;
-  /** Track gain applied on top of each clip's volume (0..2, default 1). */
+  /** Track gain applied on top of each clip's volume (0..MAX_GAIN, default 1). */
   volume?: number;
   /** Video only: opacity multiplier for every clip on the track (0..1, default 1). */
   opacity?: number;
@@ -140,7 +140,7 @@ interface BaseClip {
   sourceOutMs: number;
   /** 1 = normal, <1 = slow motion, >1 = sped up. */
   speed: number;
-  /** 0..2 */
+  /** Linear gain, 1 = unity. 0 (silence) .. MAX_GAIN (+12 dB). */
   volume: number;
   fadeInMs: number;
   fadeOutMs: number;

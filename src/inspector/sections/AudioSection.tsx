@@ -3,7 +3,8 @@ import { useStore } from '../../store/store';
 import { ToggleButton } from '../../ui/ToggleButton';
 import { Clip } from '../../types';
 import { SliderRow } from '../SliderRow';
-import { pct } from '../format';
+import { gainDb } from '../format';
+import { faderToGain, gainToFader } from '../../lib/gain';
 
 export function AudioSection({ clip }: { clip: Clip }) {
   const { t } = useTranslation();
@@ -18,14 +19,16 @@ export function AudioSection({ clip }: { clip: Clip }) {
 
   return (
     <>
+      {/* Volume rides a dB fader scale, not the raw linear gain: min/max/step
+          here are fader positions, converted on both sides. */}
       <SliderRow
         label={t('inspector.volume')}
-        value={clip.volume}
+        value={gainToFader(clip.volume)}
         min={0}
-        max={2}
-        step={0.01}
-        format={pct}
-        onChange={(v) => updateClip(clip.id, { volume: v })}
+        max={1}
+        step={0.001}
+        format={(p) => gainDb(faderToGain(p))}
+        onChange={(p) => updateClip(clip.id, { volume: faderToGain(p) })}
       />
       <SliderRow
         label={t('inspector.balance')}

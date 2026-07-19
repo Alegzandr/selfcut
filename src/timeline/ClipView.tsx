@@ -17,13 +17,15 @@ import {
   TRACK_HEIGHT_PX,
 } from '../app/config';
 import { clamp, formatTime } from '../lib/time';
+import { gainDb } from '../inspector/format';
+import { UNITY_FADER, faderToGain, gainToFader } from '../lib/gain';
 import { useIsCoarsePointer } from '../lib/device';
 import { hapticOnSnap, snapTick } from '../lib/haptics';
 import { Waveform } from './Waveform';
 import { useTimelineViewport } from './viewport';
 
 interface DragState {
-  mode: 'move' | 'trim-left' | 'trim-right' | 'fade-in' | 'fade-out' | 'slip';
+  mode: 'move' | 'trim-left' | 'trim-right' | 'fade-in' | 'fade-out' | 'slip' | 'volume';
   /** The element that captured the pointer - drag math resolves coords from it. */
   el: HTMLElement;
   startX: number;
@@ -43,6 +45,8 @@ interface DragState {
   targetClipId: string;
   /** Ctrl held on the body at press: the first movement clones the selection and drags the copies. */
   copyOnDrag: boolean;
+  /** Volume line: the fader position at press, for the relative drag. */
+  origFader: number;
   /** Source window at press (slip / ripple math works from these, not live state). */
   origSourceInMs: number;
   origSourceOutMs: number;
@@ -74,6 +78,26 @@ interface DragState {
   contentEl: HTMLElement | null;
   scrollerEl: HTMLElement | null;
 }
+
+/**
+ * Pointer travel that spans the volume line's full fader range. Deliberately
+ * larger than a track row: mapping 60 dB onto the ~55 px of clip height would
+ * make a single pixel worth more than a dB. The line still follows the drag,
+ * just damped - and Shift quarters it again for sub-dB trims.
+ */
+const VOLUME_DRAG_TRAVEL_PX = 220;
+
+/**
+ * `bottom` for the volume line at a given fader position. The clip clips its
+ * overflow, so both ends are inset far enough for the line - and above all its
+ * grab band - to stay inside: at silence the handle would otherwise hang below
+ * the clip, out of reach, with no way to bring the gain back up.
+ *
+ * Pair it with `translate-y-1/2` so the stroke is centred on the position -
+ * otherwise the 2 px gain line sits a pixel above the 1 px unity tick and the
+ * two never quite meet at 0 dB.
+ */
+const volumeLineBottom = (fader: number) => `clamp(5px, ${fader * 100}%, calc(100% - 3px))`;
 
 /** "+m:ss.d" / "−m:ss.d" - the badge's signed delta since the press. */
 const signedMs = (v: number) => `${v < 0 ? '−' : '+'}${formatTime(Math.abs(v))}`;
@@ -199,6 +223,10 @@ export const ClipView = memo(function ClipView({
   // carries several audio tracks, label the clip with which one it plays.
   const audioInfo = asset ? audioTrackForClip(asset, clip) : undefined;
   const hasPeaks = (audioInfo?.peaks?.length ?? 0) > 0;
+  // Clips whose `volume` actually does something: media with an audio track.
+  // Text/solid clips and silent footage get no volume line.
+  const hasAudio = clip.kind === 'media' && (audioInfo != null || hasPeaks);
+  const volumeFader = gainToFader(clip.volume);
   // Only an audio clip pins a single source track worth labelling - a video clip
   // delegates all of them, so it gets no track badge.
   const trackBadge =
@@ -316,6 +344,19 @@ export const ClipView = memo(function ClipView({
           text: signedMs(slipped.sourceInMs - d.origSourceInMs),
         });
       }
+    } else if (d.mode === 'volume') {
+      // Vegas volume line: the whole clip height spans the fader travel, so the
+      // drag is relative to the press - the line never jumps to the pointer.
+      // Shift = fine mode (a quarter of the travel) for sub-dB nudges.
+      const scale = shiftKey ? 0.25 : 1;
+      const pos = clamp(
+        d.origFader - ((clientY - d.startY) / VOLUME_DRAG_TRAVEL_PX) * scale,
+        0,
+        1,
+      );
+      const volume = faderToGain(pos);
+      state.updateClip(clip.id, { volume });
+      state.setDragBadge({ clipId: clip.id, text: gainDb(volume) });
     } else if (d.mode === 'fade-in' || d.mode === 'fade-out') {
       // Fade handles: drag inward from a clip edge to fade from/to black (and silence).
       const tMs = toMs(clientX);
@@ -419,7 +460,14 @@ export const ClipView = memo(function ClipView({
       }
       const lp = lastPointer.current;
       const scroller = d.scrollerEl;
-      if (lp && scroller && d.mode !== 'slip' && d.mode !== 'fade-in' && d.mode !== 'fade-out') {
+      if (
+        lp &&
+        scroller &&
+        d.mode !== 'slip' &&
+        d.mode !== 'fade-in' &&
+        d.mode !== 'fade-out' &&
+        d.mode !== 'volume'
+      ) {
         const rect = scroller.getBoundingClientRect();
         // The desktop gutter (sticky track headers) covers the scroller's left
         // side - autoscroll must kick in before the pointer dives under it.
@@ -583,6 +631,7 @@ export const ClipView = memo(function ClipView({
       downMs,
       targetClipId: clip.id,
       copyOnDrag: false,
+      origFader: gainToFader(clip.volume),
       origSourceInMs: clip.sourceInMs,
       origSourceOutMs: clip.sourceOutMs,
       ripple: null,
@@ -732,6 +781,7 @@ export const ClipView = memo(function ClipView({
       downMs,
       targetClipId: clip.id,
       copyOnDrag,
+      origFader: gainToFader(clip.volume),
       origSourceInMs: clip.sourceInMs,
       origSourceOutMs: clip.sourceOutMs,
       ripple,
@@ -887,7 +937,7 @@ export const ClipView = memo(function ClipView({
         <div className="pointer-events-none absolute right-1 top-0.5 rounded bg-black/60 px-1 text-[9px] text-zinc-200">
           {clip.speed !== 1 ? `${clip.speed}×` : ''}
           {clip.speed !== 1 && clip.volume !== 1 ? ' · ' : ''}
-          {clip.volume !== 1 ? `${Math.round(clip.volume * 100)}%` : ''}
+          {clip.volume !== 1 ? gainDb(clip.volume) : ''}
         </div>
       )}
 
@@ -1012,6 +1062,39 @@ export const ClipView = memo(function ClipView({
             />
           </svg>
         </div>
+      )}
+
+      {/* Vegas-style volume line: a horizontal gain line across the clip, dragged
+          up/down to set clip.volume. Its height IS the fader position, so the
+          gain is readable at a glance; the dashed tick marks unity (0 dB). Only
+          clips that actually carry audio get one. */}
+      {hasAudio && (
+        <>
+          <div
+            className="pointer-events-none absolute inset-x-0 z-10 h-0 translate-y-1/2 border-t border-dashed border-white/25"
+            style={{ bottom: volumeLineBottom(UNITY_FADER) }}
+          />
+          <div
+            className="pointer-events-none absolute inset-x-0 z-10 h-0 translate-y-1/2 border-t-2 border-amber-300/90"
+            style={{ bottom: volumeLineBottom(volumeFader) }}
+          />
+          {(!coarse || selected) && (
+            <Tooltip label={t('clip.volumeLine')}>
+              <div
+                className={`absolute inset-x-0 z-20 translate-y-1/2 cursor-ns-resize touch-none ${coarse ? 'h-6' : 'h-2'}`}
+                style={{ bottom: volumeLineBottom(volumeFader) }}
+                onPointerDown={(e) => beginDrag(e, 'volume')}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                onPointerCancel={onPointerUp}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  useStore.getState().updateClipCommitted(clip.id, { volume: 1 });
+                }}
+              />
+            </Tooltip>
+          )}
+        </>
       )}
 
       {/* Fade handles: drag from the clip's top corners to fade from/to black.

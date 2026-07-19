@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp, Eye, EyeOff, Film, Music2, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { Track } from '../types';
@@ -9,6 +9,8 @@ import { useIsCoarsePointer } from '../lib/device';
 import { ClipView } from './ClipView';
 import { TrackMeter } from './TrackMeter';
 import { TRACK_HEADER_WIDTH_PX, TRACK_HEIGHT_PX } from '../app/config';
+import { gainDb } from '../inspector/format';
+import { faderToGain, gainToFader } from '../lib/gain';
 
 interface Props {
   track: Track;
@@ -18,6 +20,9 @@ interface Props {
 export const TrackRow = memo(function TrackRow({ track, pxPerMs }: Props) {
   const { t } = useTranslation();
   const coarse = useIsCoarsePointer();
+  // Set while the volume slider is being dragged: the native `title` tooltip
+  // freezes on its first value, so the live dB read-out gets its own badge.
+  const [draggingVolume, setDraggingVolume] = useState(false);
   const { toggleTrackMuted, toggleTrackHidden, moveTrack, removeTrack, updateTrack, beginGesture, endGesture } =
     useStore.getState();
 
@@ -97,19 +102,34 @@ export const TrackRow = memo(function TrackRow({ track, pxPerMs }: Props) {
 
         {!coarse && (
           <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 pr-0.5">
-            <input
-              type="range"
-              min={0}
-              max={2}
-              step={0.01}
-              value={track.volume ?? 1}
-              className={`${slider} ${track.kind === 'video' ? 'accent-sky-500' : 'accent-emerald-500'}`}
-              title={t('track.volume', { pct: Math.round((track.volume ?? 1) * 100) })}
-              onPointerDown={beginGesture}
-              onPointerUp={endGesture}
-              onChange={(e) => updateTrack(track.id, { volume: Number(e.target.value) })}
-              onDoubleClick={() => updateTrack(track.id, { volume: 1 })}
-            />
+            <div className="relative">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.001}
+                value={gainToFader(track.volume ?? 1)}
+                className={`${slider} ${track.kind === 'video' ? 'accent-sky-500' : 'accent-emerald-500'}`}
+                title={t('track.volume', { db: gainDb(track.volume ?? 1) })}
+                onPointerDown={() => {
+                  setDraggingVolume(true);
+                  beginGesture();
+                }}
+                onPointerUp={() => {
+                  setDraggingVolume(false);
+                  endGesture();
+                }}
+                onPointerCancel={() => setDraggingVolume(false)}
+                onBlur={() => setDraggingVolume(false)}
+                onChange={(e) => updateTrack(track.id, { volume: faderToGain(Number(e.target.value)) })}
+                onDoubleClick={() => updateTrack(track.id, { volume: 1 })}
+              />
+              {draggingVolume && (
+                <div className="pointer-events-none absolute -top-4 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-950/85 px-1 py-0.5 font-mono text-[10px] leading-tight text-zinc-100 shadow">
+                  {gainDb(track.volume ?? 1)}
+                </div>
+              )}
+            </div>
             {track.kind === 'video' && (
               <input
                 type="range"

@@ -32,7 +32,7 @@ export function SliderRow({
         onPointerUp={endGesture}
         onChange={(e) => onChange(Number(e.target.value))}
       />
-      <span className="w-14 flex-none text-right font-mono tabular-nums text-zinc-300">
+      <span className="w-16 flex-none text-right font-mono tabular-nums text-zinc-300">
         {format(value)}
       </span>
     </label>
