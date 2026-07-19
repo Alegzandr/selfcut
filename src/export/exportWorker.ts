@@ -18,8 +18,9 @@ import {
 import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
 import { Clip } from '../types';
-import { timelineToSourceMs } from '../model';
+import { isTextClip, timelineToSourceMs } from '../model';
 import { drawClip, visibleVideoClips } from '../preview/compositor';
+import { loadFonts } from '../lib/fonts';
 import { StillFrame, type DrawableFrame } from '../media/stillImage';
 import type { Mp4Preset } from './presets';
 import { ExportErrorCode, ExportRequest, WorkerReply } from './protocol';
@@ -237,6 +238,15 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   // upscaled sources) gets the cleanest fit/crop/zoom, not the default 'low' pass.
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+  // A worker inherits nothing from `document.fonts`: without this the canvas
+  // would silently fall back to the default face and the export would not match
+  // the preview. Awaited up front, since wrapping measures against the real
+  // metrics from the very first frame.
+  await loadFonts(
+    req.project.tracks.flatMap((track) =>
+      track.clips.filter(isTextClip).map((clip) => clip.text.font),
+    ),
+  );
   const videoSource = new CanvasSource(canvas, {
     codec: 'avc',
     bitrate: preset.videoBitrate,

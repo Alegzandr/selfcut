@@ -99,8 +99,10 @@ export function patchClips(p: Project, edits: Map<string, (c: Clip) => Clip>): P
 /** Find (or create) the track a clip of the given kind should land on. Mutates `p`. */
 export function ensureTrack(p: Project, kind: Track['kind'], preferredTrackId?: string): Track {
   const preferred = preferredTrackId ? p.tracks.find((t) => t.id === preferredTrackId) : undefined;
-  if (preferred && preferred.kind === kind) return preferred;
-  const existing = p.tracks.find((t) => t.kind === kind);
+  if (preferred && preferred.kind === kind && !preferred.locked) return preferred;
+  // A locked track accepts no new clips: fall through to the next free one, or
+  // to a fresh track, rather than dropping content onto a track the user froze.
+  const existing = p.tracks.find((t) => t.kind === kind && !t.locked);
   if (existing) return existing;
   const track: Track = { id: uid('track'), kind, clips: [] };
   insertTrack(p, track);

@@ -203,7 +203,7 @@ describe('linked edits', () => {
 
   it('duplicates the pair as a fresh link', () => {
     const { video } = pair();
-    s().duplicateClip(video.id);
+    s().duplicateClips([video.id]);
     const videoClips = tracksByKind().video[0]!.clips;
     const audioClips = tracksByKind().audio[0]!.clips;
     expect(videoClips).toHaveLength(2);

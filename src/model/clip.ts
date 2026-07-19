@@ -1,4 +1,12 @@
-import { AudioTrackInfo, Clip, ClipTransform, MediaAsset, SolidClip, TextClip } from '../types';
+import {
+  AudioTrackInfo,
+  Clip,
+  ClipTransform,
+  MediaAsset,
+  ShapeClip,
+  SolidClip,
+  TextClip,
+} from '../types';
 
 /**
  * Clip-level model math: durations, source<->timeline mapping, fade/zoom
@@ -12,6 +20,13 @@ export const DEFAULT_TRANSFORM: ClipTransform = {
   y: 0.5,
   scale: 1,
 };
+
+/**
+ * Default width of a text clip's wrap box, as a fraction of the output width.
+ * Under 1 on purpose: broadcast captions keep a margin, and a line that ends
+ * flush against the frame edge reads as clipped.
+ */
+export const DEFAULT_TEXT_WIDTH_FRAC = 0.9;
 
 /** A clip that renders generated text instead of a media asset. */
 export function isTextClip(clip: Clip): clip is TextClip {
@@ -46,8 +61,13 @@ export function audioTrackForClip(
   );
 }
 
-/** A clip with no backing media asset (text or solid). */
-export function isGeneratedClip(clip: Clip): clip is TextClip | SolidClip {
+/** A clip that renders a drawn primitive instead of a media asset. */
+export function isShapeClip(clip: Clip): clip is ShapeClip {
+  return clip.kind === 'shape';
+}
+
+/** A clip with no backing media asset (text, solid or shape). */
+export function isGeneratedClip(clip: Clip): clip is TextClip | SolidClip | ShapeClip {
   return clip.kind !== 'media';
 }
 

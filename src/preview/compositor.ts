@@ -1,5 +1,13 @@
-import { Clip, ClipText, SolidClip, TextClip, Track } from '../types';
-import { DEFAULT_TRANSFORM, clipEnvelopeGainAt, clipZoomAt, isTextClip, trackCrossfades } from '../model';
+import { Clip, ClipShape, ClipText, ShapeClip, SolidClip, TextClip, Track } from '../types';
+import {
+  DEFAULT_TEXT_WIDTH_FRAC,
+  DEFAULT_TRANSFORM,
+  clipEnvelopeGainAt,
+  clipZoomAt,
+  isTextClip,
+  trackCrossfades,
+} from '../model';
+import { fontStack } from '../lib/fonts';
 import type { DrawableFrame } from '../media/stillImage';
 
 type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -75,7 +83,80 @@ export function drawClipSample(
 /** Font shorthand for a text clip at a given output height and clip scale. */
 function textFont(text: ClipText, outH: number, scale: number): { font: string; px: number } {
   const px = Math.max(1, text.sizeFrac * outH * scale);
-  return { font: `${text.bold ? '700' : '400'} ${px}px system-ui, -apple-system, sans-serif`, px };
+  return { font: `${text.bold ? '700' : '400'} ${px}px ${fontStack(text.font)}`, px };
+}
+
+/** Width of the wrap box in output pixels. */
+function textBoxWidth(text: ClipText, outW: number): number {
+  return Math.max(1, (text.widthFrac ?? DEFAULT_TEXT_WIDTH_FRAC) * outW);
+}
+
+/**
+ * Break one paragraph greedily at `maxW`. A single word too long for the box
+ * (a URL, a long compound) is split per character rather than left to overflow
+ * the frame — a caption that runs off screen is worse than an ugly break.
+ * `ctx.font` must already be set.
+ */
+function wrapParagraph(ctx: Ctx2D, paragraph: string, maxW: number): string[] {
+  if (ctx.measureText(paragraph).width <= maxW) return [paragraph];
+  const lines: string[] = [];
+  let line = '';
+  for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxW) {
+      line = candidate;
+      continue;
+    }
+    if (line) lines.push(line);
+    if (ctx.measureText(word).width <= maxW) {
+      line = word;
+      continue;
+    }
+    // Hard-break the oversized word, keeping the tail as the running line.
+    let chunk = '';
+    for (const char of word) {
+      if (chunk && ctx.measureText(chunk + char).width > maxW) {
+        lines.push(chunk);
+        chunk = char;
+      } else {
+        chunk += char;
+      }
+    }
+    line = chunk;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/**
+ * The lines a text clip actually paints: explicit `\n` breaks first, then word
+ * wrap inside the box. Shared by drawing and by `textClipRect`, so the
+ * selection overlay always frames exactly what is on screen.
+ */
+export function layoutTextLines(ctx: Ctx2D, text: ClipText, outW: number): string[] {
+  const maxW = textBoxWidth(text, outW);
+  return text.content.split('\n').flatMap((p) => (p ? wrapParagraph(ctx, p, maxW) : ['']));
+}
+
+/**
+ * Where lines are anchored horizontally, in output pixels. `align` positions
+ * them against the edges of the wrap box (centered on `transform.x`), not
+ * against each other — so left-aligning a caption pins it to a stable margin
+ * instead of shifting with the longest line.
+ */
+function textAnchorX(text: ClipText, tx: number, outW: number): number {
+  const cx = tx * outW;
+  const half = textBoxWidth(text, outW) / 2;
+  if (text.align === 'left') return cx - half;
+  if (text.align === 'right') return cx + half;
+  return cx;
+}
+
+/** Left edge of a painted line of width `w`, given the anchor and alignment. */
+function lineLeft(align: ClipText['align'], anchorX: number, w: number): number {
+  if (align === 'left') return anchorX;
+  if (align === 'right') return anchorX - w;
+  return anchorX - w / 2;
 }
 
 /**
@@ -98,15 +179,16 @@ export function drawTextClip(
 
   const t = clip.transform ?? DEFAULT_TRANSFORM;
   const { font, px } = textFont(text, outH, t.scale);
-  const lines = text.content.split('\n');
-  const lineHeight = px * 1.2;
 
   ctx.save();
   ctx.globalAlpha = alpha;
+  // Set before laying out: wrapping measures against this exact font.
   ctx.font = font;
-  ctx.textAlign = 'center';
+  const lines = layoutTextLines(ctx, text, outW);
+  const lineHeight = px * 1.2;
+  ctx.textAlign = text.align ?? 'center';
   ctx.textBaseline = 'middle';
-  const cx = t.x * outW;
+  const anchorX = textAnchorX(text, t.x, outW);
   const cy = t.y * outH;
   const lineY = (i: number) => cy + (i - (lines.length - 1) / 2) * lineHeight;
 
@@ -120,7 +202,13 @@ export function drawTextClip(
       const w = ctx.measureText(lines[i]!).width;
       const y = lineY(i);
       ctx.beginPath();
-      ctx.roundRect(cx - w / 2 - padX, y - px / 2 - padY, w + padX * 2, px + padY * 2, px * 0.25);
+      ctx.roundRect(
+        lineLeft(text.align, anchorX, w) - padX,
+        y - px / 2 - padY,
+        w + padX * 2,
+        px + padY * 2,
+        px * 0.25,
+      );
       ctx.fill();
     }
   } else {
@@ -136,13 +224,13 @@ export function drawTextClip(
     ctx.lineWidth = Math.max(1.5, px * 0.16);
     ctx.strokeStyle = 'rgba(0,0,0,0.9)';
     for (let i = 0; i < lines.length; i++) {
-      ctx.strokeText(lines[i]!, cx, lineY(i));
+      ctx.strokeText(lines[i]!, anchorX, lineY(i));
     }
   }
 
   ctx.fillStyle = text.color;
   for (let i = 0; i < lines.length; i++) {
-    ctx.fillText(lines[i]!, cx, lineY(i));
+    ctx.fillText(lines[i]!, anchorX, lineY(i));
   }
   ctx.restore();
 }
@@ -177,6 +265,78 @@ export function drawSolidClip(
   ctx.restore();
 }
 
+/**
+ * Bounding box of a shape in output coordinates. The size is the shape's own
+ * fraction of the frame, the centre and the scale come from the transform - so
+ * hit-testing, the selection outline and the corner handles need no extra case.
+ */
+export function shapeClipRect(clip: ShapeClip, outW: number, outH: number): DestRect {
+  const t = clip.transform ?? DEFAULT_TRANSFORM;
+  const dw = clip.shape.w * outW * t.scale;
+  const dh = clip.shape.h * outH * t.scale;
+  return { dx: t.x * outW - dw / 2, dy: t.y * outH - dh / 2, dw, dh };
+}
+
+/** Trace the outline into the current path, centred on (cx, cy). */
+function traceShape(ctx: Ctx2D, shape: ClipShape, rect: DestRect): void {
+  const { dx, dy, dw, dh } = rect;
+  if (shape.kind === 'ellipse') {
+    ctx.ellipse(dx + dw / 2, dy + dh / 2, dw / 2, dh / 2, 0, 0, Math.PI * 2);
+    return;
+  }
+  if (shape.kind === 'polygon') {
+    // Inscribed in the box, first vertex pointing up - the orientation everyone
+    // expects from a triangle or a pentagon.
+    const sides = Math.max(3, Math.round(shape.sides));
+    const cx = dx + dw / 2;
+    const cy = dy + dh / 2;
+    for (let i = 0; i < sides; i++) {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / sides;
+      const px = cx + (Math.cos(a) * dw) / 2;
+      const py = cy + (Math.sin(a) * dh) / 2;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    return;
+  }
+  const r = Math.min(shape.radius, 0.5) * Math.min(dw, dh);
+  if (r > 0) ctx.roundRect(dx, dy, dw, dh, r);
+  else ctx.rect(dx, dy, dw, dh);
+}
+
+export function drawShapeClip(
+  ctx: Ctx2D,
+  clip: ShapeClip,
+  outW: number,
+  outH: number,
+  timelineMs: number,
+  alphaMul = 1,
+  xfadeInMs = 0,
+): void {
+  const alpha = clipEnvelopeGainAt(clip, timelineMs, xfadeInMs, 0) * alphaMul;
+  if (alpha <= 0) return;
+  const rect = shapeClipRect(clip, outW, outH);
+  if (rect.dw <= 0 || rect.dh <= 0) return;
+
+  const shape = clip.shape;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  traceShape(ctx, shape, rect);
+  ctx.fillStyle = shape.fill;
+  ctx.fill();
+  if (shape.stroke && shape.strokeWidth > 0) {
+    // Relative to the output height, so a shape keeps its look across the
+    // resolution rungs the preview renders at.
+    ctx.lineWidth = shape.strokeWidth * outH;
+    ctx.strokeStyle = shape.stroke;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 let measureCtx: Ctx2D | null = null;
 
 /**
@@ -194,8 +354,8 @@ export function textClipRect(clip: TextClip, outW: number, outH: number): DestRe
         : (document.createElement('canvas').getContext('2d') as CanvasRenderingContext2D);
   }
   const { font, px } = textFont(text, outH, t.scale);
-  const lines = text.content.split('\n');
   measureCtx!.font = font;
+  const lines = layoutTextLines(measureCtx!, text, outW);
   let dw = 0;
   for (const line of lines) dw = Math.max(dw, measureCtx!.measureText(line).width);
   let dh = lines.length * px * 1.2;
@@ -203,7 +363,9 @@ export function textClipRect(clip: TextClip, outW: number, outH: number): DestRe
     dw += px * 0.7;
     dh += px * 0.28;
   }
-  return { dx: t.x * outW - dw / 2, dy: t.y * outH - dh / 2, dw, dh };
+  // Same anchor as the drawing pass, so the overlay frames the painted block
+  // whatever the alignment.
+  return { dx: lineLeft(text.align, textAnchorX(text, t.x, outW), dw), dy: t.y * outH - dh / 2, dw, dh };
 }
 
 /**
@@ -258,6 +420,8 @@ export function drawClip(
     drawTextClip(ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs);
   } else if (clip.kind === 'solid') {
     drawSolidClip(ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs);
+  } else if (clip.kind === 'shape') {
+    drawShapeClip(ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs);
   } else if (sample) {
     drawClipSample(ctx, sample, clip, outW, outH, timelineMs, alphaMul, xfadeInMs);
   }

@@ -12,8 +12,18 @@ import {
   outputDimensions,
   timelineToSourceMs,
 } from '../model';
-import { DestRect, clipDestRect, clipsAt, textClipRect } from './compositor';
+import { DestRect, clipDestRect, clipsAt, shapeClipRect, textClipRect } from './compositor';
 import { clamp } from '../lib/time';
+import {
+  DEFAULT_SHAPE_FILL,
+  MIN_DRAWN_SHAPE,
+  PREVIEW_MARQUEE_MIN_PX,
+  PREVIEW_ZOOM_STEP,
+  clampView,
+  type PreviewView,
+  zoomViewAt,
+  zoomViewToRect,
+} from './view';
 
 type CropHandle = 'move' | 'nw' | 'ne' | 'sw' | 'se';
 
@@ -220,6 +230,7 @@ function clipRectAt(
   timeMs: number,
 ): DestRect | null {
   if (isTextClip(clip)) return textClipRect(clip, outW, outH);
+  if (clip.kind === 'shape') return shapeClipRect(clip, outW, outH);
   if (clip.kind === 'solid') return { dx: 0, dy: 0, dw: outW, dh: outH };
   const asset = assets[clip.assetId];
   // The dest rect only depends on the source aspect ratio, known from the probe.
@@ -367,11 +378,31 @@ function PreviewOverlays({
   );
 }
 
+/** A pan in flight, from either the hand tool or a middle-button drag. */
+interface ViewPan {
+  startX: number;
+  startY: number;
+  origin: PreviewView;
+}
+
+/** Marquee drawn by the magnifier, in viewport-relative px. */
+interface Marquee {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 /**
  * Output monitor + direct manipulation: dragging a clip in the preview moves
  * its transform position, the wheel over the preview scales the selected clip.
  * The hit-test and the selection outline reuse the compositor's dest-rect math,
  * expressed in % of the canvas so no pixel measuring is needed.
+ *
+ * The camera (`previewView`) is a CSS transform on the stage, so it costs the
+ * clip-manipulation code nothing: every gesture normalizes against the stage's
+ * bounding rect (see `normPointIn`), which already carries the zoom and pan.
+ * Panning and zooming therefore need no changes to the drag/crop/handle math.
  *
  * The parent deliberately does NOT subscribe to `currentTimeMs`: the canvas is
  * painted imperatively by `PlaybackEngine`, so the only per-frame React work
@@ -380,8 +411,15 @@ function PreviewOverlays({
 export function PreviewCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const drag = useRef<PreviewDrag | null>(null);
   const wheelGesture = useRef<number | null>(null);
+  const pan = useRef<ViewPan | null>(null);
+  const zoomDrag = useRef<{ startX: number; startY: number; altKey: boolean } | null>(null);
+  const [marquee, setMarquee] = useState<Marquee | null>(null);
+  const shapeDraw = useRef<{ startNx: number; startNy: number; rect: DOMRect } | null>(null);
+  /** The shape being drawn, in stage-normalized coords (0..1). */
+  const [drawBox, setDrawBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   // Alignment guides drawn while dragging in the preview (normalized stage coords).
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
 
@@ -389,6 +427,9 @@ export function PreviewCanvas() {
   const assets = useStore((s) => s.assets);
   const selectedClip = useStore(getSelectedClip);
   const cropEditing = useStore((s) => s.cropEditing);
+  const previewTool = useStore((s) => s.previewTool);
+  const previewView = useStore((s) => s.previewView);
+  const previewShapeKind = useStore((s) => s.previewShapeKind);
 
   const { width: outW, height: outH } = outputDimensions(project.aspectRatio);
 
@@ -425,6 +466,8 @@ export function PreviewCanvas() {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     // The crop overlay owns the pointer while it is up.
     if (croppingClip) return;
+    // Hand and magnifier drive the camera: the viewport handler owns the gesture.
+    if (previewTool !== 'select') return;
     const rect = stageRef.current!.getBoundingClientRect();
     const { nx, ny } = normPointIn(rect, e);
     const clip = hitTest(nx, ny);
@@ -516,15 +559,176 @@ export function PreviewCanvas() {
     setGuides((prev) => (prev.v.length === 0 && prev.h.length === 0 ? prev : { v: [], h: [] }));
   };
 
-  // Wheel over the preview scales the selected clip. Native listener: React's
-  // onWheel is passive, and scaling must preventDefault to not scroll the page.
-  useEffect(() => {
+  /** Clamp against the live viewport/stage geometry, then commit. */
+  const commitView = (view: PreviewView) => {
+    const viewport = viewportRef.current;
     const stage = stageRef.current;
-    if (!stage) return;
+    if (!viewport || !stage) return;
+    // offsetWidth/Height are layout sizes, which the camera transform does not
+    // affect - exactly the un-zoomed stage size `clampView` expects.
+    useStore
+      .getState()
+      .setPreviewView(
+        clampView(view, viewport.getBoundingClientRect(), stage.offsetWidth, stage.offsetHeight),
+      );
+  };
+
+  /**
+   * Camera gestures. They live on the viewport, not the stage, so a pan keeps
+   * tracking once the pointer leaves the frame - and so the magnifier can
+   * marquee across the empty letterbox around it.
+   */
+  const onViewportPointerDown = (e: React.PointerEvent) => {
+    const state = useStore.getState();
+    if (state.cropEditing) return;
+    const mouse = e.pointerType === 'mouse';
+    // Middle-drag pans whatever the active tool is: the universal NLE reflex,
+    // and Space is already taken by play/pause.
+    const middle = mouse && e.button === 1;
+    if (mouse && !middle && e.button !== 0) return;
+
+    if (middle || (!middle && state.previewTool === 'hand')) {
+      e.preventDefault();
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      pan.current = { startX: e.clientX, startY: e.clientY, origin: state.previewView };
+      return;
+    }
+    if (state.previewTool === 'zoom') {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      zoomDrag.current = { startX: e.clientX, startY: e.clientY, altKey: e.altKey };
+      return;
+    }
+    if (state.previewTool === 'shape') {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      // Normalized against the STAGE, not the viewport: the shape is authored in
+      // output coordinates, and the stage rect already carries the camera.
+      const rect = stageRef.current!.getBoundingClientRect();
+      const { nx, ny } = normPointIn(rect, e);
+      shapeDraw.current = { startNx: nx, startNy: ny, rect };
+    }
+  };
+
+  const onViewportPointerMove = (e: React.PointerEvent) => {
+    const p = pan.current;
+    if (p) {
+      commitView({
+        zoom: p.origin.zoom,
+        x: p.origin.x + (e.clientX - p.startX),
+        y: p.origin.y + (e.clientY - p.startY),
+      });
+      return;
+    }
+    const s = shapeDraw.current;
+    if (s) {
+      const { nx, ny } = normPointIn(s.rect, e);
+      let w = Math.abs(nx - s.startNx);
+      let h = Math.abs(ny - s.startNy);
+      // Shift constrains to a square/circle - in OUTPUT pixels, not in these
+      // normalized units, which are stretched by the frame's aspect ratio.
+      if (e.shiftKey) {
+        const side = Math.max(w * outW, h * outH);
+        w = side / outW;
+        h = side / outH;
+      }
+      setDrawBox({
+        x: (e.shiftKey ? (nx < s.startNx ? s.startNx - w : s.startNx) : Math.min(nx, s.startNx)),
+        y: (e.shiftKey ? (ny < s.startNy ? s.startNy - h : s.startNy) : Math.min(ny, s.startNy)),
+        w,
+        h,
+      });
+      return;
+    }
+    const z = zoomDrag.current;
+    if (!z) return;
+    const viewport = viewportRef.current!.getBoundingClientRect();
+    setMarquee({
+      left: Math.min(z.startX, e.clientX) - viewport.left,
+      top: Math.min(z.startY, e.clientY) - viewport.top,
+      width: Math.abs(e.clientX - z.startX),
+      height: Math.abs(e.clientY - z.startY),
+    });
+  };
+
+  const onViewportPointerUp = () => {
+    if (pan.current) {
+      pan.current = null;
+      return;
+    }
+    if (shapeDraw.current) {
+      shapeDraw.current = null;
+      const box = drawBox;
+      setDrawBox(null);
+      // A stray click (or a drag too small to see) must not litter the timeline.
+      if (!box || box.w < MIN_DRAWN_SHAPE || box.h < MIN_DRAWN_SHAPE) return;
+      const state = useStore.getState();
+      state.addShapeClip(
+        {
+          kind: state.previewShapeKind,
+          w: box.w,
+          h: box.h,
+          fill: DEFAULT_SHAPE_FILL,
+          strokeWidth: 0,
+          radius: 0,
+          sides: 5,
+        },
+        { x: box.x + box.w / 2, y: box.y + box.h / 2 },
+      );
+      // Hand the shape straight over to the select tool: it is already selected,
+      // so the corner handles and the inspector are usable without a detour.
+      state.setPreviewTool('select');
+      return;
+    }
+    const z = zoomDrag.current;
+    if (!z) return;
+    zoomDrag.current = null;
+    const viewport = viewportRef.current!.getBoundingClientRect();
+    const view = useStore.getState().previewView;
+    if (marquee && marquee.width >= PREVIEW_MARQUEE_MIN_PX && marquee.height >= PREVIEW_MARQUEE_MIN_PX) {
+      commitView(
+        zoomViewToRect(
+          view,
+          { ...marquee, left: marquee.left + viewport.left, top: marquee.top + viewport.top },
+          viewport,
+        ),
+      );
+    } else {
+      // Too short to be a marquee: treat it as a click, one rung at the pointer.
+      const factor = z.altKey ? 1 / PREVIEW_ZOOM_STEP : PREVIEW_ZOOM_STEP;
+      commitView(zoomViewAt(view, view.zoom * factor, z.startX, z.startY, viewport));
+    }
+    setMarquee(null);
+  };
+
+  // A new aspect ratio relays out the stage, so a camera framed on the old one
+  // would land somewhere arbitrary: start from the fitted frame again.
+  useEffect(() => {
+    useStore.getState().resetPreviewView();
+  }, [outW, outH]);
+
+  // Wheel over the preview scales the selected clip - or drives the camera when
+  // Ctrl/Cmd is held or a camera tool is active. Native listener: React's
+  // onWheel is passive, and both paths must preventDefault to not scroll the page.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const stage = stageRef.current;
+    if (!viewport || !stage) return;
     const onWheel = (e: WheelEvent) => {
       const state = useStore.getState();
+      if (state.cropEditing) return;
+
+      // Ctrl/Cmd + wheel is "zoom the view" everywhere in the app (the timeline
+      // reads it the same way), and the camera tools make it the default.
+      if (e.ctrlKey || e.metaKey || state.previewTool !== 'select') {
+        e.preventDefault();
+        const rect = viewport.getBoundingClientRect();
+        const view = state.previewView;
+        const next = zoomViewAt(view, view.zoom * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY, rect);
+        state.setPreviewView(clampView(next, rect, stage.offsetWidth, stage.offsetHeight));
+        return;
+      }
+
       const clip = getSelectedClip(state);
-      if (!clip || state.cropEditing) return;
+      if (!clip) return;
       e.preventDefault();
       if (wheelGesture.current === null) state.beginGesture();
       else window.clearTimeout(wheelGesture.current);
@@ -536,14 +740,30 @@ export function PreviewCanvas() {
       const scale = Math.min(8, Math.max(0.05, tf.scale * Math.exp(-e.deltaY * 0.0012)));
       state.updateClip(clip.id, { transform: { ...tf, scale } });
     };
-    stage.addEventListener('wheel', onWheel, { passive: false });
-    return () => stage.removeEventListener('wheel', onWheel);
+    viewport.addEventListener('wheel', onWheel, { passive: false });
+    return () => viewport.removeEventListener('wheel', onWheel);
   }, []);
+
+  const cameraCursor =
+    previewTool === 'hand'
+      ? 'cursor-grab active:cursor-grabbing'
+      : previewTool === 'zoom'
+        ? 'cursor-zoom-in'
+        : previewTool === 'shape'
+          ? 'cursor-crosshair'
+          : '';
 
   return (
     <div
-      className="flex h-full w-full items-center justify-center overflow-hidden bg-zinc-950 p-1"
+      ref={viewportRef}
+      className={`relative flex h-full w-full items-center justify-center overflow-hidden bg-zinc-950 p-1 ${cameraCursor}`}
       style={{ containerType: 'size' }}
+      onPointerDown={onViewportPointerDown}
+      onPointerMove={onViewportPointerMove}
+      onPointerUp={onViewportPointerUp}
+      onPointerCancel={onViewportPointerUp}
+      // Middle-click otherwise arms the browser's autoscroll puck on Windows.
+      onAuxClick={(e) => e.preventDefault()}
     >
       <div
         ref={stageRef}
@@ -554,6 +774,12 @@ export function PreviewCanvas() {
         style={{
           aspectRatio: `${outW} / ${outH}`,
           width: `min(100%, ${outW / outH} * 100cqh)`,
+          // The camera. Around the centre, so pan 0 is the fitted position, and
+          // on the stage itself so its bounding rect carries the zoom for every
+          // pointer gesture underneath.
+          transform: `translate(${previewView.x}px, ${previewView.y}px) scale(${previewView.zoom})`,
+          transformOrigin: 'center',
+          willChange: 'transform',
         }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -581,6 +807,20 @@ export function PreviewCanvas() {
             ))}
           </div>
         )}
+        {/* The shape being drawn. Inside the stage, so it is expressed in the
+            same normalized coordinates the clip will be authored in. */}
+        {drawBox && (
+          <div
+            className="pointer-events-none absolute z-20 border-2 border-sky-300 bg-sky-400/25"
+            style={{
+              left: `${drawBox.x * 100}%`,
+              top: `${drawBox.y * 100}%`,
+              width: `${drawBox.w * 100}%`,
+              height: `${drawBox.h * 100}%`,
+              borderRadius: previewShapeKind === 'ellipse' ? '50%' : undefined,
+            }}
+          />
+        )}
         <PreviewOverlays
           project={project}
           assets={assets}
@@ -591,6 +831,14 @@ export function PreviewCanvas() {
           stageRef={stageRef}
         />
       </div>
+
+      {/* Magnifier marquee. Outside the stage, so it is not itself zoomed. */}
+      {marquee && (
+        <div
+          className="pointer-events-none absolute z-30 border border-sky-300/90 bg-sky-400/15"
+          style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }}
+        />
+      )}
     </div>
   );
 }

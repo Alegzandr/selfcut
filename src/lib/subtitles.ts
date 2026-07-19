@@ -1,8 +1,77 @@
+import type { TextAlign } from '../types';
+
+/** Vertical band a cue asks to sit in. */
+export type SubtitleVAlign = 'top' | 'middle' | 'bottom';
+
 /** A parsed subtitle cue, timeline-ready. */
 export interface SubtitleCue {
   startMs: number;
   endMs: number;
   text: string;
+  /** Only set when the file states one; undefined keeps the caption default. */
+  align?: TextAlign;
+  vAlign?: SubtitleVAlign;
+}
+
+/** Placement a cue carries, from an override tag or a WebVTT cue setting. */
+type Placement = { align?: TextAlign; vAlign?: SubtitleVAlign };
+
+const H_BY_COLUMN: TextAlign[] = ['left', 'center', 'right'];
+
+/**
+ * SubStation placement override tags, as they appear inline in the text of a
+ * Dialogue line (and, in practice, in plenty of SRT files too).
+ *
+ * `\anN` is the v4+ numpad layout: 1-3 bottom, 4-6 middle, 7-9 top, cycling
+ * left/center/right. `\aN` is the legacy SSA numbering, which orders the bands
+ * differently — hence the explicit table rather than shared arithmetic.
+ */
+const LEGACY_A_TAGS: Record<number, Placement> = {
+  1: { align: 'left', vAlign: 'bottom' },
+  2: { align: 'center', vAlign: 'bottom' },
+  3: { align: 'right', vAlign: 'bottom' },
+  5: { align: 'left', vAlign: 'top' },
+  6: { align: 'center', vAlign: 'top' },
+  7: { align: 'right', vAlign: 'top' },
+  9: { align: 'left', vAlign: 'middle' },
+  10: { align: 'center', vAlign: 'middle' },
+  11: { align: 'right', vAlign: 'middle' },
+};
+
+/** Read the first placement override in a cue's text, if any. */
+function placementFromTags(text: string): Placement {
+  const an = text.match(/\{\\an([1-9])\}/);
+  if (an) {
+    const n = Number(an[1]) - 1;
+    return { align: H_BY_COLUMN[n % 3], vAlign: (['bottom', 'middle', 'top'] as const)[Math.floor(n / 3)] };
+  }
+  const legacy = text.match(/\{\\a(\d{1,2})\}/);
+  if (legacy) return LEGACY_A_TAGS[Number(legacy[1])] ?? {};
+  return {};
+}
+
+/**
+ * Read a WebVTT cue's settings (everything after the end timestamp), e.g.
+ * "00:02.000 --> 00:04.000 align:start line:0".
+ *
+ * `line` is a percentage when suffixed with %, otherwise a line index: negative
+ * counts up from the bottom, non-negative down from the top. Only the band
+ * matters here, since a cue becomes a clip positioned by fraction.
+ */
+function placementFromVttSettings(settings: string): Placement {
+  const out: Placement = {};
+  const align = settings.match(/\balign:(start|left|center|middle|end|right)\b/i)?.[1]?.toLowerCase();
+  if (align === 'start' || align === 'left') out.align = 'left';
+  else if (align === 'end' || align === 'right') out.align = 'right';
+  else if (align) out.align = 'center';
+
+  const line = settings.match(/\bline:(-?\d+(?:\.\d+)?)(%?)/);
+  if (line) {
+    const value = Number(line[1]);
+    if (line[2] === '%') out.vAlign = value < 34 ? 'top' : value < 67 ? 'middle' : 'bottom';
+    else out.vAlign = value < 0 ? 'bottom' : 'top';
+  }
+  return out;
 }
 
 export function isSubtitleFile(file: File): boolean {
@@ -26,7 +95,7 @@ function parseTimestamp(raw: string): number | null {
 /** Strip inline markup: HTML-ish tags (<i>, <font …>) and VTT voice spans. */
 function cleanText(lines: string[]): string {
   return lines
-    .map((l) => l.replace(/<[^>]+>/g, '').replace(/\{\\an\d\}/g, '').trim())
+    .map((l) => l.replace(/<[^>]+>/g, '').replace(/\{\\[^}]*\}/g, '').trim())
     .filter(Boolean)
     .join('\n');
 }
@@ -79,15 +148,15 @@ function parseAssSubtitles(content: string): SubtitleCue[] {
     const startMs = parseAssTimestamp(parts[startIdx] ?? '');
     const endMs = parseAssTimestamp(parts[endIdx] ?? '');
     if (startMs === null || endMs === null || endMs <= startMs) continue;
-    const text = parts
-      .slice(textIdx)
-      .join(',')
+    const raw = parts.slice(textIdx).join(',');
+    const text = raw
       .replace(/\{[^}]*\}/g, '')
       .replace(/\\N|\\n/g, '\n')
       .replace(/\\h/g, ' ')
       .trim();
     if (!text) continue;
-    cues.push({ startMs, endMs, text });
+    // Read the placement BEFORE the override blocks are stripped.
+    cues.push({ startMs, endMs, text, ...placementFromTags(raw) });
   }
   return cues.sort((a, b) => a.startMs - b.startMs);
 }
@@ -113,12 +182,19 @@ export function parseSubtitles(content: string): SubtitleCue[] {
     if (timingIdx === -1) continue;
     const [rawStart, rawEnd] = lines[timingIdx]!.split('-->');
     // VTT allows settings after the end time ("00:02.000 line:0 align:start").
+    const [rawEndTime, ...settings] = (rawEnd ?? '').trim().split(/\s+/);
     const startMs = parseTimestamp(rawStart ?? '');
-    const endMs = parseTimestamp((rawEnd ?? '').trim().split(/\s+/)[0] ?? '');
+    const endMs = parseTimestamp(rawEndTime ?? '');
     if (startMs === null || endMs === null || endMs <= startMs) continue;
-    const text = cleanText(lines.slice(timingIdx + 1));
+    const body = lines.slice(timingIdx + 1);
+    const text = cleanText(body);
     if (!text) continue;
-    cues.push({ startMs, endMs, text });
+    // An inline override tag is more specific than a cue setting, so it wins.
+    const placement = {
+      ...placementFromVttSettings(settings.join(' ')),
+      ...placementFromTags(body.join('\n')),
+    };
+    cues.push({ startMs, endMs, text, ...placement });
   }
   return cues.sort((a, b) => a.startMs - b.startMs);
 }

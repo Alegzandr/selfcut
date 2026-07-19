@@ -3,16 +3,68 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Trash2, X } from 'lucide-react';
 import { useStore, getSelectedClip } from '../store/store';
+import type { InspectorTab } from '../store/editorState';
+import { SubtitlesPanel } from './SubtitlesPanel';
 import { Tooltip } from '../ui/Tooltip';
-import { Clip } from '../types';
+import type { TFunction } from 'i18next';
+import { Clip, MediaAsset } from '../types';
 import { useIsCoarsePointer } from '../lib/device';
 import { SliderRow } from './SliderRow';
 import { TextSection } from './sections/TextSection';
 import { SolidSection } from './sections/SolidSection';
+import { ShapeSection } from './sections/ShapeSection';
 import { SpeedControl } from './sections/SpeedControl';
 import { AudioSection } from './sections/AudioSection';
 import { FadeSection } from './sections/FadeSection';
 import { TransformSection } from './sections/TransformSection';
+
+/**
+ * Heading of the inspector: a generated clip is named after what it renders, a
+ * media clip after its file. Shared by the docked column and the mobile sheet -
+ * which is why it is a function and not an inline ternary in both.
+ */
+function clipDisplayName(clip: Clip, asset: MediaAsset | undefined, t: TFunction): string {
+  switch (clip.kind) {
+    case 'text':
+      return t('inspector.textClip');
+    case 'solid':
+      return t(`inspector.solid.${clip.solid.kind}`);
+    case 'shape':
+      return t(`preview.shape.${clip.shape.kind}`);
+    default:
+      return asset?.file.name ?? '';
+  }
+}
+
+/**
+ * Tab strip of the inspector column. Only shown once the cue list has been
+ * asked for: a single-pane inspector must not grow a tab bar for a pane the
+ * user never opened.
+ */
+function InspectorTabs() {
+  const { t } = useTranslation();
+  const tab = useStore((s) => s.inspectorTab);
+  const setInspectorTab = useStore.getState().setInspectorTab;
+  const tabs: { id: InspectorTab; label: string }[] = [
+    { id: 'clip', label: t('inspector.tab.clip') },
+    { id: 'subtitles', label: t('inspector.tab.subtitles') },
+  ];
+  return (
+    <div className="flex gap-1 rounded-lg bg-zinc-800/60 p-0.5">
+      {tabs.map(({ id, label }) => (
+        <button
+          key={id}
+          className={`flex-1 rounded-md px-2 py-1 text-xs font-medium ${
+            tab === id ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+          onClick={() => setInspectorTab(id)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function Inspector() {
   const { t } = useTranslation();
@@ -20,6 +72,8 @@ export function Inspector() {
   const asset = useStore((s) => (clip ? s.assets[clip.assetId] : undefined));
   const coarse = useIsCoarsePointer();
   const inspectorOpen = useStore((s) => s.inspectorOpen);
+  const tab = useStore((s) => s.inspectorTab);
+  const showSubtitles = tab === 'subtitles';
   // A linked video clip delegates its sound to the audio clip on the lane
   // below (it is silent in the mix): audio edits must target that partner,
   // otherwise the volume/balance controls are dead knobs.
@@ -40,40 +94,56 @@ export function Inspector() {
   // Desktop: docked column next to the preview - it must never cover the
   // timeline, that is where the cutting happens. Mobile: bottom sheet opened
   // on demand from the clip action bar ("Adjust"), CapCut-style.
+  // The cue list stands on its own: unlike the clip pane it stays useful with
+  // nothing selected, so it alone can keep the column up.
   if (!coarse) {
-    if (!clip) return null;
+    if (!clip && !showSubtitles) return null;
     return (
       <div className="w-72 flex-none space-y-3 overflow-x-hidden overflow-y-auto border-l border-zinc-800 bg-zinc-900/60 p-3">
-        <InspectorBody
-          clip={clip}
-          audioClip={audioClip ?? clip}
-          isVideo={!!asset && asset.kind !== 'audio'}
-          hasAudio={asset?.hasAudio ?? false}
-          name={clip.kind === 'text' ? t('inspector.textClip') : clip.kind === 'solid' ? t(`inspector.solid.${clip.solid.kind}`) : asset?.file.name ?? ''}
-        />
+        {showSubtitles && <InspectorTabs />}
+        {showSubtitles ? (
+          <SubtitlesPanel />
+        ) : (
+          clip && (
+            <InspectorBody
+              clip={clip}
+              audioClip={audioClip ?? clip}
+              isVideo={!!asset && asset.kind !== 'audio'}
+              hasAudio={asset?.hasAudio ?? false}
+              name={clipDisplayName(clip, asset, t)}
+            />
+          )
+        )}
       </div>
     );
   }
 
-  const show = clip && inspectorOpen;
+  const show = (clip || showSubtitles) && inspectorOpen;
   return (
     <AnimatePresence>
-      {show && clip && (
+      {show && (
         <motion.div
-          key={clip.id}
+          key={showSubtitles ? 'subtitles' : clip!.id}
           initial={{ y: '110%' }}
           animate={{ y: 0 }}
           exit={{ y: '110%' }}
           transition={{ type: 'spring', damping: 28, stiffness: 320 }}
           className="fixed inset-x-0 bottom-0 z-40 max-h-[55dvh] space-y-3 overflow-x-hidden overflow-y-auto rounded-t-2xl border-t border-zinc-800 bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black"
         >
-          <InspectorBody
-            clip={clip}
-            audioClip={audioClip ?? clip}
-            isVideo={!!asset && asset.kind !== 'audio'}
-            hasAudio={asset?.hasAudio ?? false}
-            name={clip.kind === 'text' ? t('inspector.textClip') : clip.kind === 'solid' ? t(`inspector.solid.${clip.solid.kind}`) : asset?.file.name ?? ''}
-          />
+          {showSubtitles && <InspectorTabs />}
+          {showSubtitles ? (
+            <SubtitlesPanel />
+          ) : (
+            clip && (
+              <InspectorBody
+                clip={clip}
+                audioClip={audioClip ?? clip}
+                isVideo={!!asset && asset.kind !== 'audio'}
+                hasAudio={asset?.hasAudio ?? false}
+                name={clipDisplayName(clip, asset, t)}
+              />
+            )
+          )}
         </motion.div>
       )}
     </AnimatePresence>
@@ -95,9 +165,10 @@ function InspectorBody({
   name: string;
 }) {
   const { t } = useTranslation();
-  const { updateClip, deleteClip, selectClip, setInspectorOpen } = useStore.getState();
+  const { updateClip, deleteClips, selectClip, setInspectorOpen } = useStore.getState();
   const coarse = useIsCoarsePointer();
   const isText = clip.kind === 'text';
+  const isShape = clip.kind === 'shape';
 
   return (
     <>
@@ -106,7 +177,9 @@ function InspectorBody({
         <Tooltip label={t('inspector.deleteClip')}>
           <button
             className="touch-hit rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2.5"
-            onClick={() => deleteClip(clip.id)}
+            // The whole selection, like every other delete surface: two trash
+            // buttons on screen must not mean two different things.
+            onClick={() => deleteClips(useStore.getState().selectedClipIds, false)}
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -123,6 +196,7 @@ function InspectorBody({
 
       {clip.kind === 'text' && <TextSection clip={clip} />}
       {clip.kind === 'solid' && <SolidSection clip={clip} />}
+      {clip.kind === 'shape' && <ShapeSection clip={clip} />}
 
       {hasAudio && <AudioSection clip={audioClip} />}
       {!isText && <SpeedControl clip={clip} />}
@@ -135,12 +209,12 @@ function InspectorBody({
           min={0.5}
           max={2}
           step={0.05}
-          format={(v) => (v === 1 ? 'off' : `→${Math.round(v * 100)}%`)}
+          format={(v) => (v === 1 ? t('inspector.zoomAnim.off') : `→${Math.round(v * 100)}%`)}
           onChange={(v) => updateClip(clip.id, { zoomEnd: v })}
         />
       )}
 
-      {(isVideo || isText) && <TransformSection clip={clip} isVideo={isVideo} />}
+      {(isVideo || isText || isShape) && <TransformSection clip={clip} isVideo={isVideo} />}
     </>
   );
 }

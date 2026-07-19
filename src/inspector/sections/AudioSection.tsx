@@ -4,11 +4,16 @@ import { ToggleButton } from '../../ui/ToggleButton';
 import { Clip } from '../../types';
 import { SliderRow } from '../SliderRow';
 import { gainDb } from '../format';
-import { faderToGain, gainToFader } from '../../lib/gain';
+import { DB_STEP_FADER, faderToGain, faderToGainStepped, gainToFader } from '../../lib/gain';
+import { useVolumeEntry } from '../../ui/VolumeEntry';
 
 export function AudioSection({ clip }: { clip: Clip }) {
   const { t } = useTranslation();
   const { updateClip, updateClipCommitted } = useStore.getState();
+  const volumeEntry = useVolumeEntry({
+    gain: clip.volume,
+    onCommit: (volume) => updateClipCommitted(clip.id, { volume }),
+  });
 
   // Pan read-out: the letter is the localised initial of Center/Left/Right.
   const pan = (v: number) => {
@@ -20,16 +25,19 @@ export function AudioSection({ clip }: { clip: Clip }) {
   return (
     <>
       {/* Volume rides a dB fader scale, not the raw linear gain: min/max/step
-          here are fader positions, converted on both sides. */}
+          here are fader positions, converted on both sides. The step is one
+          whole dB; right-click opens the decimal entry. */}
       <SliderRow
         label={t('inspector.volume')}
         value={gainToFader(clip.volume)}
         min={0}
         max={1}
-        step={0.001}
+        step={DB_STEP_FADER}
         format={(p) => gainDb(faderToGain(p))}
-        onChange={(p) => updateClip(clip.id, { volume: faderToGain(p) })}
+        onChange={(p) => updateClip(clip.id, { volume: faderToGainStepped(p) })}
+        onContextMenu={volumeEntry.onContextMenu}
       />
+      {volumeEntry.entry}
       <SliderRow
         label={t('inspector.balance')}
         value={clip.pan ?? 0}

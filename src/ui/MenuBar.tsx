@@ -15,7 +15,10 @@ import { MasterVolume } from './MasterVolume';
 type Menu = { titleKey: ParseKeys; items: readonly string[] };
 
 const MENUS: readonly Menu[] = [
-  { titleKey: 'menu.file', items: ['file.new', 'file.import', '---', 'file.export'] },
+  {
+    titleKey: 'menu.file',
+    items: ['file.new', 'file.open', '---', 'file.save', 'file.saveAs', '---', 'file.import', 'file.importSubtitles', '---', 'file.export'],
+  },
   {
     titleKey: 'menu.edit',
     items: ['edit.undo', 'edit.redo', '---', 'edit.cut', 'edit.copy', 'edit.paste', '---', 'edit.selectAll', '---', 'edit.preferences'],
@@ -30,7 +33,9 @@ const MENUS: readonly Menu[] = [
   },
   {
     titleKey: 'menu.view',
-    items: ['view.zoomIn', 'view.zoomOut', 'view.zoomFit', '---', 'view.snap', '---', 'view.shortcuts'],
+    // The shortcuts panel lives under Help alone: it was in both menus, the
+    // same command listed twice under the same label.
+    items: ['view.zoomIn', 'view.zoomOut', '---', 'view.subtitles', '---', 'view.snap'],
   },
   {
     titleKey: 'menu.playback',

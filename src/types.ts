@@ -1,3 +1,5 @@
+import type { FontId } from './lib/fonts';
+
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:5';
 
 export interface Project {
@@ -31,6 +33,13 @@ export interface Track {
   clips: Clip[];
   muted?: boolean;
   hidden?: boolean;
+  /**
+   * Locked tracks still play and export; their clips just cannot be selected,
+   * so nothing can move, trim or delete them. Enforced in the selection slice
+   * rather than in each operation: every edit acts on the selection, so making
+   * a clip unselectable makes it uneditable everywhere at once.
+   */
+  locked?: boolean;
   /** Track gain applied on top of each clip's volume (0..MAX_GAIN, default 1). */
   volume?: number;
   /** Video only: opacity multiplier for every clip on the track (0..1, default 1). */
@@ -105,6 +114,9 @@ export interface ClipTransform {
   scale: number;
 }
 
+/** Horizontal alignment of a text clip's lines inside its wrap box. */
+export type TextAlign = 'left' | 'center' | 'right';
+
 /** Content of a generated text clip (no backing media asset). */
 export interface ClipText {
   content: string;
@@ -112,6 +124,16 @@ export interface ClipText {
   color: string;
   /** Font size as a fraction of the output height (0.08 ≈ lower-third title). */
   sizeFrac: number;
+  /** Face the glyphs render in. Undefined = the default (see `DEFAULT_FONT_ID`). */
+  font?: FontId;
+  /** Undefined = centered, the caption default. */
+  align?: TextAlign;
+  /**
+   * Width of the wrap box as a fraction of the output width, centered on
+   * `transform.x`: lines longer than this break on word boundaries, and `align`
+   * positions them against its edges. Undefined = `DEFAULT_TEXT_WIDTH_FRAC`.
+   */
+  widthFrac?: number;
   bold?: boolean;
   /** Thick dark stroke behind the glyphs — keeps captions readable over footage. */
   outline?: boolean;
@@ -127,6 +149,29 @@ export interface ClipSolid {
   color2?: string;
   /** Direction of a gradient, in degrees (0 = left to right). */
   angle?: number;
+}
+
+/**
+ * A drawn primitive (rectangle, ellipse, N-sided polygon).
+ *
+ * Only the *size* lives here, as a fraction of the output frame. The centre and
+ * the scale come from the clip's `transform`, exactly like a text clip - so
+ * dragging a shape in the preview, scaling it with the corner handles and the
+ * inspector's Transform section all work with no shape-specific code.
+ */
+export interface ClipShape {
+  kind: 'rect' | 'ellipse' | 'polygon';
+  /** Size as a fraction of the output frame, before `transform.scale`. */
+  w: number;
+  h: number;
+  fill: string;
+  stroke?: string;
+  /** Stroke width as a fraction of the output height; 0 = no stroke. */
+  strokeWidth: number;
+  /** Corner radius as a fraction of the shorter side, 0..0.5 (rect only). */
+  radius: number;
+  /** Side count, 3..12 (polygon only). */
+  sides: number;
 }
 
 /** Fields shared by every clip, whatever it renders. */
@@ -190,11 +235,18 @@ export interface SolidClip extends BaseClip {
   solid: ClipSolid;
 }
 
+/** A generated clip that renders a drawn primitive. */
+export interface ShapeClip extends BaseClip {
+  kind: 'shape';
+  shape: ClipShape;
+}
+
 /**
- * Discriminated on `kind`: `text` exists only on a TextClip and `solid` only on
- * a SolidClip, so a narrowed clip needs no non-null assertion to read them.
+ * Discriminated on `kind`: `text` exists only on a TextClip, `solid` only on a
+ * SolidClip and `shape` only on a ShapeClip, so a narrowed clip needs no
+ * non-null assertion to read them.
  *
  * The model math (durations, fades, crossfades, output geometry) lives in
  * `src/model/` — this module is types only.
  */
-export type Clip = MediaClip | TextClip | SolidClip;
+export type Clip = MediaClip | TextClip | SolidClip | ShapeClip;

@@ -8,16 +8,21 @@ import {
   DEFAULT_PX_PER_SEC,
   TIMELINE_PAD_LEFT,
   DEFAULT_PREVIEW_RESOLUTION,
+  TRACK_HEIGHT_PX,
+  MIN_TRACK_HEIGHT_PX,
+  MAX_TRACK_HEIGHT_PX,
   type PreviewResolutionMode,
 } from '../app/config';
 import {
   HISTORY_LIMIT,
   TIME_FORMAT_KEY,
+  TRACK_HEIGHT_KEY,
   PREVIEW_RESOLUTION_KEY,
   PREVIEW_VOLUME_KEY,
   PREVIEW_MUTED_KEY,
 } from './constants';
 import type { EditorState } from './editorState';
+import { PREVIEW_VIEW_RESET } from '../preview/view';
 import { createProjectSlice } from './slices/projectSlice';
 import { createAssetsSlice } from './slices/assetsSlice';
 import { createSelectionSlice } from './slices/selectionSlice';
@@ -37,6 +42,16 @@ function loadTimeFormat(): TimeFormat {
     /* private mode / no storage - fall through to the default */
   }
   return 'timecode';
+}
+
+function loadTrackHeight(): number {
+  try {
+    const v = Number(localStorage.getItem(TRACK_HEIGHT_KEY));
+    if (Number.isFinite(v) && v >= MIN_TRACK_HEIGHT_PX && v <= MAX_TRACK_HEIGHT_PX) return v;
+  } catch {
+    /* private mode / no storage - fall through to the default */
+  }
+  return TRACK_HEIGHT_PX;
 }
 
 function loadPreviewResolution(): PreviewResolutionMode {
@@ -141,12 +156,14 @@ export const useStore = create<EditorState>((set, get) => {
     snapGuideMs: null,
     dragBadge: null,
     inspectorOpen: false,
+    inspectorTab: 'clip',
     libraryOpen: false,
     shortcutsOpen: false,
     preferencesOpen: false,
     aboutOpen: false,
     contextMenu: null,
     renamingMarkerId: null,
+    trackHeightPx: loadTrackHeight(),
     timeFormat: loadTimeFormat(),
     previewResolution: loadPreviewResolution(),
     previewVolume: loadPreviewVolume(),
@@ -155,10 +172,14 @@ export const useStore = create<EditorState>((set, get) => {
     exportOpen: false,
     importing: false,
     error: null,
+    notice: null,
     past: [],
     future: [],
     gestureSnapshot: null,
     cropEditing: false,
+    previewTool: 'select',
+    previewShapeKind: 'rect',
+    previewView: PREVIEW_VIEW_RESET,
 
     ...createProjectSlice(set, get, helpers),
     ...createAssetsSlice(set, get, helpers),

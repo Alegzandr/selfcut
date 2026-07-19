@@ -32,6 +32,35 @@ export function faderToGain(pos: number): number {
   return 10 ** (db / 20);
 }
 
+/**
+ * Same, snapped to whole dB - what every fader does when you drag it.
+ *
+ * A fader is a coarse instrument: sliding through tenths makes it impossible to
+ * land on a round value, and the read-out flickers over decimals nobody aimed
+ * for. Whole dB gives the drag detents; decimals stay reachable through the
+ * right-click entry (and Shift while dragging a clip's volume line).
+ */
+export function faderToGainStepped(pos: number): number {
+  if (pos <= 0) return 0;
+  return dbToGain(Math.round(MIN_DB + Math.min(1, pos) * (MAX_DB - MIN_DB)));
+}
+
+/**
+ * Fader travel of one whole dB - the `step` of every range input, so the
+ * keyboard arrows move by the same detent the pointer snaps to.
+ */
+export const DB_STEP_FADER = 1 / (MAX_DB - MIN_DB);
+
+/** dB -> linear gain. At or below the bottom of the scale that is silence. */
+export function dbToGain(db: number): number {
+  return db <= MIN_DB ? 0 : 10 ** (db / 20);
+}
+
+/** Linear gain -> dB. Silence reads as -Infinity. */
+export function gainToDb(gain: number): number {
+  return gain <= 0 ? -Infinity : 20 * Math.log10(gain);
+}
+
 /** Fader position of unity gain - where the "0 dB" tick is drawn. */
 export const UNITY_FADER = gainToFader(1);
 

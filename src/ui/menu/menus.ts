@@ -2,14 +2,13 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
-  EyeOff,
   Flag,
+  LockOpen,
   Pencil,
   PlugZap,
   Plus,
   Trash2,
   Volume2,
-  VolumeX,
 } from 'lucide-react';
 import { useStore, getLinkTargets } from '../../store/store';
 import type { ContextTarget } from '../../store/editorState';
@@ -112,8 +111,11 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
       const items: MenuEntry[] = [
         {
           id: 'ctx.track.mute',
-          labelKey: 'track.mute',
-          icon: track?.muted ? VolumeX : Volume2,
+          // The label states what a click will do, like play/pause does. The
+          // icon is unconditional: `checked` swaps it for a checkmark, so a
+          // state-dependent icon here could never render in the state it means.
+          labelKey: track?.muted ? 'track.unmute' : 'track.mute',
+          icon: Volume2,
           checked: track?.muted,
           onClick: () => st().toggleTrackMuted(id),
         },
@@ -121,13 +123,20 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
       if (track?.kind === 'video') {
         items.push({
           id: 'ctx.track.hide',
-          labelKey: 'track.hide',
-          icon: track.hidden ? EyeOff : Eye,
+          labelKey: track.hidden ? 'track.show' : 'track.hide',
+          icon: Eye,
           checked: track.hidden,
           onClick: () => st().toggleTrackHidden(id),
         });
       }
       items.push(
+        {
+          id: 'ctx.track.lock',
+          labelKey: track?.locked ? 'track.unlock' : 'track.lock',
+          icon: LockOpen,
+          checked: track?.locked,
+          onClick: () => st().toggleTrackLocked(id),
+        },
         '---',
         {
           id: 'ctx.track.moveUp',

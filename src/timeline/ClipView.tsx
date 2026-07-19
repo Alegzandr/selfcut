@@ -13,11 +13,18 @@ import {
   MIN_CLIP_DURATION_MS,
   RULER_HEIGHT_PX,
   SNAP_THRESHOLD_PX,
-  TRACK_HEIGHT_PX,
 } from '../app/config';
 import { clamp, formatTime } from '../lib/time';
 import { gainDb } from '../inspector/format';
-import { UNITY_FADER, faderToGain, faderToLinePos, gainToFader, linePosToFader } from '../lib/gain';
+import {
+  UNITY_FADER,
+  faderToGain,
+  faderToGainStepped,
+  faderToLinePos,
+  gainToFader,
+  linePosToFader,
+} from '../lib/gain';
+import { useVolumeEntry } from '../ui/VolumeEntry';
 import { useIsCoarsePointer } from '../lib/device';
 import { hapticOnSnap, snapTick } from '../lib/haptics';
 import { Waveform } from './Waveform';
@@ -131,8 +138,9 @@ const Filmstrip = memo(function Filmstrip({
   clipLeftPx: number;
 }) {
   const viewport = useTimelineViewport();
+  const trackHeightPx = useStore((s) => s.trackHeightPx);
   const aspect = asset.width && asset.height ? asset.width / asset.height : 16 / 9;
-  const tileW = Math.max(24, Math.round((TRACK_HEIGHT_PX - 8) * aspect));
+  const tileW = Math.max(24, Math.round((trackHeightPx - 8) * aspect));
   const total = Math.max(1, Math.ceil(widthPx / tileW));
   const spanMs = clip.sourceOutMs - clip.sourceInMs;
   const thumbs = asset.thumbnails;
@@ -230,6 +238,10 @@ export const ClipView = memo(function ClipView({
   // Text/solid clips and silent footage get no volume line.
   const hasAudio = clip.kind === 'media' && (audioInfo != null || hasPeaks);
   const volumeFader = gainToFader(clip.volume);
+  const volumeEntry = useVolumeEntry({
+    gain: clip.volume,
+    onCommit: (volume) => useStore.getState().updateClipCommitted(clip.id, { volume }),
+  });
   // Gain actually trimmed away from unity - the only case where the volume
   // line is worth drawing on an idle clip.
   const gainTrimmed = Math.abs(volumeFader - UNITY_FADER) > 0.001;
@@ -326,9 +338,12 @@ export const ClipView = memo(function ClipView({
         const tracks = state.project.tracks;
         const rowsRect = d.rowsEl?.getBoundingClientRect();
         const targetIdx = rowsRect
-          ? clamp(Math.floor((clientY - rowsRect.top) / TRACK_HEIGHT_PX), 0, tracks.length - 1)
+          ? clamp(Math.floor((clientY - rowsRect.top) / state.trackHeightPx), 0, tracks.length - 1)
           : d.origTrackIndex;
-        if (tracks[targetIdx]?.kind === trackKind) targetTrackId = tracks[targetIdx].id;
+        // A locked track refuses arrivals too, not just edits to what it holds.
+        if (tracks[targetIdx]?.kind === trackKind && !tracks[targetIdx].locked) {
+          targetTrackId = tracks[targetIdx].id;
+        }
 
         state.moveClip(d.targetClipId, proposed, targetTrackId);
       }
@@ -354,14 +369,16 @@ export const ClipView = memo(function ClipView({
       // Vegas volume line: the drag is relative to the press - the line never
       // jumps to the pointer. It moves in line positions, not fader units, so
       // the line keeps up with the pointer at the same rate on both sides of
-      // unity. Shift = fine mode (a quarter of the travel) for sub-dB nudges.
+      // unity. Shift = fine mode: a quarter of the travel, and the whole-dB
+      // detents give way to the 0.1 dB grid for sub-dB nudges.
       const scale = shiftKey ? 0.25 : 1;
       const pos = clamp(
         faderToLinePos(d.origFader) - ((clientY - d.startY) / VOLUME_DRAG_TRAVEL_PX) * scale,
         0,
         1,
       );
-      const volume = faderToGain(linePosToFader(pos));
+      const fader = linePosToFader(pos);
+      const volume = shiftKey ? faderToGain(fader) : faderToGainStepped(fader);
       state.updateClip(clip.id, { volume });
       state.setDragBadge({ clipId: clip.id, text: gainDb(volume) });
     } else if (d.mode === 'fade-in' || d.mode === 'fade-out') {
@@ -560,8 +577,10 @@ export const ClipView = memo(function ClipView({
     if (!coarse && !d.moved) {
       // Ctrl+click that never dragged: toggle multi-selection membership.
       if (d.copyOnDrag) state.toggleSelectClip(clip.id);
-      // A plain click on a clip that didn't turn into a drag moves the playhead there.
-      else if (d.mode === 'move') state.seek(Math.max(0, d.downMs));
+      // A plain click on a clip that didn't turn into a drag moves the playhead
+      // there - but never during playback, where selecting a clip must not
+      // disturb where the preview is.
+      else if (d.mode === 'move' && !state.playing) state.seek(Math.max(0, d.downMs));
     }
     endDragSession();
   };
@@ -838,7 +857,8 @@ export const ClipView = memo(function ClipView({
       data-clip-id={clip.id}
       data-clip-kind={trackKind}
       // Minimal screen-reader/keyboard surface: the clip is focusable, named,
-      // and Enter/Space selects it so the keyboard shortcuts have a target.
+      // and Enter selects it so the keyboard shortcuts have a target. Space is
+      // deliberately left alone - it belongs to play/pause everywhere.
       role="button"
       tabIndex={0}
       aria-label={`${
@@ -846,11 +866,13 @@ export const ClipView = memo(function ClipView({
           ? clip.text.content
           : clip.kind === 'solid'
             ? t(`clip.solid.${clip.solid.kind}`)
-            : asset?.file.name ?? ''
+            : clip.kind === 'shape'
+              ? t(`clip.shape.${clip.shape.kind}`)
+              : asset?.file.name ?? ''
       } · ${formatTime(clip.timelineStartMs)} – ${formatTime(clip.timelineStartMs + durMs)}`}
       aria-pressed={selected}
       onKeyDown={(e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (e.key !== 'Enter') return;
         e.preventDefault();
         e.stopPropagation();
         useStore.getState().selectClip(clip.id);
@@ -902,6 +924,21 @@ export const ClipView = memo(function ClipView({
           }}
         >
           <span className="truncate text-[11px] font-medium text-white drop-shadow">{t(`clip.solid.${clip.solid.kind}`)}</span>
+        </div>
+      ) : clip.kind === 'shape' ? (
+        <div className="pointer-events-none flex h-full w-full items-center gap-1 bg-gradient-to-b from-amber-900/60 to-amber-950 px-1.5">
+          {/* A swatch of the actual fill: the fastest way to tell two shape
+              clips apart at a glance on a dense timeline. */}
+          <span
+            className="h-3 w-3 flex-none rounded-sm border border-black/40"
+            style={{
+              background: clip.shape.fill,
+              borderRadius: clip.shape.kind === 'ellipse' ? '9999px' : undefined,
+            }}
+          />
+          <span className="truncate text-[11px] font-medium text-amber-100">
+            {t(`clip.shape.${clip.shape.kind}`)}
+          </span>
         </div>
       ) : isVideo && asset?.thumbnails.length ? (
         <div className="pointer-events-none h-full w-full">
@@ -1107,9 +1144,12 @@ export const ClipView = memo(function ClipView({
                   e.stopPropagation();
                   useStore.getState().updateClipCommitted(clip.id, { volume: 1 });
                 }}
+                // Right on the line, the decimal entry beats the clip menu.
+                onContextMenu={volumeEntry.onContextMenu}
               />
             </Tooltip>
           )}
+          {volumeEntry.entry}
         </>
       )}
 

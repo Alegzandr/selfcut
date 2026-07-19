@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DB_STEP_FADER,
   MAX_DB,
   MAX_GAIN,
   MIN_DB,
   UNITY_FADER,
+  dbToGain,
   faderToGain,
+  faderToGainStepped,
   faderToLinePos,
+  gainToDb,
   gainToFader,
   linePosToFader,
 } from './gain';
@@ -69,5 +73,31 @@ describe('gain fader scale', () => {
       const d = db(faderToGain(pos));
       expect(d * 10).toBeCloseTo(Math.round(d * 10), 6);
     }
+  });
+
+  it('snaps a dragged fader to whole dB', () => {
+    for (const pos of [0.137, 0.481, 0.762, 0.913]) {
+      const d = db(faderToGainStepped(pos));
+      expect(d).toBeCloseTo(Math.round(d), 6);
+    }
+    expect(faderToGainStepped(0)).toBe(0);
+    expect(faderToGainStepped(UNITY_FADER)).toBeCloseTo(1, 10);
+    expect(db(faderToGainStepped(1))).toBeCloseTo(MAX_DB, 6);
+  });
+
+  it('moves the fader by exactly one dB per keyboard step', () => {
+    const from = gainToFader(1);
+    expect(db(faderToGainStepped(from + DB_STEP_FADER))).toBeCloseTo(1, 6);
+    expect(db(faderToGainStepped(from - DB_STEP_FADER))).toBeCloseTo(-1, 6);
+  });
+
+  it('round-trips the dB the right-click entry reads and writes', () => {
+    for (const d of [-33.4, -6.1, 0, 3.7, MAX_DB]) {
+      expect(gainToDb(dbToGain(d))).toBeCloseTo(d, 6);
+    }
+    // The bottom of the scale is silence, not a very quiet gain.
+    expect(dbToGain(MIN_DB)).toBe(0);
+    expect(dbToGain(MIN_DB - 10)).toBe(0);
+    expect(gainToDb(0)).toBe(-Infinity);
   });
 });

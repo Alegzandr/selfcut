@@ -14,7 +14,6 @@ import {
   TIMELINE_PAD_LEFT,
   TRACK_HEADER_WIDTH_COARSE_PX,
   TRACK_HEADER_WIDTH_PX,
-  TRACK_HEIGHT_PX,
 } from '../app/config';
 import { clipEndMs } from '../store/store';
 import { clamp } from '../lib/time';
@@ -232,9 +231,10 @@ export function Timeline() {
     const ids = new Set(mq.base);
     const top = rowsEl.getBoundingClientRect().top;
     const n = s.project.tracks.length;
-    if (maxY >= top && minY <= top + n * TRACK_HEIGHT_PX) {
-      const r0 = clamp(Math.floor((minY - top) / TRACK_HEIGHT_PX), 0, n - 1);
-      const r1 = clamp(Math.floor((maxY - top) / TRACK_HEIGHT_PX), 0, n - 1);
+    const rowH = s.trackHeightPx;
+    if (maxY >= top && minY <= top + n * rowH) {
+      const r0 = clamp(Math.floor((minY - top) / rowH), 0, n - 1);
+      const r1 = clamp(Math.floor((maxY - top) / rowH), 0, n - 1);
       const t0 = msFromContentX(content, Math.min(mq.x0, clientX));
       const t1 = msFromContentX(content, Math.max(mq.x0, clientX));
       for (const track of s.project.tracks.slice(r0, r1 + 1)) {

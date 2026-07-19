@@ -1,6 +1,13 @@
 import { useStore, EditorState } from '../store/store';
 import { Project } from '../types';
-import { delegatedLinkIds, outputDimensions, projectDurationMs, timelineToSourceMs } from '../model';
+import {
+  delegatedLinkIds,
+  isTextClip,
+  outputDimensions,
+  projectDurationMs,
+  timelineToSourceMs,
+} from '../model';
+import { loadFonts, onFontLoaded } from '../lib/fonts';
 import { PREVIEW_RESOLUTION_SCALE } from '../app/config';
 import { audioKey, getAudioBuffer, getStillFrame } from '../media/mediaCache';
 import type { DrawableFrame } from '../media/stillImage';
@@ -8,6 +15,16 @@ import { FrameCursor } from './FrameCursor';
 import { drawClip, visibleVideoClips } from './compositor';
 import { ScheduledSource, sameAudioMix, scheduleProjectAudio, stopScheduled } from './audioMix';
 import { TrackLevels, hasLevelListeners, publishLevels } from './meterBus';
+
+/**
+ * Register the faces a project's text clips ask for. Idempotent, so calling it
+ * on every project change costs a map lookup once the face is warm.
+ */
+function ensureProjectFonts(project: Project): void {
+  void loadFonts(
+    project.tracks.flatMap((track) => track.clips.filter(isTextClip).map((clip) => clip.text.font)),
+  );
+}
 
 /**
  * After the playhead stops, delay before the paused still is re-rendered at full
@@ -52,6 +69,7 @@ export class PlaybackEngine {
   private lastDrawnMs = -1;
   private raf = 0;
   private disposed = false;
+  private unsubscribeFonts?: () => void;
 
   /** Render scale the last painted frame used - a rung change alone forces a repaint. */
   private lastRenderScale = 0;
@@ -75,11 +93,20 @@ export class PlaybackEngine {
     const state = useStore.getState();
     this.lastSeekVersion = state.seekVersion;
     this.lastProject = state.project;
+    // The engine can be created AFTER a session is restored, in which case the
+    // project reference never changes and the tick below would not kick this.
+    ensureProjectFonts(state.project);
+    // A paused preview draws once and then idles, so a face arriving after that
+    // frame would stay invisible until the next edit.
+    this.unsubscribeFonts = onFontLoaded(() => {
+      this.videoDirty = true;
+    });
     this.raf = requestAnimationFrame(this.tick);
   }
 
   dispose(): void {
     this.disposed = true;
+    this.unsubscribeFonts?.();
     cancelAnimationFrame(this.raf);
     stopScheduled(this.scheduled);
     this.scheduled = [];
@@ -216,6 +243,7 @@ export class PlaybackEngine {
       this.lastProject = state.project;
       this.videoDirty = true;
       this.pruneCursors(state.project);
+      ensureProjectFonts(state.project);
       // Only an edit that changes the mix is worth tearing the graph down for:
       // a transform drag fires updateClip on every pointermove, and
       // rescheduling there stutters the audio for nothing.

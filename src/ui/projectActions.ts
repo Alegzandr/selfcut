@@ -1,0 +1,71 @@
+import { useStore } from '../store/store';
+import {
+  ProjectFileError,
+  SaveCanceledError,
+  bindOpenedProject,
+  readProjectFile,
+  saveProjectFile,
+} from '../lib/projectFile';
+import { openProjectPicker } from './mediaPicker';
+import { ensureAssetVisuals } from '../media/probe';
+import { t } from '../i18n';
+
+/**
+ * Save / open a `.selfcut` project. Shared by the menu bar and the keyboard
+ * shortcuts so both paths agree on the confirmations and the error wording.
+ */
+
+/**
+ * Write the project out. `saveAs` forces the OS dialog; otherwise the file the
+ * project is already bound to is overwritten in place.
+ *
+ * Not async by accident: the save picker needs transient user activation, which
+ * does not survive an await, so this must be called straight from the click or
+ * keydown handler with nothing awaited in between.
+ */
+export function saveProject(saveAs: boolean): void {
+  const { project, assets } = useStore.getState();
+  void saveProjectFile(project, assets, saveAs).then(
+    () => useStore.getState().setNotice(t('project.saved')),
+    (err: unknown) => {
+      // Dismissing the dialog is a decision, not a failure.
+      if (err instanceof SaveCanceledError) return;
+      console.warn('[project] save failed:', err);
+      useStore.getState().setError(t('errors.project.saveFailed'));
+    },
+  );
+}
+
+/**
+ * Replace the editor contents with a project read from disk. Confirms first
+ * when the current timeline is not empty: opening discards it, and the autosave
+ * that follows overwrites the locally restored session too.
+ */
+export function openProject(): void {
+  openProjectPicker((file) => {
+    void (async () => {
+      let loaded;
+      try {
+        loaded = await readProjectFile(file);
+      } catch (err) {
+        useStore.getState().setError(
+          err instanceof ProjectFileError ? err.message : t('errors.project.invalidFile'),
+        );
+        return;
+      }
+
+      const s = useStore.getState();
+      const hasWork = s.project.tracks.some((tr) => tr.clips.length > 0);
+      if (hasWork && !window.confirm(t('project.openConfirm'))) return;
+
+      s.hydrate(loaded.project, loaded.assets);
+      bindOpenedProject(file.name);
+      // Every asset arrives disconnected (the file holds no media), so there is
+      // nothing to decode yet - the relink banner takes over from here. Visuals
+      // are recomputed per asset as it reconnects.
+      for (const asset of loaded.assets) {
+        if (!asset.disconnected) ensureAssetVisuals(asset, useStore.getState());
+      }
+    })();
+  });
+}

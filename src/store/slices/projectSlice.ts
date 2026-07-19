@@ -15,6 +15,12 @@ export function createProjectSlice(
     hydrate: (project, assets) => {
       const map: Record<string, MediaAsset> = {};
       for (const a of assets) map[a.id] = a;
+      // Hydrating replaces the whole library, so every decoder registered for
+      // the outgoing project is unreachable from here on. Free them all rather
+      // than sparing ids the incoming project happens to reuse: that stale
+      // input still points at the *previous* file. Anything still needed is
+      // re-created on demand from the incoming asset's own File.
+      for (const id of Object.keys(get().assets)) disposeAssetResources(id);
       set({
         // Projects saved before markers existed restore without the field.
         project: { ...project, markers: project.markers ?? [] },

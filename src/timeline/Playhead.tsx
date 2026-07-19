@@ -1,7 +1,7 @@
 import { RefObject, useEffect, useRef } from 'react';
 import { useStore } from '../store/store';
 import { msFromClientX } from './coords';
-import { MARKER_BAR_HEIGHT_PX, RULER_HEIGHT_PX, TRACK_HEIGHT_PX } from '../app/config';
+import { MARKER_BAR_HEIGHT_PX, RULER_HEIGHT_PX } from '../app/config';
 
 const HEAD_HEIGHT_PX = MARKER_BAR_HEIGHT_PX + RULER_HEIGHT_PX;
 
@@ -20,6 +20,7 @@ export function Playhead({ scrollerRef }: Props) {
   const trackBarRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
   const trackCount = useStore((s) => s.project.tracks.length);
+  const trackHeightPx = useStore((s) => s.trackHeightPx);
 
   useEffect(() => {
     const parts = [headBarRef.current, trackBarRef.current, handleRef.current];
@@ -76,7 +77,7 @@ export function Playhead({ scrollerRef }: Props) {
       <div
         ref={trackBarRef}
         className={`${bar} z-10`}
-        style={{ top: HEAD_HEIGHT_PX, height: trackCount * TRACK_HEIGHT_PX }}
+        style={{ top: HEAD_HEIGHT_PX, height: trackCount * trackHeightPx }}
       />
       <div
         ref={handleRef}

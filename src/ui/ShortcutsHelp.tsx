@@ -66,6 +66,20 @@ const GROUPS: readonly Group[] = [
     ],
   },
   {
+    title: 'shortcuts.group.preview',
+    rows: [
+      ['V / H / Z', 'shortcuts.preview.tools'],
+      ['R', 'shortcuts.preview.shape'],
+      ['{{shift}} + {{drag}}', 'shortcuts.preview.shapeSquare'],
+      ['{{drag}}', 'shortcuts.preview.pan'],
+      ['{{click}}', 'shortcuts.preview.zoomStep'],
+      ['{{alt}} + {{click}}', 'shortcuts.preview.zoomOut'],
+      ['{{dragMagnifier}}', 'shortcuts.preview.zoomRect'],
+      ['{{ctrl}} + {{wheel}}', 'shortcuts.preview.zoomCursor'],
+      ['{{middleDrag}}', 'shortcuts.preview.middlePan'],
+    ],
+  },
+  {
     title: 'shortcuts.group.edit',
     rows: [
       ['S', 'shortcuts.edit.split'],
@@ -91,6 +105,9 @@ const GROUPS: readonly Group[] = [
       ['{{ctrl}} + C / X / V', 'shortcuts.edit.clipboard'],
       ['{{ctrl}} + D', 'shortcuts.edit.duplicate'],
       ['{{ctrl}} + Z / Y', 'shortcuts.edit.undoRedo'],
+      ['{{ctrl}} + S', 'shortcuts.edit.saveProject'],
+      ['{{ctrl}} + {{shift}} + S', 'shortcuts.edit.saveProjectAs'],
+      ['{{ctrl}} + O', 'shortcuts.edit.openProject'],
       ['{{ctrl}} + E', 'shortcuts.edit.export'],
       ['{{esc}}', 'shortcuts.edit.deselect'],
       ['?', 'shortcuts.edit.togglePanel'],
@@ -128,6 +145,8 @@ function useKeyLabels(): Readonly<Record<string, string>> {
       dragBackground: t('shortcuts.key.dragBackground'),
       dragTrimEdge: t('shortcuts.key.dragTrimEdge'),
       doubleClickClip: t('shortcuts.key.doubleClickClip'),
+      dragMagnifier: t('shortcuts.key.dragMagnifier'),
+      middleDrag: t('shortcuts.key.middleDrag'),
     }),
     [t],
   );

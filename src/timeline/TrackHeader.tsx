@@ -1,14 +1,15 @@
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp, Eye, EyeOff, Film, Music2, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, EyeOff, Lock, LockOpen, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { Track } from '../types';
 import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { useIsCoarsePointer } from '../lib/device';
 import { TrackMeter } from './TrackMeter';
-import { TRACK_HEIGHT_PX } from '../app/config';
+
 import { gainDb } from '../inspector/format';
-import { faderToGain, gainToFader } from '../lib/gain';
+import { DB_STEP_FADER, faderToGainStepped, gainToFader } from '../lib/gain';
+import { useVolumeEntry } from '../ui/VolumeEntry';
 
 interface Props {
   track: Track;
@@ -25,17 +26,27 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
   // Set while the volume slider is being dragged: the native `title` tooltip
   // freezes on its first value, so the live dB read-out gets its own badge.
   const [draggingVolume, setDraggingVolume] = useState(false);
-  const { toggleTrackMuted, toggleTrackHidden, moveTrack, removeTrack, updateTrack, beginGesture, endGesture } =
+  const trackHeightPx = useStore((s) => s.trackHeightPx);
+  const { toggleTrackMuted, toggleTrackHidden, toggleTrackLocked, moveTrack, removeTrack, updateTrack, beginGesture, endGesture } =
     useStore.getState();
 
   const btn =
     'touch-hit flex h-4.5 w-4.5 items-center justify-center rounded text-zinc-500 active:bg-zinc-700 pointer-coarse:h-7 pointer-coarse:w-7';
   const slider = 'slider-thin w-full min-w-0 cursor-ew-resize';
+  const volumeEntry = useVolumeEntry({
+    gain: track.volume ?? 1,
+    onCommit: (volume) => {
+      // One undo step, the same as a drag of the fader.
+      beginGesture();
+      updateTrack(track.id, { volume });
+      endGesture();
+    },
+  });
 
   return (
     <div
       className={`flex items-center gap-1 border-b border-zinc-800/80 bg-zinc-900 py-0.5 ${coarse ? 'justify-center' : 'px-1'}`}
-      style={{ height: TRACK_HEIGHT_PX }}
+      style={{ height: trackHeightPx }}
       onContextMenu={(e) => {
         if (coarse) return; // Desktop only.
         e.preventDefault();
@@ -51,11 +62,18 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
       <div className={`flex w-full items-center gap-1 ${track.hidden ? 'opacity-40' : ''}`}>
         <div className="flex flex-none flex-col items-center justify-center gap-0.5">
           <div className="flex items-center gap-0.5">
-            {track.kind === 'video' ? (
-              <Film className="h-3 w-3 text-sky-400" />
-            ) : (
-              <Music2 className="h-3 w-3 text-emerald-400" />
-            )}
+            {/* The lock takes the slot the type icon used to hold: clips are
+                already colour-coded by kind, so that icon only repeated what
+                the row itself says, while locking had nowhere to live. */}
+            <Tooltip label={t(track.locked ? 'track.unlock' : 'track.lock')}>
+              <button className={btn} onClick={() => toggleTrackLocked(track.id)}>
+                {track.locked ? (
+                  <Lock className="h-3 w-3 text-amber-400" />
+                ) : (
+                  <LockOpen className="h-3 w-3" />
+                )}
+              </button>
+            </Tooltip>
             <Tooltip label={t('track.delete')}>
               <button className={btn} onClick={() => removeTrack(track.id)}>
                 <Trash2 className="h-3 w-3" />
@@ -63,7 +81,9 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
             </Tooltip>
           </div>
           <div className="flex items-center gap-0.5">
-            <Tooltip label={t('track.mute')}>
+            {/* The tooltip names the action, not the state: the icon already
+                shows the state, and "Mute track" on a muted track is a lie. */}
+            <Tooltip label={t(track.muted ? 'track.unmute' : 'track.mute')}>
               <button className={btn} onClick={() => toggleTrackMuted(track.id)}>
                 {track.muted ? (
                   <VolumeX className="h-3 w-3 text-red-400" />
@@ -73,7 +93,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
               </button>
             </Tooltip>
             {track.kind === 'video' ? (
-              <Tooltip label={t('track.hide')}>
+              <Tooltip label={t(track.hidden ? 'track.show' : 'track.hide')}>
                 <button className={btn} onClick={() => toggleTrackHidden(track.id)}>
                   {track.hidden ? <EyeOff className="h-3 w-3 text-red-400" /> : <Eye className="h-3 w-3" />}
                 </button>
@@ -103,7 +123,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
                 type="range"
                 min={0}
                 max={1}
-                step={0.001}
+                step={DB_STEP_FADER}
                 value={gainToFader(track.volume ?? 1)}
                 className={`${slider} ${track.kind === 'video' ? 'text-sky-500' : 'text-emerald-500'}`}
                 title={t('track.volume', { db: gainDb(track.volume ?? 1) })}
@@ -117,9 +137,13 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
                 }}
                 onPointerCancel={() => setDraggingVolume(false)}
                 onBlur={() => setDraggingVolume(false)}
-                onChange={(e) => updateTrack(track.id, { volume: faderToGain(Number(e.target.value)) })}
+                onChange={(e) =>
+                  updateTrack(track.id, { volume: faderToGainStepped(Number(e.target.value)) })
+                }
                 onDoubleClick={() => updateTrack(track.id, { volume: 1 })}
+                onContextMenu={volumeEntry.onContextMenu}
               />
+              {volumeEntry.entry}
               {draggingVolume && (
                 <div className="pointer-events-none absolute -top-4 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-950/85 px-1 py-0.5 font-mono text-[10px] leading-tight text-zinc-100 shadow">
                   {gainDb(track.volume ?? 1)}

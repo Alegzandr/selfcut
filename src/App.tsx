@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { PlugZap, UploadCloud } from 'lucide-react';
 import { useStore } from './store/store';
 import { initPersistence } from './lib/persistence';
+import { unbindProjectFile } from './lib/projectFile';
 import { openFolderPicker, openMediaPicker } from './ui/mediaPicker';
 import { MenuBar } from './ui/MenuBar';
 import { TopBar } from './ui/TopBar';
@@ -12,6 +13,7 @@ import { Toast } from './ui/Toast';
 import { UnsupportedScreen, isSupported } from './ui/UnsupportedScreen';
 import { PreviewCanvas } from './preview/PreviewCanvas';
 import { PreviewQualityMenu } from './preview/PreviewQualityMenu';
+import { PreviewToolbar } from './preview/PreviewToolbar';
 import { Timeline } from './timeline/Timeline';
 import { Inspector } from './inspector/Inspector';
 import { ExportSheet } from './export/ExportSheet';
@@ -106,6 +108,7 @@ export default function App() {
         <MediaLibrary />
         <div className="relative min-w-0 flex-1">
           <PreviewCanvas />
+          <PreviewToolbar />
           <ImportingBadge />
           <PreviewQualityMenu />
         </div>
@@ -191,7 +194,11 @@ function DisconnectedBanner() {
       <button
         className="flex-none rounded px-2.5 py-1 font-medium text-amber-200/80 hover:bg-amber-400/10 hover:text-amber-100"
         onClick={() => {
-          if (window.confirm(t('restore.startNewConfirm'))) useStore.getState().resetProject();
+          if (!window.confirm(t('restore.startNewConfirm'))) return;
+          useStore.getState().resetProject();
+          // As in File ▸ New: unbind so a later save cannot overwrite the file
+          // the discarded project came from.
+          unbindProjectFile();
         }}
       >
         {t('restore.startNew')}

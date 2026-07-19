@@ -55,6 +55,39 @@ export function formatClock(ms: number, fps: number, format: TimeFormat): string
   return format === 'decimal' ? formatTime(ms) : formatTimecode(ms, fps);
 }
 
+/**
+ * Parse a typed time back into ms, mirroring what the readout shows. Returns
+ * null when the text isn't a time at all, so the caller can reject the entry
+ * instead of silently seeking to 0.
+ *
+ * Accepted: "12" (seconds), "1:23", "1:23:12" (m:ss:frames). A trailing "."
+ * group means frames in timecode mode and fractional seconds in decimal mode,
+ * matching how each format renders - "1:23.12" reads as the user sees it.
+ */
+export function parseClock(text: string, fps: number, format: TimeFormat): number | null {
+  const input = text.trim().replace(',', '.');
+
+  // m:ss:ff - a third colon group is always frames, in either display format.
+  const tc = /^(\d+):(\d+):(\d+)$/.exec(input);
+  if (tc) {
+    const [, m = '0', s = '0', f = '0'] = tc;
+    return (Number(m) * 60 + Number(s)) * 1000 + framesToMs(Number(f), fps);
+  }
+
+  // "12", "1:23", "1:23.45" - the trailing group reads per the display format.
+  const plain = /^(?:(\d+):)?(\d+)(?:\.(\d+))?$/.exec(input);
+  if (!plain) return null;
+  const [, m = '0', s = '0', frac] = plain;
+  const base = (Number(m) * 60 + Number(s)) * 1000;
+  if (frac === undefined) return base;
+  return base + (format === 'timecode' ? framesToMs(Number(frac), fps) : Number(`0.${frac}`) * 1000);
+}
+
+/** Frames → ms, capping at fps-1 so "0:01.99" at 30 fps can't overflow a second. */
+function framesToMs(frames: number, fps: number): number {
+  return (Math.min(frames, fps - 1) / fps) * 1000;
+}
+
 export function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }

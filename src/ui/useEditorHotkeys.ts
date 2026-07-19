@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useStore, getSelectedClip, projectDurationMs, clipEndMs, sortedMarkers } from '../store/store';
-import { zoomAtPlayhead, zoomToFit } from '../timeline/zoom';
+import { zoomAtPlayhead } from '../timeline/zoom';
+import { openProject, saveProject } from './projectActions';
 
 /**
  * Jump to the previous/next edit point (clip edges, markers, region corners,
@@ -63,6 +64,25 @@ function nudgeSelected(frames: number) {
   s.endGesture();
 }
 
+/**
+ * True when `el` sits in a button the user reached with the keyboard. Focus
+ * left over from a *click* does not count: the pointer user has moved on and
+ * expects Space to still drive playback.
+ *
+ * `:focus-visible` is the browser's own answer to "should this focus be shown",
+ * which is exactly the distinction we need - guarded because an engine that
+ * does not know the selector throws on `matches` rather than returning false.
+ */
+function keyboardFocusedButton(el: HTMLElement): boolean {
+  const btn = el.closest?.('button');
+  if (!btn) return false;
+  try {
+    return btn.matches(':focus-visible');
+  } catch {
+    return true; // Unknown selector: keep the old, accessibility-safe behavior.
+  }
+}
+
 export function useEditorHotkeys() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -82,10 +102,18 @@ export function useEditorHotkeys() {
       // Delete must not edit behind it. Each dialog handles Escape itself.
       if (s.exportOpen || s.preferencesOpen || s.aboutOpen) return;
 
+      // The shortcuts panel is the one dialog whose dismissal is owned here
+      // rather than by the dialog itself, so Escape and the '?' toggle still
+      // have to reach the switch below - but nothing else does.
+      if (s.shortcutsOpen && e.key !== 'Escape' && e.key !== '?') return;
+
       if (e.code === 'Space') {
-        // A focused button owns Space (activation): stealing it would make the
-        // whole app un-drivable with the keyboard.
-        if (target.closest?.('button')) return;
+        // A button reached by keyboard owns Space (activation): stealing it
+        // would make the whole app un-drivable with the keyboard. A button
+        // merely *clicked* keeps the DOM focus but not :focus-visible, and the
+        // user is back on the mouse - Space belongs to play/pause there, which
+        // is what they expect after hitting Split or a menu item.
+        if (keyboardFocusedButton(target)) return;
         e.preventDefault();
         s.setPlaying(!s.playing);
         return;
@@ -111,15 +139,15 @@ export function useEditorHotkeys() {
             s.redo();
             return;
           case 'c':
-            if (s.selectedClipId) {
+            if (s.selectedClipIds.length) {
               e.preventDefault();
-              s.copyClip(s.selectedClipId);
+              s.copyClips(s.selectedClipIds);
             }
             return;
           case 'x':
-            if (s.selectedClipId) {
+            if (s.selectedClipIds.length) {
               e.preventDefault();
-              s.cutClip(s.selectedClipId);
+              s.cutClips(s.selectedClipIds);
             }
             return;
           case 'v':
@@ -127,9 +155,9 @@ export function useEditorHotkeys() {
             s.pasteAtPlayhead();
             return;
           case 'd':
-            if (s.selectedClipId) {
+            if (s.selectedClipIds.length) {
               e.preventDefault();
-              s.duplicateClip(s.selectedClipId);
+              s.duplicateClips(s.selectedClipIds);
             }
             return;
           case 'a':
@@ -141,9 +169,15 @@ export function useEditorHotkeys() {
             s.setExportOpen(true);
             return;
           case 's':
-            // Muscle memory from desktop NLEs: the project autosaves, so just
-            // keep the browser's "Save page as…" dialog out of the way.
+            // Always swallowed, so the browser's "Save page as…" never fires.
             e.preventDefault();
+            // Called straight from the handler: the save picker needs the
+            // transient user activation this keypress carries.
+            saveProject(e.shiftKey);
+            return;
+          case 'o':
+            e.preventDefault();
+            openProject();
             return;
           case 'arrowleft':
             e.preventDefault();
@@ -231,7 +265,12 @@ export function useEditorHotkeys() {
       if (e.repeat) return;
 
       switch (e.key.toLowerCase()) {
+        // Razor. Three keys for one action on purpose: S is the Vegas binding
+        // this editor grew up with, C is Premiere's and B is Resolve's. Someone
+        // arriving from either reaches for a blade key and finds one.
         case 's':
+        case 'c':
+        case 'b':
           s.splitAtPlayhead();
           return;
         case 't':
@@ -255,8 +294,20 @@ export function useEditorHotkeys() {
         case 'n':
           s.toggleSnap();
           return;
+        // Preview tools, Photoshop-style. Global rather than scoped to a hovered
+        // panel: the preview is always on screen, and every other action letter
+        // here works the same way.
+        case 'v':
+          s.setPreviewTool('select');
+          return;
+        case 'h':
+          s.setPreviewTool('hand');
+          return;
+        case 'r':
+          s.setPreviewTool('shape');
+          return;
         case 'z':
-          if (e.shiftKey) zoomToFit();
+          s.setPreviewTool('zoom');
           return;
         case 'j':
           // Playing: halve the shuttle rate (slow review). Paused: step back 1s.
@@ -264,7 +315,10 @@ export function useEditorHotkeys() {
           else stepBy(-1000);
           return;
         case 'k':
-          if (s.playing) s.setPlaying(false);
+          // Always stops AND drops the shuttle back to 1x, as in Premiere and
+          // Resolve. Unconditional: pausing an already-paused transport is what
+          // clears a rate left at 0.25 by a run of J presses.
+          s.setPlaying(false);
           return;
         case 'l':
           // First press plays at 1×, repeats double the shuttle rate (up to 8×).

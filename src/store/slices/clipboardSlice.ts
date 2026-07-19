@@ -1,5 +1,5 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
-import type { EditorState } from '../editorState';
+import type { EditorState, ClipboardItem } from '../editorState';
 import { uid } from '../../lib/id';
 import { ensureTrack, findClip } from '../projectOps';
 
@@ -7,38 +7,66 @@ export function createClipboardSlice(
   set: StoreSet,
   get: StoreGet,
   { withHistory }: SliceHelpers,
-): Pick<EditorState, 'copyClip' | 'cutClip' | 'pasteAtPlayhead'> {
+): Pick<EditorState, 'copyClips' | 'cutClips' | 'pasteAtPlayhead'> {
   return {
-    copyClip: (clipId) => {
-      const found = findClip(get().project, clipId);
-      if (!found) return;
-      // A pasted clip is standalone - drop the A/V link so it does not attach to
-      // the original's partner.
-      const clip = structuredClone(found.clip);
-      delete clip.linkId;
-      set({ clipboard: { clip, kind: found.track.kind } });
+    copyClips: (clipIds) => {
+      const project = get().project;
+      const found = clipIds
+        .map((id) => findClip(project, id))
+        .filter((f): f is NonNullable<typeof f> => f !== null && f !== undefined);
+      if (found.length === 0) return;
+
+      // Relative to the earliest clip, not to the playhead: the copy has to
+      // survive a seek between Ctrl+C and Ctrl+V.
+      const anchorMs = Math.min(...found.map((f) => f.clip.timelineStartMs));
+
+      // An A/V pair copied whole keeps its link (re-keyed at paste time); half a
+      // pair pastes standalone, so it cannot attach to the original's partner.
+      const linkCounts = new Map<string, number>();
+      for (const f of found) {
+        if (f.clip.linkId) linkCounts.set(f.clip.linkId, (linkCounts.get(f.clip.linkId) ?? 0) + 1);
+      }
+
+      const items: ClipboardItem[] = found.map((f) => {
+        const clip = structuredClone(f.clip);
+        if (!clip.linkId || (linkCounts.get(clip.linkId) ?? 0) < 2) delete clip.linkId;
+        return { clip, kind: f.track.kind, offsetMs: f.clip.timelineStartMs - anchorMs };
+      });
+      set({ clipboard: { items } });
     },
 
-    cutClip: (clipId) => {
-      get().copyClip(clipId);
-      get().deleteClip(clipId);
+    cutClips: (clipIds) => {
+      get().copyClips(clipIds);
+      get().deleteClips(clipIds, false);
     },
 
     pasteAtPlayhead: () => {
       const { clipboard, currentTimeMs } = get();
-      if (!clipboard) return;
-      const newId = uid('clip');
-      // The pasted clip keeps the playhead position (priority) when overlaps settle.
+      if (!clipboard || clipboard.items.length === 0) return;
+      const newIds = clipboard.items.map(() => uid('clip'));
+      // Re-keyed so a pasted pair links to itself and not to the clips it came from.
+      const linkIds = new Map<string, string>();
+
+      // The earliest pasted clip holds the playhead position (priority) when
+      // overlaps settle; the rest keep their offsets from it.
       withHistory((p) => {
-        const track = ensureTrack(p, clipboard.kind, clipboard.clip.trackId);
-        track.clips.push({
-          ...structuredClone(clipboard.clip),
-          id: newId,
-          trackId: track.id,
-          timelineStartMs: currentTimeMs,
+        clipboard.items.forEach((item, i) => {
+          const track = ensureTrack(p, item.kind, item.clip.trackId);
+          const clip = structuredClone(item.clip);
+          if (clip.linkId) {
+            const next = linkIds.get(clip.linkId) ?? uid('link');
+            linkIds.set(clip.linkId, next);
+            clip.linkId = next;
+          }
+          track.clips.push({
+            ...clip,
+            id: newIds[i]!,
+            trackId: track.id,
+            timelineStartMs: currentTimeMs + item.offsetMs,
+          });
         });
-      }, newId);
-      set({ selectedClipId: newId, selectedClipIds: [newId] });
+      }, newIds[0]);
+      set({ selectedClipId: newIds[newIds.length - 1]!, selectedClipIds: newIds });
     },
   };
 }

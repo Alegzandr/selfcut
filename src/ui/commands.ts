@@ -6,12 +6,15 @@ import {
   Copy,
   CopyPlus,
   Download,
+  File,
   FilePlus,
-  FileX2,
   Film,
   Flag,
   Focus,
   FoldHorizontal,
+  FolderOpen,
+  Save,
+  SaveAll,
   ListChecks,
   Music,
   Redo2,
@@ -20,7 +23,7 @@ import {
   SkipBack,
   SlidersHorizontal,
   Square,
-  StretchHorizontal,
+  SquareSplitHorizontal,
   Trash2,
   Type,
   Link2,
@@ -31,16 +34,24 @@ import {
   ClipboardPaste,
   ZoomIn,
   ZoomOut,
+  Expand,
+  Hand,
+  MousePointer2,
+  Search,
   Play,
   Magnet,
   MapPin,
   Settings,
   Info,
+  Captions,
 } from 'lucide-react';
 import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
 import { useImport } from './useImport';
-import { openMediaPicker } from './mediaPicker';
-import { zoomAtPlayhead, zoomToFit } from '../timeline/zoom';
+import { openMediaPicker, openSubtitlePicker } from './mediaPicker';
+import { openProject, saveProject } from './projectActions';
+import { unbindProjectFile } from '../lib/projectFile';
+import { zoomAtPlayhead } from '../timeline/zoom';
+import { isViewReset } from '../preview/view';
 
 /**
  * A single editor action, resolved against the current store state. The desktop
@@ -50,6 +61,18 @@ import { zoomAtPlayhead, zoomToFit } from '../timeline/zoom';
 export interface Command {
   id: string;
   labelKey: ParseKeys;
+  /**
+   * An already-translated label that wins over `labelKey`. For the few commands
+   * whose text is interpolated (the shape tool names its armed primitive), so
+   * every surface renders the same string without knowing the parameters.
+   */
+  label?: string;
+  /**
+   * A longer line for the toolbar tooltip: what the tool does, or how to
+   * override it. Menus and lists keep showing `labelKey`, so a hint never turns
+   * into a paragraph-wide menu row.
+   */
+  hintKey?: ParseKeys;
   icon?: ComponentType<{ className?: string }>;
   /** Display-only accelerator, e.g. "Ctrl+Z" - the real binding lives in useEditorHotkeys. */
   shortcut?: string;
@@ -73,6 +96,9 @@ export function useEditorCommands(): Record<string, Command> {
   const hasSelection = useStore((s) => s.selectedClipIds.length > 0);
   const hasClipboard = useStore((s) => s.clipboard !== null);
   const snapEnabled = useStore((s) => s.snapEnabled);
+  const previewTool = useStore((s) => s.previewTool);
+  // Subscribe to the boolean, not the view: panning must not re-render every menu.
+  const previewFitted = useStore((s) => isViewReset(s.previewView));
   const loopEnabled = useStore((s) => s.loopEnabled);
   const selectedClip = useStore(getSelectedClip);
   // Stream layout only makes sense on a real media clip (not text/solid overlays).
@@ -82,29 +108,51 @@ export function useEditorCommands(): Record<string, Command> {
   // clips on opposite tracks, or one clip with an obvious partner from the same
   // source). Subscribe to the boolean only - the pair is resolved in onClick.
   const canLink = useStore((s) => getLinkTargets(s) !== null);
+  const inspectorTab = useStore((s) => s.inspectorTab);
 
   const st = useStore.getState;
+
+  /**
+   * The cue list is a pane of the inspector column, so showing it means picking
+   * its tab - and on mobile also opening the sheet, which is otherwise only
+   * raised by selecting a clip.
+   */
+  const toggleSubtitlesPane = () => {
+    const showing = st().inspectorTab === 'subtitles';
+    st().setInspectorTab(showing ? 'clip' : 'subtitles');
+    st().setInspectorOpen(!showing);
+  };
 
   const list: Command[] = [
     // ── File ──────────────────────────────────────────────────────────────
     {
       id: 'file.new',
       labelKey: 'menu.file.new',
-      icon: FileX2,
+      icon: File,
       danger: true,
       // Destroys the whole project AND its saved state: never without a confirm.
       onClick: () => {
-        if (window.confirm(t('restore.startNewConfirm'))) st().resetProject();
+        if (!window.confirm(t('restore.startNewConfirm'))) return;
+        st().resetProject();
+        // The new project is not the file the old one came from: a later save
+        // must ask where to go instead of overwriting it.
+        unbindProjectFile();
       },
     },
+    { id: 'file.open', labelKey: 'menu.file.open', icon: FolderOpen, shortcut: 'Ctrl+O', onClick: () => openProject() },
+    { id: 'file.save', labelKey: 'menu.file.save', icon: Save, shortcut: 'Ctrl+S', onClick: () => saveProject(false) },
+    { id: 'file.saveAs', labelKey: 'menu.file.saveAs', icon: SaveAll, shortcut: 'Ctrl+Shift+S', onClick: () => saveProject(true) },
     { id: 'file.import', labelKey: 'menu.file.import', icon: FilePlus, onClick: () => openMediaPicker(importFiles) },
+    // Its own entry rather than a note under Import: dropping an .srt on the
+    // window has always worked, but nothing on screen ever said so.
+    { id: 'file.importSubtitles', labelKey: 'menu.file.importSubtitles', hintKey: 'menu.file.importSubtitles.hint', icon: Captions, onClick: () => openSubtitlePicker(importFiles) },
     { id: 'file.export', labelKey: 'menu.file.export', icon: Download, shortcut: 'Ctrl+E', onClick: () => st().setExportOpen(true) },
 
     // ── Edit ──────────────────────────────────────────────────────────────
     { id: 'edit.undo', labelKey: 'menu.edit.undo', icon: Undo2, shortcut: 'Ctrl+Z', disabled: !canUndo, onClick: () => st().undo() },
     { id: 'edit.redo', labelKey: 'menu.edit.redo', icon: Redo2, shortcut: 'Ctrl+Shift+Z', disabled: !canRedo, onClick: () => st().redo() },
-    { id: 'edit.cut', labelKey: 'menu.edit.cut', icon: Scissors, shortcut: 'Ctrl+X', disabled: !selectedId, onClick: () => selectedId && st().cutClip(selectedId) },
-    { id: 'edit.copy', labelKey: 'menu.edit.copy', icon: Copy, shortcut: 'Ctrl+C', disabled: !selectedId, onClick: () => selectedId && st().copyClip(selectedId) },
+    { id: 'edit.cut', labelKey: 'menu.edit.cut', icon: Scissors, shortcut: 'Ctrl+X', disabled: !hasSelection, onClick: () => st().cutClips(st().selectedClipIds) },
+    { id: 'edit.copy', labelKey: 'menu.edit.copy', icon: Copy, shortcut: 'Ctrl+C', disabled: !hasSelection, onClick: () => st().copyClips(st().selectedClipIds) },
     { id: 'edit.paste', labelKey: 'menu.edit.paste', icon: ClipboardPaste, shortcut: 'Ctrl+V', disabled: !hasClipboard, onClick: () => st().pasteAtPlayhead() },
     { id: 'edit.selectAll', labelKey: 'menu.edit.selectAll', icon: ListChecks, shortcut: 'Ctrl+A', onClick: () => st().selectAllClips() },
     { id: 'edit.preferences', labelKey: 'menu.edit.preferences', icon: Settings, onClick: () => st().setPreferencesOpen(true) },
@@ -118,8 +166,10 @@ export function useEditorCommands(): Record<string, Command> {
     { id: 'insert.marker', labelKey: 'menu.insert.marker', icon: Flag, shortcut: 'M', onClick: () => st().addMarkerAtPlayhead() },
 
     // ── Clip ──────────────────────────────────────────────────────────────
-    { id: 'clip.split', labelKey: 'menu.clip.split', icon: Scissors, shortcut: 'S', onClick: () => st().splitAtPlayhead() },
-    { id: 'clip.duplicate', labelKey: 'menu.clip.duplicate', icon: CopyPlus, shortcut: 'Ctrl+D', disabled: !selectedId, onClick: () => selectedId && st().duplicateClip(selectedId) },
+    { id: 'clip.split', labelKey: 'menu.clip.split', icon: SquareSplitHorizontal, shortcut: 'S', onClick: () => st().splitAtPlayhead() },
+    // C (Premiere) and B (Resolve) also split - see useEditorHotkeys. Only S is
+    // advertised here: a menu row listing three keys reads as a puzzle.
+    { id: 'clip.duplicate', labelKey: 'menu.clip.duplicate', icon: CopyPlus, shortcut: 'Ctrl+D', disabled: !hasSelection, onClick: () => st().duplicateClips(st().selectedClipIds) },
     { id: 'clip.punchIn', labelKey: 'menu.clip.punchIn', icon: Focus, shortcut: 'P', disabled: !selectedId, onClick: () => st().punchZoomSelected() },
     { id: 'clip.stream', labelKey: 'menu.clip.stream', icon: LayoutPanelTop, disabled: !canStream, onClick: () => selectedId && st().applyStreamLayout(selectedId) },
     { id: 'clip.adjust', labelKey: 'menu.clip.adjust', icon: SlidersHorizontal, disabled: !selectedId, onClick: () => st().setInspectorOpen(true) },
@@ -128,12 +178,19 @@ export function useEditorCommands(): Record<string, Command> {
     { id: 'clip.delete', labelKey: 'menu.clip.delete', icon: Trash2, shortcut: 'Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, false) },
     { id: 'clip.rippleDelete', labelKey: 'menu.clip.rippleDelete', icon: FoldHorizontal, shortcut: 'Shift+Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, true) },
 
+    // ── Preview tools ─────────────────────────────────────────────────────
+    // Modes of the preview surface, not one-shot actions: exactly one is always
+    // active, so they read as a radio group (`checked` lights the pressed one).
+    { id: 'preview.toolSelect', labelKey: 'preview.tool.select', icon: MousePointer2, shortcut: 'V', checked: previewTool === 'select', onClick: () => st().setPreviewTool('select') },
+    { id: 'preview.toolHand', labelKey: 'preview.tool.hand.name', hintKey: 'preview.tool.hand', icon: Hand, shortcut: 'H', checked: previewTool === 'hand', onClick: () => st().setPreviewTool('hand') },
+    { id: 'preview.toolZoom', labelKey: 'preview.tool.zoom.name', hintKey: 'preview.tool.zoom', icon: Search, shortcut: 'Z', checked: previewTool === 'zoom', onClick: () => st().setPreviewTool('zoom') },
+    { id: 'preview.resetView', labelKey: 'preview.view.reset', icon: Expand, disabled: previewFitted, onClick: () => st().resetPreviewView() },
+
     // ── View ──────────────────────────────────────────────────────────────
     { id: 'view.zoomIn', labelKey: 'menu.view.zoomIn', icon: ZoomIn, shortcut: '+', onClick: () => zoomAtPlayhead(1.25) },
     { id: 'view.zoomOut', labelKey: 'menu.view.zoomOut', icon: ZoomOut, shortcut: '−', onClick: () => zoomAtPlayhead(1 / 1.25) },
-    { id: 'view.zoomFit', labelKey: 'menu.view.zoomFit', icon: StretchHorizontal, shortcut: 'Shift+Z', onClick: () => zoomToFit() },
-    { id: 'view.snap', labelKey: 'menu.view.snap', icon: Magnet, shortcut: 'N', checked: snapEnabled, onClick: () => st().toggleSnap() },
-    { id: 'view.shortcuts', labelKey: 'menu.view.shortcuts', icon: Keyboard, shortcut: '?', onClick: () => st().setShortcutsOpen(true) },
+    { id: 'view.subtitles', labelKey: 'menu.view.subtitles', icon: Captions, checked: inspectorTab === 'subtitles', onClick: () => toggleSubtitlesPane() },
+    { id: 'view.snap', labelKey: 'menu.view.snap', hintKey: snapEnabled ? 'transport.snapping.on' : 'transport.snapping.off', icon: Magnet, shortcut: 'N', checked: snapEnabled, onClick: () => st().toggleSnap() },
 
     // ── Playback ──────────────────────────────────────────────────────────
     { id: 'playback.playPause', labelKey: 'menu.playback.playPause', icon: Play, shortcut: 'Space', onClick: () => st().setPlaying(!st().playing) },

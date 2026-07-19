@@ -21,6 +21,14 @@ import {
 } from '../projectOps';
 import { clamp } from '../../lib/time';
 import { MIN_CLIP_DURATION_MS } from '../../app/config';
+import type { SubtitleVAlign } from '../../lib/subtitles';
+
+/**
+ * Where each vertical band puts a caption's centre, as a fraction of the output
+ * height. Top and bottom keep a margin off the frame edge - a caption flush
+ * against it reads as clipped, and players traditionally leave that room.
+ */
+const CAPTION_Y: Record<SubtitleVAlign, number> = { top: 0.14, middle: 0.5, bottom: 0.82 };
 import { t as translate } from '../../i18n';
 
 /**
@@ -86,6 +94,7 @@ export function createClipsSlice(
   | 'addClipFromAssetAt'
   | 'addTextClip'
   | 'addSolidClip'
+  | 'addShapeClip'
   | 'updateClip'
   | 'updateClipCommitted'
   | 'moveClip'
@@ -95,9 +104,8 @@ export function createClipsSlice(
   | 'cloneClipsForDrag'
   | 'splitAtPlayhead'
   | 'deleteClip'
-  | 'rippleDeleteClip'
   | 'deleteClips'
-  | 'duplicateClip'
+  | 'duplicateClips'
   | 'unlinkClip'
   | 'linkClips'
   | 'punchZoomSelected'
@@ -263,6 +271,47 @@ export function createClipsSlice(
             kind === 'color'
               ? { kind, color: '#6366f1' }
               : { kind, color: '#7c3aed', color2: '#ec4899', angle: 45 },
+        });
+      }, newClipId);
+      set({ selectedClipId: newClipId, selectedClipIds: [newClipId] });
+    },
+
+    addShapeClip: (shape, center) => {
+      const { currentTimeMs } = get();
+      const newClipId = uid('clip');
+      const durMs = 3000;
+      withHistory((p) => {
+        const start = Math.max(0, currentTimeMs);
+        // Shapes are overlays: they belong on top of whatever is already at the
+        // playhead, so take the first free lane from the top rather than
+        // reusing a busy one.
+        let track = [...p.tracks]
+          .reverse()
+          .find(
+            (t) =>
+              t.kind === 'video' &&
+              t.clips.every((c) => clipEndMs(c) <= start || c.timelineStartMs >= start + durMs),
+          );
+        if (!track) {
+          track = { id: uid('track'), kind: 'video', clips: [] };
+          insertTrack(p, track);
+        }
+        track.clips.push({
+          kind: 'shape',
+          id: newClipId,
+          assetId: '',
+          trackId: track.id,
+          timelineStartMs: start,
+          sourceInMs: 0,
+          sourceOutMs: durMs,
+          speed: 1,
+          volume: 1,
+          fadeInMs: 0,
+          fadeOutMs: 0,
+          shape,
+          // The drawn centre. Scale stays 1 so the corner handles and the
+          // inspector read 100% on a freshly drawn shape.
+          transform: { ...DEFAULT_TRANSFORM, x: center.x, y: center.y },
         });
       }, newClipId);
       set({ selectedClipId: newClipId, selectedClipIds: [newClipId] });
@@ -493,8 +542,6 @@ export function createClipsSlice(
 
     deleteClip: (clipId) => get().deleteClips([clipId], false),
 
-    rippleDeleteClip: (clipId) => get().deleteClips([clipId], true),
-
     deleteClips: (clipIds, ripple) => {
       if (clipIds.length === 0) return;
       // Deleting one side of an A/V link removes its partner too.
@@ -522,11 +569,27 @@ export function createClipsSlice(
       pruneSelection();
     },
 
-    duplicateClip: (clipId) => {
-      // Duplicate the whole linked group as a fresh pair (new shared linkId).
-      const ids = [clipId, ...linkedPartnerIds(get().project, clipId)];
-      const newLinkId = ids.length > 1 ? uid('link') : undefined;
-      let newId = '';
+    duplicateClips: (clipIds) => {
+      const project = get().project;
+      // Whole linked groups, deduped: duplicating half an A/V pair would leave
+      // an orphan audio clip behind.
+      const ids = new Set<string>();
+      for (const id of clipIds) {
+        if (!findClip(project, id)) continue;
+        ids.add(id);
+        for (const partner of linkedPartnerIds(project, id)) ids.add(partner);
+      }
+      if (ids.size === 0) return;
+
+      // The copy lands right after the block it came from, keeping the block's
+      // internal shape (one clip: right after itself, as before).
+      const clips = [...ids].map((id) => findClip(project, id)!.clip);
+      const shiftMs =
+        Math.max(...clips.map(clipEndMs)) - Math.min(...clips.map((c) => c.timelineStartMs));
+
+      // Fresh link ids, so the duplicate is a pair of its own.
+      const linkIds = new Map<string, string>();
+      const newIds: string[] = [];
       withHistory((p) => {
         for (const id of ids) {
           const found = findClip(p, id);
@@ -534,14 +597,22 @@ export function createClipsSlice(
           const copy: Clip = {
             ...cloneClip(found.clip),
             id: uid('clip'),
-            timelineStartMs: clipEndMs(found.clip),
-            ...(newLinkId ? { linkId: newLinkId } : {}),
+            timelineStartMs: found.clip.timelineStartMs + shiftMs,
           };
-          if (id === clipId) newId = copy.id;
+          if (found.clip.linkId) {
+            const next = linkIds.get(found.clip.linkId) ?? uid('link');
+            linkIds.set(found.clip.linkId, next);
+            copy.linkId = next;
+          } else {
+            delete copy.linkId;
+          }
+          newIds.push(copy.id);
           found.track.clips.push(copy);
         }
       });
-      if (newId) set({ selectedClipId: newId, selectedClipIds: [newId] });
+      if (newIds.length) {
+        set({ selectedClipId: newIds[newIds.length - 1]!, selectedClipIds: newIds });
+      }
     },
 
     unlinkClip: (clipId) => {
@@ -645,10 +716,18 @@ export function createClipsSlice(
             volume: 1,
             fadeInMs: 0,
             fadeOutMs: 0,
-            // Caption defaults: outlined, slightly smaller than a title,
-            // lower-third position (y 0.82).
-            transform: { ...structuredClone(DEFAULT_TRANSFORM), y: 0.82 },
-            text: { content: cue.text, color: '#ffffff', sizeFrac: 0.05, bold: true, outline: true },
+            // Caption defaults: outlined, slightly smaller than a title, in the
+            // band the file asked for (lower third unless it says otherwise).
+            transform: { ...structuredClone(DEFAULT_TRANSFORM), y: CAPTION_Y[cue.vAlign ?? 'bottom'] },
+            text: {
+              content: cue.text,
+              color: '#ffffff',
+              sizeFrac: 0.05,
+              bold: true,
+              outline: true,
+              // Left undefined when the file states nothing: centered captions.
+              ...(cue.align ? { align: cue.align } : {}),
+            },
           });
         }
       }, null);

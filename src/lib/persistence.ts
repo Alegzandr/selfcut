@@ -1,6 +1,7 @@
 import { AudioTrackInfo, MediaAsset, Project } from '../types';
 import { useStore } from '../store/store';
 import { ensureAssetVisuals } from '../media/probe';
+import { isMissingSource } from './missingSource';
 import { t } from '../i18n';
 
 // Surface a save failure once per session: repeated debounced saves must not
@@ -71,7 +72,7 @@ function txDone(tx: IDBTransaction): Promise<void> {
 // Guards against a stale or corrupted database (older schema, interrupted
 // write): a project that fails the check is discarded instead of crashing
 // hydration, and invalid assets are dropped individually.
-function isValidProject(p: unknown): p is Project {
+export function isValidProject(p: unknown): p is Project {
   if (typeof p !== 'object' || p === null) return false;
   const proj = p as Project;
   return (
@@ -137,10 +138,13 @@ async function loadPersisted(): Promise<{ project: Project; assets: MediaAsset[]
     .filter(isValidAsset)
     .map(migrateAsset);
   // Flag every asset whose source file no longer reads (disconnected source).
+  // An asset that came from a `.selfcut` file and has not been relinked yet
+  // carries a placeholder instead of a real File: it reads fine (it is an empty
+  // Blob) but holds no media, so it has to be recognized on its own.
   const assets = await Promise.all(
     stored.map(async (asset) => ({
       ...asset,
-      disconnected: !(await isFileReadable(asset.file)),
+      disconnected: isMissingSource(asset.file) || !(await isFileReadable(asset.file)),
     })),
   );
   return { project, assets };

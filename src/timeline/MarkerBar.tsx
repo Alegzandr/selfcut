@@ -10,7 +10,6 @@ import {
   MARKER_BAR_HEIGHT_PX,
   RULER_HEIGHT_PX,
   SNAP_THRESHOLD_PX,
-  TRACK_HEIGHT_PX,
 } from '../app/config';
 import { hapticOnSnap } from '../lib/haptics';
 
@@ -269,11 +268,12 @@ export const TimelineOverlay = memo(function TimelineOverlay({
   const padLeft = useStore((s) => s.timelinePadLeft);
   const region = useStore((s) => s.loopRegion);
   const markers = useStore((s) => s.project.markers);
+  const trackHeightPx = useStore((s) => s.trackHeightPx);
 
   return (
     <div
       className="pointer-events-none absolute inset-x-0"
-      style={{ top: MARKER_BAR_HEIGHT_PX + RULER_HEIGHT_PX, height: trackCount * TRACK_HEIGHT_PX }}
+      style={{ top: MARKER_BAR_HEIGHT_PX + RULER_HEIGHT_PX, height: trackCount * trackHeightPx }}
     >
       {region && (
         <div

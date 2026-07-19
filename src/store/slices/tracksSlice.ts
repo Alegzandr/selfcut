@@ -15,6 +15,7 @@ export function createTracksSlice(
   | 'moveTrack'
   | 'toggleTrackMuted'
   | 'toggleTrackHidden'
+  | 'toggleTrackLocked'
 > {
   return {
     addTrack: (kind) =>
@@ -59,6 +60,21 @@ export function createTracksSlice(
         const track = p.tracks.find((tr) => tr.id === trackId);
         if (track) track.hidden = !track.hidden;
       }),
+
+    toggleTrackLocked: (trackId) => {
+      withHistory((p) => {
+        const track = p.tracks.find((tr) => tr.id === trackId);
+        if (track) track.locked = !track.locked;
+      });
+      // Locking a track with a live selection on it would leave clips selected
+      // that no longer accept edits: drop them now.
+      const locked = new Set<string>();
+      for (const track of get().project.tracks) {
+        if (track.locked) for (const clip of track.clips) locked.add(clip.id);
+      }
+      const ids = get().selectedClipIds.filter((id) => !locked.has(id));
+      if (ids.length !== get().selectedClipIds.length) get().setSelectedClips(ids);
+    },
 
     updateTrack: (trackId, patch) => {
       const p = get().project;

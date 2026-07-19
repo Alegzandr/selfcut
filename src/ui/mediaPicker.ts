@@ -10,6 +10,11 @@
  * with a correct MIME type but an unlisted extension selectable - the probe
  * validates for real, this list only drives the OS dialog filter.
  */
+import { PROJECT_FILE_EXT } from '../lib/projectFile';
+
+/** Subtitle containers the parser reads. */
+export const SUBTITLE_ACCEPT = '.srt,.vtt,.ass,.ssa';
+
 const ACCEPT = [
   'video/*,audio/*,image/*',
   // Video containers.
@@ -19,11 +24,32 @@ const ACCEPT = [
   // Still images.
   '.png,.jpg,.jpeg,.webp,.gif,.avif,.bmp,.svg',
   // Subtitles.
-  '.srt,.vtt,.ass,.ssa',
+  SUBTITLE_ACCEPT,
 ].join(',');
 
 export function openMediaPicker(onFiles: (files: FileList) => void): void {
   pick(onFiles, false);
+}
+
+/**
+ * Subtitles-only variant. The generic media picker already accepts them, but
+ * "Import subtitles" has to be findable as its own action - a caption file is
+ * not something users think to look for behind "Import media".
+ */
+export function openSubtitlePicker(onFiles: (files: FileList) => void): void {
+  pick(onFiles, false, { accept: SUBTITLE_ACCEPT });
+}
+
+/** Project-file variant: a single `.selfcut` document, not media. */
+export function openProjectPicker(onFile: (file: File) => void): void {
+  pick(
+    (files) => {
+      const file = files[0];
+      if (file) onFile(file);
+    },
+    false,
+    { accept: PROJECT_FILE_EXT, multiple: false },
+  );
 }
 
 /**
@@ -37,16 +63,20 @@ export function openFolderPicker(onFiles: (files: FileList) => void): void {
   pick(onFiles, true);
 }
 
-function pick(onFiles: (files: FileList) => void, directory: boolean): void {
+function pick(
+  onFiles: (files: FileList) => void,
+  directory: boolean,
+  opts: { accept?: string; multiple?: boolean } = {},
+): void {
   const input = document.createElement('input');
   input.type = 'file';
   if (directory) {
     // Not in the HTMLInputElement typings, but supported by every target browser.
     (input as HTMLInputElement & { webkitdirectory: boolean }).webkitdirectory = true;
   } else {
-    input.accept = ACCEPT;
+    input.accept = opts.accept ?? ACCEPT;
   }
-  input.multiple = true;
+  input.multiple = opts.multiple ?? true;
   input.style.display = 'none';
   input.addEventListener('change', () => {
     if (input.files?.length) onFiles(input.files);

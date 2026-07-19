@@ -2,25 +2,7 @@ import type { ComponentType } from 'react';
 import type { ParseKeys } from 'i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import {
-  Blend,
-  ClipboardPaste,
-  Copy,
-  CopyPlus,
-  Film,
-  FolderPlus,
-  MapPin,
-  Music,
-  Scissors,
-  Settings,
-  SlidersHorizontal,
-  LayoutPanelTop,
-  Link2,
-  Trash2,
-  Type,
-  Unlink,
-  ZoomIn,
-} from 'lucide-react';
+import { FolderPlus, Trash2 } from 'lucide-react';
 import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
 import { useIsCoarsePointer } from '../lib/device';
 import { useEditorCommands } from './commands';
@@ -36,7 +18,13 @@ import { useEditorCommands } from './commands';
 type Tile = {
   /** Command id from the shared registry (its handler + disabled state). */
   cmd: string;
-  icon: ComponentType<{ className?: string }>;
+  /**
+   * Optional icon override. Left out, the tile draws the command's own icon, so
+   * an action cannot end up wearing one glyph on desktop and another on touch -
+   * Scissors used to mean "cut" in the menus and "split" down here.
+   * Override only where the larger touch tile earns a more literal glyph.
+   */
+  icon?: ComponentType<{ className?: string }>;
   labelKey: ParseKeys;
   danger?: boolean;
   /** Clip rail only: hide the tile unless the selected clip is real media. */
@@ -48,28 +36,30 @@ type Tile = {
 };
 
 const TOOL_TILES: readonly Tile[] = [
+  // "Import media" reads better as a folder with a plus than as the menu's
+  // generic file glyph, and this tile is the entry point of the whole app.
   { cmd: 'file.import', icon: FolderPlus, labelKey: 'mobile.media' },
-  { cmd: 'edit.paste', icon: ClipboardPaste, labelKey: 'clipbar.paste' },
-  { cmd: 'insert.text', icon: Type, labelKey: 'mobile.text' },
-  { cmd: 'insert.color', icon: Blend, labelKey: 'mobile.color' },
-  { cmd: 'insert.gradient', icon: Blend, labelKey: 'mobile.gradient' },
-  { cmd: 'insert.audioTrack', icon: Music, labelKey: 'mobile.audio' },
-  { cmd: 'insert.videoTrack', icon: Film, labelKey: 'mobile.video' },
-  { cmd: 'insert.marker', icon: MapPin, labelKey: 'mobile.marker' },
+  { cmd: 'edit.paste', labelKey: 'clipbar.paste' },
+  { cmd: 'insert.text', labelKey: 'mobile.text' },
+  { cmd: 'insert.color', labelKey: 'mobile.color' },
+  { cmd: 'insert.gradient', labelKey: 'mobile.gradient' },
+  { cmd: 'insert.audioTrack', labelKey: 'mobile.audio' },
+  { cmd: 'insert.videoTrack', labelKey: 'mobile.video' },
+  { cmd: 'insert.marker', labelKey: 'mobile.marker' },
   // Touch has no menu bar: preferences (language, time format) need a tile.
-  { cmd: 'edit.preferences', icon: Settings, labelKey: 'mobile.settings' },
+  { cmd: 'edit.preferences', labelKey: 'mobile.settings' },
 ];
 
 const CLIP_TILES: readonly Tile[] = [
-  { cmd: 'clip.split', icon: Scissors, labelKey: 'clipbar.split' },
-  { cmd: 'edit.copy', icon: Copy, labelKey: 'clipbar.copy' },
-  { cmd: 'edit.paste', icon: ClipboardPaste, labelKey: 'clipbar.paste' },
-  { cmd: 'clip.duplicate', icon: CopyPlus, labelKey: 'clipbar.duplicate' },
-  { cmd: 'clip.punchIn', icon: ZoomIn, labelKey: 'clipbar.punchIn' },
-  { cmd: 'clip.stream', icon: LayoutPanelTop, labelKey: 'clipbar.stream', mediaOnly: true },
-  { cmd: 'clip.adjust', icon: SlidersHorizontal, labelKey: 'clipbar.adjust' },
-  { cmd: 'clip.link', icon: Link2, labelKey: 'clipbar.link', linkableOnly: true },
-  { cmd: 'clip.unlink', icon: Unlink, labelKey: 'clipbar.unlink', linkedOnly: true },
+  { cmd: 'clip.split', labelKey: 'clipbar.split' },
+  { cmd: 'edit.copy', labelKey: 'clipbar.copy' },
+  { cmd: 'edit.paste', labelKey: 'clipbar.paste' },
+  { cmd: 'clip.duplicate', labelKey: 'clipbar.duplicate' },
+  { cmd: 'clip.punchIn', labelKey: 'clipbar.punchIn' },
+  { cmd: 'clip.stream', labelKey: 'clipbar.stream', mediaOnly: true },
+  { cmd: 'clip.adjust', labelKey: 'clipbar.adjust' },
+  { cmd: 'clip.link', labelKey: 'clipbar.link', linkableOnly: true },
+  { cmd: 'clip.unlink', labelKey: 'clipbar.unlink', linkedOnly: true },
   // Touch gets a single "Delete" that closes the gap (ripple), matching the
   // CapCut-style expectation. The plain "leave a gap" delete stays desktop-only
   // where a monteur has the keyboard shortcut (Del vs Shift+Del) and the mental
@@ -86,6 +76,8 @@ function Rail({ tiles }: { tiles: readonly Tile[] }) {
       {tiles.map((tile) => {
         const command = commands[tile.cmd];
         if (!command) return null;
+        const Icon = tile.icon ?? command.icon;
+        if (!Icon) return null;
         const color = tile.danger ? 'text-red-300' : 'text-zinc-300';
         return (
           <button
@@ -96,7 +88,7 @@ function Rail({ tiles }: { tiles: readonly Tile[] }) {
             onClick={command.onClick}
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800/70">
-              <tile.icon className="h-5 w-5" />
+              <Icon className="h-5 w-5" />
             </span>
             {t(tile.labelKey)}
           </button>

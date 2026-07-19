@@ -1,5 +1,6 @@
 import {
   Clip,
+  ClipShape,
   LoopRegion,
   MediaAsset,
   Project,
@@ -8,10 +9,25 @@ import {
 } from '../types';
 import type { TimeFormat } from '../lib/time';
 import type { PreviewResolutionMode } from '../app/config';
+import type { PreviewTool, PreviewView } from '../preview/view';
+import type { SubtitleCue } from '../lib/subtitles';
 
-export interface ClipboardEntry {
+/** Panes of the inspector column. */
+export type InspectorTab = 'clip' | 'subtitles';
+
+export interface ClipboardItem {
   clip: Clip;
   kind: Track['kind'];
+  /**
+   * Start offset from the earliest clip of the copied set, so a multi-clip
+   * paste reproduces the shape of what was copied instead of stacking
+   * everything on the playhead.
+   */
+  offsetMs: number;
+}
+
+export interface ClipboardEntry {
+  items: ClipboardItem[];
 }
 
 /**
@@ -61,6 +77,12 @@ export interface EditorState {
   /** Shuttle rate (J/K/L): 1 = normal. Reset to 1 whenever playback stops. */
   playbackRate: number;
   pxPerSec: number;
+  /**
+   * Height of every track lane in px (vertical zoom, persisted). Uniform across
+   * tracks by design - the timeline maps a pointer's Y to a row index by
+   * division, which only holds while the rows are the same height.
+   */
+  trackHeightPx: number;
   /** Left padding of the timeline content in px (half the viewport on mobile, fixed on desktop). */
   timelinePadLeft: number;
   /** Clip-drag snapping (N toggles it; Shift inverts it for the current drag). */
@@ -75,6 +97,12 @@ export interface EditorState {
   dragBadge: { clipId: string; text: string } | null;
   /** Mobile only: the inspector opens on demand (Adjust button), not on every selection. */
   inspectorOpen: boolean;
+  /**
+   * Which pane the inspector column shows. `subtitles` lists every text clip in
+   * the project as an editable cue list, and unlike `clip` it stands on its own -
+   * the column stays up with nothing selected.
+   */
+  inspectorTab: InspectorTab;
   /** Mobile only: the media library lives in a drawer (desktop docks it permanently). */
   libraryOpen: boolean;
   shortcutsOpen: boolean;
@@ -102,6 +130,8 @@ export interface EditorState {
   exportOpen: boolean;
   importing: boolean;
   error: string | null;
+  /** Transient confirmation ("Project saved"), shown in the same slot as `error`. */
+  notice: string | null;
 
   past: HistoryEntry[];
   future: HistoryEntry[];
@@ -129,6 +159,8 @@ export interface EditorState {
   moveTrack: (trackId: string, dir: -1 | 1) => void;
   toggleTrackMuted: (trackId: string) => void;
   toggleTrackHidden: (trackId: string) => void;
+  /** Lock a track: its clips stop being selectable, so no edit can reach them. */
+  toggleTrackLocked: (trackId: string) => void;
 
   setAssetPeaks: (assetId: string, audioTrackIndex: number, peaks: number[]) => void;
   setAssetThumbnails: (assetId: string, thumbnails: string[]) => void;
@@ -167,10 +199,9 @@ export interface EditorState {
   splitAtPlayhead: () => void;
   deleteClip: (clipId: string) => void;
   /** Delete a clip and close the gap: later clips on the same track shift left. */
-  rippleDeleteClip: (clipId: string) => void;
   /** Delete several clips as one undo step; ripple closes the gaps. */
   deleteClips: (clipIds: string[], ripple: boolean) => void;
-  duplicateClip: (clipId: string) => void;
+  duplicateClips: (clipIds: string[]) => void;
   /**
    * Break an A/V link: the video and audio clips become independent (they no
    * longer move/trim/split/delete together). The audio keeps playing from the
@@ -184,8 +215,8 @@ export interface EditorState {
    * The UI resolves the target ids from the selection via `linkableSelection`.
    */
   linkClips: (clipIds: string[]) => void;
-  copyClip: (clipId: string) => void;
-  cutClip: (clipId: string) => void;
+  copyClips: (clipIds: string[]) => void;
+  cutClips: (clipIds: string[]) => void;
   pasteAtPlayhead: () => void;
   /**
    * Punch-in zoom (the social-cut staple): cycle the scale of the selected
@@ -197,7 +228,7 @@ export interface EditorState {
    * Import parsed subtitle cues as caption clips (outlined, lower-third) on a
    * dedicated topmost video track, one undo step for the whole file.
    */
-  addSubtitleClips: (cues: { startMs: number; endMs: number; text: string }[]) => void;
+  addSubtitleClips: (cues: SubtitleCue[]) => void;
   /**
    * Stream-clip layout: split the selected clip into a facecam band (top 30%,
    * cropped to the source's top-left corner by default) over a gameplay band
@@ -208,6 +239,20 @@ export interface EditorState {
   /** Preview crop-edit mode for the selected video clip (session state). */
   cropEditing: boolean;
   setCropEditing: (v: boolean) => void;
+
+  /**
+   * Drop a drawn shape at the playhead. `center` is the shape's centre in
+   * output-normalized coordinates; the size lives in `shape.w/h`.
+   */
+  addShapeClip: (shape: ClipShape, center: { x: number; y: number }) => void;
+
+  /** Which gesture the preview stage answers to: select clips, pan, zoom or draw. */
+  previewTool: PreviewTool;
+  /** Which primitive the shape tool draws (the toolbar's shape flyout). */
+  previewShapeKind: ClipShape['kind'];
+  setPreviewShapeKind: (kind: ClipShape['kind']) => void;
+  /** Preview camera. View-only: never undoable, never exported. */
+  previewView: PreviewView;
 
   beginGesture: () => void;
   endGesture: () => void;
@@ -242,8 +287,11 @@ export interface EditorState {
   /** Start over: empty project, empty library, empty history. */
   resetProject: () => void;
   setPxPerSec: (v: number) => void;
+  /** Vertical zoom: clamped to the track-height bounds and persisted. */
+  setTrackHeightPx: (px: number) => void;
   setTimelinePadLeft: (px: number) => void;
   setInspectorOpen: (open: boolean) => void;
+  setInspectorTab: (tab: InspectorTab) => void;
   setLibraryOpen: (open: boolean) => void;
   setShortcutsOpen: (open: boolean) => void;
   setPreferencesOpen: (open: boolean) => void;
@@ -254,6 +302,11 @@ export interface EditorState {
   /** Open (id) or close (null) a marker's inline label editor. */
   setRenamingMarker: (markerId: string | null) => void;
   setTimeFormat: (format: TimeFormat) => void;
+  setPreviewTool: (tool: PreviewTool) => void;
+  /** Move/scale the preview camera; the caller clamps via `clampView`. */
+  setPreviewView: (view: PreviewView) => void;
+  /** Back to the fitted, un-panned frame. */
+  resetPreviewView: () => void;
   /** Pick the preview resolution rung; persisted. */
   setPreviewResolution: (mode: PreviewResolutionMode) => void;
   /** Set the master monitoring gain (0..1); persisted. */
@@ -262,4 +315,5 @@ export interface EditorState {
   setExportOpen: (open: boolean) => void;
   setImporting: (v: boolean) => void;
   setError: (msg: string | null) => void;
+  setNotice: (msg: string | null) => void;
 }

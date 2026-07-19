@@ -49,6 +49,14 @@ export const ASSET_DRAG_MIME = 'application/x-selfcut-asset';
 
 /** Timeline geometry. */
 export const TRACK_HEIGHT_PX = 64;
+/**
+ * Vertical zoom bounds for the track lanes. One height for every track rather
+ * than a per-track one: the timeline converts a pointer's Y straight into a row
+ * index (`floor(y / height)`), which stays exact only while the rows are
+ * uniform. MIN still clears the waveform; MAX keeps a filmstrip legible.
+ */
+export const MIN_TRACK_HEIGHT_PX = 36;
+export const MAX_TRACK_HEIGHT_PX = 160;
 /** Width of the fixed track-header pane (desktop: sliders + meter; coarse: buttons only). */
 export const TRACK_HEADER_WIDTH_PX = 112;
 export const TRACK_HEADER_WIDTH_COARSE_PX = 44;
