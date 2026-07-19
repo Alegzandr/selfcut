@@ -4,6 +4,7 @@
   "og.title": "SelfCut - Edit your videos without installing anything",
   "og.description": "Cut, tweak and export your videos for YouTube, TikTok or Reels, right in the browser. Free, no watermark, and your videos stay on your device.",
   "twitter.description": "Video editing right in the browser: free, no watermark, and your videos stay on your device.",
+  "og.imageAlt": "The SelfCut interface: video preview, editing toolbar, and timeline with a video clip and its audio track.",
   "schema.browserReq": "Browser with WebCodecs (recent Chrome, Edge, Safari)",
   "schema.description": "Video editor that runs entirely in the browser: cut, adjust the sound, slow down, add fades and export for YouTube, TikTok, Reels or as MP3. Free, no watermark, no file is ever uploaded.",
   "skip": "Skip to content",

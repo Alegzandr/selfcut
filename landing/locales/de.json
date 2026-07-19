@@ -4,6 +4,7 @@
   "og.title": "SelfCut - Videos schneiden ohne Installation",
   "og.description": "Schneiden, anpassen und exportieren Sie Ihre Videos für YouTube, TikTok oder Reels, direkt im Browser. Kostenlos, ohne Wasserzeichen, und Ihre Videos bleiben auf Ihrem Gerät.",
   "twitter.description": "Videoschnitt direkt im Browser: kostenlos, ohne Wasserzeichen, und Ihre Videos bleiben auf Ihrem Gerät.",
+  "og.imageAlt": "Die SelfCut-Oberfläche: Videovorschau, Bearbeitungsleiste und Timeline mit einem Videoclip und seiner Audiospur.",
   "schema.browserReq": "Browser mit WebCodecs (aktuelle Versionen von Chrome, Edge, Safari)",
   "schema.description": "Videoeditor, der vollständig im Browser läuft: schneiden, Ton anpassen, verlangsamen, Blenden hinzufügen und für YouTube, TikTok, Reels oder als MP3 exportieren. Kostenlos, ohne Wasserzeichen, keine Datei wird hochgeladen.",
   "skip": "Zum Inhalt springen",

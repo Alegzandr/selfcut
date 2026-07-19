@@ -4,6 +4,7 @@
   "og.title": "SelfCut - Montez vos vidéos sans rien installer",
   "og.description": "Coupez, ajustez et exportez vos vidéos pour YouTube, TikTok ou Reels, directement dans le navigateur. Gratuit, sans filigrane, et vos vidéos restent sur votre appareil.",
   "twitter.description": "Montage vidéo direct dans le navigateur : gratuit, sans filigrane, et vos vidéos restent sur votre appareil.",
+  "og.imageAlt": "L'interface de SelfCut : aperçu vidéo, barre d'outils de montage et timeline avec un clip vidéo et sa piste audio.",
   "schema.browserReq": "Navigateur avec WebCodecs (Chrome, Edge, Safari récents)",
   "schema.description": "Éditeur vidéo qui tourne entièrement dans le navigateur : coupez, ajustez le son, ralentissez, ajoutez des fondus et exportez pour YouTube, TikTok, Reels ou en MP3. Gratuit, sans filigrane, aucun fichier n'est uploadé.",
   "skip": "Aller au contenu",

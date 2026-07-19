@@ -4,6 +4,7 @@
   "og.title": "SelfCut - Edita tus vídeos sin instalar nada",
   "og.description": "Corta, ajusta y exporta tus vídeos para YouTube, TikTok o Reels, directamente en el navegador. Gratis, sin marca de agua, y tus vídeos se quedan en tu dispositivo.",
   "twitter.description": "Edición de vídeo directamente en el navegador: gratis, sin marca de agua, y tus vídeos se quedan en tu dispositivo.",
+  "og.imageAlt": "La interfaz de SelfCut: vista previa de vídeo, barra de herramientas de edición y línea de tiempo con un clip de vídeo y su pista de audio.",
   "schema.browserReq": "Navegador con WebCodecs (Chrome, Edge, Safari recientes)",
   "schema.description": "Editor de vídeo que funciona completamente en el navegador: corta, ajusta el sonido, ralentiza, añade fundidos y exporta para YouTube, TikTok, Reels o en MP3. Gratis, sin marca de agua, ningún archivo se sube a ningún sitio.",
   "skip": "Ir al contenido",
