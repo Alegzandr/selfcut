@@ -7,7 +7,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b0b0d" />
+    <meta name="theme-color" content="#0b0d10" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
@@ -67,7 +67,7 @@
         --line-soft: oklch(0.25 0.008 250);
         --text: oklch(0.94 0.004 250);
         --muted: oklch(0.72 0.012 250);
-        --faint: oklch(0.58 0.012 250);
+        --faint: oklch(0.6 0.012 250);
         --accent: oklch(0.7 0.135 237);
         --accent-ink: oklch(0.2 0.05 240);
         --accent-dim: oklch(0.45 0.09 237);
@@ -81,8 +81,10 @@
         box-sizing: border-box;
       }
 
-      html {
-        scroll-behavior: smooth;
+      @media (prefers-reduced-motion: no-preference) {
+        html {
+          scroll-behavior: smooth;
+        }
       }
 
       body {
@@ -98,6 +100,11 @@
         color: inherit;
       }
 
+      ::selection {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+
       :focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 3px;
@@ -107,17 +114,18 @@
       .skip-link {
         position: absolute;
         left: var(--pad);
-        top: -4rem;
+        top: 0.75rem;
+        translate: 0 -6rem;
         z-index: 10;
         background: var(--accent);
         color: var(--accent-ink);
         padding: 0.5rem 1rem;
         font-weight: 600;
         text-decoration: none;
-        transition: top 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+        transition: translate 0.15s cubic-bezier(0.22, 1, 0.36, 1);
       }
       .skip-link:focus {
-        top: 0.75rem;
+        translate: 0 0;
       }
 
       /* Sections span the full viewport; hairlines run edge to edge and the
@@ -166,7 +174,11 @@
         border-radius: 4px;
         transition:
           background-color 0.15s ease-out,
-          border-color 0.15s ease-out;
+          border-color 0.15s ease-out,
+          translate 0.1s ease-out;
+      }
+      .btn:active {
+        translate: 0 1px;
       }
       .btn-primary {
         background: var(--accent);
@@ -237,6 +249,13 @@
         position: relative;
         min-width: 46rem;
       }
+      /* Phones see a shorter stage so the sweeping playhead spends less of
+         its loop clipped off-screen. */
+      @media (max-width: 40rem) {
+        .timeline {
+          min-width: 34rem;
+        }
+      }
       .ruler {
         display: flex;
         height: 1.6rem;
@@ -287,12 +306,18 @@
           oklch(0.31 0.014 250) 44px 46px
         );
       }
-      .clip.selected {
+      .scene .clip {
+        cursor: grab;
+      }
+      .clip.selected,
+      .scene .clip:hover {
         border-color: var(--accent);
         box-shadow: inset 0 0 0 1px var(--accent);
       }
       .clip.selected::before,
-      .clip.selected::after {
+      .clip.selected::after,
+      .scene .clip:hover::before,
+      .scene .clip:hover::after {
         content: '';
         position: absolute;
         top: 50%;
@@ -302,10 +327,12 @@
         border-radius: 2px;
         background: var(--accent);
       }
-      .clip.selected::before {
+      .clip.selected::before,
+      .scene .clip:hover::before {
         left: 3px;
       }
-      .clip.selected::after {
+      .clip.selected::after,
+      .scene .clip:hover::after {
         right: 3px;
       }
       .clip.audio-clip {
@@ -351,6 +378,88 @@
           }
           to {
             left: 97%;
+          }
+        }
+
+        /* Clips light up while the playhead crosses them. Windows are derived
+           from the sweep animation (left: 3% -> 97% over 14s, linear): a clip
+           spanning [a%, b%] of the track is lit for x in [(a-3)/94, (b-3)/94]
+           of the cycle. Keep in sync with the clip widths in the markup. */
+        .track:nth-child(2) .clip:nth-child(1) {
+          animation: play-a 14s linear infinite;
+        }
+        .track:nth-child(2) .clip:nth-child(2) {
+          animation: play-b 14s linear infinite;
+        }
+        .track:nth-child(2) .clip:nth-child(3) {
+          animation: play-c 14s linear infinite;
+        }
+        .track:nth-child(3) .clip {
+          animation: play-broll 14s linear infinite;
+        }
+        .track.audio .clip svg {
+          animation: play-wave 14s linear infinite;
+        }
+        @keyframes play-a {
+          0%,
+          24.5% {
+            filter: brightness(1.25);
+          }
+          25.5%,
+          100% {
+            filter: brightness(1);
+          }
+        }
+        @keyframes play-b {
+          0%,
+          23.5% {
+            filter: brightness(1);
+          }
+          24.5%,
+          60.6% {
+            filter: brightness(1.25);
+          }
+          61.6%,
+          100% {
+            filter: brightness(1);
+          }
+        }
+        @keyframes play-c {
+          0%,
+          59.6% {
+            filter: brightness(1);
+          }
+          60.6%,
+          84% {
+            filter: brightness(1.25);
+          }
+          85%,
+          100% {
+            filter: brightness(1);
+          }
+        }
+        @keyframes play-broll {
+          0%,
+          8.6% {
+            filter: brightness(1);
+          }
+          9.6%,
+          41.5% {
+            filter: brightness(1.25);
+          }
+          42.5%,
+          100% {
+            filter: brightness(1);
+          }
+        }
+        @keyframes play-wave {
+          0%,
+          90.4% {
+            opacity: 1;
+          }
+          91.4%,
+          100% {
+            opacity: 0.55;
           }
         }
       }
@@ -434,6 +543,10 @@
         border-radius: 4px;
         padding: 0.1em 0.45em;
         white-space: nowrap;
+        transition: translate 0.1s ease-out;
+      }
+      .spec kbd:hover {
+        translate: 0 1px;
       }
       @media (max-width: 40rem) {
         .spec {
@@ -460,6 +573,8 @@
         gap: 0.7rem;
       }
       .format .shape {
+        position: relative;
+        overflow: hidden;
         border: 1px solid var(--line);
         border-radius: 6px;
         background: linear-gradient(160deg, oklch(0.24 0.01 250), oklch(0.18 0.008 250));
@@ -486,6 +601,36 @@
         height: 55%;
         color: var(--accent);
       }
+      .format .shape::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 4%;
+        width: 1.5px;
+        background: var(--playhead);
+        opacity: 0;
+        pointer-events: none;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .format:hover .shape:not(.audio)::after {
+          animation: shape-sweep 1.1s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        @keyframes shape-sweep {
+          0% {
+            left: 4%;
+            opacity: 1;
+          }
+          85% {
+            opacity: 1;
+          }
+          100% {
+            left: 95%;
+            opacity: 0;
+          }
+        }
+      }
+
       .format figcaption {
         font-size: 0.95rem;
         color: var(--muted);
@@ -537,6 +682,17 @@
         max-width: var(--measure);
         color: var(--muted);
       }
+      @media (prefers-reduced-motion: no-preference) {
+        .faq-list details[open] p {
+          animation: faq-in 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        @keyframes faq-in {
+          from {
+            opacity: 0;
+            translate: 0 -0.25rem;
+          }
+        }
+      }
 
       .closing {
         padding-bottom: clamp(3.5rem, 8vw, 6rem);
@@ -564,6 +720,9 @@
       }
       footer a {
         text-decoration: none;
+        /* Vertical padding on inline links widens the tap target without
+           changing the line box. */
+        padding-block: 0.75rem;
       }
       footer a:hover {
         color: var(--muted);
@@ -573,6 +732,7 @@
         align-items: center;
         gap: 0.5rem;
         padding: 0;
+        min-height: 44px;
         border: 0;
         background: none;
         color: inherit;
@@ -614,6 +774,13 @@
         font-stretch: 110%;
       }
       .lang-close {
+        display: grid;
+        place-items: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        /* Pull the enlarged hit area back so the × stays visually in the
+           corner of the dialog. */
+        margin: -0.7rem -0.7rem -0.7rem 0;
         border: 0;
         background: none;
         color: var(--faint);
@@ -621,7 +788,7 @@
         font-size: 1.4rem;
         line-height: 1;
         cursor: pointer;
-        padding: 0.15rem 0.4rem;
+        padding: 0;
         border-radius: 4px;
       }
       .lang-close:hover {
