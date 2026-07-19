@@ -227,6 +227,9 @@ export const ClipView = memo(function ClipView({
   // Text/solid clips and silent footage get no volume line.
   const hasAudio = clip.kind === 'media' && (audioInfo != null || hasPeaks);
   const volumeFader = gainToFader(clip.volume);
+  // Gain actually trimmed away from unity - the only case where the volume
+  // line is worth drawing on an idle clip.
+  const gainTrimmed = Math.abs(volumeFader - UNITY_FADER) > 0.001;
   // Only an audio clip pins a single source track worth labelling - a video clip
   // delegates all of them, so it gets no track badge.
   const trackBadge =
@@ -821,6 +824,10 @@ export const ClipView = memo(function ClipView({
       : 'border-emerald-900';
   // Unselected on touch: no touch-action lock, so a horizontal pan scrubs the timeline.
   const touch = coarse && !selected ? '' : 'touch-none';
+  // `isolate` below gives the clip its own stacking context. Its inner
+  // z-10/z-20/z-30 (volume line, grab band, badges) have to stay inside it:
+  // the sticky track header is z-10 too, and a clip is rendered after it, so
+  // otherwise those layers win the tie on DOM order and paint over the gutter.
 
   return (
     <div
@@ -844,7 +851,7 @@ export const ClipView = memo(function ClipView({
         e.stopPropagation();
         useStore.getState().selectClip(clip.id);
       }}
-      className={`absolute top-1 bottom-1 overflow-hidden rounded-md border focus-visible:ring-2 focus-visible:ring-sky-300 ${touch} ${border} ${isVideo ? 'bg-sky-950' : 'bg-emerald-950'}`}
+      className={`group absolute top-1 bottom-1 isolate overflow-hidden rounded-md border focus-visible:ring-2 focus-visible:ring-sky-300 ${touch} ${border} ${isVideo ? 'bg-sky-950' : 'bg-emerald-950'}`}
       style={{ left, width }}
       onPointerDown={(e) => beginDrag(e, 'move')}
       onPointerMove={onPointerMove}
@@ -1067,15 +1074,20 @@ export const ClipView = memo(function ClipView({
       {/* Vegas-style volume line: a horizontal gain line across the clip, dragged
           up/down to set clip.volume. Its height IS the fader position, so the
           gain is readable at a glance; the dashed tick marks unity (0 dB). Only
-          clips that actually carry audio get one. */}
+          clips that actually carry audio get one.
+
+          At unity the line carries no information, and drawing it on every clip
+          of every track turns the timeline into a grid of amber rules. So it
+          only stays lit when the gain is actually trimmed; otherwise it fades
+          in on hover or selection, right when it becomes draggable. */}
       {hasAudio && (
         <>
           <div
-            className="pointer-events-none absolute inset-x-0 z-10 h-0 translate-y-1/2 border-t border-dashed border-white/25"
+            className={`pointer-events-none absolute inset-x-0 z-10 h-0 translate-y-1/2 border-t border-dashed border-white/25 transition-opacity ${gainTrimmed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} ${selected ? 'opacity-100' : ''}`}
             style={{ bottom: volumeLineBottom(UNITY_FADER) }}
           />
           <div
-            className="pointer-events-none absolute inset-x-0 z-10 h-0 translate-y-1/2 border-t-2 border-amber-300/90"
+            className={`pointer-events-none absolute inset-x-0 z-10 h-0 translate-y-1/2 border-t-2 border-amber-300/90 transition-opacity ${gainTrimmed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} ${selected ? 'opacity-100' : ''}`}
             style={{ bottom: volumeLineBottom(volumeFader) }}
           />
           {(!coarse || selected) && (
