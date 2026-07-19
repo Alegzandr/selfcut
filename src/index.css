@@ -67,3 +67,47 @@ textarea {
     inset: -8px;
   }
 }
+
+/* Thin range slider (timeline track header). The native thumb is ~16px tall
+   and is drawn outside the input's box, so a 4px-high native range spills its
+   knob over the neighbouring rows and the clip area. Draw both parts
+   ourselves: a 4px track painted as a background, a 10px thumb that fits
+   inside the input's own height. The knob colour follows `color`, so callers
+   tint it with a Tailwind `text-*` class instead of `accent-*` (which has no
+   effect once appearance is none). */
+.slider-thin {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 10px;
+  background: transparent;
+}
+.slider-thin::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background-color: rgb(63 63 70);
+}
+.slider-thin::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background-color: rgb(63 63 70);
+}
+.slider-thin::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 10px;
+  width: 10px;
+  margin-top: -3px; /* centre the 10px thumb on the 4px track */
+  border-radius: 9999px;
+  background-color: currentColor;
+}
+.slider-thin::-moz-range-thumb {
+  height: 10px;
+  width: 10px;
+  border: none;
+  border-radius: 9999px;
+  background-color: currentColor;
+}
+.slider-thin:focus-visible {
+  outline: 2px solid rgb(56 189 248);
+  outline-offset: 2px;
+}

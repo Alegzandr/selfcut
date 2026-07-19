@@ -28,7 +28,7 @@ export const TrackRow = memo(function TrackRow({ track, pxPerMs }: Props) {
 
   const btn =
     'touch-hit flex h-4.5 w-4.5 items-center justify-center rounded text-zinc-500 active:bg-zinc-700 pointer-coarse:h-7 pointer-coarse:w-7';
-  const slider = 'h-1 w-full min-w-0 cursor-ew-resize';
+  const slider = 'slider-thin w-full min-w-0 cursor-ew-resize';
 
   const xfades = trackCrossfades(track.clips);
 
@@ -109,7 +109,7 @@ export const TrackRow = memo(function TrackRow({ track, pxPerMs }: Props) {
                 max={1}
                 step={0.001}
                 value={gainToFader(track.volume ?? 1)}
-                className={`${slider} ${track.kind === 'video' ? 'accent-sky-500' : 'accent-emerald-500'}`}
+                className={`${slider} ${track.kind === 'video' ? 'text-sky-500' : 'text-emerald-500'}`}
                 title={t('track.volume', { db: gainDb(track.volume ?? 1) })}
                 onPointerDown={() => {
                   setDraggingVolume(true);
@@ -137,7 +137,7 @@ export const TrackRow = memo(function TrackRow({ track, pxPerMs }: Props) {
                 max={1}
                 step={0.01}
                 value={track.opacity ?? 1}
-                className={`${slider} accent-zinc-400`}
+                className={`${slider} text-zinc-400`}
                 title={t('track.opacity', { pct: Math.round((track.opacity ?? 1) * 100) })}
                 onPointerDown={beginGesture}
                 onPointerUp={endGesture}
