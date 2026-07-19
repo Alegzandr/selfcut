@@ -17,7 +17,7 @@ export const IMAGE_CLIP_DEFAULT_MS = 5000;
 export const SNAP_THRESHOLD_PX = 8;
 
 /** Timeline zoom bounds (pixels per second). */
-export const MIN_PX_PER_SEC = 4;
+export const MIN_PX_PER_SEC = 1.6;
 export const MAX_PX_PER_SEC = 600;
 export const DEFAULT_PX_PER_SEC = 60;
 
