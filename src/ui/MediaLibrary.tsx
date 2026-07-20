@@ -40,9 +40,11 @@ export function MediaLibrary() {
               {list.length}
             </span>
           )}
+          {/* Always reachable: once the library holds assets, this is the only
+              import entry point in reach - the timeline dropzone is gone. */}
           <Tooltip label={t('library.import')}>
             <button
-              className="touch-hit rounded p-1 text-zinc-400 hover:text-zinc-200 active:bg-zinc-800 pointer-coarse:p-2"
+              className="touch-hit rounded bg-sky-500/15 p-1 text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 pointer-coarse:p-2"
               onClick={importHere}
               aria-label={t('library.import')}
             >
@@ -62,16 +64,7 @@ export function MediaLibrary() {
       </div>
 
       {list.length === 0 ? (
-        <div className="p-3">
-          <p className="text-[11px] leading-relaxed text-zinc-400">{t('library.empty')}</p>
-          <button
-            className="touch-hit mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-zinc-700 px-2 py-2 text-[11px] font-medium text-zinc-300 hover:border-sky-500/60 hover:text-sky-300 active:bg-zinc-800"
-            onClick={importHere}
-          >
-            <Import className="h-3.5 w-3.5" />
-            {t('library.import')}
-          </button>
-        </div>
+        <p className="p-3 text-[11px] leading-relaxed text-zinc-400">{t('library.empty')}</p>
       ) : (
         <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-1.5">
           {list.map((asset) => (
