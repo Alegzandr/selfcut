@@ -30,6 +30,7 @@
   "timeline.importing": "Importieren…",
   "timeline.addVideoTrack": "Videospur",
   "timeline.addAudioTrack": "Audiospur",
+  "timeline.dropNewTrack": "Ablegen, um eine neue Spur zu erstellen",
   "track.delete": "Titel löschen",
   "track.hide": "Spur ausblenden",
   "track.show": "Spur einblenden",

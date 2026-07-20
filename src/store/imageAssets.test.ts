@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import type { MediaAsset } from '../types';
+import { NEW_TRACK_TARGET } from './projectOps';
 
 /**
  * Still-image assets on the timeline: they land on video tracks, stretch
@@ -71,5 +72,13 @@ describe('image assets', () => {
     const clips = s().project.tracks.flatMap((t) => t.clips);
     expect(clips).toHaveLength(2);
     expect(clips[1]!.timelineStartMs).toBe(2500);
+  });
+
+  it('drop with NEW_TRACK_TARGET creates a fresh track instead of reusing one', () => {
+    s().addClipFromAssetAt('img', 1000, NEW_TRACK_TARGET);
+    const videoTracks = s().project.tracks.filter((t) => t.kind === 'video');
+    expect(videoTracks).toHaveLength(2);
+    expect(videoTracks[1]!.clips).toHaveLength(1);
+    expect(videoTracks[1]!.clips[0]!.timelineStartMs).toBe(1000);
   });
 });

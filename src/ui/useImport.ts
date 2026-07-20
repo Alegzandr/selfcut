@@ -4,13 +4,24 @@ import { ensureAssetVisuals, probeFile } from '../media/probe';
 import { isSubtitleFile, parseSubtitles } from '../lib/subtitles';
 import { t } from '../i18n';
 
+/** Options for a single import batch. */
+export type ImportOptions = {
+  /**
+   * Also append every imported asset to the timeline, in order. Opt-in: an
+   * import fills the media library, and what lands on the timeline stays the
+   * user's call (from a card, or by dragging it over). The one exception is
+   * the empty-project dropzone, which exists precisely to build a first cut.
+   */
+  placeOnTimeline?: boolean;
+};
+
 /**
- * Import a batch of files: probe metadata, register assets in the media
- * library AND append them to the timeline in order - dropping five rushes
- * gives a rough cut ready to trim, no per-asset clicking.
+ * Import a batch of files: probe metadata and register assets in the media
+ * library. Subtitle files have no library entry - they can only ever become
+ * caption clips, so they go straight to the timeline either way.
  */
-export function useImport(): (files: Iterable<File>) => Promise<void> {
-  return useCallback(async (files: Iterable<File>) => {
+export function useImport(): (files: Iterable<File>, opts?: ImportOptions) => Promise<void> {
+  return useCallback(async (files: Iterable<File>, opts: ImportOptions = {}) => {
     const {
       setImporting,
       setError,
@@ -33,8 +44,7 @@ export function useImport(): (files: Iterable<File>) => Promise<void> {
           // Subtitle files (.srt/.vtt) become caption clips, not media assets.
           if (isSubtitleFile(file)) {
             const cues = parseSubtitles(await file.text());
-            if (cues.length === 0)
-              throw new Error(t('errors.media.noCues', { name: file.name }));
+            if (cues.length === 0) throw new Error(t('errors.media.noCues', { name: file.name }));
             addSubtitleClips(cues);
             continue;
           }
@@ -44,7 +54,7 @@ export function useImport(): (files: Iterable<File>) => Promise<void> {
           beginGesture();
           try {
             addAsset(asset);
-            addClipFromAsset(asset.id);
+            if (opts.placeOnTimeline) addClipFromAsset(asset.id);
           } finally {
             // An open gesture swallows every later edit's history entry.
             endGesture();
@@ -56,7 +66,9 @@ export function useImport(): (files: Iterable<File>) => Promise<void> {
           if (warning) setError(warning);
         } catch (err) {
           failures.push(
-            err instanceof Error ? err.message : t('errors.media.importFailed', { name: file.name }),
+            err instanceof Error
+              ? err.message
+              : t('errors.media.importFailed', { name: file.name }),
           );
         }
       }

@@ -43,6 +43,7 @@ export function Timeline() {
   const { t } = useTranslation();
   const project = useStore((s) => s.project);
   const pxPerSec = useStore((s) => s.pxPerSec);
+  const trackHeightPx = useStore((s) => s.trackHeightPx);
   const importing = useStore((s) => s.importing);
   const coarse = useIsCoarsePointer();
   const importFiles = useImport();
@@ -57,9 +58,12 @@ export function Timeline() {
   const lastScrollLeft = useRef(0);
   // Marquee (rubber-band) selection: press anchor + base selection in a ref
   // (stable across renders), the live box in state (drawn as a fixed overlay).
-  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(
-    null,
-  );
+  const [marquee, setMarquee] = useState<{
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  } | null>(null);
   const marqueeRef = useRef<{
     x0: number;
     y0: number;
@@ -147,7 +151,10 @@ export function Timeline() {
     let raf = 0;
     const publish = () => {
       raf = 0;
-      publishViewport({ left: scroller.scrollLeft, right: scroller.scrollLeft + scroller.clientWidth });
+      publishViewport({
+        left: scroller.scrollLeft,
+        right: scroller.scrollLeft + scroller.clientWidth,
+      });
     };
     const onScroll = () => {
       if (raf === 0) raf = requestAnimationFrame(publish);
@@ -166,14 +173,17 @@ export function Timeline() {
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     if (scroller) {
-      publishViewport({ left: scroller.scrollLeft, right: scroller.scrollLeft + scroller.clientWidth });
+      publishViewport({
+        left: scroller.scrollLeft,
+        right: scroller.scrollLeft + scroller.clientWidth,
+      });
     }
   });
 
   useTimelineWheel(scrollerRef, coarse, empty);
   usePinchZoom(scrollerRef, coarse, pinching, empty);
   useMobileScrubSync(scrollerRef, coarse, { programmaticScroll, pinching, lastScrollLeft }, empty);
-  const { onAssetDragOver, onAssetDrop } = useAssetDrop();
+  const { onAssetDragOver, onAssetDragLeave, onAssetDrop, newTrackDragOver } = useAssetDrop();
 
   if (empty) {
     return (
@@ -193,7 +203,10 @@ export function Timeline() {
             multiple
             className="hidden"
             onChange={(e) => {
-              if (e.target.files?.length) void importFiles(e.target.files);
+              // The empty-project dropzone builds a first cut: these files go
+              // onto the timeline, unlike an import from the media library.
+              if (e.target.files?.length)
+                void importFiles(e.target.files, { placeOnTimeline: true });
               e.target.value = '';
             }}
           />
@@ -290,7 +303,12 @@ export function Timeline() {
   };
 
   return (
-    <div className="relative flex min-h-0 flex-1" onDragOver={onAssetDragOver} onDrop={onAssetDrop}>
+    <div
+      className="relative flex min-h-0 flex-1"
+      onDragOver={onAssetDragOver}
+      onDragLeave={onAssetDragLeave}
+      onDrop={onAssetDrop}
+    >
       {/* Fixed header pane, outside the scroller: the timeline cannot reach it. */}
       <div
         className="flex shrink-0 flex-col border-r border-zinc-800 bg-zinc-900"
@@ -316,88 +334,100 @@ export function Timeline() {
       {/* min-w-0: without it the flex item sizes to the timeline content instead
           of clamping it, and the scroller never gets anything to scroll. */}
       <div className="relative min-h-0 min-w-0 flex-1">
-      <div
-        ref={scrollerRef}
-        className="timeline-scroller h-full overflow-auto overscroll-none bg-zinc-950"
-      >
         <div
-          data-timeline-content
-          className="relative min-h-full"
-          style={{ width: contentWidth, minWidth: '100%' }}
-          onPointerDown={(e) => {
-            // Empty space below the tracks: pressing it drops the selection,
-            // like every NLE (rows handle their own background separately).
-            if (e.target === e.currentTarget) selectClip(null);
-          }}
+          ref={scrollerRef}
+          className="timeline-scroller h-full overflow-auto overscroll-none bg-zinc-950"
         >
-          <MarkerBar pxPerMs={pxPerMs} />
-          <Ruler durationMs={durationMs} pxPerMs={pxPerMs} overscanMs={coarse ? 0 : 30_000} />
           <div
-            // One list item per track, each holding its clips as focusable
-            // buttons: a screen reader walks the timeline track by track.
-            role="list"
-            aria-label={t('a11y.timeline.label')}
-            onPointerDown={onBgPointerDown}
-            onPointerMove={onBgPointerMove}
-            onPointerUp={onBgPointerUp}
-            onPointerCancel={onBgPointerUp}
-            onContextMenu={(e) => {
-              // Only the empty track background: clips / headers open their own menus.
-              if (coarse || (e.target as HTMLElement).dataset.rowbg === undefined) return;
-              e.preventDefault();
-              useStore.getState().openContextMenu(e.clientX, e.clientY, { kind: 'timeline' });
+            data-timeline-content
+            className="relative min-h-full"
+            style={{ width: contentWidth, minWidth: '100%' }}
+            onPointerDown={(e) => {
+              // Empty space below the tracks: pressing it drops the selection,
+              // like every NLE (rows handle their own background separately).
+              if (e.target === e.currentTarget) selectClip(null);
             }}
           >
-            {project.tracks.map((track, i) => (
-              <TrackRow key={track.id} track={track} index={i} pxPerMs={pxPerMs} />
-            ))}
-          </div>
-          {/* Region shading + marker lines: after the tracks, so they paint over the clips. */}
-          <TimelineOverlay pxPerMs={pxPerMs} trackCount={project.tracks.length} />
-          <SnapGuide />
+            <MarkerBar pxPerMs={pxPerMs} />
+            <Ruler durationMs={durationMs} pxPerMs={pxPerMs} overscanMs={coarse ? 0 : 30_000} />
+            <div
+              // One list item per track, each holding its clips as focusable
+              // buttons: a screen reader walks the timeline track by track.
+              role="list"
+              aria-label={t('a11y.timeline.label')}
+              onPointerDown={onBgPointerDown}
+              onPointerMove={onBgPointerMove}
+              onPointerUp={onBgPointerUp}
+              onPointerCancel={onBgPointerUp}
+              onContextMenu={(e) => {
+                // Only the empty track background: clips / headers open their own menus.
+                if (coarse || (e.target as HTMLElement).dataset.rowbg === undefined) return;
+                e.preventDefault();
+                useStore.getState().openContextMenu(e.clientX, e.clientY, { kind: 'timeline' });
+              }}
+            >
+              {project.tracks.map((track, i) => (
+                <TrackRow key={track.id} track={track} index={i} pxPerMs={pxPerMs} />
+              ))}
+            </div>
+            {/* Placeholder row while an asset drag hovers below the last track:
+                dropping there creates a fresh track instead of reusing one. */}
+            {newTrackDragOver && (
+              <div
+                className="pointer-events-none flex items-center border-y border-dashed border-sky-400/60 bg-sky-400/10"
+                style={{ height: trackHeightPx }}
+              >
+                <span className="sticky left-0 px-3 text-[11px] font-medium text-sky-300">
+                  {t('timeline.dropNewTrack')}
+                </span>
+              </div>
+            )}
+            {/* Region shading + marker lines: after the tracks, so they paint over the clips. */}
+            <TimelineOverlay pxPerMs={pxPerMs} trackCount={project.tracks.length} />
+            <SnapGuide />
 
-          {/* Opaque + sticky at the scroller's left edge, so the buttons stay
+            {/* Opaque + sticky at the scroller's left edge, so the buttons stay
               reachable however far the timeline is scrolled. */}
-          <div className="sticky left-0 z-20 flex w-fit gap-2 bg-zinc-950 p-2">
-            <button
-              className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800 pointer-coarse:py-2"
-              onClick={() => addTrack('video')}
-            >
-              <Plus className="mr-1 inline h-3 w-3" />
-              {t('timeline.addVideoTrack')}
-            </button>
-            <button
-              className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800 pointer-coarse:py-2"
-              onClick={() => addTrack('audio')}
-            >
-              <Plus className="mr-1 inline h-3 w-3" />
-              {t('timeline.addAudioTrack')}
-            </button>
+            <div className="sticky left-0 z-20 flex w-fit gap-2 bg-zinc-950 p-2">
+              <button
+                className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800 pointer-coarse:py-2"
+                onClick={() => addTrack('video')}
+              >
+                <Plus className="mr-1 inline h-3 w-3" />
+                {t('timeline.addVideoTrack')}
+              </button>
+              <button
+                className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800 pointer-coarse:py-2"
+                onClick={() => addTrack('audio')}
+              >
+                <Plus className="mr-1 inline h-3 w-3" />
+                {t('timeline.addAudioTrack')}
+              </button>
+            </div>
+
+            {!coarse && <Playhead scrollerRef={scrollerRef} />}
           </div>
-
-          {!coarse && <Playhead scrollerRef={scrollerRef} />}
         </div>
-      </div>
 
-      {/* Marquee box: viewport-fixed so it stays put while the timeline scrolls. */}
-      {marquee && (
-        <div
-          className="pointer-events-none fixed z-40 rounded-sm border border-sky-400/80 bg-sky-400/10"
-          style={{
-            left: Math.min(marquee.x0, marquee.x1),
-            top: Math.min(marquee.y0, marquee.y1),
-            width: Math.abs(marquee.x1 - marquee.x0),
-            height: Math.abs(marquee.y1 - marquee.y0),
-          }}
-        />
-      )}
+        {/* Marquee box: viewport-fixed so it stays put while the timeline scrolls. */}
+        {marquee && (
+          <div
+            className="pointer-events-none fixed z-40 rounded-sm border border-sky-400/80 bg-sky-400/10"
+            style={{
+              left: Math.min(marquee.x0, marquee.x1),
+              top: Math.min(marquee.y0, marquee.y1),
+              width: Math.abs(marquee.x1 - marquee.x0),
+              height: Math.abs(marquee.y1 - marquee.y0),
+            }}
+          />
+        )}
 
-      {/* Mobile: fixed playhead at the center of the scroller (the timeline scrolls under it). */}
-      {coarse && (
-        <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-0.5 -translate-x-1/2 bg-red-500">
-          <div className="absolute -left-[5px] top-0 h-0 w-0 border-x-[6px] border-t-[7px] border-x-transparent border-t-red-500" />
-        </div>
-      )}
+        {/* Mobile: fixed playhead at the center of the scroller (the timeline scrolls under it). */}
+        {coarse && (
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-0.5 -translate-x-1/2 bg-red-500">
+            <div className="absolute -left-[5px] top-0 h-0 w-0 border-x-[6px] border-t-[7px] border-x-transparent border-t-red-500" />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -30,6 +30,7 @@
   "timeline.importing": "Importation…",
   "timeline.addVideoTrack": "Piste vidéo",
   "timeline.addAudioTrack": "Piste audio",
+  "timeline.dropNewTrack": "Déposez ici pour créer une nouvelle piste",
   "track.delete": "Supprimer la piste",
   "track.hide": "Masquer la piste",
   "track.show": "Afficher la piste",

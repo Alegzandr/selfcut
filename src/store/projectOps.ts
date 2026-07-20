@@ -96,8 +96,19 @@ export function patchClips(p: Project, edits: Map<string, (c: Clip) => Clip>): P
   return projectChanged ? { ...p, tracks } : p;
 }
 
+/**
+ * Sentinel accepted as `preferredTrackId` by {@link ensureTrack}: always create
+ * a fresh track instead of reusing an existing one (drop below the last row).
+ */
+export const NEW_TRACK_TARGET = '__new-track__';
+
 /** Find (or create) the track a clip of the given kind should land on. Mutates `p`. */
 export function ensureTrack(p: Project, kind: Track['kind'], preferredTrackId?: string): Track {
+  if (preferredTrackId === NEW_TRACK_TARGET) {
+    const track: Track = { id: uid('track'), kind, clips: [] };
+    insertTrack(p, track);
+    return track;
+  }
   const preferred = preferredTrackId ? p.tracks.find((t) => t.id === preferredTrackId) : undefined;
   if (preferred && preferred.kind === kind && !preferred.locked) return preferred;
   // A locked track accepts no new clips: fall through to the next free one, or
