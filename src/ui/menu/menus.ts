@@ -1,4 +1,5 @@
 import {
+  AudioLines,
   ChevronDown,
   ChevronUp,
   Eye,
@@ -10,7 +11,9 @@ import {
   Trash2,
   Volume2,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useStore, getLinkTargets } from '../../store/store';
+import { audioKey } from '../../media/mediaCache';
 import type { ContextTarget } from '../../store/editorState';
 import { reconnectAssetViaPicker } from '../MediaLibrary';
 import { useEditorCommands, type Command } from '../commands';
@@ -29,8 +32,10 @@ import type { MenuEntry } from './MenuList';
  * open - a toggled mute or a deleted clip stays reflected live.
  */
 export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
+  const { t } = useTranslation();
   const commands = useEditorCommands();
   const tracks = useStore((s) => s.project.tracks);
+  const transcodes = useStore((s) => s.transcodes);
   const assets = useStore((s) => s.assets);
   const canLink = useStore((s) => getLinkTargets(s) !== null);
   const st = useStore.getState;
@@ -45,6 +50,21 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
     case 'clip': {
       const clip = tracks.flatMap((tr) => tr.clips).find((c) => c.id === target.clipId);
       const linked = clip?.linkId != null;
+      // A clip whose source carries sound the browser cannot decode: offer to
+      // convert it right here, so a muted clip is fixable without a detour
+      // through the media library.
+      const asset = clip?.kind === 'media' ? assets[clip.assetId] : undefined;
+      const convertible = (asset?.audioTracks ?? []).filter(
+        (tr) => tr.undecodable && !tr.transcoded,
+      );
+      const transcodeRows: MenuEntry[] = convertible.map((tr) => ({
+        id: `clip.activateAudio.${tr.index}`,
+        labelKey: 'clip.activateAudio',
+        label: `${t('clip.activateAudio')} · ${tr.label ?? tr.language ?? tr.codec ?? '?'}`,
+        icon: AudioLines,
+        disabled: audioKey(asset!.id, tr.index) in transcodes,
+        onClick: () => void st().transcodeAudioTrack(asset!.id, tr.index),
+      }));
       return resolve([
         'edit.cut',
         'edit.copy',
@@ -60,7 +80,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         '---',
         'clip.delete',
         'clip.rippleDelete',
-      ]);
+      ]).concat(transcodeRows.length > 0 ? ['---', ...transcodeRows] : []);
     }
 
     case 'timeline':

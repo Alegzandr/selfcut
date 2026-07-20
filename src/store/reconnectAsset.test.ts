@@ -32,9 +32,14 @@ beforeAll(async () => {
     structuredClone: typeof structuredClone;
   };
   g.document ??= { documentElement: {} };
-  g.window ??= { confirm: () => confirmResult };
+  g.window ??= {};
   g.structuredClone = (<T>(v: T): T => JSON.parse(JSON.stringify(v)) as T) as typeof structuredClone;
   ({ useStore } = await import('./store'));
+  // Stand in for <ConfirmDialog>: answer whatever the store asks with the
+  // verdict the test set, so `reconnectAsset` is never left awaiting.
+  useStore.subscribe((state) => {
+    if (state.confirmDialog) state.resolveConfirm(confirmResult);
+  });
 });
 
 function videoAsset(id: string, durationMs: number, name = `${id}.mp4`): MediaAsset {

@@ -37,6 +37,20 @@ export function saveProject(saveAs: boolean): void {
 }
 
 /**
+ * Confirm throwing the whole project away. Shared by File ▸ New, its mobile
+ * button and the relink banner's "start over", so all three ask the same
+ * question and none of them can reset the editor without one.
+ */
+export function confirmDiscardProject(): Promise<boolean> {
+  return useStore.getState().requestConfirm({
+    title: t('restore.startNewConfirm.title'),
+    message: t('restore.startNewConfirm'),
+    confirmLabel: t('restore.startNewConfirm.action'),
+    danger: true,
+  });
+}
+
+/**
  * Replace the editor contents with a project read from disk. Confirms first
  * when the current timeline is not empty: opening discards it, and the autosave
  * that follows overwrites the locally restored session too.
@@ -54,10 +68,24 @@ export function openProject(): void {
         return;
       }
 
-      const s = useStore.getState();
-      const hasWork = s.project.tracks.some((tr) => tr.clips.length > 0);
-      if (hasWork && !window.confirm(t('project.openConfirm'))) return;
+      const hasWork = useStore
+        .getState()
+        .project.tracks.some((tr) => tr.clips.length > 0);
+      if (
+        hasWork &&
+        !(await useStore.getState().requestConfirm({
+          title: t('project.openConfirm.title'),
+          message: t('project.openConfirm'),
+          confirmLabel: t('project.openConfirm.action'),
+          danger: true,
+        }))
+      ) {
+        return;
+      }
 
+      // Re-read: the dialog was up for arbitrarily long, so the state captured
+      // before it is stale.
+      const s = useStore.getState();
       s.hydrate(loaded.project, loaded.assets);
       bindOpenedProject(file.name);
       // Every asset arrives disconnected (the file holds no media), so there is

@@ -6,15 +6,51 @@ import {
   MAX_PX_PER_SEC,
   MIN_TRACK_HEIGHT_PX,
   MAX_TRACK_HEIGHT_PX,
+  MIN_TRACK_HEADER_WIDTH_PX,
+  MAX_TRACK_HEADER_WIDTH_PX,
+  MIN_LIBRARY_WIDTH_PX,
+  MAX_LIBRARY_WIDTH_PX,
+  MIN_INSPECTOR_WIDTH_PX,
+  MAX_INSPECTOR_WIDTH_PX,
 } from '../../app/config';
 import { PREVIEW_VIEW_RESET, isViewReset } from '../../preview/view';
 import {
   TIME_FORMAT_KEY,
   TRACK_HEIGHT_KEY,
+  TRACK_HEADER_WIDTH_KEY,
+  LIBRARY_WIDTH_KEY,
+  INSPECTOR_WIDTH_KEY,
   PREVIEW_RESOLUTION_KEY,
   PREVIEW_VOLUME_KEY,
   PREVIEW_MUTED_KEY,
 } from '../constants';
+
+/** Keys of the persisted pane-width fields - all three resize the same way. */
+type WidthKey = 'trackHeaderWidthPx' | 'libraryWidthPx' | 'inspectorWidthPx';
+
+/**
+ * Build a pane-width setter: clamp, skip the no-op (these fire on every
+ * pointermove of a drag, most of which land on the same rounded pixel), persist.
+ */
+function setWidth(
+  set: StoreSet,
+  get: StoreGet,
+  field: WidthKey,
+  storageKey: string,
+  min: number,
+  max: number,
+): (px: number) => void {
+  return (px) => {
+    const next = Math.round(clamp(px, min, max));
+    if (next === get()[field]) return;
+    try {
+      localStorage.setItem(storageKey, String(next));
+    } catch {
+      /* private mode / no storage - the choice just won't persist */
+    }
+    set({ [field]: next } as Pick<EditorState, WidthKey>);
+  };
+}
 
 export function createUiSlice(
   set: StoreSet,
@@ -27,6 +63,9 @@ export function createUiSlice(
   | 'setDragBadge'
   | 'setPxPerSec'
   | 'setTrackHeightPx'
+  | 'setTrackHeaderWidthPx'
+  | 'setLibraryWidthPx'
+  | 'setInspectorWidthPx'
   | 'setTimelinePadLeft'
   | 'setInspectorOpen'
   | 'setInspectorTab'
@@ -36,6 +75,8 @@ export function createUiSlice(
   | 'setAboutOpen'
   | 'openContextMenu'
   | 'closeContextMenu'
+  | 'requestConfirm'
+  | 'resolveConfirm'
   | 'setRenamingMarker'
   | 'setTimeFormat'
   | 'setPreviewTool'
@@ -75,6 +116,31 @@ export function createUiSlice(
       set({ trackHeightPx: next });
     },
 
+    setTrackHeaderWidthPx: setWidth(
+      set,
+      get,
+      'trackHeaderWidthPx',
+      TRACK_HEADER_WIDTH_KEY,
+      MIN_TRACK_HEADER_WIDTH_PX,
+      MAX_TRACK_HEADER_WIDTH_PX,
+    ),
+    setLibraryWidthPx: setWidth(
+      set,
+      get,
+      'libraryWidthPx',
+      LIBRARY_WIDTH_KEY,
+      MIN_LIBRARY_WIDTH_PX,
+      MAX_LIBRARY_WIDTH_PX,
+    ),
+    setInspectorWidthPx: setWidth(
+      set,
+      get,
+      'inspectorWidthPx',
+      INSPECTOR_WIDTH_KEY,
+      MIN_INSPECTOR_WIDTH_PX,
+      MAX_INSPECTOR_WIDTH_PX,
+    ),
+
     setTimelinePadLeft: (px) => {
       if (get().timelinePadLeft !== px) set({ timelinePadLeft: px });
     },
@@ -91,6 +157,20 @@ export function createUiSlice(
       if (get().contextMenu) set({ contextMenu: null });
     },
     setRenamingMarker: (markerId) => set({ renamingMarkerId: markerId }),
+
+    requestConfirm: (options) =>
+      new Promise<boolean>((resolve) => {
+        // A second request while one is up would strand the first caller's
+        // promise forever: decline it so its `await` unblocks.
+        get().confirmDialog?.resolve(false);
+        set({ confirmDialog: { ...options, resolve } });
+      }),
+    resolveConfirm: (ok) => {
+      const pending = get().confirmDialog;
+      if (!pending) return;
+      set({ confirmDialog: null });
+      pending.resolve(ok);
+    },
 
     setTimeFormat: (format) => {
       try {

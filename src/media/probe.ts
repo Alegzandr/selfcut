@@ -1,5 +1,5 @@
 import { CanvasSink, Input } from 'mediabunny';
-import { AudioTrackInfo, MediaAsset } from '../types';
+import { AudioTrackInfo, MediaAsset, isTrackPlayable } from '../types';
 import { uid } from '../lib/id';
 import { IMAGE_CLIP_DEFAULT_MS } from '../app/config';
 import {
@@ -24,22 +24,40 @@ export interface AssetVisualsSink {
   setAssetThumbnails: (assetId: string, thumbnails: string[]) => void;
 }
 
-/** Enumerate every decodable audio track of a source, in file order. */
+/**
+ * Enumerate every audio track of a source, in file order.
+ *
+ * Tracks the browser cannot decode (E-AC-3, AC-3, DTS - common in MKV rips) are
+ * kept and flagged rather than dropped: they carry real sound the user can bring
+ * in through an on-demand transcode, and listing them is what lets the UI offer
+ * that. `index` is the position in the FULL list, so mediaCache always re-fetches
+ * the exact track.
+ */
 async function probeAudioTracks(input: Input): Promise<AudioTrackInfo[]> {
   const tracks = await input.getAudioTracks();
   const out: AudioTrackInfo[] = [];
   for (let i = 0; i < tracks.length; i++) {
     const track = tracks[i]!;
-    // Skip tracks the browser can't decode - they would only fail silently
-    // later. `index` is the position in the FULL list, so mediaCache can
-    // re-fetch the exact track even when earlier ones were skipped.
-    if (!(await track.canDecode())) continue;
+    const decodable = await track.canDecode();
     out.push({
       index: i,
       language: track.languageCode && track.languageCode !== 'und' ? track.languageCode : undefined,
       label: track.name ?? undefined,
       channels: Math.max(1, track.numberOfChannels),
+      ...(track.codec ? { codec: track.codec } : {}),
+      ...(decodable ? {} : { undecodable: true as const }),
     });
+  }
+  return out;
+}
+
+/** Codecs of the tracks no browser can decode, deduped, in file order. */
+function undecodableCodecs(tracks: AudioTrackInfo[]): string[] {
+  const out: string[] = [];
+  for (const track of tracks) {
+    if (!track.undecodable) continue;
+    const codec = track.codec ?? '?';
+    if (!out.includes(codec)) out.push(codec);
   }
   return out;
 }
@@ -95,12 +113,14 @@ export async function probeFile(file: File, reuseId?: string): Promise<ProbeResu
 
   const videoTrack = await input.getPrimaryVideoTrack();
   const audioTracks = await probeAudioTracks(input);
+  const playableAudio = audioTracks.filter(isTrackPlayable);
+  const skippedCodecs = undecodableCodecs(audioTracks);
   if (!videoTrack && audioTracks.length === 0) {
     input.dispose();
     throw new Error(t('errors.media.noTrack', { name: file.name }));
   }
   const videoDecodable = videoTrack ? await videoTrack.canDecode() : false;
-  if (videoTrack && !videoDecodable && audioTracks.length === 0) {
+  if (videoTrack && !videoDecodable && playableAudio.length === 0) {
     input.dispose();
     throw new Error(
       t('errors.media.undecodableVideo', { name: file.name, codec: videoTrack.codec ?? '?' }),
@@ -124,7 +144,7 @@ export async function probeFile(file: File, reuseId?: string): Promise<ProbeResu
     width: decodableVideo ? await decodableVideo.getDisplayWidth() : undefined,
     height: decodableVideo ? await decodableVideo.getDisplayHeight() : undefined,
     fps: decodableVideo ? await probeFrameRate(decodableVideo) : undefined,
-    hasAudio: audioTracks.length > 0,
+    hasAudio: playableAudio.length > 0,
     audioTracks,
     thumbnails: [],
   };
@@ -143,13 +163,21 @@ export async function probeFile(file: File, reuseId?: string): Promise<ProbeResu
   }
 
   warmAudio(asset);
-  return {
-    asset,
-    warning:
-      videoTrack && !videoDecodable
-        ? t('errors.media.videoAudioOnly', { name: file.name, codec: videoTrack.codec ?? '?' })
-        : undefined,
-  };
+  // Both halves of the file can degrade independently, so report both.
+  const warnings: string[] = [];
+  if (videoTrack && !videoDecodable) {
+    warnings.push(
+      t('errors.media.videoAudioOnly', { name: file.name, codec: videoTrack.codec ?? '?' }),
+    );
+  }
+  if (skippedCodecs.length > 0) {
+    // The track is listed, just not playable yet: point at the way out rather
+    // than reporting a dead end.
+    warnings.push(
+      t('errors.media.audioNeedsTranscode', { name: file.name, codec: skippedCodecs.join(', ') }),
+    );
+  }
+  return { asset, warning: warnings.length > 0 ? warnings.join('\n') : undefined };
 }
 
 /**
@@ -211,6 +239,9 @@ export function targetThumbnailCount(durationMs: number): number {
 export function ensureAssetVisuals(asset: MediaAsset, sink: AssetVisualsSink): void {
   const wantBins = expectedPeakBins(asset.durationMs);
   for (const track of asset.audioTracks) {
+    // An undecodable track has no waveform until it is transcoded, and the
+    // transcode publishes its own peaks.
+    if (!isTrackPlayable(track)) continue;
     if ((track.peaks?.length ?? 0) >= wantBins) continue;
     void getPeaks(asset, track.index).then((peaks) => {
       if (peaks) sink.setAssetPeaks(asset.id, track.index, peaks);

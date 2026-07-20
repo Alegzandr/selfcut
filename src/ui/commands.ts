@@ -1,6 +1,5 @@
 import type { ComponentType } from 'react';
 import type { ParseKeys } from 'i18next';
-import { t } from '../i18n';
 import {
   Blend,
   Copy,
@@ -48,7 +47,7 @@ import {
 import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
 import { useImport } from './useImport';
 import { openMediaPicker, openSubtitlePicker } from './mediaPicker';
-import { openProject, saveProject } from './projectActions';
+import { confirmDiscardProject, openProject, saveProject } from './projectActions';
 import { unbindProjectFile } from '../lib/projectFile';
 import { zoomAtPlayhead } from '../timeline/zoom';
 import { isViewReset } from '../preview/view';
@@ -132,11 +131,13 @@ export function useEditorCommands(): Record<string, Command> {
       danger: true,
       // Destroys the whole project AND its saved state: never without a confirm.
       onClick: () => {
-        if (!window.confirm(t('restore.startNewConfirm'))) return;
-        st().resetProject();
-        // The new project is not the file the old one came from: a later save
-        // must ask where to go instead of overwriting it.
-        unbindProjectFile();
+        void confirmDiscardProject().then((ok) => {
+          if (!ok) return;
+          st().resetProject();
+          // The new project is not the file the old one came from: a later save
+          // must ask where to go instead of overwriting it.
+          unbindProjectFile();
+        });
       },
     },
     { id: 'file.open', labelKey: 'menu.file.open', icon: FolderOpen, shortcut: 'Ctrl+O', onClick: () => openProject() },

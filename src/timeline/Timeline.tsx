@@ -15,6 +15,7 @@ import {
   TRACK_HEADER_WIDTH_COARSE_PX,
   TRACK_HEADER_WIDTH_PX,
 } from '../app/config';
+import { ResizeHandle } from '../ui/ResizeHandle';
 import { clipEndMs } from '../store/store';
 import { clamp } from '../lib/time';
 import { useImport } from '../ui/useImport';
@@ -44,6 +45,7 @@ export function Timeline() {
   const project = useStore((s) => s.project);
   const pxPerSec = useStore((s) => s.pxPerSec);
   const trackHeightPx = useStore((s) => s.trackHeightPx);
+  const trackHeaderWidthPx = useStore((s) => s.trackHeaderWidthPx);
   const importing = useStore((s) => s.importing);
   const coarse = useIsCoarsePointer();
   const importFiles = useImport();
@@ -101,7 +103,7 @@ export function Timeline() {
   // Mobile: half the viewport on both sides so t=0 and the end can sit under the
   // fixed center playhead. Desktop: fixed pad + room to drag clips past the end.
   const padLeft = coarse ? halfW : TIMELINE_PAD_LEFT;
-  const headerWidth = coarse ? TRACK_HEADER_WIDTH_COARSE_PX : TRACK_HEADER_WIDTH_PX;
+  const headerWidth = coarse ? TRACK_HEADER_WIDTH_COARSE_PX : trackHeaderWidthPx;
   const contentWidth = coarse
     ? padLeft + durationMs * pxPerMs + halfW
     : TIMELINE_PAD_LEFT + (durationMs + 60_000) * pxPerMs;
@@ -330,6 +332,16 @@ export function Timeline() {
           </div>
         </div>
       </div>
+
+      {/* Desktop only: the coarse pane is a fixed strip of icon buttons with
+          nothing to widen, and there is no pointer to hit a 2px handle with. */}
+      {!coarse && (
+        <ResizeHandle
+          width={trackHeaderWidthPx}
+          onWidth={useStore.getState().setTrackHeaderWidthPx}
+          defaultWidth={TRACK_HEADER_WIDTH_PX}
+        />
+      )}
 
       {/* min-w-0: without it the flex item sizes to the timeline content instead
           of clamping it, and the scroller never gets anything to scroll. */}

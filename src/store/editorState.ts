@@ -50,6 +50,23 @@ export interface ContextMenuState {
 }
 
 /**
+ * A pending confirmation, shown by the shared `<ConfirmDialog>`. Callers never
+ * build this by hand: `requestConfirm()` fills in the resolver and awaits the
+ * answer, so a confirmation reads like the `window.confirm()` it replaces.
+ */
+export interface ConfirmRequest {
+  title: string;
+  message: string;
+  /** Label of the accepting button. Defaults to a generic "Continue". */
+  confirmLabel?: string;
+  /** Paints the accepting button red. For anything that destroys work. */
+  danger?: boolean;
+  resolve: (ok: boolean) => void;
+}
+
+export type ConfirmOptions = Omit<ConfirmRequest, 'resolve'>;
+
+/**
  * One undo step. The media library is part of it: an import adds an asset AND
  * a clip, so an undo that rolled back only the project would leave an orphan
  * card behind in the library.
@@ -83,6 +100,16 @@ export interface EditorState {
    * division, which only holds while the rows are the same height.
    */
   trackHeightPx: number;
+  /**
+   * Width of the fixed track-header pane in px (desktop only, persisted). The
+   * pane sits outside the scroller, so widening it never shifts timeline time
+   * coordinates - it only takes room from the scroller.
+   */
+  trackHeaderWidthPx: number;
+  /** Width of the docked media library column in px (desktop only, persisted). */
+  libraryWidthPx: number;
+  /** Width of the docked inspector column in px (desktop only, persisted). */
+  inspectorWidthPx: number;
   /** Left padding of the timeline content in px (half the viewport on mobile, fixed on desktop). */
   timelinePadLeft: number;
   /** Clip-drag snapping (N toggles it; Shift inverts it for the current drag). */
@@ -112,6 +139,8 @@ export interface EditorState {
   aboutOpen: boolean;
   /** Open right-click menu (desktop), or null when none is showing. */
   contextMenu: ContextMenuState | null;
+  /** Pending confirmation, or null when nothing is being asked. */
+  confirmDialog: ConfirmRequest | null;
   /** Marker whose inline label editor is open (opened by dbl-click or the menu). */
   renamingMarkerId: string | null;
   /** How the transport spells time out (persisted). */
@@ -129,6 +158,12 @@ export interface EditorState {
   clipboard: ClipboardEntry | null;
   exportOpen: boolean;
   importing: boolean;
+  /**
+   * Running audio transcodes, keyed by `audioKey(assetId, trackIndex)`, holding
+   * a 0..1 progress ratio. An entry exists only while the job runs, so the UI
+   * reads presence as "in progress".
+   */
+  transcodes: Record<string, number>;
   error: string | null;
   /** Transient confirmation ("Project saved"), shown in the same slot as `error`. */
   notice: string | null;
@@ -164,6 +199,21 @@ export interface EditorState {
 
   setAssetPeaks: (assetId: string, audioTrackIndex: number, peaks: number[]) => void;
   setAssetThumbnails: (assetId: string, thumbnails: string[]) => void;
+  /**
+   * Transcode one undecodable audio track (E-AC-3, AC-3, DTS) through
+   * ffmpeg.wasm so it becomes audible for the rest of the session. Long and
+   * explicitly user-triggered: progress is published in `transcodes`, and a
+   * second call for a track already running is a no-op.
+   */
+  transcodeAudioTrack: (assetId: string, audioTrackIndex: number) => Promise<void>;
+  /** Abort a running transcode (the partial result is discarded). */
+  cancelTranscode: (assetId: string, audioTrackIndex: number) => void;
+  /**
+   * Give every already-placed picture clip of an asset the audio lane for a
+   * track that just became playable (right after a transcode). Clips dropped
+   * before that had no lane to split onto.
+   */
+  attachAudioTrack: (assetId: string, audioTrackIndex: number) => void;
 
   selectClip: (id: string | null) => void;
   /** Ctrl/Cmd+A: every clip on every track. */
@@ -289,6 +339,10 @@ export interface EditorState {
   setPxPerSec: (v: number) => void;
   /** Vertical zoom: clamped to the track-height bounds and persisted. */
   setTrackHeightPx: (px: number) => void;
+  /** Pane resizes: each clamped to its own bounds and persisted. */
+  setTrackHeaderWidthPx: (px: number) => void;
+  setLibraryWidthPx: (px: number) => void;
+  setInspectorWidthPx: (px: number) => void;
   setTimelinePadLeft: (px: number) => void;
   setInspectorOpen: (open: boolean) => void;
   setInspectorTab: (tab: InspectorTab) => void;
@@ -299,6 +353,14 @@ export interface EditorState {
   /** Open the right-click menu for `target` at viewport coords (x, y). */
   openContextMenu: (x: number, y: number, target: ContextTarget) => void;
   closeContextMenu: () => void;
+  /**
+   * Ask the user to confirm, resolving true when they accept. Replaces
+   * `window.confirm()`: same await-a-boolean shape, but rendered in-app and
+   * without blocking the main thread.
+   */
+  requestConfirm: (options: ConfirmOptions) => Promise<boolean>;
+  /** Answer the open confirmation. Closing without a choice means false. */
+  resolveConfirm: (ok: boolean) => void;
   /** Open (id) or close (null) a marker's inline label editor. */
   setRenamingMarker: (markerId: string | null) => void;
   setTimeFormat: (format: TimeFormat) => void;

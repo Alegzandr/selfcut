@@ -16,6 +16,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@ffmpeg/core": "^0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "@mediabunny/aac-encoder": "^1.50.8",
     "@mediabunny/mp3-encoder": "^1.50.8",
     "framer-motion": "^12.42.2",

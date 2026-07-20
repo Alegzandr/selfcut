@@ -11,12 +11,24 @@ import {
   TRACK_HEIGHT_PX,
   MIN_TRACK_HEIGHT_PX,
   MAX_TRACK_HEIGHT_PX,
+  TRACK_HEADER_WIDTH_PX,
+  MIN_TRACK_HEADER_WIDTH_PX,
+  MAX_TRACK_HEADER_WIDTH_PX,
+  LIBRARY_WIDTH_PX,
+  MIN_LIBRARY_WIDTH_PX,
+  MAX_LIBRARY_WIDTH_PX,
+  INSPECTOR_WIDTH_PX,
+  MIN_INSPECTOR_WIDTH_PX,
+  MAX_INSPECTOR_WIDTH_PX,
   type PreviewResolutionMode,
 } from '../app/config';
 import {
   HISTORY_LIMIT,
   TIME_FORMAT_KEY,
   TRACK_HEIGHT_KEY,
+  TRACK_HEADER_WIDTH_KEY,
+  LIBRARY_WIDTH_KEY,
+  INSPECTOR_WIDTH_KEY,
   PREVIEW_RESOLUTION_KEY,
   PREVIEW_VOLUME_KEY,
   PREVIEW_MUTED_KEY,
@@ -52,6 +64,17 @@ function loadTrackHeight(): number {
     /* private mode / no storage - fall through to the default */
   }
   return TRACK_HEIGHT_PX;
+}
+
+/** Read a persisted pane width, falling back to its default when out of bounds. */
+function loadWidth(key: string, min: number, max: number, fallback: number): number {
+  try {
+    const v = Number(localStorage.getItem(key));
+    if (Number.isFinite(v) && v >= min && v <= max) return v;
+  } catch {
+    /* private mode / no storage - fall through to the default */
+  }
+  return fallback;
 }
 
 function loadPreviewResolution(): PreviewResolutionMode {
@@ -162,8 +185,27 @@ export const useStore = create<EditorState>((set, get) => {
     preferencesOpen: false,
     aboutOpen: false,
     contextMenu: null,
+    confirmDialog: null,
     renamingMarkerId: null,
     trackHeightPx: loadTrackHeight(),
+    trackHeaderWidthPx: loadWidth(
+      TRACK_HEADER_WIDTH_KEY,
+      MIN_TRACK_HEADER_WIDTH_PX,
+      MAX_TRACK_HEADER_WIDTH_PX,
+      TRACK_HEADER_WIDTH_PX,
+    ),
+    libraryWidthPx: loadWidth(
+      LIBRARY_WIDTH_KEY,
+      MIN_LIBRARY_WIDTH_PX,
+      MAX_LIBRARY_WIDTH_PX,
+      LIBRARY_WIDTH_PX,
+    ),
+    inspectorWidthPx: loadWidth(
+      INSPECTOR_WIDTH_KEY,
+      MIN_INSPECTOR_WIDTH_PX,
+      MAX_INSPECTOR_WIDTH_PX,
+      INSPECTOR_WIDTH_PX,
+    ),
     timeFormat: loadTimeFormat(),
     previewResolution: loadPreviewResolution(),
     previewVolume: loadPreviewVolume(),
@@ -171,6 +213,7 @@ export const useStore = create<EditorState>((set, get) => {
     clipboard: null,
     exportOpen: false,
     importing: false,
+    transcodes: {},
     error: null,
     notice: null,
     past: [],

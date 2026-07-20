@@ -1,6 +1,6 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
-import { Clip, ClipTransform, Project, Track } from '../../types';
+import { Clip, ClipTransform, MediaClip, Project, Track, isTrackPlayable } from '../../types';
 import {
   DEFAULT_TRANSFORM,
   clipDurationMs,
@@ -113,6 +113,7 @@ export function createClipsSlice(
   | 'addSubtitleClips'
   | 'applyStreamLayout'
   | 'setCropEditing'
+  | 'attachAudioTrack'
 > {
   return {
     addClipFromAsset: (assetId) => {
@@ -123,15 +124,16 @@ export function createClipsSlice(
       // so each can be edited independently while staying tied to the video.
       // A video multiplexing several audio tracks (VO + dub, commentary, discrete
       // channels) explodes into one linked audio clip per track.
-      const splitAudio = asset.kind === 'video' && asset.audioTracks.length > 0;
+      // Undecodable tracks get no lane: they would lay down a silent clip with
+      // no waveform. Transcoding one adds its lane afterwards.
+      const audioTracks = asset.audioTracks.filter(isTrackPlayable);
+      const splitAudio = asset.kind === 'video' && audioTracks.length > 0;
       let newClipId = '';
       withHistory((p) => {
         const trackEnd = (t: Track) => t.clips.reduce((max, c) => Math.max(max, clipEndMs(c)), 0);
         // Stills are picture content: they land on video tracks like footage.
         const track = ensureTrack(p, asset.kind === 'audio' ? 'audio' : 'video');
-        const lanes = splitAudio
-          ? asset.audioTracks.map((_, i) => ensureAudioLane(p, i))
-          : [];
+        const lanes = splitAudio ? audioTracks.map((_, i) => ensureAudioLane(p, i)) : [];
         // The group shares one start, placed past the end of the video track AND
         // every audio lane it touches, so no side overlaps and gets nudged
         // independently (which would desync the group).
@@ -154,7 +156,7 @@ export function createClipsSlice(
         newClipId = clip.id;
         track.clips.push(clip);
         if (splitAudio && linkId) {
-          asset.audioTracks.forEach((info, i) => {
+          audioTracks.forEach((info, i) => {
             lanes[i]!.clips.push(
               buildAudioClip(assetId, lanes[i]!.id, start, asset.durationMs, linkId, info.index),
             );
@@ -167,7 +169,8 @@ export function createClipsSlice(
     addClipFromAssetAt: (assetId, timelineMs, targetTrackId) => {
       const asset = get().assets[assetId];
       if (!asset) return;
-      const splitAudio = asset.kind === 'video' && asset.audioTracks.length > 0;
+      const audioTracks = asset.audioTracks.filter(isTrackPlayable);
+      const splitAudio = asset.kind === 'video' && audioTracks.length > 0;
       const newClipId = uid('clip');
       const start = Math.max(0, timelineMs);
       // The dropped clip keeps its position (priority) when overlaps settle.
@@ -191,7 +194,7 @@ export function createClipsSlice(
         if (splitAudio && linkId) {
           // Every extracted audio track drops at the same instant, each on its
           // own lane so a multi-track source lands as parallel audio clips.
-          asset.audioTracks.forEach((info, i) => {
+          audioTracks.forEach((info, i) => {
             const lane = ensureAudioLane(p, i);
             lane.clips.push(
               buildAudioClip(assetId, lane.id, start, asset.durationMs, linkId, info.index),
@@ -200,6 +203,59 @@ export function createClipsSlice(
         }
       }, newClipId);
       set({ selectedClipId: newClipId, selectedClipIds: [newClipId] });
+    },
+
+    attachAudioTrack: (assetId, audioTrackIndex) => {
+      const asset = get().assets[assetId];
+      if (!asset) return;
+      // The lane a track owns is its rank among the playable ones, matching how
+      // addClipFromAsset lays a multi-track source out.
+      const lane = asset.audioTracks.filter(isTrackPlayable).findIndex(
+        (tr) => tr.index === audioTrackIndex,
+      );
+      if (lane < 0) return;
+      withHistory((p) => {
+        const isThisAsset = (c: Clip): c is MediaClip =>
+          c.kind === 'media' && c.assetId === assetId;
+        // Snapshot the picture clips first: pushing into a lane while iterating
+        // would revisit the clips being added.
+        const placed = p.tracks
+          .filter((tr) => tr.kind === 'video')
+          .flatMap((tr) => tr.clips)
+          .filter(isThisAsset);
+        if (placed.length === 0) return;
+        // Re-running a transcode must not lay a second copy of the same sound.
+        const existing = new Set(
+          p.tracks
+            .filter((tr) => tr.kind === 'audio')
+            .flatMap((tr) => tr.clips)
+            .filter(isThisAsset)
+            .map((c) => `${c.linkId ?? ''}#${c.audioTrackIndex ?? ''}`),
+        );
+        const laneTrack = ensureAudioLane(p, lane);
+        for (const clip of placed) {
+          // An unlinked picture clip gets a group id now so its new sound stays
+          // tied to it through moves and trims.
+          const linkId = clip.linkId ?? uid('link');
+          clip.linkId = linkId;
+          if (existing.has(`${linkId}#${audioTrackIndex}`)) continue;
+          laneTrack.clips.push({
+            ...buildAudioClip(
+              assetId,
+              laneTrack.id,
+              clip.timelineStartMs,
+              asset.durationMs,
+              linkId,
+              audioTrackIndex,
+            ),
+            // Match the picture clip's trim and speed, or the sound would run
+            // against a cut made before the track existed.
+            sourceInMs: clip.sourceInMs,
+            sourceOutMs: clip.sourceOutMs,
+            speed: clip.speed,
+          });
+        }
+      });
     },
 
     addTextClip: () => {

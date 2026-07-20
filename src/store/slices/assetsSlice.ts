@@ -1,8 +1,26 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
-import { disposeAssetResources } from '../../media/mediaCache';
+import { audioKey, disposeAssetResources, setTranscodedAudio } from '../../media/mediaCache';
 import { ensureAssetVisuals, probeFile } from '../../media/probe';
+import { TranscodeCanceled, transcodeAudioTrack } from '../../media/transcodeAudio';
 import { t } from '../../i18n';
+
+/**
+ * Abort handles of the running transcodes, keyed like `transcodes`. Kept module
+ * side rather than in the store because an AbortController is not serializable
+ * state and nothing renders from it.
+ */
+const controllers = new Map<string, AbortController>();
+
+function setProgress(set: StoreSet, get: StoreGet, key: string, ratio: number): void {
+  set({ transcodes: { ...get().transcodes, [key]: ratio } });
+}
+
+function clearProgress(set: StoreSet, get: StoreGet, key: string): void {
+  const transcodes = { ...get().transcodes };
+  delete transcodes[key];
+  set({ transcodes });
+}
 
 export function createAssetsSlice(
   set: StoreSet,
@@ -16,6 +34,8 @@ export function createAssetsSlice(
   | 'setAssetPeaks'
   | 'setAssetThumbnails'
   | 'setImporting'
+  | 'transcodeAudioTrack'
+  | 'cancelTranscode'
 > {
   return {
     addAsset: (asset) => set({ assets: { ...get().assets, [asset.id]: asset } }),
@@ -45,13 +65,28 @@ export function createAssetsSlice(
             : overrun.length > 0
               ? t('library.reconnectMismatch', { count: overrun.length })
               : null;
-        if (message && !window.confirm(message)) {
+        const accepted =
+          !message ||
+          (await get().requestConfirm({
+            title: t('library.reconnectConfirm.title'),
+            message,
+            confirmLabel: t('library.reconnectConfirm.action'),
+            danger: true,
+          }));
+        if (!accepted) {
           // Put the original file back under the id so its decoder is valid
           // again. A disconnected asset has no readable file to restore: it
           // simply stays disconnected.
           if (!existing.disconnected) {
             await probeFile(existing.file, assetId).catch(() => undefined);
           }
+          return;
+        }
+
+        // Unlike the native confirm() this replaced, the dialog does not block
+        // the app: the asset can have been removed while it was up.
+        if (!get().assets[assetId]) {
+          disposeAssetResources(assetId);
           return;
         }
 
@@ -112,5 +147,60 @@ export function createAssetsSlice(
     },
 
     setImporting: (v) => set({ importing: v }),
+
+    transcodeAudioTrack: async (assetId, audioTrackIndex) => {
+      const asset = get().assets[assetId];
+      const track = asset?.audioTracks.find((tr) => tr.index === audioTrackIndex);
+      if (!asset || !track || !track.undecodable || track.transcoded) return;
+      const key = audioKey(assetId, audioTrackIndex);
+      if (key in get().transcodes) return;
+
+      const controller = new AbortController();
+      controllers.set(key, controller);
+      setProgress(set, get, key, 0);
+      try {
+        const buffer = await transcodeAudioTrack(asset, audioTrackIndex, {
+          signal: controller.signal,
+          onProgress: (ratio) => setProgress(set, get, key, ratio),
+        });
+        // The asset can have been removed (or the file reconnected) during a
+        // job that runs for minutes: committing then would resurrect it.
+        if (get().assets[assetId] !== asset) return;
+
+        // Publishing to the cache is what makes the track audible: preview mix,
+        // export and waveform all read from there.
+        const peaks = setTranscodedAudio(assetId, audioTrackIndex, buffer, {
+          alsoPrimary: asset.audioTracks.length === 1,
+        });
+        const audioTracks = asset.audioTracks.map((tr) =>
+          tr.index === audioTrackIndex ? { ...tr, transcoded: true, peaks } : tr,
+        );
+        set({
+          assets: {
+            ...get().assets,
+            [assetId]: { ...asset, audioTracks, hasAudio: true },
+          },
+        });
+        // A clip already sitting on the timeline gains the lane it could not
+        // have at drop time.
+        get().attachAudioTrack(assetId, audioTrackIndex);
+      } catch (err) {
+        if (!(err instanceof TranscodeCanceled)) {
+          get().setError(
+            t('errors.media.transcodeFailed', {
+              name: asset.file.name,
+              codec: track.codec ?? '?',
+            }),
+          );
+        }
+      } finally {
+        controllers.delete(key);
+        clearProgress(set, get, key);
+      }
+    },
+
+    cancelTranscode: (assetId, audioTrackIndex) => {
+      controllers.get(audioKey(assetId, audioTrackIndex))?.abort();
+    },
   };
 }

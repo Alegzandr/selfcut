@@ -47,11 +47,11 @@ export interface Track {
 }
 
 /**
- * One decodable audio track carried by a source file. A video can multiplex
- * several (VO + dub, commentary, discrete channels); each becomes its own audio
- * clip on import. The `index` is the track's position among ALL audio tracks of
- * the file (as returned by mediabunny's getAudioTracks), so it stays stable
- * across sessions and is what a clip references to pick its source track.
+ * One audio track carried by a source file. A video can multiplex several
+ * (VO + dub, commentary, discrete channels); each becomes its own audio clip on
+ * import. The `index` is the track's position among ALL audio tracks of the file
+ * (as returned by mediabunny's getAudioTracks), so it stays stable across
+ * sessions and is what a clip references to pick its source track.
  */
 export interface AudioTrackInfo {
   index: number;
@@ -63,6 +63,30 @@ export interface AudioTrackInfo {
   channels: number;
   /** Normalized peaks (0..1) over the whole duration, for this track's waveform. */
   peaks?: number[];
+  /** Container codec string ('eac3', 'ac-3'…), kept to name the codec in the UI. */
+  codec?: string;
+  /**
+   * WebCodecs cannot decode this track in any browser (E-AC-3, AC-3, DTS…). It
+   * is listed anyway so the UI can offer to transcode it on demand. This is a
+   * property of the file, not a state: it stays true even once transcoded.
+   */
+  undecodable?: true;
+  /**
+   * Runtime only: an on-demand transcode has produced a buffer for this
+   * undecodable track, so it plays for the rest of the session. Never restored
+   * from persistence - the decoded PCM lives in memory only, like every other
+   * track's buffer, so a reloaded project must transcode again.
+   */
+  transcoded?: boolean;
+}
+
+/**
+ * Whether a track can actually be heard right now: natively decodable, or an
+ * undecodable one the user has already transcoded this session. The mix, the
+ * export and the timeline all gate on this so they never disagree.
+ */
+export function isTrackPlayable(track: AudioTrackInfo): boolean {
+  return !track.undecodable || track.transcoded === true;
 }
 
 export interface MediaAsset {
@@ -112,6 +136,12 @@ export interface ClipTransform {
   y: number;
   /** Scale multiplier applied after the "contain" fit. */
   scale: number;
+  /**
+   * Clockwise rotation in degrees around the clip's center. Optional: projects
+   * saved before rotation existed have no such field, so every reader must
+   * treat `undefined` as 0 rather than assume the key is there.
+   */
+  rotation?: number;
 }
 
 /** Horizontal alignment of a text clip's lines inside its wrap box. */

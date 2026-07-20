@@ -16,6 +16,23 @@ export const IMAGE_CLIP_DEFAULT_MS = 5000;
 /** Snapping threshold in screen pixels. */
 export const SNAP_THRESHOLD_PX = 8;
 
+/**
+ * Preview magnetism, expressed in SCREEN pixels like the timeline's - so the
+ * pull feels the same however far the preview camera is zoomed in. A threshold
+ * kept in normalized stage units would silently grow with the zoom.
+ */
+export const PREVIEW_SNAP_THRESHOLD_PX = 9;
+
+/**
+ * Angles a rotation gesture snaps to (degrees). 15° steps give the useful
+ * detents - the uprights, the diagonals, and the slight-tilt look - without the
+ * grid getting so dense that free angles become unreachable.
+ */
+export const ROTATION_SNAP_STEP_DEG = 15;
+
+/** Half-width of the pull around each rotation detent, in degrees. */
+export const ROTATION_SNAP_THRESHOLD_DEG = 4;
+
 /** Timeline zoom bounds (pixels per second). */
 export const MIN_PX_PER_SEC = 0.9;
 export const MAX_PX_PER_SEC = 600;
@@ -58,8 +75,22 @@ export const TRACK_HEIGHT_PX = 64;
 export const MIN_TRACK_HEIGHT_PX = 36;
 export const MAX_TRACK_HEIGHT_PX = 160;
 /** Width of the fixed track-header pane (desktop: sliders + meter; coarse: buttons only). */
-export const TRACK_HEADER_WIDTH_PX = 112;
+export const TRACK_HEADER_WIDTH_PX = 168;
 export const TRACK_HEADER_WIDTH_COARSE_PX = 44;
+/**
+ * Resize bounds for the header pane. MIN still fits the button column plus a
+ * usable fader; MAX stops it from eating the timeline on a narrow window.
+ */
+export const MIN_TRACK_HEADER_WIDTH_PX = 96;
+export const MAX_TRACK_HEADER_WIDTH_PX = 360;
+
+/** Docked side panels (desktop): default width and resize bounds. */
+export const LIBRARY_WIDTH_PX = 224;
+export const MIN_LIBRARY_WIDTH_PX = 160;
+export const MAX_LIBRARY_WIDTH_PX = 520;
+export const INSPECTOR_WIDTH_PX = 288;
+export const MIN_INSPECTOR_WIDTH_PX = 220;
+export const MAX_INSPECTOR_WIDTH_PX = 560;
 /**
  * Desktop timeline pad. The header pane sits outside the scroller, so t=0 is
  * flush with the scroller's left edge - like every NLE.

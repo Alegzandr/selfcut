@@ -24,13 +24,18 @@ interface Props {
 export const TrackHeader = memo(function TrackHeader({ track }: Props) {
   const { t } = useTranslation();
   const coarse = useIsCoarsePointer();
-  // Set while the volume slider is being dragged: the native `title` tooltip
-  // freezes on its first value, so the live dB read-out gets its own badge.
+  // Set while a slider is being dragged: the native `title` tooltip freezes on
+  // its first value, so the live read-out gets its own badge.
   // Portalled and viewport-positioned rather than absolute inside the row: the
-  // badge sits above the fader, and on the first track that lands outside the
+  // badge sits above the slider, and on the first track that lands outside the
   // header pane's `overflow-hidden`, which clipped it away entirely.
   const volumeRef = useRef<HTMLInputElement>(null);
-  const [badgeAt, setBadgeAt] = useState<{ left: number; top: number } | null>(null);
+  const opacityRef = useRef<HTMLInputElement>(null);
+  const [badgeAt, setBadgeAt] = useState<{ left: number; top: number; kind: 'volume' | 'opacity' } | null>(null);
+  const showBadge = (el: HTMLInputElement | null, kind: 'volume' | 'opacity') => {
+    const r = el?.getBoundingClientRect();
+    if (r) setBadgeAt({ left: r.left + r.width / 2, top: r.top - 6, kind });
+  };
   const trackHeightPx = useStore((s) => s.trackHeightPx);
   const { toggleTrackMuted, toggleTrackHidden, toggleTrackLocked, moveTrack, removeTrack, updateTrack, beginGesture, endGesture } =
     useStore.getState();
@@ -156,8 +161,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
                 // read aloud, so speak the dB figure the badge shows instead.
                 aria-valuetext={gainDb(track.volume ?? 1)}
                 onPointerDown={() => {
-                  const r = volumeRef.current?.getBoundingClientRect();
-                  if (r) setBadgeAt({ left: r.left + r.width / 2, top: r.top - 6 });
+                  showBadge(volumeRef.current, 'volume');
                   beginGesture();
                 }}
                 onPointerUp={() => {
@@ -173,19 +177,10 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
                 onContextMenu={volumeEntry.onContextMenu}
               />
               {volumeEntry.entry}
-              {badgeAt &&
-                createPortal(
-                  <div
-                    className="pointer-events-none fixed z-[200] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-zinc-950/85 px-1 py-0.5 font-mono text-[10px] leading-tight text-zinc-100 shadow"
-                    style={{ left: badgeAt.left, top: badgeAt.top }}
-                  >
-                    {gainDb(track.volume ?? 1)}
-                  </div>,
-                  document.body,
-                )}
             </div>
             {track.kind === 'video' && (
               <input
+                ref={opacityRef}
                 type="range"
                 min={0}
                 max={1}
@@ -195,12 +190,32 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
                 title={t('track.opacity', { pct: Math.round((track.opacity ?? 1) * 100) })}
                 aria-label={t('a11y.track.opacity')}
                 aria-valuetext={`${Math.round((track.opacity ?? 1) * 100)}%`}
-                onPointerDown={beginGesture}
-                onPointerUp={endGesture}
+                onPointerDown={() => {
+                  showBadge(opacityRef.current, 'opacity');
+                  beginGesture();
+                }}
+                onPointerUp={() => {
+                  setBadgeAt(null);
+                  endGesture();
+                }}
+                onPointerCancel={() => setBadgeAt(null)}
+                onBlur={() => setBadgeAt(null)}
                 onChange={(e) => updateTrack(track.id, { opacity: Number(e.target.value) })}
                 onDoubleClick={() => updateTrack(track.id, { opacity: 1 })}
               />
             )}
+            {badgeAt &&
+              createPortal(
+                <div
+                  className="pointer-events-none fixed z-[200] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-zinc-950/85 px-1 py-0.5 font-mono text-[10px] leading-tight text-zinc-100 shadow"
+                  style={{ left: badgeAt.left, top: badgeAt.top }}
+                >
+                  {badgeAt.kind === 'volume'
+                    ? gainDb(track.volume ?? 1)
+                    : `${Math.round((track.opacity ?? 1) * 100)}%`}
+                </div>,
+                document.body,
+              )}
             <TrackMeter trackId={track.id} />
           </div>
         )}

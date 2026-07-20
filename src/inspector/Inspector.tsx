@@ -9,6 +9,8 @@ import { Tooltip } from '../ui/Tooltip';
 import type { TFunction } from 'i18next';
 import { Clip, MediaAsset } from '../types';
 import { useIsCoarsePointer } from '../lib/device';
+import { ResizeHandle } from '../ui/ResizeHandle';
+import { INSPECTOR_WIDTH_PX } from '../app/config';
 import { SliderRow } from './SliderRow';
 import { TextSection } from './sections/TextSection';
 import { SolidSection } from './sections/SolidSection';
@@ -73,6 +75,7 @@ export function Inspector() {
   const coarse = useIsCoarsePointer();
   const inspectorOpen = useStore((s) => s.inspectorOpen);
   const tab = useStore((s) => s.inspectorTab);
+  const inspectorWidthPx = useStore((s) => s.inspectorWidthPx);
   const showSubtitles = tab === 'subtitles';
   // A linked video clip delegates its sound to the audio clip on the lane
   // below (it is silent in the mix): audio edits must target that partner,
@@ -99,22 +102,35 @@ export function Inspector() {
   if (!coarse) {
     if (!clip && !showSubtitles) return null;
     return (
-      <div className="w-72 flex-none space-y-3 overflow-x-hidden overflow-y-auto border-l border-zinc-800 bg-zinc-900/60 p-3">
-        {showSubtitles && <InspectorTabs />}
-        {showSubtitles ? (
-          <SubtitlesPanel />
-        ) : (
-          clip && (
-            <InspectorBody
-              clip={clip}
-              audioClip={audioClip ?? clip}
-              isVideo={!!asset && asset.kind !== 'audio'}
-              hasAudio={asset?.hasAudio ?? false}
-              name={clipDisplayName(clip, asset, t)}
-            />
-          )
-        )}
-      </div>
+      // The handle rides the column's left edge, so it appears and disappears
+      // with the column instead of leaving an orphan divider next to the preview.
+      <>
+        <ResizeHandle
+          width={inspectorWidthPx}
+          onWidth={useStore.getState().setInspectorWidthPx}
+          defaultWidth={INSPECTOR_WIDTH_PX}
+          side="start"
+        />
+        <div
+          className="flex-none space-y-3 overflow-x-hidden overflow-y-auto border-l border-zinc-800 bg-zinc-900/60 p-3"
+          style={{ width: inspectorWidthPx }}
+        >
+          {showSubtitles && <InspectorTabs />}
+          {showSubtitles ? (
+            <SubtitlesPanel />
+          ) : (
+            clip && (
+              <InspectorBody
+                clip={clip}
+                audioClip={audioClip ?? clip}
+                isVideo={!!asset && asset.kind !== 'audio'}
+                hasAudio={asset?.hasAudio ?? false}
+                name={clipDisplayName(clip, asset, t)}
+              />
+            )
+          )}
+        </div>
+      </>
     );
   }
 

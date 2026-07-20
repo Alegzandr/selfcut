@@ -1,4 +1,4 @@
-import { AudioTrackInfo, MediaAsset, Project } from '../types';
+import { AudioTrackInfo, MediaAsset, Project, isTrackPlayable } from '../types';
 import { useStore } from '../store/store';
 import { ensureAssetVisuals } from '../media/probe';
 import { isMissingSource } from './missingSource';
@@ -114,13 +114,26 @@ async function isFileReadable(file: File): Promise<boolean> {
 }
 
 /**
+ * `transcoded` marks an undecodable track whose PCM sits in the in-memory cache.
+ * That cache dies with the tab (we persist peaks, never decoded audio), so a
+ * restored asset must forget the flag: keeping it would claim the track is
+ * audible and export it as silence. Its peaks survive, so the waveform is still
+ * there and the user only has to re-run the transcode.
+ */
+function dropTranscodedFlags(asset: MediaAsset): MediaAsset {
+  if (!asset.audioTracks.some((track) => track.transcoded)) return asset;
+  const audioTracks = asset.audioTracks.map(({ transcoded: _dropped, ...track }) => track);
+  return { ...asset, audioTracks, hasAudio: audioTracks.some(isTrackPlayable) };
+}
+
+/**
  * Bring an asset stored before multi-track audio up to the current shape: a
  * legacy asset has `hasAudio` + a single top-level `peaks` array but no
  * `audioTracks`, so synthesize a one-entry list (the old primary track) that
  * carries those peaks. Assets already on the new shape pass through untouched.
  */
 function migrateAsset(asset: MediaAsset): MediaAsset {
-  if (Array.isArray(asset.audioTracks)) return asset;
+  if (Array.isArray(asset.audioTracks)) return dropTranscodedFlags(asset);
   const legacy = asset as MediaAsset & { peaks?: number[] };
   const audioTracks: AudioTrackInfo[] = legacy.hasAudio
     ? [{ index: 0, channels: 2, ...(legacy.peaks ? { peaks: legacy.peaks } : {}) }]

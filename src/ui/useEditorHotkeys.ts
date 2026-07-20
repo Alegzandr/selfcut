@@ -100,7 +100,7 @@ export function useEditorHotkeys() {
 
       // A modal dialog open: the timeline must go inert - a stray Space or
       // Delete must not edit behind it. Each dialog handles Escape itself.
-      if (s.exportOpen || s.preferencesOpen || s.aboutOpen) return;
+      if (s.exportOpen || s.preferencesOpen || s.aboutOpen || s.confirmDialog) return;
 
       // The shortcuts panel is the one dialog whose dismissal is owned here
       // rather than by the dialog itself, so Escape and the '?' toggle still

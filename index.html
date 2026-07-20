@@ -623,7 +623,7 @@
         pointer-events: none;
       }
       @media (prefers-reduced-motion: no-preference) {
-        .format:hover .shape::after {
+        .format:hover .shape:not(.audio)::after {
           animation: shape-sweep 1.1s cubic-bezier(0.25, 1, 0.5, 1);
         }
         @keyframes shape-sweep {

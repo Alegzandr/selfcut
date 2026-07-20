@@ -207,14 +207,10 @@ export const ClipView = memo(function ClipView({
           </span>
         </div>
       ) : isVideo && asset?.thumbnails.length ? (
+        /* A video clip's audio lives on its own linked audio track, so the
+           filmstrip stays picture-only - no waveform overlay here. */
         <div className="pointer-events-none h-full w-full">
           <Filmstrip asset={asset} clip={clip} widthPx={width} clipLeftPx={left} />
-          {/* Audio envelope under the thumbnails - cutting to sound needs to be visual. */}
-          {hasPeaks && (
-            <div className="absolute inset-x-0 bottom-0 h-1/3 bg-black/40">
-              <Waveform asset={asset} clip={clip} widthPx={width} clipLeftPx={left} color="rgba(255,255,255,0.85)" />
-            </div>
-          )}
         </div>
       ) : (
         <div className="pointer-events-none relative h-full w-full bg-gradient-to-b from-emerald-900/60 to-emerald-950">

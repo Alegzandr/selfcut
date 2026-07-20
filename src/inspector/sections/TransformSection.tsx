@@ -56,6 +56,16 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
       <SliderRow label={t('inspector.scale')} value={tf.scale} min={0.1} max={4} step={0.01} format={pct} onChange={(v) => setTf({ scale: v })} />
       <SliderRow label={t('inspector.positionX')} value={tf.x} min={0} max={1} step={0.01} format={pct} onChange={(v) => setTf({ x: v })} />
       <SliderRow label={t('inspector.positionY')} value={tf.y} min={0} max={1} step={0.01} format={pct} onChange={(v) => setTf({ y: v })} />
+      {/* A full turn each way: tilting counter-clockwise is as common as clockwise. */}
+      <SliderRow
+        label={t('inspector.rotation')}
+        value={tf.rotation ?? 0}
+        min={-180}
+        max={180}
+        step={1}
+        format={(v) => `${Math.round(v)}°`}
+        onChange={(v) => setTf({ rotation: v })}
+      />
       {isVideo && <CropSection clip={clip} />}
     </div>
   );

@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, FileX2, FolderOpen } from 'lucide-react';
 import { APP_NAME } from '../app/config';
 import logoUrl from '../assets/logo.png';
 import { useStore } from '../store/store';
 import { unbindProjectFile } from '../lib/projectFile';
+import { confirmDiscardProject } from './projectActions';
 import { Tooltip } from './Tooltip';
 import { useIsCoarsePointer } from '../lib/device';
 import { AspectRatio } from '../types';
@@ -143,47 +143,28 @@ function DesktopTools() {
 }
 
 /**
- * "New project" without a native confirm(): the first press arms the button
- * (it turns into an explicit red "Discard?"), a second press within 4s resets.
- * Touch only - on desktop the File menu owns "New project".
+ * "New project" on touch - on desktop the File menu owns it. Both go through
+ * the same confirmation dialog, so the two entry points cannot disagree about
+ * what discarding a project takes.
  */
 function NewProjectButton() {
   const { t } = useTranslation();
   const { resetProject } = useStore.getState();
-  const [armed, setArmed] = useState(false);
 
-  useEffect(() => {
-    if (!armed) return;
-    const timer = setTimeout(() => setArmed(false), 4000);
-    return () => clearTimeout(timer);
-  }, [armed]);
-
-  if (armed) {
-    return (
-      <Tooltip label={t('topbar.newProject.confirm')}>
-        <button
-          className="flex items-center gap-1.5 rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-semibold text-red-300 active:bg-red-500/30"
-          onClick={() => {
-            setArmed(false);
+  return (
+    <Tooltip label={t('topbar.newProject.title')}>
+      <button
+        className="touch-hit rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+        onClick={() => {
+          void confirmDiscardProject().then((ok) => {
+            if (!ok) return;
             resetProject();
             // Same contract as File ▸ New: the fresh project is not the file the
             // old one came from, so a later Ctrl+S must ask where to go rather
             // than silently overwrite it.
             unbindProjectFile();
-          }}
-          onBlur={() => setArmed(false)}
-        >
-          <FileX2 className="h-4 w-4" />
-          {t('topbar.newProject.armed')}
-        </button>
-      </Tooltip>
-    );
-  }
-  return (
-    <Tooltip label={t('topbar.newProject.title')}>
-      <button
-        className="touch-hit rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
-        onClick={() => setArmed(true)}
+          });
+        }}
       >
         <FileX2 className="h-4 w-4" />
       </button>

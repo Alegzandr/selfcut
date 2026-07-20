@@ -6,6 +6,7 @@ import {
   ShapeClip,
   SolidClip,
   TextClip,
+  isTrackPlayable,
 } from '../types';
 
 /**
@@ -19,6 +20,7 @@ export const DEFAULT_TRANSFORM: ClipTransform = {
   x: 0.5,
   y: 0.5,
   scale: 1,
+  rotation: 0,
 };
 
 /**
@@ -55,10 +57,15 @@ export function audioTrackForClip(
   clip: Clip,
 ): AudioTrackInfo | undefined {
   if (asset.audioTracks.length === 0) return undefined;
-  if (clip.audioTrackIndex == null) return asset.audioTracks[0];
-  return (
-    asset.audioTracks.find((a) => a.index === clip.audioTrackIndex) ?? asset.audioTracks[0]
-  );
+  // A pinned index wins even when that track is undecodable: the clip exists to
+  // play THAT track, and it becomes audible as soon as the user transcodes it.
+  if (clip.audioTrackIndex != null) {
+    const pinned = asset.audioTracks.find((a) => a.index === clip.audioTrackIndex);
+    if (pinned) return pinned;
+  }
+  // Unpinned: fall back to something actually audible rather than to whichever
+  // track happens to come first in the file.
+  return asset.audioTracks.find(isTrackPlayable) ?? asset.audioTracks[0];
 }
 
 /** A clip that renders a drawn primitive instead of a media asset. */

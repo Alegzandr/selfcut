@@ -1,13 +1,26 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { Film, FolderOpen, Image, Import, Music, Plus, PlugZap, Trash2, X } from 'lucide-react';
+import {
+  AudioLines,
+  Film,
+  FolderOpen,
+  Image,
+  Import,
+  Music,
+  Plus,
+  PlugZap,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
 import { MediaAsset } from '../types';
 import { formatTimeShort } from '../lib/time';
-import { ASSET_DRAG_MIME } from '../app/config';
+import { ASSET_DRAG_MIME, LIBRARY_WIDTH_PX } from '../app/config';
 import { useIsCoarsePointer } from '../lib/device';
+import { ResizeHandle } from './ResizeHandle';
 import { openMediaPicker } from './mediaPicker';
+import { audioKey } from '../media/mediaCache';
 import { useImport } from './useImport';
 
 /**
@@ -21,6 +34,7 @@ export function MediaLibrary() {
   const assets = useStore((s) => s.assets);
   const coarse = useIsCoarsePointer();
   const libraryOpen = useStore((s) => s.libraryOpen);
+  const libraryWidthPx = useStore((s) => s.libraryWidthPx);
   const importFiles = useImport();
   const list = Object.values(assets);
   const importHere = () => openMediaPicker(importFiles);
@@ -66,7 +80,11 @@ export function MediaLibrary() {
       {list.length === 0 ? (
         <p className="p-3 text-[11px] leading-relaxed text-zinc-400">{t('library.empty')}</p>
       ) : (
-        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-1.5">
+        // Reflowing grid rather than a stack: widening the column adds columns
+        // of cards instead of inflating one card, so the extra room buys more
+        // visible assets. `auto-fill` + `1fr` lets the tiles share the leftover
+        // width evenly, and `content-start` keeps a half-empty bin top-aligned.
+        <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(132px,1fr))] content-start gap-1.5 overflow-y-auto p-1.5">
           {list.map((asset) => (
             <AssetCard key={asset.id} asset={asset} />
           ))}
@@ -77,9 +95,21 @@ export function MediaLibrary() {
 
   if (!coarse) {
     return (
-      <aside className="flex w-56 flex-none flex-col border-r border-zinc-800 bg-zinc-900/60">
-        {body}
-      </aside>
+      // The handle is a sibling, not a child: it has to sit in the same flex row
+      // as the column so it can straddle the border without being clipped.
+      <>
+        <aside
+          className="flex flex-none flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900/60"
+          style={{ width: libraryWidthPx }}
+        >
+          {body}
+        </aside>
+        <ResizeHandle
+          width={libraryWidthPx}
+          onWidth={useStore.getState().setLibraryWidthPx}
+          defaultWidth={LIBRARY_WIDTH_PX}
+        />
+      </>
     );
   }
 
@@ -119,6 +149,64 @@ export function reconnectAssetViaPicker(assetId: string): void {
     const file = files[0];
     if (file) void useStore.getState().reconnectAsset(assetId, file);
   });
+}
+
+/**
+ * One row per audio track the browser cannot decode, offering to transcode it.
+ *
+ * Deliberately explicit about the cost: the first activation pulls a 32 MB
+ * converter and then chews through the whole file, which is long enough that an
+ * unexplained spinner would read as a freeze.
+ */
+function UndecodableAudio({ asset }: { asset: MediaAsset }) {
+  const { t } = useTranslation();
+  const transcodes = useStore((s) => s.transcodes);
+  const pending = asset.audioTracks.filter((track) => track.undecodable && !track.transcoded);
+  if (pending.length === 0 || asset.disconnected) return null;
+
+  return (
+    <div className="border-t border-zinc-800 bg-zinc-950/60 px-1 py-1">
+      {pending.map((track) => {
+        const key = audioKey(asset.id, track.index);
+        const progress = transcodes[key];
+        const running = progress != null;
+        const name =
+          track.label ??
+          track.language ??
+          t('library.audio.trackNumber', { n: track.index + 1 });
+        return (
+          <div key={track.index} className="flex items-center gap-1">
+            <span
+              className="min-w-0 flex-1 truncate text-[9px] text-amber-300/90"
+              title={t('library.audio.needsTranscode', { codec: track.codec ?? '?' })}
+            >
+              {running
+                ? t('library.audio.converting', { percent: Math.round(progress * 100) })
+                : `${name} · ${track.codec ?? '?'}`}
+            </span>
+            {running ? (
+              <button
+                className="touch-hit flex-none rounded px-1 py-0.5 text-[9px] text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2"
+                onClick={() => useStore.getState().cancelTranscode(asset.id, track.index)}
+              >
+                {t('library.audio.cancel')}
+              </button>
+            ) : (
+              <Tooltip label={t('library.audio.activateHint')}>
+                <button
+                  className="touch-hit flex-none rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-300 active:bg-amber-500/30 pointer-coarse:p-2"
+                  onClick={() => void useStore.getState().transcodeAudioTrack(asset.id, track.index)}
+                >
+                  <AudioLines className="mr-0.5 inline h-3 w-3" />
+                  {t('library.audio.activate')}
+                </button>
+              </Tooltip>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function AssetCard({ asset }: { asset: MediaAsset }) {
@@ -189,6 +277,8 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
           )}
         </span>
       </div>
+
+      <UndecodableAudio asset={asset} />
 
       <div className="flex items-center gap-1 p-1">
         <span className="min-w-0 flex-1 truncate text-[10px] text-zinc-300" title={asset.file.name}>

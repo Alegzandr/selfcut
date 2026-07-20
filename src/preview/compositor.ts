@@ -20,6 +20,59 @@ export interface DestRect {
 }
 
 /**
+ * Rotate the canvas around a point, for the duration of `paint`.
+ *
+ * Applied around the clip's own centre so a rotation never drifts the clip -
+ * the transform's x/y keep meaning "where the centre is", which is what the
+ * drag gesture and the inspector both edit. A zero angle takes no save/restore
+ * at all: the overwhelmingly common case must not pay for the feature.
+ */
+function withRotation(ctx: Ctx2D, deg: number, cx: number, cy: number, paint: () => void): void {
+  if (!deg) {
+    paint();
+    return;
+  }
+  ctx.save();
+  applyRotation(ctx, deg, cx, cy);
+  paint();
+  ctx.restore();
+}
+
+/**
+ * Rotate the canvas around a point, leaving the restore to the caller - for the
+ * draw paths that already sit inside their own save/restore pair.
+ */
+function applyRotation(ctx: Ctx2D, deg: number, cx: number, cy: number): void {
+  if (!deg) return;
+  ctx.translate(cx, cy);
+  ctx.rotate((deg * Math.PI) / 180);
+  ctx.translate(-cx, -cy);
+}
+
+/** Rotation of a clip in degrees, tolerating transforms saved before it existed. */
+export function clipRotation(clip: Clip): number {
+  return clip.transform?.rotation ?? 0;
+}
+
+/**
+ * Map a point in output coordinates into a clip's UN-rotated frame, so a plain
+ * axis-aligned rect test still answers "is the pointer on this clip".
+ */
+export function unrotatePoint(
+  px: number,
+  py: number,
+  deg: number,
+  cx: number,
+  cy: number,
+): { x: number; y: number } {
+  if (!deg) return { x: px, y: py };
+  const a = (-deg * Math.PI) / 180;
+  const dx = px - cx;
+  const dy = py - cy;
+  return { x: cx + dx * Math.cos(a) - dy * Math.sin(a), y: cy + dx * Math.sin(a) + dy * Math.cos(a) };
+}
+
+/**
  * Destination rectangle of a clip in the output, from the source dimensions
  * and the clip transform (crop → "contain" fit → user scale, centered on x/y).
  * Shared by drawing, preview hit-testing and the selection overlay.
@@ -76,7 +129,9 @@ export function drawClipSample(
   const { dx, dy, dw, dh } = clipDestRect(clip, sw, sh, outW, outH, timelineMs);
 
   ctx.globalAlpha = alpha;
-  sample.draw(ctx, sx, sy, cropW, cropH, dx, dy, dw, dh);
+  withRotation(ctx, t.rotation ?? 0, dx + dw / 2, dy + dh / 2, () =>
+    sample.draw(ctx, sx, sy, cropW, cropH, dx, dy, dw, dh),
+  );
   ctx.globalAlpha = 1;
 }
 
@@ -182,6 +237,10 @@ export function drawTextClip(
 
   ctx.save();
   ctx.globalAlpha = alpha;
+  // Rotates the caption block as a whole, inside the save/restore already here.
+  // Around the transform centre, not the text baseline, so a rotated caption
+  // stays where it was placed.
+  applyRotation(ctx, t.rotation ?? 0, t.x * outW, t.y * outH);
   // Set before laying out: wrapping measures against this exact font.
   ctx.font = font;
   const lines = layoutTextLines(ctx, text, outW);
@@ -322,6 +381,7 @@ export function drawShapeClip(
   const shape = clip.shape;
   ctx.save();
   ctx.globalAlpha = alpha;
+  applyRotation(ctx, clipRotation(clip), rect.dx + rect.dw / 2, rect.dy + rect.dh / 2);
   ctx.beginPath();
   traceShape(ctx, shape, rect);
   ctx.fillStyle = shape.fill;

@@ -5,7 +5,7 @@ import {
   AudioBufferSink,
   InputAudioTrack,
 } from 'mediabunny';
-import { MediaAsset } from '../types';
+import { MediaAsset, isTrackPlayable } from '../types';
 import { StillFrame, decodeImageFile } from './stillImage';
 
 /**
@@ -144,13 +144,66 @@ async function decodeFullAudio(
   return target;
 }
 
-/** Kick off background audio decoding (every audio track) right after import. */
+/** Kick off background audio decoding (every playable audio track) right after import. */
 export function warmAudio(asset: MediaAsset): void {
   if (asset.audioTracks.length === 0) {
     if (asset.hasAudio) void getAudioBuffer(asset);
     return;
   }
-  for (const track of asset.audioTracks) void getAudioBuffer(asset, track.index);
+  // Undecodable tracks would only decode to null: they wait for an explicit
+  // transcode, which fills the cache through setTranscodedAudio.
+  for (const track of asset.audioTracks) {
+    if (isTrackPlayable(track)) void getAudioBuffer(asset, track.index);
+  }
+}
+
+/**
+ * Publish the PCM produced by an on-demand transcode as if the browser had
+ * decoded the track natively. Everything downstream (preview mix, export,
+ * waveform) reads the cache, so this single injection makes the track audible
+ * everywhere without any of them knowing a transcode happened.
+ *
+ * Peaks are re-derived from the buffer here because `streamPeaks` decodes
+ * through mediabunny, which is exactly what cannot handle this track.
+ */
+export function setTranscodedAudio(
+  assetId: string,
+  audioTrackIndex: number,
+  buffer: AudioBuffer,
+  { alsoPrimary = false }: { alsoPrimary?: boolean } = {},
+): number[] {
+  const peaks = peaksFromBuffer(buffer);
+  // A clip that pins no track reads the cache under the "primary" key, which is
+  // deliberately distinct from '#0'. When this IS the source's only track, the
+  // two address the same sound, so publish under both or such a clip (any
+  // audio-only import) would stay silent after its transcode.
+  const keys = alsoPrimary
+    ? [audioKey(assetId, audioTrackIndex), audioKey(assetId)]
+    : [audioKey(assetId, audioTrackIndex)];
+  for (const key of keys) {
+    audioPromises.set(key, Promise.resolve(buffer));
+    peaksPromises.set(key, Promise.resolve(peaks));
+  }
+  return peaks;
+}
+
+/** Same normalized envelope as `streamPeaks`, computed from an in-memory buffer. */
+function peaksFromBuffer(buffer: AudioBuffer): number[] {
+  const durationMs = (buffer.length / buffer.sampleRate) * 1000;
+  const bins = expectedPeakBins(durationMs);
+  const out = new Array<number>(bins).fill(0);
+  const data = buffer.getChannelData(0);
+  const stride = Math.max(1, Math.floor(data.length / bins / 32));
+  for (let j = 0; j < data.length; j += stride) {
+    const bin = Math.floor((j / data.length) * bins);
+    if (bin < 0 || bin >= bins) continue;
+    const v = Math.abs(data[j]!);
+    if (v > out[bin]!) out[bin] = v;
+  }
+  let max = 0;
+  for (const v of out) if (v > max) max = v;
+  if (max > 0) for (let i = 0; i < bins; i++) out[i]! /= max;
+  return out;
 }
 
 const peaksPromises = new Map<string, Promise<number[] | null>>();

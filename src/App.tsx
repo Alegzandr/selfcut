@@ -23,6 +23,8 @@ import { MobileBottomBar } from './ui/MobileBottomBar';
 import { ShortcutsHelp } from './ui/ShortcutsHelp';
 import { Preferences } from './ui/Preferences';
 import { About } from './ui/About';
+import { ConfirmDialog } from './ui/ConfirmDialog';
+import { confirmDiscardProject } from './ui/projectActions';
 import { ContextMenu } from './ui/menu/ContextMenu';
 import { A11yAnnouncer } from './ui/A11yAnnouncer';
 import { useEditorHotkeys } from './ui/useEditorHotkeys';
@@ -139,6 +141,7 @@ export default function App() {
       <ShortcutsHelp />
       <Preferences />
       <About />
+      <ConfirmDialog />
       {!coarse && <ContextMenu />}
       <Toast />
       <A11yAnnouncer />
@@ -247,11 +250,13 @@ function DisconnectedBanner() {
       <button
         className="flex-none rounded px-2.5 py-1 font-medium text-amber-200/80 hover:bg-amber-400/10 hover:text-amber-100"
         onClick={() => {
-          if (!window.confirm(t('restore.startNewConfirm'))) return;
-          useStore.getState().resetProject();
-          // As in File ▸ New: unbind so a later save cannot overwrite the file
-          // the discarded project came from.
-          unbindProjectFile();
+          void confirmDiscardProject().then((ok) => {
+            if (!ok) return;
+            useStore.getState().resetProject();
+            // As in File ▸ New: unbind so a later save cannot overwrite the file
+            // the discarded project came from.
+            unbindProjectFile();
+          });
         }}
       >
         {t('restore.startNew')}

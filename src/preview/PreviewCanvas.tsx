@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PlugZap } from 'lucide-react';
 import { PlaybackEngine } from './PlaybackEngine';
@@ -12,8 +12,26 @@ import {
   outputDimensions,
   timelineToSourceMs,
 } from '../model';
-import { DestRect, clipDestRect, clipsAt, shapeClipRect, textClipRect } from './compositor';
+import {
+  DestRect,
+  clipDestRect,
+  clipRotation,
+  clipsAt,
+  shapeClipRect,
+  textClipRect,
+  unrotatePoint,
+} from './compositor';
 import { clamp } from '../lib/time';
+import { hapticOnSnap, type SnapHapticState } from '../lib/haptics';
+import { PREVIEW_SNAP_THRESHOLD_PX } from '../app/config';
+import {
+  type SnapGuides,
+  handlePlacements,
+  resizeCursor,
+  scaleSnapTargets,
+  snapRotation,
+  snapScale,
+} from './transformSnap';
 import {
   DEFAULT_SHAPE_FILL,
   MIN_DRAWN_SHAPE,
@@ -189,8 +207,62 @@ interface PreviewResize {
   centerNy: number;
   /** Pointer distance from the center when the drag started. */
   startDist: number;
+  /** Clip size in output px at scale 1 - the basis for every snap target. */
+  unitW: number;
+  unitH: number;
+  /** Cropped source width in source px, when known: gives the 1:1 snap. */
+  sourceW?: number;
+  haptics: SnapHapticState;
   /** Stage rect captured at pointerdown - see `normPointIn`. */
   rect: DOMRect;
+}
+
+interface PreviewRotate {
+  clipId: string;
+  origRotation: number;
+  /** Center of the clip's dest rect, normalized to the stage. */
+  centerNx: number;
+  centerNy: number;
+  /** Pointer angle (degrees) from the center when the drag started. */
+  startAngle: number;
+  haptics: SnapHapticState;
+  /** Stage rect captured at pointerdown - see `normPointIn`. */
+  rect: DOMRect;
+}
+
+/**
+ * Rotation cursor. CSS has no `rotate` keyword - `grab` is the usual stand-in,
+ * but it reads as "drag me", which is exactly the wrong promise next to a
+ * resize handle. So the glyph ships inline: a circular arrow, drawn twice, dark
+ * halo under white stroke, so it stays legible over both bright and dark
+ * footage. `data:` images are allowed by the CSP (see `vite.config.ts`).
+ */
+const ROTATE_CURSOR_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
+  '<g fill="none" stroke="#18181b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M17.2 7.8a6.6 6.6 0 1 0 1.7 5.4"/><path d="M18.6 3.4v4.6h-4.6"/></g>' +
+  '<g fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M17.2 7.8a6.6 6.6 0 1 0 1.7 5.4"/><path d="M18.6 3.4v4.6h-4.6"/></g></svg>';
+
+/** Hotspot centred on the glyph, with `grab` as the fallback if the URL fails. */
+const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ROTATE_CURSOR_SVG)}") 12 12, grab`;
+
+/**
+ * Pointer angle around a center, in degrees, measured in OUTPUT pixel space.
+ *
+ * The normalized stage coords are stretched by the frame's aspect ratio, so
+ * taking the angle straight from them would make the clip lag or race the
+ * pointer around the circle - badly on a 9:16 frame, where the stretch is ~3x.
+ */
+function angleFromCenter(
+  nx: number,
+  ny: number,
+  centerNx: number,
+  centerNy: number,
+  outW: number,
+  outH: number,
+): number {
+  return (Math.atan2((ny - centerNy) * outH, (nx - centerNx) * outW) * 180) / Math.PI;
 }
 
 /**
@@ -253,6 +325,7 @@ function PreviewOverlays({
   outW,
   outH,
   stageRef,
+  onGuides,
 }: {
   project: Project;
   assets: Record<string, MediaAsset>;
@@ -261,10 +334,15 @@ function PreviewOverlays({
   outW: number;
   outH: number;
   stageRef: RefObject<HTMLDivElement | null>;
+  /** Publish snap guides up to the stage, which owns the lines' layer. */
+  onGuides: (guides: SnapGuides) => void;
 }) {
   const { t } = useTranslation();
   const currentTimeMs = useStore((s) => s.currentTimeMs);
   const resize = useRef<PreviewResize | null>(null);
+  const rotate = useRef<PreviewRotate | null>(null);
+  /** Live angle readout while rotating - null when no rotation is in flight. */
+  const [angleBadge, setAngleBadge] = useState<number | null>(null);
 
   // A media clip visible right now that points at a disconnected source: the
   // canvas would otherwise just render black with no explanation. Plain scan
@@ -308,12 +386,23 @@ function PreviewOverlays({
     const { nx, ny } = normPointIn(stageRect, e);
     const centerNx = (rect.dx + rect.dw / 2) / outW;
     const centerNy = (rect.dy + rect.dh / 2) / outH;
+    const origScale = (clip.transform ?? DEFAULT_TRANSFORM).scale;
+    // Every clip kind scales linearly from its size at scale 1, so dividing the
+    // live rect by the live scale gives one basis the snap targets derive from.
+    const unit = Math.max(origScale, 0.001);
+    const asset = isGeneratedClip(clip) ? undefined : assets[clip.assetId];
     resize.current = {
       clipId: clip.id,
-      origScale: (clip.transform ?? DEFAULT_TRANSFORM).scale,
+      origScale,
       centerNx,
       centerNy,
       startDist: Math.max(0.01, Math.hypot(nx - centerNx, ny - centerNy)),
+      unitW: rect.dw / unit,
+      unitH: rect.dh / unit,
+      sourceW: asset?.width
+        ? asset.width * (clip.transform ?? DEFAULT_TRANSFORM).crop.w
+        : undefined,
+      haptics: { lastSnap: null },
       rect: stageRect,
     };
   };
@@ -323,13 +412,35 @@ function PreviewOverlays({
     if (!r) return;
     const { nx, ny } = normPointIn(r.rect, e);
     const dist = Math.hypot(nx - r.centerNx, ny - r.centerNy);
-    let scale = Math.min(8, Math.max(0.05, (r.origScale * dist) / r.startDist));
-    // Magnetism: snap to the natural "fit-to-frame" scale (1.0) unless Shift is held.
-    if (!e.shiftKey && Math.abs(scale - 1) < 0.03) scale = 1;
+    const raw = Math.min(8, Math.max(0.05, (r.origScale * dist) / r.startDist));
     const state = useStore.getState();
     const clip = findClip(state.project, r.clipId);
     if (!clip) return;
     const tf = clip.transform ?? DEFAULT_TRANSFORM;
+
+    // Magnetism. The old rule snapped to scale 1 and nothing else, which is
+    // useless for vertical editing: a 16:9 clip in a 9:16 frame fills the frame
+    // at ~3.16x, and there was no detent anywhere near it. Targets are now
+    // derived from the clip's real geometry (fit / cover / 1:1 pixels).
+    let scale = raw;
+    let guides: SnapGuides = { v: [], h: [] };
+    if (state.snapEnabled !== e.shiftKey) {
+      // Screen-pixel threshold converted into scale units via the gesture's own
+      // scale-per-distance ratio, so the pull is the same physical width
+      // whatever the camera zoom or how far out the handle was grabbed.
+      const threshold = (r.origScale / r.startDist) * (PREVIEW_SNAP_THRESHOLD_PX / r.rect.width);
+      const snapped = snapScale(
+        raw,
+        scaleSnapTargets({ unitW: r.unitW, unitH: r.unitH, outW, outH, sourceW: r.sourceW }),
+        threshold,
+        { centerX: tf.x, centerY: tf.y, unitW: r.unitW, unitH: r.unitH, outW, outH },
+      );
+      scale = hapticOnSnap(raw, snapped.scale, r.haptics);
+      guides = snapped.guides;
+    }
+    // Resizing used to snap silently: same magnetism as the drag, but with no
+    // line and no tick, so it read as "the magnetism does not work".
+    onGuides(guides);
     state.updateClip(r.clipId, { transform: { ...tf, scale } });
   };
 
@@ -337,6 +448,54 @@ function PreviewOverlays({
     if (!resize.current) return;
     useStore.getState().endGesture();
     resize.current = null;
+    onGuides({ v: [], h: [] });
+  };
+
+  /** Corner ring drag: rotate the clip around its center. */
+  const onRotateDown = (e: React.PointerEvent, rect: DestRect, clip: Clip) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const state = useStore.getState();
+    state.beginGesture();
+    const stageRect = stageRef.current!.getBoundingClientRect();
+    const { nx, ny } = normPointIn(stageRect, e);
+    const centerNx = (rect.dx + rect.dw / 2) / outW;
+    const centerNy = (rect.dy + rect.dh / 2) / outH;
+    rotate.current = {
+      clipId: clip.id,
+      origRotation: clipRotation(clip),
+      centerNx,
+      centerNy,
+      startAngle: angleFromCenter(nx, ny, centerNx, centerNy, outW, outH),
+      haptics: { lastSnap: null },
+      rect: stageRect,
+    };
+    setAngleBadge(clipRotation(clip));
+  };
+
+  const onRotateMove = (e: React.PointerEvent) => {
+    const r = rotate.current;
+    if (!r) return;
+    const { nx, ny } = normPointIn(r.rect, e);
+    const raw = r.origRotation + (angleFromCenter(nx, ny, r.centerNx, r.centerNy, outW, outH) - r.startAngle);
+    const state = useStore.getState();
+    const clip = findClip(state.project, r.clipId);
+    if (!clip) return;
+    const tf = clip.transform ?? DEFAULT_TRANSFORM;
+    // Detents every 15°: the uprights and the diagonals, plus the slight-tilt
+    // angles. Shift inverts the snap toggle, exactly like the other gestures.
+    const rotation =
+      state.snapEnabled !== e.shiftKey ? hapticOnSnap(raw, snapRotation(raw), r.haptics) : raw;
+    setAngleBadge(rotation);
+    state.updateClip(r.clipId, { transform: { ...tf, rotation } });
+  };
+
+  const onRotateUp = () => {
+    if (!rotate.current) return;
+    useStore.getState().endGesture();
+    rotate.current = null;
+    setAngleBadge(null);
   };
 
   return (
@@ -348,31 +507,64 @@ function PreviewOverlays({
         </div>
       )}
       {selectedRect && (
-        <div
-          className="pointer-events-none absolute rounded-sm ring-2 ring-sky-400/90"
-          style={{
-            left: `${(selectedRect.dx / outW) * 100}%`,
-            top: `${(selectedRect.dy / outH) * 100}%`,
-            width: `${(selectedRect.dw / outW) * 100}%`,
-            height: `${(selectedRect.dh / outH) * 100}%`,
-          }}
-        >
-          {/* Corner handles: drag to rescale the clip around its center. */}
-          {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
-            <div
-              key={corner}
-              className={`pointer-events-auto absolute h-3 w-3 rounded-sm border border-zinc-900 bg-sky-400 shadow ${
-                corner[0] === 'n' ? '-top-1.5' : '-bottom-1.5'
-              } ${corner[1] === 'w' ? '-left-1.5' : '-right-1.5'} ${
-                corner === 'nw' || corner === 'se' ? 'cursor-nwse-resize' : 'cursor-nesw-resize'
-              } touch-none`}
-              onPointerDown={(e) => onHandleDown(e, selectedRect, selectedClip!)}
-              onPointerMove={onHandleMove}
-              onPointerUp={onHandleUp}
-              onPointerCancel={onHandleUp}
-            />
+        <>
+          {/* Purely visual: it tilts with the clip and follows it off-frame. The
+              handles below are NOT its children, so they can be clamped back
+              into view independently of where the outline runs off to. */}
+          <div
+            className="pointer-events-none absolute rounded-sm ring-2 ring-sky-400/90"
+            style={{
+              left: `${(selectedRect.dx / outW) * 100}%`,
+              top: `${(selectedRect.dy / outH) * 100}%`,
+              width: `${(selectedRect.dw / outW) * 100}%`,
+              height: `${(selectedRect.dh / outH) * 100}%`,
+              transform: `rotate(${clipRotation(selectedClip!)}deg)`,
+            }}
+          />
+          {handlePlacements(selectedRect, clipRotation(selectedClip!), outW, outH).map((h) => (
+            <div key={h.corner} className="pointer-events-none absolute" style={{ left: `${h.x * 100}%`, top: `${h.y * 100}%` }}>
+              {/* Rotation zone: just OUTSIDE the corner, where every editor puts
+                  it (Figma, Premiere, Canva) - no extra chrome crowding an
+                  already narrow 9:16 frame. Once the corner has been pulled back
+                  to the frame border there is no "outside" left, so it flips to
+                  the inner side of the handle instead of leaving the panel. */}
+              <div
+                className="pointer-events-auto absolute h-6 w-6 touch-none"
+                style={{
+                  cursor: ROTATE_CURSOR,
+                  transform: `translate(-50%, -50%) translate(${h.dirX * (h.clamped ? -20 : 16)}px, ${
+                    h.dirY * (h.clamped ? -20 : 16)
+                  }px)`,
+                }}
+                onPointerDown={(e) => onRotateDown(e, selectedRect, selectedClip!)}
+                onPointerMove={onRotateMove}
+                onPointerUp={onRotateUp}
+                onPointerCancel={onRotateUp}
+              />
+              {/* Painted after the rotation zone, so it wins any overlap. */}
+              <div
+                className="pointer-events-auto absolute h-3 w-3 touch-none rounded-sm border border-zinc-900 bg-sky-400 shadow"
+                style={{ cursor: resizeCursor(h.dirX, h.dirY), transform: 'translate(-50%, -50%)' }}
+                onPointerDown={(e) => onHandleDown(e, selectedRect, selectedClip!)}
+                onPointerMove={onHandleMove}
+                onPointerUp={onHandleUp}
+                onPointerCancel={onHandleUp}
+              />
+            </div>
           ))}
-        </div>
+          {angleBadge !== null && (
+            <span
+              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-[11px] font-medium tabular-nums text-sky-200"
+              style={{
+                left: `${((selectedRect.dx + selectedRect.dw / 2) / outW) * 100}%`,
+                top: `${((selectedRect.dy + selectedRect.dh / 2) / outH) * 100}%`,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              {`${Math.round(angleBadge)}°`}
+            </span>
+          )}
+        </>
       )}
     </>
   );
@@ -413,6 +605,13 @@ export function PreviewCanvas() {
   const stageRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const drag = useRef<PreviewDrag | null>(null);
+  // One tick per new snap, per axis - so a drag that catches both the vertical
+  // and the horizontal guide at once still feels like a single click, and a clip
+  // sliding along a guide does not buzz continuously.
+  const dragHaptics = useRef<{ x: SnapHapticState; y: SnapHapticState }>({
+    x: { lastSnap: null },
+    y: { lastSnap: null },
+  });
   const wheelGesture = useRef<number | null>(null);
   const pan = useRef<ViewPan | null>(null);
   const zoomDrag = useRef<{ startX: number; startY: number; altKey: boolean } | null>(null);
@@ -442,6 +641,15 @@ export function PreviewCanvas() {
     return () => engine.dispose();
   }, []);
 
+  /**
+   * Guide lines published by the overlay's resize gesture. Same bail-out as the
+   * drag path: the overlay re-renders every frame, so an unconditional setState
+   * here would re-render the whole stage subtree alongside it.
+   */
+  const publishGuides = useCallback((next: SnapGuides) => {
+    setGuides((prev) => (sameLines(prev.v, next.v) && sameLines(prev.h, next.h) ? prev : next));
+  }, []);
+
   /** Topmost visible clip under a normalized point at the current time. */
   const hitTest = (nx: number, ny: number): Clip | null => {
     const timeMs = useStore.getState().currentTimeMs;
@@ -454,7 +662,18 @@ export function PreviewCanvas() {
       for (let i = visible.length - 1; i >= 0; i--) {
         const clip = visible[i]!;
         const r = clipRectAt(clip, assets, outW, outH, timeMs);
-        if (r && px >= r.dx && px <= r.dx + r.dw && py >= r.dy && py <= r.dy + r.dh) {
+        if (!r) continue;
+        // Undo the clip's rotation around its own centre, so the rect test below
+        // stays a plain axis-aligned compare: a tilted clip must be grabbable
+        // where it is actually painted, not where its upright box used to be.
+        const { x: hx, y: hy } = unrotatePoint(
+          px,
+          py,
+          clipRotation(clip),
+          r.dx + r.dw / 2,
+          r.dy + r.dh / 2,
+        );
+        if (hx >= r.dx && hx <= r.dx + r.dw && hy >= r.dy && hy <= r.dy + r.dh) {
           return clip;
         }
       }
@@ -503,12 +722,21 @@ export function PreviewCanvas() {
 
     // Smart guides: the transform x/y IS the clip's normalized center, so snap
     // it to the frame center and to the frame edges (via the clip's half-size).
-    // Holding Shift disables the magnetism. Fuchsia lines mark each active snap.
+    // Fuchsia lines mark each active snap.
+    //
+    // Magnetism follows the same rule as the timeline: the `snapEnabled` toggle
+    // (N) decides, and Shift inverts it for the current drag. Before, the
+    // preview ignored the toggle entirely and only honoured Shift, so turning
+    // snapping off had no effect here.
     const rect = clipRectAt(clip, assets, outW, outH, state.currentTimeMs);
     const vLines: number[] = [];
     const hLines: number[] = [];
-    if (!e.shiftKey && rect) {
-      const TH = 0.012;
+    if (state.snapEnabled !== e.shiftKey && rect) {
+      // In screen pixels, converted per axis: the stage rect carries the preview
+      // zoom, so the pull stays 9px wide on screen at any camera zoom. A fixed
+      // threshold in normalized units grew with the zoom and turned gluey.
+      const THX = PREVIEW_SNAP_THRESHOLD_PX / d.rect.width;
+      const THY = PREVIEW_SNAP_THRESHOLD_PX / d.rect.height;
       const halfW = rect.dw / outW / 2;
       const halfH = rect.dh / outH / 2;
       const xCands: [number, number][] = [
@@ -517,8 +745,8 @@ export function PreviewCanvas() {
         [1 - halfW, 1],
       ];
       for (const [center, guide] of xCands) {
-        if (Math.abs(x - center) <= TH) {
-          x = center;
+        if (Math.abs(x - center) <= THX) {
+          x = hapticOnSnap(x, center, dragHaptics.current.x);
           vLines.push(guide);
           break;
         }
@@ -529,8 +757,8 @@ export function PreviewCanvas() {
         [1 - halfH, 1],
       ];
       for (const [center, guide] of yCands) {
-        if (Math.abs(y - center) <= TH) {
-          y = center;
+        if (Math.abs(y - center) <= THY) {
+          y = hapticOnSnap(y, center, dragHaptics.current.y);
           hLines.push(guide);
           break;
         }
@@ -556,6 +784,7 @@ export function PreviewCanvas() {
     if (!drag.current) return;
     useStore.getState().endGesture();
     drag.current = null;
+    dragHaptics.current = { x: { lastSnap: null }, y: { lastSnap: null } };
     setGuides((prev) => (prev.v.length === 0 && prev.h.length === 0 ? prev : { v: [], h: [] }));
   };
 
@@ -829,6 +1058,7 @@ export function PreviewCanvas() {
           outW={outW}
           outH={outH}
           stageRef={stageRef}
+          onGuides={publishGuides}
         />
       </div>
 
