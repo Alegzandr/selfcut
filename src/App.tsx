@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
-import { PlugZap, UploadCloud } from 'lucide-react';
+import { PlugZap, UploadCloud, X, Zap } from 'lucide-react';
 import { useStore } from './store/store';
 import { initPersistence } from './lib/persistence';
 import { unbindProjectFile } from './lib/projectFile';
@@ -27,6 +27,7 @@ import { ContextMenu } from './ui/menu/ContextMenu';
 import { A11yAnnouncer } from './ui/A11yAnnouncer';
 import { useEditorHotkeys } from './ui/useEditorHotkeys';
 import { useIsCoarsePointer } from './lib/device';
+import { isSoftwareRendering } from './lib/gpu';
 
 const PREVIEW_FRAC_KEY = 'selfcut.previewFrac';
 const DEFAULT_PREVIEW_FRAC = 0.42;
@@ -113,6 +114,7 @@ export default function App() {
     >
       {!coarse && <MenuBar />}
       <TopBar />
+      <SoftwareRenderingBanner />
       <DisconnectedBanner />
       <div
         className="flex flex-none border-b border-zinc-800"
@@ -154,6 +156,43 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+const GPU_WARNING_KEY = 'selfcut.gpuWarningDismissed';
+
+/**
+ * Performance warning: shown when the browser is compositing in software.
+ * Everything still works, so the banner is advisory and dismissible for good -
+ * the user has to change a browser setting to fix it, and nagging every launch
+ * would not help.
+ */
+function SoftwareRenderingBanner() {
+  const { t } = useTranslation();
+  // Probed once per session: the renderer cannot change while the page lives.
+  const [software] = useState(() => {
+    if (localStorage.getItem(GPU_WARNING_KEY) === '1') return false;
+    return isSoftwareRendering();
+  });
+  const [dismissed, setDismissed] = useState(false);
+  if (!software || dismissed) return null;
+
+  return (
+    <div className="flex flex-none items-center gap-x-3 gap-y-1.5 border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+      <Zap className="h-4 w-4 flex-none text-amber-300" />
+      <span className="min-w-0 flex-1">{t('gpu.softwareRendering')}</span>
+      <button
+        className="flex-none rounded p-1 text-amber-200/80 hover:bg-amber-400/10 hover:text-amber-100"
+        title={t('gpu.dismiss')}
+        aria-label={t('gpu.dismiss')}
+        onClick={() => {
+          localStorage.setItem(GPU_WARNING_KEY, '1');
+          setDismissed(true);
+        }}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }

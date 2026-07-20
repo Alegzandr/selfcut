@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { Film, FolderOpen, Image, Music, Plus, PlugZap, Trash2, X } from 'lucide-react';
+import { Film, FolderOpen, Image, Import, Music, Plus, PlugZap, Trash2, X } from 'lucide-react';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
 import { MediaAsset } from '../types';
@@ -8,6 +8,7 @@ import { formatTimeShort } from '../lib/time';
 import { ASSET_DRAG_MIME } from '../app/config';
 import { useIsCoarsePointer } from '../lib/device';
 import { openMediaPicker } from './mediaPicker';
+import { useImport } from './useImport';
 
 /**
  * Source explorer: every imported file lands here. From here assets are
@@ -20,7 +21,9 @@ export function MediaLibrary() {
   const assets = useStore((s) => s.assets);
   const coarse = useIsCoarsePointer();
   const libraryOpen = useStore((s) => s.libraryOpen);
+  const importFiles = useImport();
   const list = Object.values(assets);
+  const importHere = () => openMediaPicker(importFiles);
 
   const body = (
     <>
@@ -28,27 +31,47 @@ export function MediaLibrary() {
         <FolderOpen className="h-3.5 w-3.5" />
         {t('library.title')}
         {/* Bare count badge: no unit to translate, but it needs a spoken label. */}
-        {list.length > 0 && (
-          <span
-            className="ml-auto font-normal text-zinc-400"
-            aria-label={t('library.count', { count: list.length })}
-          >
-            {list.length}
-          </span>
-        )}
-        {coarse && (
-          <button
-            className="touch-hit -mr-1 rounded p-1 text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2"
-            onClick={() => useStore.getState().setLibraryOpen(false)}
-            title={t('library.close')}
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-0.5">
+          {list.length > 0 && (
+            <span
+              className="font-normal text-zinc-400"
+              aria-label={t('library.count', { count: list.length })}
+            >
+              {list.length}
+            </span>
+          )}
+          <Tooltip label={t('library.import')}>
+            <button
+              className="touch-hit rounded p-1 text-zinc-400 hover:text-zinc-200 active:bg-zinc-800 pointer-coarse:p-2"
+              onClick={importHere}
+              aria-label={t('library.import')}
+            >
+              <Import className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
+          {coarse && (
+            <button
+              className="touch-hit -mr-1 rounded p-1 text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2"
+              onClick={() => useStore.getState().setLibraryOpen(false)}
+              title={t('library.close')}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {list.length === 0 ? (
-        <p className="p-3 text-[11px] leading-relaxed text-zinc-400">{t('library.empty')}</p>
+        <div className="p-3">
+          <p className="text-[11px] leading-relaxed text-zinc-400">{t('library.empty')}</p>
+          <button
+            className="touch-hit mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-zinc-700 px-2 py-2 text-[11px] font-medium text-zinc-300 hover:border-sky-500/60 hover:text-sky-300 active:bg-zinc-800"
+            onClick={importHere}
+          >
+            <Import className="h-3.5 w-3.5" />
+            {t('library.import')}
+          </button>
+        </div>
       ) : (
         <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-1.5">
           {list.map((asset) => (
