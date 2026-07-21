@@ -8,6 +8,8 @@ import { setTranscodedAudio } from '../media/mediaCache';
 // the ffmpeg runtime imports it dynamically, on first job.
 import { decodeCachedAudio } from '../media/transcodeAudio';
 import { isMissingSource } from './missingSource';
+import { ASSETS_STORE, PROJECT_STORE, db, requestDone, txDone } from './idb';
+import { loadTranscodedAudio, pruneTranscodedAudio } from './audioCache';
 import { t } from '../i18n';
 
 // Surface a save failure once per session: repeated debounced saves must not
@@ -29,116 +31,25 @@ function reportSaveFailure(err: unknown): void {
  * library changes.
  */
 
-const DB_NAME = 'selfcut';
-const DB_VERSION = 2;
-const PROJECT_STORE = 'project';
-const ASSETS_STORE = 'assets';
-/** Compressed copies of transcoded audio tracks, keyed `${assetId}#${trackIndex}`. */
-const AUDIO_STORE = 'transcodedAudio';
 const PROJECT_KEY = 'current';
 const SAVE_DEBOUNCE_MS = 500;
 
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function db(): Promise<IDBDatabase> {
-  dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const d = req.result;
-      if (!d.objectStoreNames.contains(PROJECT_STORE)) d.createObjectStore(PROJECT_STORE);
-      if (!d.objectStoreNames.contains(ASSETS_STORE)) {
-        d.createObjectStore(ASSETS_STORE, { keyPath: 'id' });
-      }
-      if (!d.objectStoreNames.contains(AUDIO_STORE)) d.createObjectStore(AUDIO_STORE);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-  return dbPromise;
-}
-
-function audioCacheKey(assetId: string, audioTrackIndex: number): string {
-  return `${assetId}#${audioTrackIndex}`;
-}
-
 /**
- * Keep the compressed copy of a transcoded track, so reopening the project does
- * not re-run a conversion that takes minutes.
+ * Ask the browser to stop counting this origin as disposable.
  *
- * A failure here is deliberately swallowed rather than surfaced: the transcode
- * itself succeeded and the track is audible for this session. All that is lost
- * is the shortcut next time, which is not worth a toast over a full disk.
+ * Without it everything here is best-effort storage, which the browser is free
+ * to wipe under disk pressure - not just the reconstructible audio cache, but
+ * the project itself, with no event and no warning. The audio cache budget only
+ * governs what SelfCut chooses to keep; this governs whether that choice is
+ * ours to make at all. A refusal is normal (Firefox prompts, some contexts
+ * decline outright) and changes nothing about how the app behaves.
  */
-export async function saveTranscodedAudio(
-  assetId: string,
-  audioTrackIndex: number,
-  bytes: Uint8Array,
-): Promise<void> {
+async function requestPersistentStorage(): Promise<void> {
   try {
-    const d = await db();
-    const tx = d.transaction(AUDIO_STORE, 'readwrite');
-    tx.objectStore(AUDIO_STORE).put(bytes, audioCacheKey(assetId, audioTrackIndex));
-    await txDone(tx);
-  } catch (err) {
-    console.warn('[persistence] transcoded audio not cached:', err);
-  }
-}
-
-/** The cached copy of a transcoded track, or null if there is none. */
-export async function loadTranscodedAudio(
-  assetId: string,
-  audioTrackIndex: number,
-): Promise<Uint8Array | null> {
-  try {
-    const d = await db();
-    const tx = d.transaction(AUDIO_STORE, 'readonly');
-    const bytes = await requestDone(
-      tx.objectStore(AUDIO_STORE).get(audioCacheKey(assetId, audioTrackIndex)),
-    );
-    return bytes instanceof Uint8Array ? bytes : null;
+    if (!(await navigator.storage?.persisted?.())) await navigator.storage?.persist?.();
   } catch {
-    return null;
+    /* unsupported, or declined - best-effort storage still works */
   }
-}
-
-/** Drop every cached track of an asset, when the asset itself goes away. */
-async function dropTranscodedAudio(assetId: string): Promise<void> {
-  try {
-    const d = await db();
-    const tx = d.transaction(AUDIO_STORE, 'readwrite');
-    const store = tx.objectStore(AUDIO_STORE);
-    // Keys are `${assetId}#${index}`: bound the range on the prefix rather than
-    // walk every entry in the store.
-    // U+FFFF sorts above any real key suffix. Written as an escape, not as the
-    // character itself: a literal non-character in source survives editors and
-    // encoding round-trips far less reliably than it reads.
-    const range = IDBKeyRange.bound(`${assetId}#`, `${assetId}#\uffff`);
-    for (const key of await requestDone(store.getAllKeys(range))) store.delete(key);
-    await txDone(tx);
-  } catch (err) {
-    console.warn('[persistence] transcoded audio not cleared:', err);
-  }
-}
-
-function requestDone<T>(req: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-/**
- * Resolve when a write transaction actually commits. Firing put/delete and
- * returning is not enough: the write can still fail at commit time (quota
- * exceeded, disk full), and only the transaction's own events report it - so a
- * silent data-loss would otherwise go unnoticed.
- */
-function txDone(tx: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
-  });
 }
 
 // Guards against a stale or corrupted database (older schema, interrupted
@@ -314,14 +225,11 @@ async function syncAssets(
     for (const [id, asset] of Object.entries(next)) {
       if (prev[id] !== asset) store.put(asset);
     }
-    for (const id of Object.keys(prev)) {
-      if (!(id in next)) {
-        store.delete(id);
-        // The cached audio is worthless without the asset it belongs to, and it
-        // is the largest thing this database holds after the media itself.
-        void dropTranscodedAudio(id);
-      }
-    }
+    // The asset itself goes now - the state is the library, and leaving its
+    // blob behind would resurrect the card on the next hydrate. Its transcoded
+    // audio stays: a removal is undoable for as long as the session lasts, and
+    // orphans are swept at the next startup instead.
+    for (const id of Object.keys(prev)) if (!(id in next)) store.delete(id);
     await txDone(tx);
   } catch (err) {
     reportSaveFailure(err);
@@ -356,6 +264,13 @@ export async function initPersistence(): Promise<void> {
   } catch (err) {
     console.warn('[persistence] restore failed:', err);
   }
+
+  // Before the subscription, so the sweep reads a library no store write can be
+  // racing it for. Cheap: key and metadata scans only, no blob is read.
+  await pruneTranscodedAudio();
+  // Not awaited: it can prompt in some browsers, and nothing below depends on
+  // the answer.
+  void requestPersistentStorage();
 
   useStore.subscribe((s, prev) => {
     if (s.project !== prev.project) scheduleProjectSave(s.project);

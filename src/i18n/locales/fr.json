@@ -192,6 +192,7 @@
   "library.audio.activate": "Activer",
   "library.audio.detected": "Audio avancé détecté ({{codec}}) : activez la piste depuis la médiathèque pour l'entendre.",
   "library.audio.ready": "Piste audio prête : {{name}}",
+  "library.alreadyImported": "{{name}} est déjà dans votre médiathèque",
   "library.audio.activateHint": "Convertir cette piste pour l'entendre. La première conversion télécharge un convertisseur de 32 Mo, puis lit tout le fichier : comptez plusieurs minutes.",
   "library.audio.needsTranscode": "Codec {{codec}} : une conversion est nécessaire pour l'écouter",
   "library.audio.trackNumber": "Piste {{n}}",

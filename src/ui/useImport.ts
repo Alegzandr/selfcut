@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useStore } from '../store/store';
 import { ensureAssetVisuals, probeFile } from '../media/probe';
 import { isSubtitleFile, parseSubtitles } from '../lib/subtitles';
+import { findExistingAsset, isDetached } from './importDedup';
 import { t } from '../i18n';
 
 /** Options for a single import batch. */
@@ -28,6 +29,7 @@ export function useImport(): (files: Iterable<File>, opts?: ImportOptions) => Pr
       setNotice,
       addAsset,
       addClipFromAsset,
+      reconnectAsset,
       addSubtitleClips,
       beginGesture,
       endGesture,
@@ -51,6 +53,17 @@ export function useImport(): (files: Iterable<File>, opts?: ImportOptions) => Pr
             const cues = parseSubtitles(await file.text());
             if (cues.length === 0) throw new Error(t('errors.media.noCues', { name: file.name }));
             addSubtitleClips(cues);
+            continue;
+          }
+          // Already in the library: reuse that asset rather than minting a
+          // second one. A detached entry gets its bytes back (relink), a live
+          // one needs nothing at all - either way the id, and the transcoded
+          // audio cached under it, survives the re-import.
+          const existing = findExistingAsset(useStore.getState().assets, file);
+          if (existing) {
+            if (isDetached(existing)) await reconnectAsset(existing.id, file);
+            else notices.push(t('library.alreadyImported', { name: file.name }));
+            if (opts.placeOnTimeline) addClipFromAsset(existing.id);
             continue;
           }
           const { asset, warning, notice } = await probeFile(file);

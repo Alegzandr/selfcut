@@ -192,6 +192,7 @@
   "library.audio.activate": "Aktivieren",
   "library.audio.detected": "Erweitertes Audio erkannt ({{codec}}). Aktiviere die Spur in der Medienbibliothek, um sie zu hören.",
   "library.audio.ready": "Audiospur bereit: {{name}}",
+  "library.alreadyImported": "{{name}} ist bereits in deiner Mediathek",
   "library.audio.activateHint": "Diese Spur konvertieren, um sie zu hören. Die erste Konvertierung lädt einen 32-MB-Konverter und liest dann die ganze Datei: Das dauert einige Minuten.",
   "library.audio.needsTranscode": "Codec {{codec}}: Konvertierung nötig, um sie zu hören",
   "library.audio.trackNumber": "Spur {{n}}",

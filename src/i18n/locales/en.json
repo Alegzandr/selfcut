@@ -192,6 +192,7 @@
   "library.audio.activate": "Activate",
   "library.audio.detected": "Advanced audio detected ({{codec}}). Activate the track from the media library to hear it.",
   "library.audio.ready": "Audio track ready: {{name}}",
+  "library.alreadyImported": "{{name}} is already in your media library",
   "library.audio.activateHint": "Convert this track to hear it. The first conversion downloads a 32 MB converter, then reads the whole file: expect several minutes.",
   "library.audio.needsTranscode": "{{codec}} codec: needs a conversion to be heard",
   "library.audio.trackNumber": "Track {{n}}",

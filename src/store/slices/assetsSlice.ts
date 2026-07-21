@@ -5,7 +5,7 @@ import { ensureAssetVisuals, probeFile } from '../../media/probe';
 import { FFmpegCanceled, type FFmpegProgress } from '../../media/ffmpeg';
 import { transcodeAudioTrack } from '../../media/transcodeAudio';
 import { extractSubtitleTracks, subtitleKey } from '../../media/extractSubtitles';
-import { saveTranscodedAudio } from '../../lib/persistence';
+import { saveTranscodedAudio } from '../../lib/audioCache';
 import { t } from '../../i18n';
 
 /**
