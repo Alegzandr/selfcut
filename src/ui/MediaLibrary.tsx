@@ -167,22 +167,30 @@ function UndecodableAudio({ asset }: { asset: MediaAsset }) {
   const pending = asset.audioTracks.filter((track) => track.undecodable && !track.transcoded);
   if (pending.length === 0 || asset.disconnected) return null;
 
+  /* A file routinely names every track the same ("Surround"), which would leave
+     the rows indistinguishable. A name only earns its place when it tells the
+     tracks apart; otherwise the track number does the work. */
+  const names = pending.map((track) => track.label ?? track.language ?? null);
+  const labelOf = (i: number) => {
+    const name = names[i];
+    const number = t('library.audio.trackNumber', { n: pending[i]!.index + 1 });
+    if (name == null) return number;
+    return names.filter((other) => other === name).length > 1 ? `${number} · ${name}` : name;
+  };
+
   return (
     <div className="space-y-1 border-t border-zinc-800 bg-zinc-950/60 px-1 py-1">
-      {pending.map((track) => {
+      {pending.map((track, i) => {
         const key = audioKey(asset.id, track.index);
         const progress = transcodes[key];
-        const name =
-          track.label ??
-          track.language ??
-          t('library.audio.trackNumber', { n: track.index + 1 });
+        const name = labelOf(i);
 
         if (progress) {
           const percent = progress.ratio == null ? null : Math.round(progress.ratio * 100);
           return (
             <div key={track.index}>
               <div className="flex items-center gap-1">
-                <span className="min-w-0 flex-1 truncate text-[9px] text-sky-300/90">
+                <span className="min-w-0 flex-1 truncate text-[9px] text-sky-300/90" title={name}>
                   {t(`library.audio.phase.${progress.phase}`)}
                   {percent != null && ` · ${percent} %`}
                 </span>
