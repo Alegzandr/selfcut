@@ -1,12 +1,5 @@
-import {
-  AUDIO_META_STORE,
-  AUDIO_STORE,
-  ASSETS_STORE,
-  db,
-  isQuotaError,
-  requestDone,
-  txDone,
-} from './idb';
+import { AUDIO_META_STORE, AUDIO_STORE, db, isQuotaError, requestDone, txDone } from './idb';
+import { mediaKeyOf } from './mediaKey';
 import { useStore } from '../store/store';
 
 /**
@@ -40,7 +33,8 @@ const MAX_BUDGET_BYTES = 6 * 1024 * 1024 * 1024;
 const FALLBACK_BUDGET_BYTES = 1024 * 1024 * 1024;
 
 export interface CacheMeta {
-  assetId: string;
+  /** The source file's fingerprint, not an asset id. See lib/mediaKey.ts. */
+  mediaKey: string;
   trackIndex: number;
   byteLength: number;
   lastUsedAt: number;
@@ -72,8 +66,8 @@ export function selectEvictions(
     // implicit: pinned entries are simply last in line, and are only reached
     // when dropping every unpinned one was not enough.
     .sort(([, a], [, b]) => {
-      const pa = pinned.has(a.assetId) ? 1 : 0;
-      const pb = pinned.has(b.assetId) ? 1 : 0;
+      const pa = pinned.has(a.mediaKey) ? 1 : 0;
+      const pb = pinned.has(b.mediaKey) ? 1 : 0;
       return pa !== pb ? pa - pb : a.lastUsedAt - b.lastUsedAt;
     });
 
@@ -86,13 +80,8 @@ export function selectEvictions(
   return doomed;
 }
 
-function cacheKey(assetId: string, audioTrackIndex: number): string {
-  return `${assetId}#${audioTrackIndex}`;
-}
-
-/** Keys are `${assetId}#${index}`, and an asset id never contains a '#'. */
-function assetIdOf(key: string): string {
-  return key.slice(0, key.indexOf('#'));
+function cacheKey(mediaKey: string, audioTrackIndex: number): string {
+  return `${mediaKey}#${audioTrackIndex}`;
 }
 
 async function budgetBytes(): Promise<number> {
@@ -117,12 +106,17 @@ async function budgetBytes(): Promise<number> {
  * the budget still has to give something up, and `evict` falls through to these
  * last rather than failing to free anything.
  */
-function timelineAssetIds(): Set<string> {
-  const ids = new Set<string>();
-  for (const track of useStore.getState().project.tracks) {
-    for (const clip of track.clips) if (clip.assetId) ids.add(clip.assetId);
+function timelineMediaKeys(): Set<string> {
+  const { project, assets } = useStore.getState();
+  const keys = new Set<string>();
+  for (const track of project.tracks) {
+    for (const clip of track.clips) {
+      const file = clip.assetId ? assets[clip.assetId]?.file : undefined;
+      const key = file && mediaKeyOf(file);
+      if (key) keys.add(key);
+    }
   }
-  return ids;
+  return keys;
 }
 
 /**
@@ -180,7 +174,7 @@ async function deleteEntries(keys: string[]): Promise<void> {
  */
 async function evict(target: number, keep?: string): Promise<void> {
   const meta = await readMeta();
-  const doomed = selectEvictions(meta, target, timelineAssetIds(), keep);
+  const doomed = selectEvictions(meta, target, timelineMediaKeys(), keep);
   if (doomed.length === 0) return;
   await deleteEntries(doomed);
   const freed = doomed.reduce((sum, key) => sum + (meta.get(key)?.byteLength ?? 0), 0);
@@ -189,16 +183,11 @@ async function evict(target: number, keep?: string): Promise<void> {
   );
 }
 
-async function write(key: string, bytes: Uint8Array, now: number): Promise<void> {
+async function write(meta: CacheMeta, bytes: Uint8Array): Promise<void> {
+  const key = cacheKey(meta.mediaKey, meta.trackIndex);
   const d = await db();
   const tx = d.transaction([AUDIO_STORE, AUDIO_META_STORE], 'readwrite');
   tx.objectStore(AUDIO_STORE).put(bytes, key);
-  const meta: CacheMeta = {
-    assetId: assetIdOf(key),
-    trackIndex: Number(key.slice(key.indexOf('#') + 1)),
-    byteLength: bytes.byteLength,
-    lastUsedAt: now,
-  };
   tx.objectStore(AUDIO_META_STORE).put(meta, key);
   await txDone(tx);
 }
@@ -212,20 +201,30 @@ async function write(key: string, bytes: Uint8Array, now: number): Promise<void>
  * is the shortcut next time, which is not worth a toast over a full disk.
  */
 export async function saveTranscodedAudio(
-  assetId: string,
+  file: File,
   audioTrackIndex: number,
   bytes: Uint8Array,
 ): Promise<void> {
-  const key = cacheKey(assetId, audioTrackIndex);
+  const mediaKey = mediaKeyOf(file);
+  // Nothing to file it under. Cannot happen from the transcode path - a
+  // placeholder holds no audio to convert - but the cache must not invent an
+  // identity for a file it cannot identify.
+  if (!mediaKey) return;
+  const key = cacheKey(mediaKey, audioTrackIndex);
   await serialize(async () => {
-    const now = Date.now();
+    const meta: CacheMeta = {
+      mediaKey,
+      trackIndex: audioTrackIndex,
+      byteLength: bytes.byteLength,
+      lastUsedAt: Date.now(),
+    };
     try {
       // Make room first, so the common case never touches the quota ceiling and
       // the browser is never the one deciding what to drop. Its own eviction is
       // origin-wide and would take the project with it.
       const budget = await budgetBytes();
       await evict(Math.max(0, budget - bytes.byteLength), key);
-      await write(key, bytes, now);
+      await write(meta, bytes);
     } catch (err) {
       if (!isQuotaError(err)) {
         console.warn('[audioCache] transcoded audio not cached:', err);
@@ -236,7 +235,7 @@ export async function saveTranscodedAudio(
       // disk is genuinely full and the session is unaffected either way.
       try {
         await evict(Math.max(0, (await budgetBytes()) / 2 - bytes.byteLength), key);
-        await write(key, bytes, now);
+        await write(meta, bytes);
       } catch (retryErr) {
         console.warn('[audioCache] transcoded audio not cached after eviction:', retryErr);
       }
@@ -252,10 +251,15 @@ export async function saveTranscodedAudio(
  * imported in.
  */
 export async function loadTranscodedAudio(
-  assetId: string,
+  file: File,
   audioTrackIndex: number,
 ): Promise<Uint8Array | null> {
-  const key = cacheKey(assetId, audioTrackIndex);
+  const mediaKey = mediaKeyOf(file);
+  // An asset waiting to be relinked has no bytes to identify, so it cannot
+  // reach its cache yet. Relinking is what gives it one back, and the transcode
+  // path checks again from there.
+  if (!mediaKey) return null;
+  const key = cacheKey(mediaKey, audioTrackIndex);
   try {
     const d = await db();
     const tx = d.transaction(AUDIO_STORE, 'readonly');
@@ -289,7 +293,7 @@ async function touch(key: string): Promise<void> {
 }
 
 /**
- * Drop the cached tracks of every asset the library no longer holds, then bring
+ * Drop the cached tracks of every file the library no longer holds, then bring
  * whatever remains within budget.
  *
  * Deliberately a startup sweep rather than a delete on removal: removing an
@@ -298,20 +302,24 @@ async function touch(key: string): Promise<void> {
  * memory side already works this way (`disposeUnreachableAssets`), which keeps
  * an undone removal fully playable.
  *
- * Orphans are judged against the asset store rather than the live state: that
- * store IS the persisted library, so this stays correct whether or not the
- * session hydrated from it. Undo is a within-session affair - once the tab is
- * gone, so is the history that could have brought the asset back.
+ * `live` is the set of media keys the persisted library still refers to - see
+ * persistence.ts, which owns the asset store and so is the one place that can
+ * answer it. Null means it could not answer, and then only the size pass runs:
+ * dropping an entry that is merely unaccounted for costs the user a transcode,
+ * where keeping it costs disk the eviction below reclaims anyway.
+ *
+ * Note what the file-keyed cache buys here beyond the re-import fix: a removal
+ * that survives to the next session no longer sweeps away a cache the user is
+ * about to want, as long as the same file is still in the library under any
+ * asset at all.
  */
-export async function pruneTranscodedAudio(): Promise<void> {
+export async function pruneTranscodedAudio(live: ReadonlySet<string> | null): Promise<void> {
   try {
     await serialize(async () => {
-      const d = await db();
-      const live = new Set(
-        await requestDone(d.transaction(ASSETS_STORE, 'readonly').objectStore(ASSETS_STORE).getAllKeys()),
-      );
       const meta = await readMeta();
-      await deleteEntries([...meta.keys()].filter((key) => !live.has(assetIdOf(key))));
+      if (live) {
+        await deleteEntries([...meta].filter(([, m]) => !live.has(m.mediaKey)).map(([key]) => key));
+      }
       // The budget can have shrunk since last run (a fuller disk means a
       // smaller quota), so orphans alone are not enough to call it clean.
       await evict(await budgetBytes());

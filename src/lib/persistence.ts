@@ -10,6 +10,8 @@ import { decodeCachedAudio } from '../media/transcodeAudio';
 import { isMissingSource } from './missingSource';
 import { ASSETS_STORE, PROJECT_STORE, db, requestDone, txDone } from './idb';
 import { loadTranscodedAudio, pruneTranscodedAudio } from './audioCache';
+import { pruneSubtitleCues } from './subtitleCache';
+import { mediaKeyOf } from './mediaKey';
 import { t } from '../i18n';
 
 // Surface a save failure once per session: repeated debounced saves must not
@@ -160,13 +162,16 @@ async function loadPersisted(): Promise<{ project: Project; assets: MediaAsset[]
 async function restoreTranscodedTracks(assets: MediaAsset[]): Promise<void> {
   await Promise.all(
     assets.flatMap((asset) =>
-      // Only an undecodable track can have been transcoded; a disconnected
-      // asset has no source to fall back on either way, but its cached audio is
-      // still perfectly good, so it is deliberately not skipped here.
+      // Only an undecodable track can have been transcoded; an asset whose file
+      // has MOVED is deliberately not skipped, since the persisted File still
+      // carries the name, size and mtime its cache is keyed by - the bytes are
+      // unreadable, the identity is not. An asset still on a `.selfcut`
+      // placeholder has neither, so it misses here and picks its cache back up
+      // on the first transcode request after being relinked.
       asset.audioTracks
         .filter((track) => track.undecodable)
         .map(async (track) => {
-          const bytes = await loadTranscodedAudio(asset.id, track.index);
+          const bytes = await loadTranscodedAudio(asset.file, track.index);
           if (!bytes) return;
           const buffer = await decodeCachedAudio(bytes);
           if (!buffer) return;
@@ -236,6 +241,45 @@ async function syncAssets(
   }
 }
 
+/**
+ * Drop everything both derived-media caches hold for files the library no
+ * longer refers to.
+ *
+ * The live set is read from the asset store rather than the live state: that
+ * store IS the persisted library, so this stays correct whether or not the
+ * session hydrated from it. Undo is a within-session affair - once the tab is
+ * gone, so is the history that could have brought a removed asset back.
+ *
+ * Assets are the source of truth, not the caches, and this is the only place
+ * that reads them for this purpose: the caches key by file (lib/mediaKey.ts)
+ * and cannot resolve an asset id, which is exactly the decoupling that lets two
+ * assets of the same file share one entry.
+ */
+async function pruneMediaCaches(): Promise<void> {
+  let live: Set<string> | null = null;
+  try {
+    const d = await db();
+    const stored = (
+      await requestDone(d.transaction(ASSETS_STORE, 'readonly').objectStore(ASSETS_STORE).getAll())
+    ).filter(isValidAsset);
+    const keys = stored.map((asset) => mediaKeyOf(asset.file));
+    // An asset still on a `.selfcut` placeholder has no media key at all, so it
+    // cannot vouch for its own cache - and its entries would read as orphaned
+    // and be deleted, wiping hours of transcoding out from under a project the
+    // user has merely not relinked yet. One such asset makes the whole library
+    // an unreliable witness, so the orphan pass is skipped entirely; eviction
+    // still runs and keeps the size bounded, which is the part that protects
+    // the disk. Relinking restores the identity, and the next start sweeps.
+    if (keys.every((key) => key !== null)) live = new Set(keys as string[]);
+  } catch (err) {
+    // Same reasoning, for a library that could not be read at all: skipping a
+    // sweep costs disk space until the next start, getting it wrong costs the
+    // user hours of transcoding.
+    console.warn('[persistence] library unreadable, media caches swept by size only:', err);
+  }
+  await Promise.all([pruneTranscodedAudio(live), pruneSubtitleCues(live)]);
+}
+
 let started = false;
 
 /**
@@ -267,7 +311,7 @@ export async function initPersistence(): Promise<void> {
 
   // Before the subscription, so the sweep reads a library no store write can be
   // racing it for. Cheap: key and metadata scans only, no blob is read.
-  await pruneTranscodedAudio();
+  await pruneMediaCaches();
   // Not awaited: it can prompt in some browsers, and nothing below depends on
   // the answer.
   void requestPersistentStorage();

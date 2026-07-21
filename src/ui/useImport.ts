@@ -57,8 +57,10 @@ export function useImport(): (files: Iterable<File>, opts?: ImportOptions) => Pr
           }
           // Already in the library: reuse that asset rather than minting a
           // second one. A detached entry gets its bytes back (relink), a live
-          // one needs nothing at all - either way the id, and the transcoded
-          // audio cached under it, survives the re-import.
+          // one needs nothing at all - either way the id, and everything cached
+          // in memory under it, survives the re-import. A file NOT in the
+          // library falls through to a fresh asset and still finds its on-disk
+          // caches, which key by the file rather than the id.
           const existing = findExistingAsset(useStore.getState().assets, file);
           if (existing) {
             if (isDetached(existing)) await reconnectAsset(existing.id, file);

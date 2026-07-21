@@ -16,8 +16,8 @@ beforeAll(async () => {
 
 const MB = 1024 * 1024;
 
-function entry(assetId: string, lastUsedAt: number, mb = 100): [string, CacheMeta] {
-  return [`${assetId}#0`, { assetId, trackIndex: 0, byteLength: mb * MB, lastUsedAt }];
+function entry(mediaKey: string, lastUsedAt: number, mb = 100): [string, CacheMeta] {
+  return [`${mediaKey}#0`, { mediaKey, trackIndex: 0, byteLength: mb * MB, lastUsedAt }];
 }
 
 const nothingPinned = new Set<string>();

@@ -4,6 +4,7 @@ import { MediaAsset } from '../../types';
 import { createEmptyProject } from '../projectOps';
 import { disposeAssetResources } from '../../media/mediaCache';
 import { clearTranscodedAudio } from '../../lib/audioCache';
+import { clearSubtitleCues } from '../../lib/subtitleCache';
 
 export function createProjectSlice(
   set: StoreSet,
@@ -42,10 +43,11 @@ export function createProjectSlice(
       for (const entry of [...get().past, ...get().future])
         for (const id of Object.keys(entry.assets)) ids.add(id);
       for (const id of ids) disposeAssetResources(id);
-      // Nothing survives a reset, so the on-disk audio cache has no owner left
+      // Nothing survives a reset, so neither on-disk cache has an owner left
       // either. Not awaited: the new project must appear now, and a cache that
       // fails to clear is only wasted space the startup sweep will collect.
       void clearTranscodedAudio();
+      void clearSubtitleCues();
       set({
         project: createEmptyProject(),
         assets: {},

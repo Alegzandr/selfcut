@@ -3,9 +3,11 @@ import type { EditorState } from '../editorState';
 import { audioKey, disposeAssetResources, setTranscodedAudio } from '../../media/mediaCache';
 import { ensureAssetVisuals, probeFile } from '../../media/probe';
 import { FFmpegCanceled, type FFmpegProgress } from '../../media/ffmpeg';
-import { transcodeAudioTrack } from '../../media/transcodeAudio';
+import { decodeCachedAudio, transcodeAudioTrack } from '../../media/transcodeAudio';
 import { extractSubtitleTracks, subtitleKey } from '../../media/extractSubtitles';
-import { saveTranscodedAudio } from '../../lib/audioCache';
+import { loadTranscodedAudio, saveTranscodedAudio } from '../../lib/audioCache';
+import { loadSubtitleCues, saveSubtitleCues } from '../../lib/subtitleCache';
+import type { SubtitleCue } from '../../lib/subtitles';
 import { t } from '../../i18n';
 
 /**
@@ -174,17 +176,18 @@ export function createAssetsSlice(
       // one may just be waiting its turn, and saying 'downloading' would be a
       // lie the user reads as a stall.
       setProgress(set, get, key, { phase: 'queued', ratio: null });
-      try {
-        const { buffer, compressed } = await transcodeAudioTrack(asset, audioTrackIndex, {
-          signal: controller.signal,
-          onProgress: (progress) => setProgress(set, get, key, progress),
-        });
+
+      /**
+       * Make the track audible, wherever its audio came from. Answers false if
+       * the asset went away while this was being produced.
+       */
+      const publish = (buffer: AudioBuffer): boolean => {
         // The asset can have been removed (or the file reconnected) during a
         // job that runs for minutes: committing then would resurrect it. Keyed
         // on the file, since background thumbnails/peaks respread the object
         // and an identity check would discard a finished transcode.
         const current = get().assets[assetId];
-        if (!current || current.file !== asset.file) return;
+        if (!current || current.file !== asset.file) return false;
 
         // Publishing to the cache is what makes the track audible: preview mix,
         // export and waveform all read from there.
@@ -213,10 +216,44 @@ export function createAssetsSlice(
         );
         if (placed) get().attachAudioTrack(assetId, audioTrackIndex);
         else get().addClipFromAsset(assetId);
+        return true;
+      };
+
+      try {
+        // The disk first, always. The startup restore only reaches tracks the
+        // library held at hydrate time, which leaves out every way a file can
+        // arrive later - re-imported after a removal, relinked, opened in a
+        // second project - and each of those would otherwise pay minutes for
+        // audio already sitting in IndexedDB. Cheap to be wrong about: a miss
+        // is one indexed read before the work that was going to happen anyway.
+        const cached = await loadTranscodedAudio(asset.file, audioTrackIndex);
+        if (cached) {
+          // Decoding is not interruptible and reports nothing, so say what is
+          // happening rather than leave the card on 'queued'.
+          setProgress(set, get, key, { phase: 'decoding', ratio: null });
+          const buffer = await decodeCachedAudio(cached);
+          // A cached copy that will not decode is not an error: the browser
+          // reading it need not be the one that wrote it, and AAC leans on
+          // system codecs. Fall through and transcode, as before the cache.
+          if (buffer && !controller.signal.aborted) {
+            // No 'ready' notice here. That toast exists because a transcode
+            // runs long enough for the user to have looked away; this took a
+            // second, and they are still looking at the card it changed.
+            publish(buffer);
+            return;
+          }
+        }
+        if (controller.signal.aborted) throw new FFmpegCanceled();
+
+        const { buffer, compressed } = await transcodeAudioTrack(asset, audioTrackIndex, {
+          signal: controller.signal,
+          onProgress: (progress) => setProgress(set, get, key, progress),
+        });
+        if (!publish(buffer)) return;
         // Keep the compressed copy so reopening the project does not re-run
         // this. Not awaited: the track is already audible, and a full disk must
         // not turn a successful transcode into a failed one.
-        if (compressed) void saveTranscodedAudio(assetId, audioTrackIndex, compressed);
+        if (compressed) void saveTranscodedAudio(asset.file, audioTrackIndex, compressed);
         // Long enough that the user has almost certainly looked away: say so.
         get().setNotice(t('library.audio.ready', { name: asset.file.name }));
       } catch (err) {
@@ -273,10 +310,31 @@ export function createAssetsSlice(
         for (const key of keys) setProgress(set, get, key, progress);
       };
       try {
-        const byTrack = await extractSubtitleTracks(asset, indexes, {
-          signal: controller.signal,
-          onProgress: report,
-        });
+        // Whatever the disk already holds, so an extraction only ever covers
+        // what is genuinely missing. This matters more here than for audio: an
+        // exec demuxes the container end to end, so re-pulling one track of a
+        // disc rip reads several GB for a few hundred kB of text - and until
+        // this cache existed, every repeat import paid it in full.
+        const byTrack = new Map<number, SubtitleCue[]>();
+        for (const index of indexes) {
+          const cues = await loadSubtitleCues(asset.file, index);
+          if (cues) byTrack.set(index, cues);
+        }
+        const missing = indexes.filter((i) => !byTrack.has(i));
+        if (missing.length > 0) {
+          const extracted = await extractSubtitleTracks(asset, missing, {
+            signal: controller.signal,
+            onProgress: report,
+          });
+          for (const [index, cues] of extracted) {
+            byTrack.set(index, cues);
+            // Cached even when empty: "the track decoded fine and held nothing"
+            // is an answer worth keeping, and re-reading gigabytes to learn it
+            // again is precisely what this avoids. Not awaited - the captions
+            // are already on their way to the timeline.
+            void saveSubtitleCues(asset.file, index, cues);
+          }
+        }
         // The asset can have been removed (or its file reconnected) during a job
         // that runs for a while: the cues would belong to a source that is gone.
         // Compare the FILE, not the object: thumbnails and peaks landing in the
