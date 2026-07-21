@@ -223,22 +223,27 @@ function UndecodableAudio({ asset }: { asset: MediaAsset }) {
         }
 
         return (
-          <div key={track.index} className="flex items-center gap-1">
-            <span
-              className="min-w-0 flex-1 truncate text-[9px] text-zinc-400"
+          /* Name and button share too little width in this sidebar to sit on one
+             line: the row truncated away the very part that says which track
+             this is. The name gets the full width, the button its own line. */
+          <div key={track.index}>
+            <div
+              className="truncate text-[9px] text-zinc-400"
               title={t('library.audio.needsTranscode', { codec: track.codec ?? '?' })}
             >
               {`${name} · ${track.codec ?? '?'}`}
-            </span>
-            <Tooltip label={t('library.audio.activateHint')}>
-              <button
-                className="touch-hit flex-none rounded bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-medium text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 pointer-coarse:p-2"
-                onClick={() => void useStore.getState().transcodeAudioTrack(asset.id, track.index)}
-              >
-                <AudioLines className="mr-0.5 inline h-3 w-3" />
-                {t('library.audio.activate')}
-              </button>
-            </Tooltip>
+            </div>
+            <div className="flex justify-end">
+              <Tooltip label={t('library.audio.activateHint')}>
+                <button
+                  className="touch-hit rounded bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-medium text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 pointer-coarse:p-2"
+                  onClick={() => void useStore.getState().transcodeAudioTrack(asset.id, track.index)}
+                >
+                  <AudioLines className="mr-0.5 inline h-3 w-3" />
+                  {t('library.audio.activate')}
+                </button>
+              </Tooltip>
+            </div>
           </div>
         );
       })}
