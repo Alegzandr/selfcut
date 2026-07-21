@@ -287,9 +287,11 @@ export interface EditorState {
   toggleSnap: () => void;
   /**
    * Import parsed subtitle cues as caption clips (outlined, lower-third) on a
-   * dedicated topmost video track, one undo step for the whole file.
+   * dedicated video track, one undo step for the whole file. The track lands
+   * directly above the lane carrying `anchorAssetId` when the cues came out of
+   * a container, and above every video lane otherwise.
    */
-  addSubtitleClips: (cues: SubtitleCue[]) => void;
+  addSubtitleClips: (cues: SubtitleCue[], anchorAssetId?: string) => void;
   /**
    * Stream-clip layout: split the selected clip into a facecam band (top 30%,
    * cropped to the source's top-left corner by default) over a gameplay band

@@ -27,10 +27,15 @@ const MOUNT_DIR = '/mount';
  * without the distinction a user watching 0 % for a minute of downloading cannot
  * tell a slow job from a hung one.
  *
+ * 'queued' is the wait for the single-job queue below; the runtime only reports
+ * the later phases, so it is set by whoever registers the job and is replaced as
+ * soon as the job actually starts. Without it a job waiting behind three others
+ * looks exactly like one that is downloading.
+ *
  * 'decoding' is the caller's own post-processing (decoding PCM, parsing cues),
  * which the runtime cannot measure - it is reported by whoever does that work.
  */
-export type FFmpegPhase = 'downloading' | 'converting' | 'decoding';
+export type FFmpegPhase = 'queued' | 'downloading' | 'converting' | 'decoding';
 
 export interface FFmpegProgress {
   phase: FFmpegPhase;

@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import {
   AudioLines,
   Captions,
+  ChevronRight,
   Film,
   FolderOpen,
   Image,
@@ -23,7 +25,8 @@ import { ResizeHandle } from './ResizeHandle';
 import { openMediaPicker } from './mediaPicker';
 import { audioKey } from '../media/mediaCache';
 import { subtitleKey } from '../media/extractSubtitles';
-import type { FFmpegProgress } from '../media/ffmpeg';
+import { JobProgress } from './JobProgress';
+import { TrackPickerDialog, type PickerTrack } from './TrackPickerDialog';
 import { useImport } from './useImport';
 
 /**
@@ -203,61 +206,18 @@ function TrackList({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * A running ffmpeg job: which phase it is in, how far along, and a way out.
- * Shared by every on-demand job, since they all report the same three phases.
+ * Up to this many rows, the list belongs on the card: the buttons are one click
+ * away and nothing is hidden. Past it the card stops being readable at 150 px
+ * wide, and the choice moves into the picker dialog.
  */
-function JobProgress({
-  progress,
-  name,
-  onCancel,
-}: {
-  progress: FFmpegProgress;
-  name: string;
-  onCancel: () => void;
-}) {
-  const { t } = useTranslation();
-  const percent = progress.ratio == null ? null : Math.round(progress.ratio * 100);
-  const phase = t(`library.job.phase.${progress.phase}`);
-  return (
-    <div>
-      <div className="flex items-center gap-1">
-        <span className="min-w-0 flex-1 truncate text-[9px] text-sky-300/90" title={name}>
-          {phase}
-          {percent != null && ` · ${percent} %`}
-        </span>
-        <button
-          className="touch-hit flex-none rounded px-1 py-0.5 text-[9px] text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2"
-          onClick={onCancel}
-        >
-          {t('library.job.cancel')}
-        </button>
-      </div>
-      {/* An unmeasurable phase (decoding) gets a full dim bar rather than an
-          empty one: the job is nearly done, not stalled. */}
-      <div
-        className="mt-0.5 h-0.5 w-full overflow-hidden rounded-full bg-zinc-800"
-        role="progressbar"
-        aria-valuenow={percent ?? undefined}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={phase}
-      >
-        <div
-          className={`h-full rounded-full transition-[width] duration-300 ${
-            percent == null ? 'w-full bg-sky-500/40' : 'bg-sky-400'
-          }`}
-          style={percent == null ? undefined : { width: `${percent}%` }}
-        />
-      </div>
-    </div>
-  );
-}
+const INLINE_MAX = 3;
 
 /**
  * One track row: what it is on its own line, the action on the next.
  *
  * They share too little width in this sidebar to sit on one line - the row
- * truncated away the very part that says which track this is.
+ * truncated away the very part that says which track this is. Only ever a
+ * handful of rows, since past INLINE_MAX the whole list moves to the dialog.
  */
 function TrackAction({
   name,
@@ -297,6 +257,108 @@ function TrackAction({
 }
 
 /**
+ * A source's tracks of one kind: inline while there are few, behind a dialog
+ * once there are many.
+ *
+ * Running jobs always render on the card, never behind the summary: a progress
+ * bar the user has to reopen a dialog to find is a progress bar they will assume
+ * has stalled. They stay listed in the dialog too, so it never looks like a
+ * track went missing while it was converting.
+ */
+function TrackGroup({
+  tracks,
+  summary,
+  dialogTitle,
+  dialogHint,
+  action,
+  actionHint,
+  icon,
+  rowTitle,
+  onPick,
+  onCancelJob,
+}: {
+  tracks: PickerTrack[];
+  summary: string;
+  dialogTitle: string;
+  dialogHint: string;
+  action: string;
+  actionHint: string;
+  icon: React.ReactNode;
+  rowTitle: (track: PickerTrack) => string;
+  onPick: (index: number) => void;
+  onCancelJob: (index: number) => void;
+}) {
+  const { t } = useTranslation();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const running = tracks.filter((track) => track.progress);
+  const idle = tracks.filter((track) => !track.progress);
+
+  return (
+    <>
+      <TrackList>
+        {running.map((track) => (
+          <JobProgress
+            key={track.index}
+            progress={track.progress!}
+            name={track.name}
+            onCancel={() => onCancelJob(track.index)}
+          />
+        ))}
+        {idle.length > INLINE_MAX ? (
+          <Tooltip label={t('library.tracks.browse')}>
+            <button
+              className="touch-hit flex w-full items-center gap-1 rounded px-0.5 py-1 text-[9px] text-zinc-400 hover:bg-zinc-800/60 pointer-coarse:py-2"
+              onClick={() => setPickerOpen(true)}
+            >
+              <span className="min-w-0 flex-1 truncate text-left">{summary}</span>
+              <ChevronRight className="h-3 w-3 flex-none" />
+            </button>
+          </Tooltip>
+        ) : (
+          idle.map((track) =>
+            track.unavailable ? (
+              <div
+                key={track.index}
+                className="truncate text-[9px] text-zinc-500"
+                title={rowTitle(track)}
+              >
+                {`${track.name} · ${track.detail} · ${track.unavailable}`}
+              </div>
+            ) : (
+              <TrackAction
+                key={track.index}
+                name={track.name}
+                detail={track.detail}
+                title={rowTitle(track)}
+                icon={icon}
+                action={action}
+                hint={actionHint}
+                onClick={() => onPick(track.index)}
+              />
+            ),
+          )
+        )}
+      </TrackList>
+      <TrackPickerDialog
+        open={pickerOpen}
+        title={dialogTitle}
+        hint={dialogHint}
+        tracks={tracks}
+        actionLabel={action}
+        actionHint={actionHint}
+        icon={icon}
+        onPick={(index) => {
+          onPick(index);
+          setPickerOpen(false);
+        }}
+        onCancelJob={onCancelJob}
+        onClose={() => setPickerOpen(false)}
+      />
+    </>
+  );
+}
+
+/**
  * One row per audio track the browser cannot decode natively, offering to
  * convert it.
  *
@@ -315,33 +377,28 @@ function UndecodableAudio({ asset }: { asset: MediaAsset }) {
   const names = trackNames(pending, i18n.language, (n) =>
     t('library.audio.trackNumber', { n }),
   );
+  const picker: PickerTrack[] = pending.map((track, i) => ({
+    index: track.index,
+    name: names[i]!,
+    detail: track.codec ?? '?',
+    ...(transcodes[audioKey(asset.id, track.index)]
+      ? { progress: transcodes[audioKey(asset.id, track.index)]! }
+      : {}),
+  }));
 
   return (
-    <TrackList>
-      {pending.map((track, i) => {
-        const progress = transcodes[audioKey(asset.id, track.index)];
-        const name = names[i]!;
-        return progress ? (
-          <JobProgress
-            key={track.index}
-            progress={progress}
-            name={name}
-            onCancel={() => useStore.getState().cancelTranscode(asset.id, track.index)}
-          />
-        ) : (
-          <TrackAction
-            key={track.index}
-            name={name}
-            detail={track.codec ?? '?'}
-            title={t('library.audio.needsTranscode', { codec: track.codec ?? '?' })}
-            icon={<AudioLines className="mr-0.5 inline h-3 w-3" />}
-            action={t('library.audio.activate')}
-            hint={t('library.audio.activateHint')}
-            onClick={() => void useStore.getState().transcodeAudioTrack(asset.id, track.index)}
-          />
-        );
-      })}
-    </TrackList>
+    <TrackGroup
+      tracks={picker}
+      summary={t('library.audio.section', { count: picker.length })}
+      dialogTitle={t('library.audio.pickerTitle')}
+      dialogHint={t('library.audio.activateHint')}
+      action={t('library.audio.activate')}
+      actionHint={t('library.audio.activateHint')}
+      icon={<AudioLines className="mr-0.5 inline h-3 w-3" />}
+      rowTitle={(track) => t('library.audio.needsTranscode', { codec: track.detail })}
+      onPick={(index) => void useStore.getState().transcodeAudioTrack(asset.id, index)}
+      onCancelJob={(index) => useStore.getState().cancelTranscode(asset.id, index)}
+    />
   );
 }
 
@@ -380,51 +437,36 @@ function SubtitleTracks({ asset }: { asset: MediaAsset }) {
   const names = trackNames(tracks, i18n.language, (n) =>
     t('library.subtitles.trackNumber', { n }),
   );
+  const picker: PickerTrack[] = tracks.map((track, i) => {
+    const progress = transcodes[subtitleKey(asset.id, track.index)];
+    return {
+      index: track.index,
+      // "Forced" is the one flag worth surfacing: it changes what the track
+      // contains (signs only), not merely how a player picks it.
+      name: track.forced ? `${names[i]!} · ${t('library.subtitles.forced')}` : names[i]!,
+      detail: subtitleFormat(track.codec),
+      ...(track.bitmap ? { unavailable: t('library.subtitles.bitmap') } : {}),
+      ...(progress ? { progress } : {}),
+    };
+  });
 
   return (
-    <TrackList>
-      {tracks.map((track, i) => {
-        const progress = transcodes[subtitleKey(asset.id, track.index)];
-        // "Forced" is the one flag worth surfacing: it changes what the track
-        // contains (signs only), not merely how a player picks it.
-        const name = track.forced ? `${names[i]!} · ${t('library.subtitles.forced')}` : names[i]!;
-        const format = subtitleFormat(track.codec);
-
-        if (progress) {
-          return (
-            <JobProgress
-              key={track.index}
-              progress={progress}
-              name={name}
-              onCancel={() => useStore.getState().cancelSubtitleImport(asset.id, track.index)}
-            />
-          );
-        }
-        if (track.bitmap) {
-          return (
-            <div
-              key={track.index}
-              className="truncate text-[9px] text-zinc-500"
-              title={t('library.subtitles.bitmapHint', { format })}
-            >
-              {`${name} · ${format} · ${t('library.subtitles.bitmap')}`}
-            </div>
-          );
-        }
-        return (
-          <TrackAction
-            key={track.index}
-            name={name}
-            detail={format}
-            title={t('library.subtitles.importHint')}
-            icon={<Captions className="mr-0.5 inline h-3 w-3" />}
-            action={t('library.subtitles.import')}
-            hint={t('library.subtitles.importHint')}
-            onClick={() => void useStore.getState().importSubtitleTrack(asset.id, track.index)}
-          />
-        );
-      })}
-    </TrackList>
+    <TrackGroup
+      tracks={picker}
+      summary={t('library.subtitles.section', { count: picker.length })}
+      dialogTitle={t('library.subtitles.pickerTitle')}
+      dialogHint={t('library.subtitles.importHint')}
+      action={t('library.subtitles.import')}
+      actionHint={t('library.subtitles.importHint')}
+      icon={<Captions className="mr-0.5 inline h-3 w-3" />}
+      rowTitle={(track) =>
+        track.unavailable
+          ? t('library.subtitles.bitmapHint', { format: track.detail })
+          : t('library.subtitles.importHint')
+      }
+      onPick={(index) => void useStore.getState().importSubtitleTrack(asset.id, index)}
+      onCancelJob={(index) => useStore.getState().cancelSubtitleImport(asset.id, index)}
+    />
   );
 }
 

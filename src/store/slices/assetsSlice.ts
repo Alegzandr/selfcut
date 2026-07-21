@@ -168,28 +168,36 @@ export function createAssetsSlice(
 
       const controller = new AbortController();
       controllers.set(key, controller);
-      setProgress(set, get, key, { phase: 'downloading', ratio: 0 });
+      // Jobs run one at a time: until the runtime reports its first phase this
+      // one may just be waiting its turn, and saying 'downloading' would be a
+      // lie the user reads as a stall.
+      setProgress(set, get, key, { phase: 'queued', ratio: null });
       try {
         const buffer = await transcodeAudioTrack(asset, audioTrackIndex, {
           signal: controller.signal,
           onProgress: (progress) => setProgress(set, get, key, progress),
         });
         // The asset can have been removed (or the file reconnected) during a
-        // job that runs for minutes: committing then would resurrect it.
-        if (get().assets[assetId] !== asset) return;
+        // job that runs for minutes: committing then would resurrect it. Keyed
+        // on the file, since background thumbnails/peaks respread the object
+        // and an identity check would discard a finished transcode.
+        const current = get().assets[assetId];
+        if (!current || current.file !== asset.file) return;
 
         // Publishing to the cache is what makes the track audible: preview mix,
         // export and waveform all read from there.
         const peaks = setTranscodedAudio(assetId, audioTrackIndex, buffer, {
-          alsoPrimary: asset.audioTracks.length === 1,
+          alsoPrimary: current.audioTracks.length === 1,
         });
-        const audioTracks = asset.audioTracks.map((tr) =>
+        // Spread the CURRENT asset, not the captured one: anything that landed
+        // during the job (thumbnails, peaks) must survive this commit.
+        const audioTracks = current.audioTracks.map((tr) =>
           tr.index === audioTrackIndex ? { ...tr, transcoded: true, peaks } : tr,
         );
         set({
           assets: {
             ...get().assets,
-            [assetId]: { ...asset, audioTracks, hasAudio: true },
+            [assetId]: { ...current, audioTracks, hasAudio: true },
           },
         });
         // A clip already sitting on the timeline gains the lane it could not
@@ -231,7 +239,7 @@ export function createAssetsSlice(
 
       const controller = new AbortController();
       controllers.set(key, controller);
-      setProgress(set, get, key, { phase: 'downloading', ratio: 0 });
+      setProgress(set, get, key, { phase: 'queued', ratio: null });
       try {
         const cues = await extractSubtitleTrack(asset, subtitleTrackIndex, {
           signal: controller.signal,
@@ -239,14 +247,31 @@ export function createAssetsSlice(
         });
         // The asset can have been removed (or its file reconnected) during a job
         // that runs for a while: the cues would belong to a source that is gone.
-        if (get().assets[assetId] !== asset) return;
+        // Compare the FILE, not the object: thumbnails and peaks landing in the
+        // background respread the asset, and an identity check would throw away
+        // a perfectly good extraction.
+        const current = get().assets[assetId];
+        if (!current || current.file !== asset.file) return;
         if (cues.length === 0) {
           get().setError(t('errors.media.noCues', { name: asset.file.name }));
           return;
         }
+        // Captions over nothing are not an edit. When the footage they were
+        // pulled out of is still library-only, it lands on the timeline first
+        // so the caption track has the picture it belongs to underneath it.
+        const onTimeline = get().project.tracks.some((tr) =>
+          tr.clips.some((c) => c.assetId === assetId),
+        );
+        // Footage + captions are one undo step: a Ctrl+Z takes back the whole
+        // import, not just the text.
+        if (!onTimeline) {
+          get().beginGesture();
+          get().addClipFromAsset(assetId);
+        }
         // From here on an embedded track is indistinguishable from an imported
         // .srt: same cues, same parser, same caption track.
-        get().addSubtitleClips(cues);
+        get().addSubtitleClips(cues, assetId);
+        if (!onTimeline) get().endGesture();
         get().setNotice(t('library.subtitles.ready', { count: cues.length }));
       } catch (err) {
         if (!(err instanceof FFmpegCanceled)) {

@@ -754,14 +754,25 @@ export function createClipsSlice(
       set({ selectedClipId: targetId, selectedClipIds: [targetId] });
     },
 
-    addSubtitleClips: (cues) => {
+    addSubtitleClips: (cues, anchorAssetId) => {
       if (cues.length === 0) return;
       withHistory((p) => {
         // Captions always live on their own dedicated video track, composited
-        // above any footage. Z-order = array order (the last video track draws
-        // on top), so the caption track goes LAST, not first.
+        // above any footage. Z-order = array order the way the timeline shows
+        // it: index 0 is the top lane and paints last, so the caption track is
+        // inserted BEFORE its footage, not pushed to the end.
         const track: Track = { id: uid('track'), kind: 'video', clips: [] };
-        p.tracks.push(track);
+        // Embedded tracks know the asset they came from: sit right on top of
+        // the lane carrying it, so captions and footage read as a pair. A
+        // loose .srt has no anchor and goes above every video lane.
+        const anchorIdx = anchorAssetId
+          ? p.tracks.findIndex(
+              (t) => t.kind === 'video' && t.clips.some((c) => c.assetId === anchorAssetId),
+            )
+          : -1;
+        const firstVideoIdx = p.tracks.findIndex((t) => t.kind === 'video');
+        const at = anchorIdx >= 0 ? anchorIdx : firstVideoIdx >= 0 ? firstVideoIdx : 0;
+        p.tracks.splice(at, 0, track);
         for (const cue of cues) {
           track.clips.push({
             kind: 'text',
