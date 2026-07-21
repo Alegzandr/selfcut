@@ -19,34 +19,38 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
+/**
+ * Only the document is rewritten. COOP and COEP are document-level policies -
+ * they do nothing on a subresource - and under `require-corp` a same-origin
+ * subresource is allowed without CORP, which every file this app loads is.
+ *
+ * So subresources are left alone entirely, not even re-fetched. That is not a
+ * micro-optimization: proxying means piping the response through
+ * `new Response(response.body, ...)`, and the ffmpeg core is a 32 MB stream. The
+ * browser is free to kill an idle service worker while such a stream is still
+ * open, and when it does the fetch rejects as a bare "Failed to fetch" - a
+ * download that worked before this worker existed, broken by the worker meant to
+ * make it faster.
+ */
 self.addEventListener('fetch', (event) => {
   const request = event.request;
-  // Range requests are served from the network untouched: rewriting a 206 into
-  // a fresh Response drops the byte-range semantics media elements rely on.
-  if (request.cache === 'only-if-cached' && request.mode !== 'same-origin') return;
+  if (request.mode !== 'navigate') return;
 
   event.respondWith(
-    fetch(request)
-      .then((response) => {
-        // An opaque response has no readable headers or body to copy, and
-        // handing one back rewritten would blank it.
-        if (response.status === 0) return response;
+    fetch(request).then((response) => {
+      // An opaque or opaqueredirect response has no readable headers or body to
+      // copy, and handing one back rewritten would blank it.
+      if (response.status === 0 || response.type === 'opaqueredirect') return response;
 
-        const headers = new Headers(response.headers);
-        headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
-        headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-        // Everything this app loads is same-origin; without CORP those same
-        // subresources would be blocked by the COEP we just turned on.
-        headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+      const headers = new Headers(response.headers);
+      headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+      headers.set('Cross-Origin-Opener-Policy', 'same-origin');
 
-        return new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers,
-        });
-      })
-      // A failed fetch is the network's business, not this worker's: let the
-      // page see the real error rather than one about isolation.
-      .catch((err) => Promise.reject(err)),
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }),
   );
 });
