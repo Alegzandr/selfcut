@@ -1,6 +1,8 @@
 {
   "app.drop.title": "Suelta tus archivos multimedia",
   "app.importing": "Importando medios…",
+  "app.remux.preparing": "Preparando el convertidor para {{name}}…",
+  "app.remux.converting": "Convirtiendo {{name}}…",
   "app.split.handle": "Arrastre para cambiar el tamaño; haga doble clic para restablecer",
   "topbar.aspect.16x9": "Paisaje 16:9 - YouTube",
   "topbar.aspect.9x16": "Retrato 9:16: TikTok, Reels, Shorts",
@@ -203,6 +205,7 @@
   "errors.media.undecodableVideo": "El códec de vídeo ({{codec}}) no se puede decodificar: {{name}}",
   "errors.media.videoAudioOnly": "Códec de vídeo no compatible ({{codec}}): solo se importó el audio de {{name}}",
   "errors.media.unsupportedFormat": "Formato no admitido: {{name}}",
+  "errors.media.converterUnavailable": "No se pudo cargar el convertidor multimedia, por lo que no se pudo importar {{name}}.",
   "errors.persistence.saveFailed": "No se pudo guardar tu trabajo localmente (almacenamiento lleno o bloqueado).",
   "errors.project.invalidFile": "Este archivo no es un proyecto de SelfCut válido.",
   "errors.project.futureVersion": "Este proyecto se guardó con una versión más reciente de SelfCut.",

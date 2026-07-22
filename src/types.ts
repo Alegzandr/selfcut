@@ -161,6 +161,16 @@ export interface MediaAsset {
    * frames/audio decode to nothing until the user reconnects the source file.
    */
   disconnected?: boolean;
+  /**
+   * When `file` was produced by remuxing an unreadable container
+   * (media/remuxContainer.ts), the identity of the ORIGINAL file the user
+   * picked - which is no longer `file`, since that is now the Matroska we wrote.
+   * Import dedup matches a re-picked source against this too, so re-importing the
+   * same file lands back on this asset instead of remuxing it again into a second
+   * card. Absent for the overwhelming majority of assets, whose `file` IS what
+   * the user picked.
+   */
+  originalSource?: { name: string; size: number; lastModified: number };
 }
 
 export interface ClipTransform {

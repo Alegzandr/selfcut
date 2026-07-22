@@ -1,6 +1,8 @@
 {
   "app.drop.title": "Drop your media files",
   "app.importing": "Importing media…",
+  "app.remux.preparing": "Preparing converter for {{name}}…",
+  "app.remux.converting": "Converting {{name}}…",
   "app.split.handle": "Drag to resize - double-click to reset",
   "topbar.aspect.16x9": "Landscape 16:9 - YouTube",
   "topbar.aspect.9x16": "Portrait 9:16 - TikTok, Reels, Shorts",
@@ -203,6 +205,7 @@
   "errors.media.undecodableVideo": "Video codec cannot be decoded ({{codec}}): {{name}}",
   "errors.media.videoAudioOnly": "Video codec not supported ({{codec}}) - kept the audio of {{name}}",
   "errors.media.unsupportedFormat": "Unsupported format: {{name}}",
+  "errors.media.converterUnavailable": "The media converter could not load, so {{name}} could not be imported.",
   "errors.persistence.saveFailed": "Your work could not be saved locally (storage full or blocked).",
   "errors.project.invalidFile": "This file is not a valid SelfCut project.",
   "errors.project.futureVersion": "This project was saved by a newer version of SelfCut.",

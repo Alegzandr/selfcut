@@ -160,6 +160,14 @@ export interface EditorState {
   exportOpen: boolean;
   importing: boolean;
   /**
+   * A human-readable line about the one import step that is not instant: remuxing
+   * an unreadable container through ffmpeg (pulling the core, reading the whole
+   * file). Null the rest of the time, when the plain "Importing…" badge says all
+   * there is to say. Shown in place of that badge so a minute-long conversion
+   * does not read as a hung import.
+   */
+  importStatus: string | null;
+  /**
    * Running ffmpeg jobs, keyed by `audioKey(assetId, trackIndex)` for an audio
    * conversion and `subtitleKey(...)` for a subtitle extraction, holding the
    * current phase and its progress. An entry exists only while the job runs, so
@@ -399,6 +407,8 @@ export interface EditorState {
   togglePreviewMuted: () => void;
   setExportOpen: (open: boolean) => void;
   setImporting: (v: boolean) => void;
+  /** Set (or clear, with null) the detailed import status line. */
+  setImportStatus: (msg: string | null) => void;
   setError: (msg: string | null) => void;
   setNotice: (msg: string | null) => void;
 }

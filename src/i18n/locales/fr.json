@@ -1,6 +1,8 @@
 {
   "app.drop.title": "Déposez vos fichiers multimédias",
   "app.importing": "Importation de médias…",
+  "app.remux.preparing": "Préparation du convertisseur pour {{name}}…",
+  "app.remux.converting": "Conversion de {{name}}…",
   "app.split.handle": "Faites glisser pour redimensionner - double-cliquez pour réinitialiser",
   "topbar.aspect.16x9": "Paysage 16:9 - YouTube",
   "topbar.aspect.9x16": "Portrait 9:16 : TikTok, Reels, Shorts",
@@ -203,6 +205,7 @@
   "errors.media.undecodableVideo": "Le codec vidéo ({{codec}}) ne peut pas être décodé : {{name}}",
   "errors.media.videoAudioOnly": "Codec vidéo non pris en charge ({{codec}}) - seul l'audio de {{name}} a été importé",
   "errors.media.unsupportedFormat": "Format non pris en charge : {{name}}",
+  "errors.media.converterUnavailable": "Le convertisseur multimédia n’a pas pu se charger : {{name}} n’a pas pu être importé.",
   "errors.persistence.saveFailed": "Votre travail n’a pas pu être enregistré localement (stockage plein ou bloqué).",
   "errors.project.invalidFile": "Ce fichier n’est pas un projet SelfCut valide.",
   "errors.project.futureVersion": "Ce projet a été enregistré par une version plus récente de SelfCut.",

@@ -1,6 +1,8 @@
 {
   "app.drop.title": "Legen Sie Ihre Mediendateien ab",
   "app.importing": "Medien werden importiert…",
+  "app.remux.preparing": "Konverter wird für {{name}} vorbereitet…",
+  "app.remux.converting": "{{name}} wird konvertiert…",
   "app.split.handle": "Zum Ändern der Größe ziehen – zum Zurücksetzen doppelklicken",
   "topbar.aspect.16x9": "Querformat 16:9 – YouTube",
   "topbar.aspect.9x16": "Hochformat 9:16: TikTok, Reels, Shorts",
@@ -203,6 +205,7 @@
   "errors.media.undecodableVideo": "Videocodec ({{codec}}) kann nicht dekodiert werden: {{name}}",
   "errors.media.videoAudioOnly": "Videocodec nicht unterstützt ({{codec}}) - nur die Tonspur von {{name}} wurde importiert",
   "errors.media.unsupportedFormat": "Nicht unterstütztes Format: {{name}}",
+  "errors.media.converterUnavailable": "Der Medienkonverter konnte nicht geladen werden, daher konnte {{name}} nicht importiert werden.",
   "errors.persistence.saveFailed": "Ihre Arbeit konnte nicht lokal gespeichert werden (Speicher voll oder blockiert).",
   "errors.project.invalidFile": "Diese Datei ist kein gültiges SelfCut-Projekt.",
   "errors.project.futureVersion": "Dieses Projekt wurde mit einer neueren Version von SelfCut gespeichert.",

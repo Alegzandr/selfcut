@@ -13,6 +13,8 @@ import {
 } from './mediaCache';
 import { decodeImageFile, isImageFile } from './stillImage';
 import { detectSubtitleTracks } from './containerSubtitles';
+import { remuxUnreadableContainer } from './remuxContainer';
+import { FFmpegLoadFailed, type FFmpegProgress } from './ffmpeg';
 import { t } from '../i18n';
 
 /**
@@ -95,6 +97,15 @@ export interface ProbeResult {
   notice?: string;
 }
 
+export interface ProbeOptions {
+  /**
+   * Reported while an unreadable container is being remuxed - the one part of a
+   * probe that is not instant (it pulls the ffmpeg core and reads the whole
+   * file). Absent everywhere else: probing a readable file is a handful of reads.
+   */
+  onRemuxProgress?: (progress: FFmpegProgress) => void;
+}
+
 /**
  * Probe an imported file: metadata + a first quick thumbnail.
  * Throws an Error (displayable message) if the file cannot be read.
@@ -108,14 +119,52 @@ export interface ProbeResult {
  * `reuseId` keeps an existing asset's id (and therefore its clips) when
  * reconnecting a source whose File reference went stale between sessions.
  */
-export async function probeFile(file: File, reuseId?: string): Promise<ProbeResult> {
+export async function probeFile(
+  file: File,
+  reuseId?: string,
+  { onRemuxProgress }: ProbeOptions = {},
+): Promise<ProbeResult> {
   // Still images have no decoder pipeline: rasterize once, no mediabunny input.
   if (isImageFile(file)) return { asset: await probeImageFile(file, reuseId) };
 
-  const input = createInput(file);
+  // The identity of the file the user actually picked. Captured before a remux
+  // can replace `file`, and kept on the asset only when it does - so re-importing
+  // the same source is recognized as a duplicate rather than remuxed afresh.
+  let originalSource: MediaAsset['originalSource'];
+
+  let input = createInput(file);
   if (!(await input.canRead())) {
     input.dispose();
-    throw new Error(t('errors.media.unsupportedFormat', { name: file.name }));
+    const source = { name: file.name, size: file.size, lastModified: file.lastModified };
+    // mediabunny cannot demux this container, but ffmpeg very likely can. Remux
+    // it (stream copy, no re-encode) into Matroska and probe THAT instead, so a
+    // file the browser never recognized still imports whenever its actual codecs
+    // are ones it can play. The remuxed blob becomes the asset's file from here
+    // on - it persists directly (see persistence.ts), so a reopened project
+    // reads it back without paying for the remux again.
+    let remuxed: File | null;
+    try {
+      remuxed = await remuxUnreadableContainer(file, { onProgress: onRemuxProgress });
+    } catch (err) {
+      // The converter itself never came up - a different failure from an unusable
+      // file, and one the user can sometimes act on (offline, or a page that is
+      // not cross-origin isolated). Say so rather than blame the format.
+      if (err instanceof FFmpegLoadFailed) {
+        throw new Error(t('errors.media.converterUnavailable', { name: file.name }), { cause: err });
+      }
+      throw err;
+    }
+    if (!remuxed) throw new Error(t('errors.media.unsupportedFormat', { name: file.name }));
+    file = remuxed;
+    originalSource = source;
+    input = createInput(file);
+    // A remux that ffmpeg reported as successful but mediabunny still cannot read
+    // is not something the pipeline can use: treat it as the unsupported file it
+    // effectively is rather than carry a half-broken asset forward.
+    if (!(await input.canRead())) {
+      input.dispose();
+      throw new Error(t('errors.media.unsupportedFormat', { name: file.name }));
+    }
   }
 
   const videoTrack = await input.getPrimaryVideoTrack();
@@ -157,6 +206,7 @@ export async function probeFile(file: File, reuseId?: string): Promise<ProbeResu
     hasAudio: playableAudio.length > 0,
     audioTracks,
     ...(subtitleTracks.length > 0 ? { subtitleTracks } : {}),
+    ...(originalSource ? { originalSource } : {}),
     thumbnails: [],
   };
 

@@ -268,6 +268,9 @@ function DisconnectedBanner() {
 function ImportingBadge() {
   const { t } = useTranslation();
   const importing = useStore((s) => s.importing);
+  // The detailed line (remuxing a container) takes over the badge while it lasts;
+  // the rest of an import is quick enough for the generic label.
+  const importStatus = useStore((s) => s.importStatus);
   return (
     <AnimatePresence>
       {importing && (
@@ -278,7 +281,7 @@ function ImportingBadge() {
           className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 rounded-full bg-zinc-800/90 px-3 py-1.5 text-xs text-zinc-200 shadow-lg"
         >
           <span className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
-          {t('app.importing')}
+          {importStatus ?? t('app.importing')}
         </motion.div>
       )}
     </AnimatePresence>

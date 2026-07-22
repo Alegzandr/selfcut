@@ -44,6 +44,7 @@ export function createAssetsSlice(
   | 'setAssetPeaks'
   | 'setAssetThumbnails'
   | 'setImporting'
+  | 'setImportStatus'
   | 'transcodeAudioTrack'
   | 'cancelTranscode'
   | 'importSubtitleTrack'
@@ -162,6 +163,8 @@ export function createAssetsSlice(
     },
 
     setImporting: (v) => set({ importing: v }),
+
+    setImportStatus: (msg) => set({ importStatus: msg }),
 
     transcodeAudioTrack: async (assetId, audioTrackIndex) => {
       const asset = get().assets[assetId];
