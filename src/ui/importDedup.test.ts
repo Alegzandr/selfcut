@@ -51,4 +51,17 @@ describe('findExistingAsset', () => {
   it('returns nothing for an empty library', () => {
     expect(findExistingAsset({}, source)).toBeUndefined();
   });
+
+  it('matches a remuxed asset against the original file it was made from', () => {
+    // The library holds the Matroska we wrote (bigger, and mediabunny-readable);
+    // the user re-picks the original AVI. Its own file no longer matches, but the
+    // stored source identity does, so the re-import reuses the asset.
+    const remuxed = asset('a1', fileOf('take-1.avi', 200, 1_700_000_000_000));
+    remuxed.originalSource = { name: 'take-1.avi', size: 64, lastModified: 1_700_000_000_000 };
+    const assets = { a1: remuxed };
+
+    expect(findExistingAsset(assets, fileOf('take-1.avi', 64, 1_700_000_000_000))?.id).toBe('a1');
+    // A genuinely different source must still miss.
+    expect(findExistingAsset(assets, fileOf('take-1.avi', 65, 1_700_000_000_000))).toBeUndefined();
+  });
 });

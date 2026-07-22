@@ -127,9 +127,15 @@ export async function probeFile(
   // Still images have no decoder pipeline: rasterize once, no mediabunny input.
   if (isImageFile(file)) return { asset: await probeImageFile(file, reuseId) };
 
+  // The identity of the file the user actually picked. Captured before a remux
+  // can replace `file`, and kept on the asset only when it does - so re-importing
+  // the same source is recognized as a duplicate rather than remuxed afresh.
+  let originalSource: MediaAsset['originalSource'];
+
   let input = createInput(file);
   if (!(await input.canRead())) {
     input.dispose();
+    const source = { name: file.name, size: file.size, lastModified: file.lastModified };
     // mediabunny cannot demux this container, but ffmpeg very likely can. Remux
     // it (stream copy, no re-encode) into Matroska and probe THAT instead, so a
     // file the browser never recognized still imports whenever its actual codecs
@@ -150,6 +156,7 @@ export async function probeFile(
     }
     if (!remuxed) throw new Error(t('errors.media.unsupportedFormat', { name: file.name }));
     file = remuxed;
+    originalSource = source;
     input = createInput(file);
     // A remux that ffmpeg reported as successful but mediabunny still cannot read
     // is not something the pipeline can use: treat it as the unsupported file it
@@ -199,6 +206,7 @@ export async function probeFile(
     hasAudio: playableAudio.length > 0,
     audioTracks,
     ...(subtitleTracks.length > 0 ? { subtitleTracks } : {}),
+    ...(originalSource ? { originalSource } : {}),
     thumbnails: [],
   };
 

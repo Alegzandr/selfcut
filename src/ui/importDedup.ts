@@ -26,10 +26,33 @@ export function findExistingAsset(
   file: File,
 ): MediaAsset | undefined {
   return Object.values(assets).find(
-    (asset) =>
-      asset.file.name === file.name &&
-      asset.file.lastModified === file.lastModified &&
-      (isDetached(asset) || asset.file.size === file.size),
+    (asset) => matchesFile(asset, file) || matchesRemuxSource(asset, file),
+  );
+}
+
+/** The picked file is the one this asset already holds. */
+function matchesFile(asset: MediaAsset, file: File): boolean {
+  return (
+    asset.file.name === file.name &&
+    asset.file.lastModified === file.lastModified &&
+    (isDetached(asset) || asset.file.size === file.size)
+  );
+}
+
+/**
+ * The picked file is the ORIGINAL an unreadable-container asset was remuxed
+ * from. That asset's own `file` is the Matroska we wrote - a different name is
+ * possible and the size always differs - so `matchesFile` never catches it, and
+ * a re-import would otherwise remux the same source into a second card. The
+ * remux stored the source's identity precisely so this can recognize it.
+ */
+function matchesRemuxSource(asset: MediaAsset, file: File): boolean {
+  const src = asset.originalSource;
+  return (
+    src != null &&
+    src.name === file.name &&
+    src.size === file.size &&
+    src.lastModified === file.lastModified
   );
 }
 
