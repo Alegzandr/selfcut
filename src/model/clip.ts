@@ -167,6 +167,46 @@ export function clipRotationAt(clip: Clip, timelineMs: number): number {
   return animatedValue(clip.animation, 'rotation', clip.transform?.rotation ?? 0, timelineMs - clip.timelineStartMs);
 }
 
+/** Colour grading resolved to plain numbers at a timeline time. */
+export interface ResolvedColor {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  temperature: number;
+  tint: number;
+  vignette: number;
+}
+
+/**
+ * The clip's colour grade at a timeline time, sampling every (keyframable)
+ * channel — or null when the clip has no grade or every field is the identity,
+ * so the compositor skips the WebGL pass entirely for the common ungraded case.
+ */
+export function resolveColor(clip: Clip, timelineMs: number): ResolvedColor | null {
+  const c = clip.color;
+  if (!c) return null;
+  const local = timelineMs - clip.timelineStartMs;
+  const r: ResolvedColor = {
+    brightness: sampleChannel(c.brightness ?? 0, local),
+    contrast: sampleChannel(c.contrast ?? 0, local),
+    saturation: sampleChannel(c.saturation ?? 0, local),
+    temperature: sampleChannel(c.temperature ?? 0, local),
+    tint: sampleChannel(c.tint ?? 0, local),
+    vignette: sampleChannel(c.vignette ?? 0, local),
+  };
+  if (
+    r.brightness === 0 &&
+    r.contrast === 0 &&
+    r.saturation === 0 &&
+    r.temperature === 0 &&
+    r.tint === 0 &&
+    r.vignette === 0
+  ) {
+    return null;
+  }
+  return r;
+}
+
 /**
  * Fade gain including crossfade windows (overlap with neighboring clips).
  * A crossfade behaves like an implicit fade of the overlap duration; when the

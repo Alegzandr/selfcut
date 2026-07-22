@@ -237,6 +237,24 @@ export interface AudioFx {
   amount: number;
 }
 
+/**
+ * Colour grading applied to a clip before compositing, run as an isolated WebGL
+ * pass (`src/preview/colorPass.ts`). Every field is an animatable `Channel`
+ * (keyframable), defaults to the identity (0), and is optional so a project
+ * saved before a field existed still loads. `vignette` is 0..1; the rest are
+ * roughly -1..1.
+ */
+export interface ClipColor {
+  brightness?: Channel;
+  contrast?: Channel;
+  saturation?: Channel;
+  /** White balance, warm (+) to cool (-). */
+  temperature?: Channel;
+  /** Green (-) to magenta (+) tint. */
+  tint?: Channel;
+  vignette?: Channel;
+}
+
 /** Horizontal alignment of a text clip's lines inside its wrap box. */
 export type TextAlign = 'left' | 'center' | 'right';
 
@@ -340,6 +358,8 @@ interface BaseClip {
    */
   audioTrackIndex?: number;
   transform?: ClipTransform;
+  /** Colour grading (WebGL pass). Undefined/identity = the clip is drawn as-is. */
+  color?: ClipColor;
   /**
    * Keyframed overrides for animatable properties. Undefined = the clip is fully
    * static and reads its transform values directly. A property listed here (with

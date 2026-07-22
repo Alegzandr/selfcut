@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MediaClip } from '../types';
-import { clipRotationAt, resolveOpacity, resolveTransform } from './clip';
+import { clipRotationAt, resolveColor, resolveOpacity, resolveTransform } from './clip';
 
 function clip(over: Partial<MediaClip> = {}): MediaClip {
   return {
@@ -79,6 +79,34 @@ describe('resolveOpacity', () => {
   it('clamps out-of-range keyframe values into 0..1', () => {
     const c = clip({ animation: { opacity: [{ t: 0, value: 5 }] } });
     expect(resolveOpacity(c, 1500)).toBe(1);
+  });
+});
+
+describe('resolveColor', () => {
+  it('is null when the clip has no grade', () => {
+    expect(resolveColor(clip(), 1000)).toBeNull();
+  });
+
+  it('is null when every field is the identity', () => {
+    expect(resolveColor(clip({ color: { brightness: 0, contrast: 0 } }), 1000)).toBeNull();
+  });
+
+  it('returns the resolved grade when any field is set', () => {
+    const rc = resolveColor(clip({ color: { contrast: 0.4, saturation: -0.2 } }), 1000);
+    expect(rc).toMatchObject({ contrast: 0.4, saturation: -0.2, brightness: 0, vignette: 0 });
+  });
+
+  it('samples a keyframed colour channel at the clip-local time', () => {
+    const c = clip({
+      color: {
+        brightness: [
+          { t: 0, value: 0, ease: 'linear' },
+          { t: 1000, value: 1, ease: 'linear' },
+        ],
+      },
+    });
+    // Clip starts at timelineStartMs=1000, so 1500 is halfway through the ramp.
+    expect(resolveColor(c, 1500)!.brightness).toBeCloseTo(0.5, 6);
   });
 });
 

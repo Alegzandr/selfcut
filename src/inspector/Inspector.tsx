@@ -19,6 +19,7 @@ import { SpeedControl } from './sections/SpeedControl';
 import { AudioSection } from './sections/AudioSection';
 import { FadeSection } from './sections/FadeSection';
 import { TransformSection } from './sections/TransformSection';
+import { ColorSection } from './sections/ColorSection';
 
 /**
  * Heading of the inspector: a generated clip is named after what it renders, a
@@ -231,6 +232,7 @@ function InspectorBody({
       )}
 
       {(isVideo || isText || isShape) && <TransformSection clip={clip} isVideo={isVideo} />}
+      {isVideo && <ColorSection clip={clip} />}
     </>
   );
 }

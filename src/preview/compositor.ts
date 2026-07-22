@@ -6,10 +6,12 @@ import {
   clipRotationAt,
   clipZoomAt,
   isTextClip,
+  resolveColor,
   resolveOpacity,
   resolveTransform,
   trackCrossfades,
 } from '../model';
+import { gradeFrame } from './colorPass';
 import { fontStack } from '../lib/fonts';
 import type { DrawableFrame } from '../media/stillImage';
 
@@ -131,10 +133,17 @@ export function drawClipSample(
   const cropH = Math.max(1, t.crop.h * sh);
   const { dx, dy, dw, dh } = clipDestRect(clip, sw, sh, outW, outH, timelineMs);
 
+  // Colour grade runs as an isolated WebGL pass that returns a canvas drawn in
+  // the frame's place; a null grade (no adjustment or no WebGL) draws the frame
+  // directly, so the ungraded path is untouched.
+  const color = resolveColor(clip, timelineMs);
+  const graded = color ? gradeFrame(sample, sw, sh, color) : null;
+
   ctx.globalAlpha = alpha;
-  withRotation(ctx, clipRotationAt(clip, timelineMs), dx + dw / 2, dy + dh / 2, () =>
-    sample.draw(ctx, sx, sy, cropW, cropH, dx, dy, dw, dh),
-  );
+  withRotation(ctx, clipRotationAt(clip, timelineMs), dx + dw / 2, dy + dh / 2, () => {
+    if (graded) ctx.drawImage(graded, sx, sy, cropW, cropH, dx, dy, dw, dh);
+    else sample.draw(ctx, sx, sy, cropW, cropH, dx, dy, dw, dh);
+  });
   ctx.globalAlpha = 1;
 }
 
