@@ -99,6 +99,7 @@
   "inspector.positionY": "Position Y",
   "inspector.rotation": "Drehung",
   "inspector.reset": "Zurücksetzen",
+  "inspector.keyframe": "Keyframe",
   "inspector.crop.edit": "Zuschnitt bearbeiten",
   "inspector.crop.done": "Zuschnitt fertig",
   "inspector.crop.hint": "Zuschnitt anpassen, indem du ein Rechteck in der Vorschau ziehst",

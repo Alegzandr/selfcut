@@ -7,15 +7,16 @@ import { Clip, ClipTransform, MediaAsset, Project } from '../types';
 import {
   DEFAULT_TRANSFORM,
   clipEndMs,
+  clipRotationAt,
   isTextClip,
   isGeneratedClip,
   outputDimensions,
+  resolveTransform,
   timelineToSourceMs,
 } from '../model';
 import {
   DestRect,
   clipDestRect,
-  clipRotation,
   clipsAt,
   shapeClipRect,
   textClipRect,
@@ -413,7 +414,7 @@ function PreviewOverlays({
     const { nx, ny } = normPointIn(stageRect, e);
     const centerNx = (rect.dx + rect.dw / 2) / outW;
     const centerNy = (rect.dy + rect.dh / 2) / outH;
-    const origScale = (clip.transform ?? DEFAULT_TRANSFORM).scale;
+    const origScale = resolveTransform(clip, state.currentTimeMs).scale;
     // Every clip kind scales linearly from its size at scale 1, so dividing the
     // live rect by the live scale gives one basis the snap targets derive from.
     const unit = Math.max(origScale, 0.001);
@@ -443,7 +444,7 @@ function PreviewOverlays({
     const state = useStore.getState();
     const clip = findClip(state.project, r.clipId);
     if (!clip) return;
-    const tf = clip.transform ?? DEFAULT_TRANSFORM;
+    const rt = resolveTransform(clip, state.currentTimeMs);
 
     // Magnetism. The old rule snapped to scale 1 and nothing else, which is
     // useless for vertical editing: a 16:9 clip in a 9:16 frame fills the frame
@@ -460,7 +461,7 @@ function PreviewOverlays({
         raw,
         scaleSnapTargets({ unitW: r.unitW, unitH: r.unitH, outW, outH, sourceW: r.sourceW }),
         threshold,
-        { centerX: tf.x, centerY: tf.y, unitW: r.unitW, unitH: r.unitH, outW, outH },
+        { centerX: rt.x, centerY: rt.y, unitW: r.unitW, unitH: r.unitH, outW, outH },
       );
       scale = hapticOnSnap(raw, snapped.scale, r.haptics);
       guides = snapped.guides;
@@ -468,7 +469,7 @@ function PreviewOverlays({
     // Resizing used to snap silently: same magnetism as the drag, but with no
     // line and no tick, so it read as "the magnetism does not work".
     onGuides(guides);
-    state.updateClip(r.clipId, { transform: { ...tf, scale } });
+    state.updateClipTransformLive(r.clipId, { scale }, state.currentTimeMs);
   };
 
   const onHandleUp = () => {
@@ -491,14 +492,14 @@ function PreviewOverlays({
     const centerNy = (rect.dy + rect.dh / 2) / outH;
     rotate.current = {
       clipId: clip.id,
-      origRotation: clipRotation(clip),
+      origRotation: clipRotationAt(clip, state.currentTimeMs),
       centerNx,
       centerNy,
       startAngle: angleFromCenter(nx, ny, centerNx, centerNy, outW, outH),
       haptics: { lastSnap: null },
       rect: stageRect,
     };
-    setAngleBadge(clipRotation(clip));
+    setAngleBadge(clipRotationAt(clip, state.currentTimeMs));
   };
 
   const onRotateMove = (e: React.PointerEvent) => {
@@ -509,13 +510,12 @@ function PreviewOverlays({
     const state = useStore.getState();
     const clip = findClip(state.project, r.clipId);
     if (!clip) return;
-    const tf = clip.transform ?? DEFAULT_TRANSFORM;
     // Detents every 15°: the uprights and the diagonals, plus the slight-tilt
     // angles. Shift inverts the snap toggle, exactly like the other gestures.
     const rotation =
       state.snapEnabled !== e.shiftKey ? hapticOnSnap(raw, snapRotation(raw), r.haptics) : raw;
     setAngleBadge(rotation);
-    state.updateClip(r.clipId, { transform: { ...tf, rotation } });
+    state.updateClipTransformLive(r.clipId, { rotation }, state.currentTimeMs);
   };
 
   const onRotateUp = () => {
@@ -545,10 +545,10 @@ function PreviewOverlays({
               top: `${(selectedRect.dy / outH) * 100}%`,
               width: `${(selectedRect.dw / outW) * 100}%`,
               height: `${(selectedRect.dh / outH) * 100}%`,
-              transform: `rotate(${clipRotation(selectedClip!)}deg)`,
+              transform: `rotate(${clipRotationAt(selectedClip!, currentTimeMs)}deg)`,
             }}
           />
-          {handlePlacements(selectedRect, clipRotation(selectedClip!), outW, outH, handleBounds).map((h) => (
+          {handlePlacements(selectedRect, clipRotationAt(selectedClip!, currentTimeMs), outW, outH, handleBounds).map((h) => (
             <div key={h.corner} className="pointer-events-none absolute" style={{ left: `${h.x * 100}%`, top: `${h.y * 100}%` }}>
               {/* Rotation zone: just OUTSIDE the corner, where every editor puts
                   it (Figma, Premiere, Canva) - no extra chrome crowding an
@@ -696,7 +696,7 @@ export function PreviewCanvas() {
         const { x: hx, y: hy } = unrotatePoint(
           px,
           py,
-          clipRotation(clip),
+          clipRotationAt(clip, timeMs),
           r.dx + r.dw / 2,
           r.dy + r.dh / 2,
         );
@@ -722,13 +722,13 @@ export function PreviewCanvas() {
     state.selectClip(clip.id);
     state.beginGesture();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    const t = clip.transform ?? DEFAULT_TRANSFORM;
+    const rt = resolveTransform(clip, state.currentTimeMs);
     drag.current = {
       clipId: clip.id,
       startNx: nx,
       startNy: ny,
-      origX: t.x,
-      origY: t.y,
+      origX: rt.x,
+      origY: rt.y,
       moved: false,
       rect,
     };
@@ -743,7 +743,6 @@ export function PreviewCanvas() {
     const state = useStore.getState();
     const clip = findClip(state.project, d.clipId);
     if (!clip) return;
-    const tf = clip.transform ?? DEFAULT_TRANSFORM;
     let x = d.origX + (nx - d.startNx);
     let y = d.origY + (ny - d.startNy);
 
@@ -798,13 +797,11 @@ export function PreviewCanvas() {
       sameLines(prev.v, vLines) && sameLines(prev.h, hLines) ? prev : { v: vLines, h: hLines },
     );
 
-    state.updateClip(d.clipId, {
-      transform: {
-        ...tf,
-        x: Math.min(1.5, Math.max(-0.5, x)),
-        y: Math.min(1.5, Math.max(-0.5, y)),
-      },
-    });
+    state.updateClipTransformLive(
+      d.clipId,
+      { x: Math.min(1.5, Math.max(-0.5, x)), y: Math.min(1.5, Math.max(-0.5, y)) },
+      state.currentTimeMs,
+    );
   };
 
   const onPointerUp = () => {
@@ -992,9 +989,9 @@ export function PreviewCanvas() {
         useStore.getState().endGesture();
         wheelGesture.current = null;
       }, 350);
-      const tf = clip.transform ?? DEFAULT_TRANSFORM;
-      const scale = Math.min(8, Math.max(0.05, tf.scale * Math.exp(-e.deltaY * 0.0012)));
-      state.updateClip(clip.id, { transform: { ...tf, scale } });
+      const rt = resolveTransform(clip, state.currentTimeMs);
+      const scale = Math.min(8, Math.max(0.05, rt.scale * Math.exp(-e.deltaY * 0.0012)));
+      state.updateClipTransformLive(clip.id, { scale }, state.currentTimeMs);
     };
     viewport.addEventListener('wheel', onWheel, { passive: false });
     return () => viewport.removeEventListener('wheel', onWheel);

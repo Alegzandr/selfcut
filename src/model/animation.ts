@@ -125,18 +125,16 @@ export function setKeyframe(channel: Channel, t: number, value: number, ease?: E
 }
 
 /**
- * Remove the keyframe at clip-local time `t` (within epsilon). Removing the
- * last keyframe collapses the channel back to a constant of that key's value, so
- * a de-animated property stays exactly where its final key left it.
+ * Remove the keyframe at clip-local time `t` (within epsilon). A surviving
+ * keyframe keeps the property animated (one diamond stays one diamond); only
+ * removing the LAST keyframe collapses the channel back to a constant of that
+ * key's value, so a de-animated property stays exactly where its final key left
+ * it. A no-op (returns the same reference) when no key sits at `t`.
  */
 export function removeKeyframe(channel: Channel, t: number): Channel {
   if (!Array.isArray(channel)) return channel;
-  const remaining = channel.filter((k) => Math.abs(k.t - t) >= KEYFRAME_EPSILON_MS);
-  if (remaining.length === channel.length) return channel;
-  if (remaining.length === 0) {
-    const removed = channel.find((k) => Math.abs(k.t - t) < KEYFRAME_EPSILON_MS)!;
-    return removed.value;
-  }
-  if (remaining.length === 1) return remaining[0]!.value;
-  return remaining;
+  const removed = channel.find((k) => Math.abs(k.t - t) < KEYFRAME_EPSILON_MS);
+  if (!removed) return channel;
+  const remaining = channel.filter((k) => k !== removed);
+  return remaining.length ? remaining : removed.value;
 }

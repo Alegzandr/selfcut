@@ -1,6 +1,15 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
-import { Clip, ClipTransform, MediaClip, Project, Track, isTrackPlayable } from '../../types';
+import {
+  AnimatableProp,
+  Clip,
+  ClipAnimation,
+  ClipTransform,
+  MediaClip,
+  Project,
+  Track,
+  isTrackPlayable,
+} from '../../types';
 import {
   DEFAULT_TRANSFORM,
   clipDurationMs,
@@ -8,6 +17,9 @@ import {
   cloneClip,
   delegatedLinkIds,
   outputDimensions,
+  removeKeyframe,
+  sampleChannel,
+  setKeyframe,
   timelineToSourceMs,
 } from '../../model';
 import { uid } from '../../lib/id';
@@ -85,6 +97,13 @@ function shiftEdits(clipIds: string[], delta: number): Map<string, (c: Clip) => 
   return edits;
 }
 
+/** The clip's static (non-animated) value for an animatable property. */
+function staticPropValue(clip: Clip, prop: AnimatableProp): number {
+  if (prop === 'opacity') return 1;
+  const t = clip.transform ?? DEFAULT_TRANSFORM;
+  return prop === 'rotation' ? t.rotation ?? 0 : t[prop];
+}
+
 export function createClipsSlice(
   set: StoreSet,
   get: StoreGet,
@@ -98,6 +117,8 @@ export function createClipsSlice(
   | 'addShapeClip'
   | 'updateClip'
   | 'updateClipCommitted'
+  | 'updateClipTransformLive'
+  | 'toggleClipKeyframe'
   | 'moveClip'
   | 'moveClips'
   | 'trimClip'
@@ -396,6 +417,75 @@ export function createClipsSlice(
             const partner = findClip(p, pid);
             if (partner) partner.clip.speed = patch.speed;
           }
+        }
+      }),
+
+    updateClipTransformLive: (clipId, patch, timelineMs) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([
+            [
+              clipId,
+              (c: Clip): Clip => {
+                const local = timelineMs - c.timelineStartMs;
+                let animation: ClipAnimation | undefined = c.animation;
+                let transform = c.transform ?? DEFAULT_TRANSFORM;
+                let transformChanged = false;
+                for (const [key, value] of Object.entries(patch)) {
+                  if (value === undefined) continue;
+                  const prop = key as 'x' | 'y' | 'scale' | 'rotation';
+                  const existing = animation?.[prop];
+                  if (existing && existing.length) {
+                    // Already animated: write/update the keyframe at the playhead.
+                    animation = { ...animation, [prop]: setKeyframe(existing, local, value) };
+                  } else {
+                    transform = { ...transform, [prop]: value };
+                    transformChanged = true;
+                  }
+                }
+                return { ...c, transform: transformChanged ? transform : c.transform, animation } as Clip;
+              },
+            ],
+          ]),
+        ),
+      }),
+
+    toggleClipKeyframe: (clipId, prop, timelineMs) =>
+      withHistory((p) => {
+        const found = findClip(p, clipId);
+        if (!found) return;
+        const clip = found.clip;
+        const local = timelineMs - clip.timelineStartMs;
+        const existing = clip.animation?.[prop];
+        if (existing && existing.length) {
+          const onKey = existing.some((k) => Math.abs(k.t - local) < 1);
+          // A key on the playhead is removed; otherwise one is added at the value
+          // the property currently shows, so toggling never makes the clip jump.
+          const next = onKey
+            ? removeKeyframe(existing, local)
+            : setKeyframe(existing, local, sampleChannel(existing, local));
+          const anim: ClipAnimation = { ...clip.animation };
+          if (Array.isArray(next)) {
+            anim[prop] = next;
+            clip.animation = anim;
+          } else {
+            // The last keyframe went: the property is static again. Keep the value
+            // it collapsed to so the look is preserved (opacity has no static field).
+            delete anim[prop];
+            clip.animation = Object.keys(anim).length ? anim : undefined;
+            if (prop !== 'opacity') {
+              const tf = clip.transform ?? structuredClone(DEFAULT_TRANSFORM);
+              tf[prop] = next;
+              clip.transform = tf;
+            }
+          }
+        } else {
+          // Not animated yet: enable it, seeding one keyframe at the current value.
+          clip.animation = {
+            ...clip.animation,
+            [prop]: [{ t: local, value: staticPropValue(clip, prop) }],
+          };
         }
       }),
 

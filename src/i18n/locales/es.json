@@ -99,6 +99,7 @@
   "inspector.positionY": "Posición Y",
   "inspector.rotation": "Rotación",
   "inspector.reset": "Reiniciar",
+  "inspector.keyframe": "Fotograma clave",
   "inspector.crop.edit": "Editar recorte",
   "inspector.crop.done": "Terminar recorte",
   "inspector.crop.hint": "Ajusta el recorte arrastrando un rectángulo en la vista previa",

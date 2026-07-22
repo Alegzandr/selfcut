@@ -117,12 +117,14 @@ describe('removeKeyframe', () => {
     expect(removeKeyframe(ch, 120)).toBe(7);
   });
 
-  it('collapses to a constant when only one keyframe remains', () => {
+  it('keeps a lone surviving keyframe (still animated) instead of collapsing', () => {
     const ch: Channel = [
       { t: 0, value: 1 },
       { t: 100, value: 2 },
     ];
-    expect(removeKeyframe(ch, 100)).toBe(1);
+    const out = removeKeyframe(ch, 100);
+    expect(isAnimated(out)).toBe(true);
+    expect((out as { t: number; value: number }[])).toEqual([{ t: 0, value: 1 }]);
   });
 
   it('keeps the remaining keyframes when more than one is left', () => {

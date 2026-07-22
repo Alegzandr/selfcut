@@ -99,6 +99,7 @@
   "inspector.positionY": "Position Y",
   "inspector.rotation": "Rotation",
   "inspector.reset": "Réinitialiser",
+  "inspector.keyframe": "Image clé",
   "inspector.crop.edit": "Modifier le recadrage",
   "inspector.crop.done": "Terminer le recadrage",
   "inspector.crop.hint": "Ajustez le recadrage en traçant un rectangle dans l'aperçu",

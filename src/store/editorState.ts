@@ -1,4 +1,5 @@
 import {
+  AnimatableProp,
   Clip,
   ClipShape,
   LoopRegion,
@@ -250,6 +251,27 @@ export interface EditorState {
   selectClipRange: (anchorId: string, targetId: string) => void;
   updateClip: (clipId: string, patch: Partial<Clip>) => void;
   updateClipCommitted: (clipId: string, patch: Partial<Clip>) => void;
+  /**
+   * Keyframe-aware live transform edit — the one path the inspector transform
+   * sliders and the preview move/scale/rotate gestures both use. For each
+   * property in `patch`: if the clip already animates it, a keyframe is written
+   * (or the one at this time updated) at the clip-local time for `timelineMs`;
+   * otherwise the static transform value is set, exactly as before. No history:
+   * wrap the gesture with begin/endGesture.
+   */
+  updateClipTransformLive: (
+    clipId: string,
+    patch: Partial<Record<'x' | 'y' | 'scale' | 'rotation', number>>,
+    timelineMs: number,
+  ) => void;
+  /**
+   * Toggle a keyframe for an animatable property at `timelineMs` — its own
+   * history entry, driven by the inspector's keyframe diamond. Removes the
+   * keyframe sitting on the playhead, or adds one at the current value when none
+   * does; a property becomes animated on its first keyframe and static again
+   * when its last one is removed.
+   */
+  toggleClipKeyframe: (clipId: string, prop: AnimatableProp, timelineMs: number) => void;
   moveClip: (clipId: string, timelineStartMs: number, targetTrackId?: string) => void;
   /** Batch position update (multi-selection drag), no history - wrap with begin/endGesture. */
   moveClips: (entries: { clipId: string; timelineStartMs: number }[]) => void;

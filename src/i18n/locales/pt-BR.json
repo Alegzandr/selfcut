@@ -99,6 +99,7 @@
   "inspector.positionY": "Posição Y",
   "inspector.rotation": "Rotação",
   "inspector.reset": "Redefinir",
+  "inspector.keyframe": "Quadro-chave",
   "inspector.crop.edit": "Editar corte",
   "inspector.crop.done": "Concluir corte",
   "inspector.crop.hint": "Ajuste o corte arrastando um retângulo na prévia",

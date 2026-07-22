@@ -99,6 +99,7 @@
   "inspector.positionY": "Position Y",
   "inspector.rotation": "Rotation",
   "inspector.reset": "Reset",
+  "inspector.keyframe": "Keyframe",
   "inspector.crop.edit": "Edit crop",
   "inspector.crop.done": "Done cropping",
   "inspector.crop.hint": "Adjust the crop by dragging a rectangle in the preview",
