@@ -6,8 +6,7 @@ import { useStore, getSelectedClip } from '../store/store';
 import type { InspectorTab } from '../store/editorState';
 import { SubtitlesPanel } from './SubtitlesPanel';
 import { Tooltip } from '../ui/Tooltip';
-import type { TFunction } from 'i18next';
-import { Clip, MediaAsset } from '../types';
+import { Clip } from '../types';
 import { useIsCoarsePointer } from '../lib/device';
 import { ResizeHandle } from '../ui/ResizeHandle';
 import { INSPECTOR_WIDTH_PX } from '../app/config';
@@ -21,25 +20,7 @@ import { FadeSection } from './sections/FadeSection';
 import { TransformSection } from './sections/TransformSection';
 import { ColorSection } from './sections/ColorSection';
 import { TransitionSection } from './sections/TransitionSection';
-import { PresetSection } from './sections/PresetSection';
-
-/**
- * Heading of the inspector: a generated clip is named after what it renders, a
- * media clip after its file. Shared by the docked column and the mobile sheet -
- * which is why it is a function and not an inline ternary in both.
- */
-export function clipDisplayName(clip: Clip, asset: MediaAsset | undefined, t: TFunction): string {
-  switch (clip.kind) {
-    case 'text':
-      return t('inspector.textClip');
-    case 'solid':
-      return t(`inspector.solid.${clip.solid.kind}`);
-    case 'shape':
-      return t(`preview.shape.${clip.shape.kind}`);
-    default:
-      return asset?.file.name ?? '';
-  }
-}
+import { clipDisplayName } from '../ui/clipName';
 
 /**
  * Tab strip of the inspector column. Only shown once the cue list has been
@@ -236,7 +217,6 @@ function InspectorBody({
       {(isVideo || isText || isShape) && <TransformSection clip={clip} isVideo={isVideo} />}
       {isVideo && <ColorSection clip={clip} />}
       {(isVideo || isText || isShape) && <TransitionSection clip={clip} />}
-      <PresetSection clip={clip} name={name} />
     </>
   );
 }

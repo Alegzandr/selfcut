@@ -77,6 +77,10 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         // Link when the selection joins into a pair; unlink on an already-linked clip.
         ...(canLink ? ['clip.link'] : []),
         ...(linked ? ['clip.unlink'] : []),
+        // The one preset row that is about *this* clip. Touch has no menu bar,
+        // so without it saving a look would be desktop-only.
+        '---',
+        'file.savePreset',
         '---',
         'clip.delete',
         'clip.rippleDelete',

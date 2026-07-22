@@ -17,7 +17,20 @@ type Menu = { titleKey: ParseKeys; items: readonly string[] };
 const MENUS: readonly Menu[] = [
   {
     titleKey: 'menu.file',
-    items: ['file.new', 'file.open', '---', 'file.save', 'file.saveAs', '---', 'file.import', 'file.importSubtitles', '---', 'file.export'],
+    items: [
+      'file.new',
+      'file.open',
+      '---',
+      'file.save',
+      'file.saveAs',
+      '---',
+      'file.import',
+      'file.importSubtitles',
+      'file.importPreset',
+      'file.savePreset',
+      '---',
+      'file.export',
+    ],
   },
   {
     titleKey: 'menu.edit',

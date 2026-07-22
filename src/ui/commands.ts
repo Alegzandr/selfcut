@@ -44,6 +44,8 @@ import {
   Info,
   Captions,
   Wand2,
+  Sparkles,
+  Upload,
 } from 'lucide-react';
 import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
 import type { LibraryTab } from '../store/editorState';
@@ -51,6 +53,9 @@ import { useImport } from './useImport';
 import { openMediaPicker, openSubtitlePicker } from './mediaPicker';
 import { confirmDiscardProject, openProject, saveProject } from './projectActions';
 import { unbindProjectFile } from '../lib/projectFile';
+import { applyPresetToClips, exportClipPreset, importPreset } from './presetActions';
+import { clipDisplayName } from './clipName';
+import { t } from '../i18n';
 import { zoomAtPlayhead } from '../timeline/zoom';
 import { isViewReset } from '../preview/view';
 
@@ -156,6 +161,33 @@ export function useEditorCommands(): Record<string, Command> {
     // Its own entry rather than a note under Import: dropping an .srt on the
     // window has always worked, but nothing on screen ever said so.
     { id: 'file.importSubtitles', labelKey: 'menu.file.importSubtitles', hintKey: 'menu.file.importSubtitles.hint', icon: Captions, onClick: () => openSubtitlePicker(importFiles) },
+    // Presets are files like a project or a render is, so they belong with the
+    // other file actions rather than tucked inside the panel that happens to
+    // edit the look. Import both shelves and applies: the file dialog is the
+    // expensive part, and it would be odd to pick a preset and see nothing move.
+    {
+      id: 'file.importPreset',
+      labelKey: 'menu.file.importPreset',
+      icon: Upload,
+      onClick: () =>
+        importPreset((presetName, look) => {
+          st().addLoadedPreset(presetName, look);
+          if (st().selectedClipIds.length > 0) applyPresetToClips(look, st().selectedClipIds);
+        }),
+    },
+    {
+      id: 'file.savePreset',
+      labelKey: 'menu.file.savePreset',
+      icon: Sparkles,
+      disabled: selectedClip === null,
+      // Called straight from the click: the save picker needs transient user
+      // activation, which would be gone after an await.
+      onClick: () => {
+        const clip = getSelectedClip(st());
+        if (!clip) return;
+        exportClipPreset(clip.id, clipDisplayName(clip, st().assets[clip.assetId], t));
+      },
+    },
     { id: 'file.export', labelKey: 'menu.file.export', icon: Download, shortcut: 'Ctrl+E', onClick: () => st().setExportOpen(true) },
 
     // ── Edit ──────────────────────────────────────────────────────────────
