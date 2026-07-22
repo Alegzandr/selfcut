@@ -70,6 +70,15 @@ describe('insertTrack', () => {
     insertTrack(p, { id: 'a1', kind: 'audio', clips: [] });
     expect(p.tracks.map((t) => t.id)).toEqual(['v1', 'a1']);
   });
+
+  it('places a track at index 0 when `atTop` is set', () => {
+    const p = project([
+      { id: 'v1', kind: 'video', clips: [] },
+      { id: 'a1', kind: 'audio', clips: [] },
+    ]);
+    insertTrack(p, { id: 'v2', kind: 'video', clips: [] }, { atTop: true });
+    expect(p.tracks.map((t) => t.id)).toEqual(['v2', 'v1', 'a1']);
+  });
 });
 
 describe('findClip', () => {
