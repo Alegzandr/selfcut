@@ -167,6 +167,18 @@ export function clipRotationAt(clip: Clip, timelineMs: number): number {
   return animatedValue(clip.animation, 'rotation', clip.transform?.rotation ?? 0, timelineMs - clip.timelineStartMs);
 }
 
+/**
+ * Blur amount (0..1) at a timeline time — a fraction of the output height,
+ * applied as a Canvas 2D `filter` when the clip is composited. Separate from
+ * `resolveColor` because blur is a spatial filter, not a WebGL colour grade, and
+ * a blur-only clip must not spin up the colour pass.
+ */
+export function resolveBlur(clip: Clip, timelineMs: number): number {
+  const b = clip.color?.blur;
+  if (b === undefined) return 0;
+  return Math.max(0, sampleChannel(b, timelineMs - clip.timelineStartMs));
+}
+
 /** Colour grading resolved to plain numbers at a timeline time. */
 export interface ResolvedColor {
   brightness: number;

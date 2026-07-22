@@ -6,6 +6,7 @@ import {
   clipRotationAt,
   clipZoomAt,
   isTextClip,
+  resolveBlur,
   resolveColor,
   resolveOpacity,
   resolveTransform,
@@ -138,12 +139,18 @@ export function drawClipSample(
   // directly, so the ungraded path is untouched.
   const color = resolveColor(clip, timelineMs);
   const graded = color ? gradeFrame(sample, sw, sh, color) : null;
+  // Blur is the browser's own gaussian via the 2D filter — GPU-accelerated and
+  // higher quality than a hand-rolled shader blur; scaled to the output height
+  // so it looks the same across the preview's resolution rungs and the export.
+  const blurPx = resolveBlur(clip, timelineMs) * outH * 0.06;
 
   ctx.globalAlpha = alpha;
+  if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
   withRotation(ctx, clipRotationAt(clip, timelineMs), dx + dw / 2, dy + dh / 2, () => {
     if (graded) ctx.drawImage(graded, sx, sy, cropW, cropH, dx, dy, dw, dh);
     else sample.draw(ctx, sx, sy, cropW, cropH, dx, dy, dw, dh);
   });
+  if (blurPx > 0) ctx.filter = 'none';
   ctx.globalAlpha = 1;
 }
 

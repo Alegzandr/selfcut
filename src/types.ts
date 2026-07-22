@@ -253,6 +253,8 @@ export interface ClipColor {
   /** Green (-) to magenta (+) tint. */
   tint?: Channel;
   vignette?: Channel;
+  /** Gaussian blur, 0..1 (fraction of the output height), applied when compositing. */
+  blur?: Channel;
 }
 
 /** Horizontal alignment of a text clip's lines inside its wrap box. */

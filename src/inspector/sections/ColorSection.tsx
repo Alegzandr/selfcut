@@ -13,6 +13,17 @@ const PARAMS: { key: keyof ClipColor; min: number; max: number }[] = [
   { key: 'temperature', min: -1, max: 1 },
   { key: 'tint', min: -1, max: 1 },
   { key: 'vignette', min: 0, max: 1 },
+  { key: 'blur', min: 0, max: 1 },
+];
+
+/** One-tap looks: each populates the colour params with a preset grade. */
+type FilterName = 'bw' | 'warm' | 'cool' | 'vintage' | 'vivid';
+const FILTERS: { name: FilterName; color: ClipColor }[] = [
+  { name: 'bw', color: { saturation: -1 } },
+  { name: 'warm', color: { temperature: 0.4, saturation: 0.1 } },
+  { name: 'cool', color: { temperature: -0.4 } },
+  { name: 'vintage', color: { temperature: 0.25, contrast: -0.15, saturation: -0.2, vignette: 0.4 } },
+  { name: 'vivid', color: { saturation: 0.4, contrast: 0.15 } },
 ];
 
 /** Current value of a colour channel as a plain number (constant until keyframed). */
@@ -45,6 +56,21 @@ export function ColorSection({ clip }: { clip: Clip }) {
           <RotateCcw className="h-3 w-3" />
           {t('inspector.reset')}
         </button>
+      </div>
+      {/* One-tap filters: preconfigured looks, keeping any blur already set. */}
+      <div className="flex flex-wrap gap-1.5">
+        {FILTERS.map((f) => (
+          <button
+            key={f.name}
+            type="button"
+            onClick={() =>
+              updateClipCommitted(clip.id, { color: { ...f.color, blur: color?.blur } })
+            }
+            className="touch-hit rounded bg-zinc-800 px-2 py-1 text-[11px] font-medium text-zinc-300 active:bg-zinc-700"
+          >
+            {t(`inspector.filters.${f.name}`)}
+          </button>
+        ))}
       </div>
       {PARAMS.map(({ key, min, max }) => (
         <SliderRow

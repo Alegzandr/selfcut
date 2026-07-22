@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MediaClip } from '../types';
-import { clipRotationAt, resolveColor, resolveOpacity, resolveTransform } from './clip';
+import { clipRotationAt, resolveBlur, resolveColor, resolveOpacity, resolveTransform } from './clip';
 
 function clip(over: Partial<MediaClip> = {}): MediaClip {
   return {
@@ -107,6 +107,27 @@ describe('resolveColor', () => {
     });
     // Clip starts at timelineStartMs=1000, so 1500 is halfway through the ramp.
     expect(resolveColor(c, 1500)!.brightness).toBeCloseTo(0.5, 6);
+  });
+});
+
+describe('resolveBlur', () => {
+  it('is 0 with no colour or no blur', () => {
+    expect(resolveBlur(clip(), 1000)).toBe(0);
+    expect(resolveBlur(clip({ color: { saturation: 0.5 } }), 1000)).toBe(0);
+  });
+
+  it('reads a static blur and does not trigger the colour pass', () => {
+    const c = clip({ color: { blur: 0.5 } });
+    expect(resolveBlur(c, 1000)).toBe(0.5);
+    // blur alone is not a colour grade, so the WebGL pass stays off.
+    expect(resolveColor(c, 1000)).toBeNull();
+  });
+
+  it('samples a keyframed blur channel', () => {
+    const c = clip({
+      color: { blur: [{ t: 0, value: 0, ease: 'linear' }, { t: 1000, value: 1, ease: 'linear' }] },
+    });
+    expect(resolveBlur(c, 1500)).toBeCloseTo(0.5, 6);
   });
 });
 
