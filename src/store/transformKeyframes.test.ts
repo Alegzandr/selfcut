@@ -101,3 +101,38 @@ describe('toggleClipKeyframe', () => {
     expect(clip().animation?.scale).toBeUndefined();
   });
 });
+
+describe('moveClipKeyframes', () => {
+  it('retimes the key at a given clip-local time', () => {
+    s().toggleClipKeyframe(clip().id, 'scale', 0);
+    s().updateClipTransformLive(clip().id, { scale: 2 }, 2000);
+    s().moveClipKeyframes(clip().id, 2000, 1500);
+    expect(scaleKeys()!.map((k) => k.t)).toEqual([0, 1500]);
+  });
+
+  it('clamps the retimed key to the clip bounds', () => {
+    s().toggleClipKeyframe(clip().id, 'scale', 0);
+    s().updateClipTransformLive(clip().id, { scale: 2 }, 2000);
+    s().moveClipKeyframes(clip().id, 2000, 9_999_999);
+    // The image clip defaults to a 5000 ms duration.
+    expect(scaleKeys()!.map((k) => k.t)).toEqual([0, 5000]);
+  });
+
+  it('moves keys of every property sharing that time together', () => {
+    s().toggleClipKeyframe(clip().id, 'scale', 1000);
+    s().toggleClipKeyframe(clip().id, 'x', 1000);
+    s().moveClipKeyframes(clip().id, 1000, 2000);
+    expect(clip().animation?.scale?.[0]!.t).toBe(2000);
+    expect(clip().animation?.x?.[0]!.t).toBe(2000);
+  });
+});
+
+describe('setClipKeyframesEase', () => {
+  it('sets the easing of the key at a time and is undoable', () => {
+    s().toggleClipKeyframe(clip().id, 'scale', 0);
+    s().setClipKeyframesEase(clip().id, 0, 'linear');
+    expect(scaleKeys()![0]!.ease).toBe('linear');
+    s().undo();
+    expect(scaleKeys()![0]!.ease).toBeUndefined();
+  });
+});

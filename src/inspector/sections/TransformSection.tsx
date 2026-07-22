@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Crop, LayoutPanelTop, RotateCcw } from 'lucide-react';
 import { useStore } from '../../store/store';
 import { Tooltip } from '../../ui/Tooltip';
-import { AnimatableProp, Clip } from '../../types';
+import { AnimatableProp, Clip, EaseId } from '../../types';
 import { resolveTransform } from '../../model';
 import { SliderRow, type KeyframeControl } from '../SliderRow';
 import { pct } from '../format';
@@ -11,9 +11,13 @@ import { CropSection } from './CropSection';
 /** Two keyframe times within this many ms count as sitting on the same playhead. */
 const ON_KEY_EPSILON_MS = 1;
 
+/** Easing presets offered for the keyframe under the playhead. */
+const EASES: EaseId[] = ['linear', 'in', 'out', 'inOut', 'hold'];
+const TRANSFORM_PROPS: AnimatableProp[] = ['scale', 'x', 'y', 'rotation'];
+
 export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boolean }) {
   const { t } = useTranslation();
-  const { updateClipTransformLive, toggleClipKeyframe, updateClipCommitted, setCropEditing } =
+  const { updateClipTransformLive, toggleClipKeyframe, setClipKeyframesEase, updateClipCommitted, setCropEditing } =
     useStore.getState();
   const cropEditing = useStore((s) => s.cropEditing);
   // Subscribed so the sliders and diamonds track the value at the playhead as it
@@ -39,6 +43,17 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
   const xLabel = t('inspector.positionX');
   const yLabel = t('inspector.positionY');
   const rotationLabel = t('inspector.rotation');
+
+  // Easing of the transform keyframe under the playhead, if any: all props at a
+  // given time share one picker, so read the first that has a key there.
+  let easeAtPlayhead: EaseId | null = null;
+  for (const p of TRANSFORM_PROPS) {
+    const k = clip.animation?.[p]?.find((kk) => Math.abs(kk.t - local) < ON_KEY_EPSILON_MS);
+    if (k) {
+      easeAtPlayhead = k.ease ?? 'inOut';
+      break;
+    }
+  }
 
   return (
     <div className="space-y-3 border-t border-zinc-800 pt-3">
@@ -91,6 +106,29 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
         onChange={(v) => setProp('rotation', v)}
         keyframe={kf('rotation', rotationLabel)}
       />
+      {/* Easing of the key on the playhead — reachable by clicking a timeline
+          diamond (which seeks onto its key) or nudging the playhead onto one. */}
+      {easeAtPlayhead && (
+        <div className="flex items-center gap-2 pt-0.5">
+          <span className="w-16 flex-none text-xs text-zinc-500">{t('inspector.easing')}</span>
+          <div className="flex flex-1 flex-wrap gap-1">
+            {EASES.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => setClipKeyframesEase(clip.id, local, e)}
+                className={`touch-hit rounded px-1.5 py-1 text-[11px] ${
+                  easeAtPlayhead === e
+                    ? 'bg-sky-500/20 text-sky-300'
+                    : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'
+                }`}
+              >
+                {t(`inspector.easing.${e}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {isVideo && <CropSection clip={clip} />}
     </div>
   );

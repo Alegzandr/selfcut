@@ -2,6 +2,7 @@ import {
   AnimatableProp,
   Clip,
   ClipShape,
+  EaseId,
   LoopRegion,
   MediaAsset,
   Project,
@@ -272,6 +273,19 @@ export interface EditorState {
    * when its last one is removed.
    */
   toggleClipKeyframe: (clipId: string, prop: AnimatableProp, timelineMs: number) => void;
+  /**
+   * Retime every keyframe sitting at clip-local `fromT` (across all animated
+   * properties, so a keyframe column moves as one) to `toT`, clamped to the
+   * clip. Live — the timeline diamond drag wraps it with begin/endGesture so one
+   * drag is one undo step. The caller clamps `toT` between neighbours; this only
+   * guards the clip bounds.
+   */
+  moveClipKeyframes: (clipId: string, fromT: number, toT: number) => void;
+  /**
+   * Set the easing of every keyframe at clip-local `atT` (across all animated
+   * properties) — its own history entry, driven by the inspector easing picker.
+   */
+  setClipKeyframesEase: (clipId: string, atT: number, ease: EaseId) => void;
   moveClip: (clipId: string, timelineStartMs: number, targetTrackId?: string) => void;
   /** Batch position update (multi-selection drag), no history - wrap with begin/endGesture. */
   moveClips: (entries: { clipId: string; timelineStartMs: number }[]) => void;

@@ -119,6 +119,8 @@ export function createClipsSlice(
   | 'updateClipCommitted'
   | 'updateClipTransformLive'
   | 'toggleClipKeyframe'
+  | 'moveClipKeyframes'
+  | 'setClipKeyframesEase'
   | 'moveClip'
   | 'moveClips'
   | 'trimClip'
@@ -486,6 +488,45 @@ export function createClipsSlice(
             ...clip.animation,
             [prop]: [{ t: local, value: staticPropValue(clip, prop) }],
           };
+        }
+      }),
+
+    moveClipKeyframes: (clipId, fromT, toT) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([
+            [
+              clipId,
+              (c: Clip): Clip => {
+                if (!c.animation) return c;
+                const dest = Math.max(0, Math.min(clipDurationMs(c), toT));
+                let animation: ClipAnimation = c.animation;
+                let changed = false;
+                for (const [key, keys] of Object.entries(c.animation)) {
+                  if (!keys?.some((k) => Math.abs(k.t - fromT) < 1)) continue;
+                  animation = {
+                    ...animation,
+                    [key as AnimatableProp]: keys
+                      .map((k) => (Math.abs(k.t - fromT) < 1 ? { ...k, t: dest } : k))
+                      .sort((a, b) => a.t - b.t),
+                  };
+                  changed = true;
+                }
+                return changed ? ({ ...c, animation } as Clip) : c;
+              },
+            ],
+          ]),
+        ),
+      }),
+
+    setClipKeyframesEase: (clipId, atT, ease) =>
+      withHistory((p) => {
+        const anim = findClip(p, clipId)?.clip.animation;
+        if (!anim) return;
+        for (const keys of Object.values(anim)) {
+          const k = keys?.find((kk) => Math.abs(kk.t - atT) < 1);
+          if (k) k.ease = ease;
         }
       }),
 
