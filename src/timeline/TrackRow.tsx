@@ -4,6 +4,8 @@ import { Track } from '../types';
 import { trackCrossfades } from '../model';
 import { ClipView } from './ClipView';
 import { useStore } from '../store/store';
+import { TrackKeyframeLanes } from './TrackKeyframeLanes';
+import { trackRowHeightPx } from './trackHeight';
 
 interface Props {
   track: Track;
@@ -19,7 +21,9 @@ interface Props {
 export const TrackRow = memo(function TrackRow({ track, index, pxPerMs }: Props) {
   const { t } = useTranslation();
   const xfades = trackCrossfades(track.clips);
-  const trackHeightPx = useStore((s) => s.trackHeightPx);
+  const baseHeightPx = useStore((s) => s.trackHeightPx);
+  const expanded = useStore((s) => s.expandedTrackIds.includes(track.id));
+  const rowHeight = trackRowHeightPx(baseHeightPx, expanded);
 
   // "Video track 2, muted, locked" - the row's name plus its toggled states,
   // so a screen reader hears why the clips inside refuse to change.
@@ -37,7 +41,7 @@ export const TrackRow = memo(function TrackRow({ track, index, pxPerMs }: Props)
       role="listitem"
       aria-label={rowLabel}
       className={`relative border-b border-zinc-800/80 ${track.hidden ? 'opacity-40' : ''}`}
-      style={{ height: trackHeightPx }}
+      style={{ height: rowHeight }}
       data-rowbg
       data-track-id={track.id}
     >
@@ -50,22 +54,28 @@ export const TrackRow = memo(function TrackRow({ track, index, pxPerMs }: Props)
           className="pointer-events-none absolute inset-0 z-20 bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,rgb(250_204_21/0.06)_6px,rgb(250_204_21/0.06)_12px)]"
         />
       )}
-      {/* `contents` when unlocked so the wrapper adds no box at all; when locked
-          it turns into a plain static div, which swallows pointer events for
-          its children without becoming their positioning ancestor. */}
-      <div className={track.locked ? 'pointer-events-none' : 'contents'}>
-      {track.clips.map((clip) => (
-        <ClipView
-          key={clip.id}
-          clip={clip}
-          trackKind={track.kind}
-          trackNumber={index + 1}
-          pxPerMs={pxPerMs}
-          xfadeInMs={xfades.get(clip.id)?.inMs ?? 0}
-          xfadeOutMs={xfades.get(clip.id)?.outMs ?? 0}
-        />
-      ))}
+      {/* Clip lane sits at the top; when the track is expanded, the keyframe
+          lanes take the rest, so the clip band stays the same size the user
+          set with the vertical-zoom slider. */}
+      <div className="relative" style={{ height: baseHeightPx }}>
+        {/* `contents` when unlocked so the wrapper adds no box at all; when locked
+            it turns into a plain static div, which swallows pointer events for
+            its children without becoming their positioning ancestor. */}
+        <div className={track.locked ? 'pointer-events-none' : 'contents'}>
+          {track.clips.map((clip) => (
+            <ClipView
+              key={clip.id}
+              clip={clip}
+              trackKind={track.kind}
+              trackNumber={index + 1}
+              pxPerMs={pxPerMs}
+              xfadeInMs={xfades.get(clip.id)?.inMs ?? 0}
+              xfadeOutMs={xfades.get(clip.id)?.outMs ?? 0}
+            />
+          ))}
+        </div>
       </div>
+      {expanded && <TrackKeyframeLanes track={track} pxPerMs={pxPerMs} />}
     </div>
   );
 });

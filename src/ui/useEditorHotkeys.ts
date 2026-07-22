@@ -46,6 +46,34 @@ function stepBy(ms: number) {
   s.seek(s.currentTimeMs + ms);
 }
 
+/**
+ * Toggle the expand/collapse state of every track that owns a currently
+ * selected clip (all tracks when nothing is selected). If any target row is
+ * already expanded, they all collapse - matches the header chevron and reads
+ * as one action on the group.
+ */
+function toggleTrackExpansion() {
+  const s = useStore.getState();
+  const targets: string[] = [];
+  if (s.selectedClipIds.length === 0) {
+    for (const track of s.project.tracks) targets.push(track.id);
+  } else {
+    const selected = new Set(s.selectedClipIds);
+    for (const track of s.project.tracks) {
+      if (track.clips.some((c) => selected.has(c.id))) targets.push(track.id);
+    }
+  }
+  if (!targets.length) return;
+  const anyExpanded = targets.some((id) => s.expandedTrackIds.includes(id));
+  const cur = new Set(s.expandedTrackIds);
+  for (const id of targets) {
+    if (anyExpanded) cur.delete(id);
+    else cur.add(id);
+  }
+  // Direct set: one commit, no history entry (expansion is view state).
+  useStore.setState({ expandedTrackIds: [...cur] });
+}
+
 /** Move the selected clip(s) by N frames (one undo step per press). */
 function nudgeSelected(frames: number) {
   const s = useStore.getState();
@@ -293,6 +321,13 @@ export function useEditorHotkeys() {
           return;
         case 'n':
           s.toggleSnap();
+          return;
+        case 'e':
+          // Adobe's reflex: E toggles the "expand track" view. Targets the
+          // tracks that own the current selection, or every track when nothing
+          // is selected. When any of them is already expanded, they collapse
+          // together (matches the header chevron's toggle semantics).
+          toggleTrackExpansion();
           return;
         // Preview tools, Photoshop-style. Global rather than scoped to a hovered
         // panel: the preview is always on screen, and every other action letter

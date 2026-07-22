@@ -1,7 +1,19 @@
 import { memo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp, Eye, EyeOff, Lock, LockOpen, Trash2, Volume2, VolumeX } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Diamond,
+  Eye,
+  EyeOff,
+  Lock,
+  LockOpen,
+  Trash2,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { Track } from '../types';
 import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
@@ -11,6 +23,8 @@ import { TrackMeter } from './TrackMeter';
 import { gainDb } from '../inspector/format';
 import { DB_STEP_FADER, faderToGainStepped, gainToFader } from '../lib/gain';
 import { useVolumeEntry } from '../ui/VolumeEntry';
+import { EXPANDED_TRACK_PROPS, KEYFRAME_LANE_HEIGHT_PX, KEYFRAME_LANES_GAP_PX } from './trackHeight';
+import { AnimatableProp } from '../types';
 
 interface Props {
   track: Track;
@@ -37,8 +51,18 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
     if (r) setBadgeAt({ left: r.left + r.width / 2, top: r.top - 6, kind });
   };
   const trackHeightPx = useStore((s) => s.trackHeightPx);
-  const { toggleTrackMuted, toggleTrackHidden, toggleTrackLocked, moveTrack, removeTrack, updateTrack, beginGesture, endGesture } =
-    useStore.getState();
+  const expanded = useStore((s) => s.expandedTrackIds.includes(track.id));
+  const {
+    toggleTrackMuted,
+    toggleTrackHidden,
+    toggleTrackLocked,
+    toggleTrackExpanded,
+    moveTrack,
+    removeTrack,
+    updateTrack,
+    beginGesture,
+    endGesture,
+  } = useStore.getState();
 
   const btn =
     'touch-hit flex h-4.5 w-4.5 items-center justify-center rounded text-zinc-500 active:bg-zinc-700 pointer-coarse:h-7 pointer-coarse:w-7';
@@ -55,8 +79,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
 
   return (
     <div
-      className={`flex items-center gap-1 border-b border-zinc-800/80 bg-zinc-900 py-0.5 ${coarse ? 'justify-center' : 'px-1'}`}
-      style={{ height: trackHeightPx }}
+      className="flex flex-col border-b border-zinc-800/80 bg-zinc-900"
       onContextMenu={(e) => {
         if (coarse) return; // Desktop only.
         e.preventDefault();
@@ -67,11 +90,31 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
         });
       }}
     >
+      <div
+        className={`flex items-center gap-1 py-0.5 ${coarse ? 'justify-center' : 'px-1'}`}
+        style={{ height: trackHeightPx }}
+      >
       {/* Only the controls dim on a hidden track: the pane itself must stay
           opaque, it is what separates the header column from the timeline. */}
       <div className={`flex w-full items-center gap-1 ${track.hidden ? 'opacity-40' : ''}`}>
         <div className="flex flex-none flex-col items-center justify-center gap-0.5">
           <div className="flex items-center gap-0.5">
+            {/* Adobe-style expand/collapse: chevron flips the track open to
+                reveal its per-property keyframe lanes below. */}
+            <Tooltip label={t(expanded ? 'track.collapse' : 'track.expand')}>
+              <button
+                className={btn}
+                aria-label={t('track.expand')}
+                aria-pressed={expanded}
+                onClick={() => toggleTrackExpanded(track.id)}
+              >
+                {expanded ? (
+                  <ChevronDown className="h-3 w-3 text-sky-300" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+              </button>
+            </Tooltip>
             {/* The lock takes the slot the type icon used to hold: clips are
                 already colour-coded by kind, so that icon only repeated what
                 the row itself says, while locking had nowhere to live. */}
@@ -220,6 +263,43 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
           </div>
         )}
       </div>
+      </div>
+      {expanded && (
+        <div
+          className="flex flex-col"
+          style={{
+            height: KEYFRAME_LANE_HEIGHT_PX * EXPANDED_TRACK_PROPS.length + KEYFRAME_LANES_GAP_PX,
+            paddingTop: KEYFRAME_LANES_GAP_PX,
+          }}
+        >
+          {EXPANDED_TRACK_PROPS.map((prop) => (
+            <div
+              key={prop}
+              className="flex items-center gap-1 border-t border-zinc-800/50 bg-zinc-900/40 px-1.5 text-[9px] uppercase tracking-wide text-zinc-500"
+              style={{ height: KEYFRAME_LANE_HEIGHT_PX }}
+            >
+              <Diamond className="h-2 w-2 -rotate-45 fill-zinc-500 text-zinc-500" />
+              <span className="truncate">{t(propHeaderKey(prop))}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 });
+
+/** Inspector i18n key for the property label shown in an expanded track header. */
+function propHeaderKey(prop: AnimatableProp) {
+  switch (prop) {
+    case 'x':
+      return 'inspector.positionX' as const;
+    case 'y':
+      return 'inspector.positionY' as const;
+    case 'scale':
+      return 'inspector.scale' as const;
+    case 'rotation':
+      return 'inspector.rotation' as const;
+    case 'opacity':
+      return 'inspector.opacity' as const;
+  }
+}

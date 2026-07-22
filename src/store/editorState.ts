@@ -98,11 +98,20 @@ export interface EditorState {
   playbackRate: number;
   pxPerSec: number;
   /**
-   * Height of every track lane in px (vertical zoom, persisted). Uniform across
-   * tracks by design - the timeline maps a pointer's Y to a row index by
-   * division, which only holds while the rows are the same height.
+   * Base height of a collapsed track lane in px (vertical zoom, persisted). An
+   * expanded track (see `expandedTrackIds`) grows past this to reveal its
+   * per-property keyframe lanes; `trackRowHeightPx()` in the store returns the
+   * effective per-track heights, which is what the timeline reads.
    */
   trackHeightPx: number;
+  /**
+   * Ids of tracks the user opened up to reveal their per-property keyframe
+   * lanes - Adobe's "expand track" reflex. Session state (not persisted with
+   * the project): pressing `E` while a clip is selected toggles it for that
+   * clip's track, and the track-header chevron toggles it for the row it sits
+   * on. `trackRowHeightPx()` sizes every consumer off this list.
+   */
+  expandedTrackIds: string[];
   /**
    * Width of the fixed track-header pane in px (desktop only, persisted). The
    * pane sits outside the scroller, so widening it never shifts timeline time
@@ -208,6 +217,11 @@ export interface EditorState {
   toggleTrackHidden: (trackId: string) => void;
   /** Lock a track: its clips stop being selectable, so no edit can reach them. */
   toggleTrackLocked: (trackId: string) => void;
+  /**
+   * Toggle a track's expanded state: an expanded track reveals a lane per
+   * animatable property with the keyframes of every clip on it.
+   */
+  toggleTrackExpanded: (trackId: string) => void;
 
   setAssetPeaks: (assetId: string, audioTrackIndex: number, peaks: number[]) => void;
   setAssetThumbnails: (assetId: string, thumbnails: string[]) => void;

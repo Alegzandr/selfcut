@@ -16,6 +16,7 @@ export function createTracksSlice(
   | 'toggleTrackMuted'
   | 'toggleTrackHidden'
   | 'toggleTrackLocked'
+  | 'toggleTrackExpanded'
 > {
   return {
     addTrack: (kind) =>
@@ -80,6 +81,15 @@ export function createTracksSlice(
       const p = get().project;
       const tracks = p.tracks.map((t) => (t.id === trackId ? { ...t, ...patch } : t));
       set({ project: { ...p, tracks } });
+    },
+
+    toggleTrackExpanded: (trackId) => {
+      const cur = get().expandedTrackIds;
+      set({
+        expandedTrackIds: cur.includes(trackId)
+          ? cur.filter((id) => id !== trackId)
+          : [...cur, trackId],
+      });
     },
   };
 }

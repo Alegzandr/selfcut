@@ -20,6 +20,7 @@ import {
   linePosToFader,
 } from '../lib/gain';
 import { hapticOnSnap } from '../lib/haptics';
+import { trackIndexAtY, trackTops } from './trackHeight';
 
 export interface DragState {
   mode: 'move' | 'trim-left' | 'trim-right' | 'fade-in' | 'fade-out' | 'slip' | 'volume';
@@ -211,7 +212,14 @@ export const applyClipDrag = (
       const tracks = state.project.tracks;
       const rowsRect = d.rowsEl?.getBoundingClientRect();
       const targetIdx = rowsRect
-        ? clamp(Math.floor((clientY - rowsRect.top) / state.trackHeightPx), 0, tracks.length - 1)
+        ? clamp(
+            trackIndexAtY(
+              trackTops(tracks, state.trackHeightPx, new Set(state.expandedTrackIds)),
+              clientY - rowsRect.top,
+            ),
+            0,
+            tracks.length - 1,
+          )
         : d.origTrackIndex;
       // A locked track refuses arrivals too, not just edits to what it holds.
       if (tracks[targetIdx]?.kind === trackKind && !tracks[targetIdx].locked) {

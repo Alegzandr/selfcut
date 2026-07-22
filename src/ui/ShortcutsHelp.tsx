@@ -85,6 +85,7 @@ const GROUPS: readonly Group[] = [
       ['S', 'shortcuts.edit.split'],
       ['P', 'shortcuts.edit.punchIn'],
       ['T', 'shortcuts.edit.textClip'],
+      ['E', 'shortcuts.edit.expandTrack'],
       ['{{dragClipOverNeighbor}}', 'shortcuts.edit.crossfade'],
       ['{{dragCornerHandle}}', 'shortcuts.edit.fade'],
       ['{{ctrl}} + {{click}}', 'shortcuts.edit.multiSelect'],

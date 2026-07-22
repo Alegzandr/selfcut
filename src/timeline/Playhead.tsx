@@ -2,6 +2,7 @@ import { RefObject, useEffect, useRef } from 'react';
 import { useStore } from '../store/store';
 import { msFromClientX } from './coords';
 import { MARKER_BAR_HEIGHT_PX, RULER_HEIGHT_PX } from '../app/config';
+import { trackRowHeightPx } from './trackHeight';
 
 const HEAD_HEIGHT_PX = MARKER_BAR_HEIGHT_PX + RULER_HEIGHT_PX;
 
@@ -19,8 +20,14 @@ export function Playhead({ scrollerRef }: Props) {
   const headBarRef = useRef<HTMLDivElement>(null);
   const trackBarRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
-  const trackCount = useStore((s) => s.project.tracks.length);
-  const trackHeightPx = useStore((s) => s.trackHeightPx);
+  // Sum of the per-track row heights: an expanded track adds its keyframe lanes
+  // to the base, so the playhead's track bar has to grow with it or stop short.
+  const totalHeight = useStore((s) => {
+    const expanded = new Set(s.expandedTrackIds);
+    let h = 0;
+    for (const t of s.project.tracks) h += trackRowHeightPx(s.trackHeightPx, expanded.has(t.id));
+    return h;
+  });
 
   useEffect(() => {
     const parts = [headBarRef.current, trackBarRef.current, handleRef.current];
@@ -77,7 +84,7 @@ export function Playhead({ scrollerRef }: Props) {
       <div
         ref={trackBarRef}
         className={`${bar} z-10`}
-        style={{ top: HEAD_HEIGHT_PX, height: trackCount * trackHeightPx }}
+        style={{ top: HEAD_HEIGHT_PX, height: totalHeight }}
       />
       <div
         ref={handleRef}

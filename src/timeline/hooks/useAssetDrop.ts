@@ -3,6 +3,7 @@ import { useStore } from '../../store/store';
 import { msFromContentX, timelineContentEl } from '../coords';
 import { ASSET_DRAG_MIME, MARKER_BAR_HEIGHT_PX, RULER_HEIGHT_PX } from '../../app/config';
 import { NEW_TRACK_TARGET } from '../../store/projectOps';
+import { trackTops } from '../trackHeight';
 
 /** True when the drag sits below the last track row: dropping there makes a new track. */
 function belowTracks(e: DragEvent): boolean {
@@ -11,11 +12,9 @@ function belowTracks(e: DragEvent): boolean {
   const s = useStore.getState();
   const n = s.project.tracks.length;
   if (n === 0) return false;
+  const totalH = trackTops(s.project.tracks, s.trackHeightPx, new Set(s.expandedTrackIds))[n]!;
   const rowsBottom =
-    content.getBoundingClientRect().top +
-    MARKER_BAR_HEIGHT_PX +
-    RULER_HEIGHT_PX +
-    n * s.trackHeightPx;
+    content.getBoundingClientRect().top + MARKER_BAR_HEIGHT_PX + RULER_HEIGHT_PX + totalH;
   return e.clientY >= rowsBottom;
 }
 

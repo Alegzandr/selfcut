@@ -25,6 +25,7 @@ import { usePinchZoom } from './hooks/usePinchZoom';
 import { useMobileScrubSync } from './hooks/useMobileScrubSync';
 import { useAssetDrop } from './hooks/useAssetDrop';
 import { publishViewport } from './viewport';
+import { trackIndexAtY, trackTops } from './trackHeight';
 
 /** Vertical guide at the point a drag is currently snapped to (all NLEs flash one). */
 function SnapGuide() {
@@ -246,10 +247,13 @@ export function Timeline() {
     const ids = new Set(mq.base);
     const top = rowsEl.getBoundingClientRect().top;
     const n = s.project.tracks.length;
-    const rowH = s.trackHeightPx;
-    if (maxY >= top && minY <= top + n * rowH) {
-      const r0 = clamp(Math.floor((minY - top) / rowH), 0, n - 1);
-      const r1 = clamp(Math.floor((maxY - top) / rowH), 0, n - 1);
+    // Variable row heights: sum the tops once, then walk to find the two rows
+    // the marquee touches instead of dividing by a fixed height.
+    const tops = trackTops(s.project.tracks, s.trackHeightPx, new Set(s.expandedTrackIds));
+    const totalH = tops[n]!;
+    if (maxY >= top && minY <= top + totalH) {
+      const r0 = clamp(trackIndexAtY(tops, minY - top), 0, n - 1);
+      const r1 = clamp(trackIndexAtY(tops, maxY - top), 0, n - 1);
       const t0 = msFromContentX(content, Math.min(mq.x0, clientX));
       const t1 = msFromContentX(content, Math.max(mq.x0, clientX));
       for (const track of s.project.tracks.slice(r0, r1 + 1)) {

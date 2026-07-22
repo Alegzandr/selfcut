@@ -12,6 +12,7 @@ import {
   SNAP_THRESHOLD_PX,
 } from '../app/config';
 import { hapticOnSnap } from '../lib/haptics';
+import { trackRowHeightPx } from './trackHeight';
 
 /** Timeline ms under a client X, clamped to the origin (the bar has no negative time). */
 function markerMsFromClientX(el: HTMLElement, clientX: number): number {
@@ -260,7 +261,7 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
  */
 export const TimelineOverlay = memo(function TimelineOverlay({
   pxPerMs,
-  trackCount,
+  trackCount: _trackCount,
 }: {
   pxPerMs: number;
   trackCount: number;
@@ -268,12 +269,19 @@ export const TimelineOverlay = memo(function TimelineOverlay({
   const padLeft = useStore((s) => s.timelinePadLeft);
   const region = useStore((s) => s.loopRegion);
   const markers = useStore((s) => s.project.markers);
-  const trackHeightPx = useStore((s) => s.trackHeightPx);
+  // Sum-over-tracks height: an expanded track adds its keyframe lanes, so the
+  // overlay reads its size off the same source of truth as the row layout.
+  const totalHeight = useStore((s) => {
+    const expanded = new Set(s.expandedTrackIds);
+    let h = 0;
+    for (const t of s.project.tracks) h += trackRowHeightPx(s.trackHeightPx, expanded.has(t.id));
+    return h;
+  });
 
   return (
     <div
       className="pointer-events-none absolute inset-x-0"
-      style={{ top: MARKER_BAR_HEIGHT_PX + RULER_HEIGHT_PX, height: trackCount * trackHeightPx }}
+      style={{ top: MARKER_BAR_HEIGHT_PX + RULER_HEIGHT_PX, height: totalHeight }}
     >
       {region && (
         <div
