@@ -19,9 +19,16 @@ export function createEmptyProject(): Project {
 /**
  * Insert a track, keeping video tracks grouped: a new video track goes right
  * after the last existing video track (z-order = array order), audio tracks
- * go at the end. Mutates `p` (called on the withHistory draft).
+ * go at the end. With `atTop`, the track goes to index 0 instead - used for
+ * overlays (text, shapes, solids) so they land on top of the existing footage
+ * without the user having to reorder tracks. Mutates `p` (called on the
+ * withHistory draft).
  */
-export function insertTrack(p: Project, track: Track): void {
+export function insertTrack(p: Project, track: Track, opts?: { atTop?: boolean }): void {
+  if (opts?.atTop) {
+    p.tracks.unshift(track);
+    return;
+  }
   if (track.kind === 'video') {
     const lastVideoIdx = p.tracks.map((t) => t.kind).lastIndexOf('video');
     p.tracks.splice(lastVideoIdx + 1, 0, track);

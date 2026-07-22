@@ -288,17 +288,16 @@ export function createClipsSlice(
       withHistory((p) => {
         const start = Math.max(0, currentTimeMs);
         // Topmost video track with the interval free - a text clip is an overlay,
-        // it must not crossfade with the footage it sits on. Otherwise stack a new track.
-        let track = [...p.tracks]
-          .reverse()
-          .find(
-            (t) =>
-              t.kind === 'video' &&
-              t.clips.every((c) => clipEndMs(c) <= start || c.timelineStartMs >= start + durMs),
-          );
+        // it must not crossfade with the footage it sits on. Otherwise stack a
+        // new track at the top so the overlay is visible without reordering.
+        let track = p.tracks.find(
+          (t) =>
+            t.kind === 'video' &&
+            t.clips.every((c) => clipEndMs(c) <= start || c.timelineStartMs >= start + durMs),
+        );
         if (!track) {
           track = { id: uid('track'), kind: 'video', clips: [] };
-          insertTrack(p, track);
+          insertTrack(p, track, { atTop: true });
         }
         track.clips.push({
           kind: 'text',
@@ -324,16 +323,16 @@ export function createClipsSlice(
       const durMs = 3000;
       withHistory((p) => {
         const start = Math.max(0, currentTimeMs);
-        let track = [...p.tracks]
-          .reverse()
-          .find(
-            (t) =>
-              t.kind === 'video' &&
-              t.clips.every((c) => clipEndMs(c) <= start || c.timelineStartMs >= start + durMs),
-          );
+        // Overlay: topmost free video lane, or a fresh track at the top so the
+        // new clip is visible without the user reordering tracks.
+        let track = p.tracks.find(
+          (t) =>
+            t.kind === 'video' &&
+            t.clips.every((c) => clipEndMs(c) <= start || c.timelineStartMs >= start + durMs),
+        );
         if (!track) {
           track = { id: uid('track'), kind: 'video', clips: [] };
-          insertTrack(p, track);
+          insertTrack(p, track, { atTop: true });
         }
         track.clips.push({
           kind: 'solid',
@@ -364,17 +363,16 @@ export function createClipsSlice(
         const start = Math.max(0, currentTimeMs);
         // Shapes are overlays: they belong on top of whatever is already at the
         // playhead, so take the first free lane from the top rather than
-        // reusing a busy one.
-        let track = [...p.tracks]
-          .reverse()
-          .find(
-            (t) =>
-              t.kind === 'video' &&
-              t.clips.every((c) => clipEndMs(c) <= start || c.timelineStartMs >= start + durMs),
-          );
+        // reusing a busy one. When none is free, stack a fresh track at the
+        // top so the shape is visible without reordering.
+        let track = p.tracks.find(
+          (t) =>
+            t.kind === 'video' &&
+            t.clips.every((c) => clipEndMs(c) <= start || c.timelineStartMs >= start + durMs),
+        );
         if (!track) {
           track = { id: uid('track'), kind: 'video', clips: [] };
-          insertTrack(p, track);
+          insertTrack(p, track, { atTop: true });
         }
         track.clips.push({
           kind: 'shape',
