@@ -1,11 +1,16 @@
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/store';
 import { ToggleButton } from '../../ui/ToggleButton';
-import { Clip } from '../../types';
+import { AudioFxType, Clip } from '../../types';
 import { SliderRow } from '../SliderRow';
 import { gainDb } from '../format';
 import { DB_STEP_FADER, faderToGain, faderToGainStepped, gainToFader } from '../../lib/gain';
 import { useVolumeEntry } from '../../ui/VolumeEntry';
+
+/** The audio effects offered, in the order they chain and appear. */
+const FX_TYPES: AudioFxType[] = ['leveler', 'voice', 'bass', 'reverb', 'echo'];
+/** Intensity a freshly enabled effect starts at. */
+const DEFAULT_FX_AMOUNT = 0.5;
 
 export function AudioSection({ clip }: { clip: Clip }) {
   const { t } = useTranslation();
@@ -14,6 +19,19 @@ export function AudioSection({ clip }: { clip: Clip }) {
     gain: clip.volume,
     onCommit: (volume) => updateClipCommitted(clip.id, { volume }),
   });
+
+  const fxList = clip.audioFx ?? [];
+  const findFx = (type: AudioFxType) => fxList.find((f) => f.type === type);
+  const toggleFx = (type: AudioFxType) => {
+    const next = findFx(type)
+      ? fxList.filter((f) => f.type !== type)
+      : [...fxList, { type, amount: DEFAULT_FX_AMOUNT }];
+    updateClipCommitted(clip.id, { audioFx: next.length ? next : undefined });
+  };
+  // Live (one undo per drag via SliderRow's begin/endGesture); the sameAudioMix
+  // gate now watches audioFx, so the preview follows the change as it moves.
+  const setFxAmount = (type: AudioFxType, amount: number) =>
+    updateClip(clip.id, { audioFx: fxList.map((f) => (f.type === type ? { ...f, amount } : f)) });
 
   // Pan read-out: the letter is the localised initial of Center/Left/Right.
   const pan = (v: number) => {
@@ -61,6 +79,33 @@ export function AudioSection({ clip }: { clip: Clip }) {
         >
           {t('inspector.mono')}
         </ToggleButton>
+      </div>
+
+      {/* Audio effects: named one-tap presets, each with a single intensity
+          slider once on — a voice-effects tray, not a mixing desk. */}
+      <div className="space-y-2 border-t border-zinc-800 pt-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          {t('inspector.audioFx')}
+        </h3>
+        <div className="flex flex-wrap gap-1.5">
+          {FX_TYPES.map((type) => (
+            <ToggleButton key={type} active={!!findFx(type)} onClick={() => toggleFx(type)}>
+              {t(`inspector.audioFx.${type}`)}
+            </ToggleButton>
+          ))}
+        </div>
+        {FX_TYPES.filter((type) => findFx(type)).map((type) => (
+          <SliderRow
+            key={type}
+            label={t(`inspector.audioFx.${type}`)}
+            value={findFx(type)!.amount}
+            min={0}
+            max={1}
+            step={0.01}
+            format={(v) => `${Math.round(v * 100)}%`}
+            onChange={(v) => setFxAmount(type, v)}
+          />
+        ))}
       </div>
     </>
   );

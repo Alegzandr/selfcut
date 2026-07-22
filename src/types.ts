@@ -219,6 +219,24 @@ export type AnimatableProp = 'x' | 'y' | 'scale' | 'rotation' | 'opacity';
  */
 export type ClipAnimation = Partial<Record<AnimatableProp, Keyframe[]>>;
 
+/**
+ * A named audio effect a clip can carry. All are native Web Audio nodes, so they
+ * cost nothing to bundle and render identically in the preview
+ * (`AudioContext`) and the export (`OfflineAudioContext`):
+ * - `leveler`   — `DynamicsCompressor` + makeup, evens out an uneven voice-over.
+ * - `voice`     — high-pass (rumble) + a presence peak, clarity for talking head.
+ * - `bass`      — low-shelf boost, warmth.
+ * - `reverb`    — `Convolver` on a synthesized tail, adds space (wet mix).
+ * - `echo`      — `Delay` with feedback, a repeating slap (wet mix).
+ */
+export type AudioFxType = 'leveler' | 'voice' | 'bass' | 'reverb' | 'echo';
+
+export interface AudioFx {
+  type: AudioFxType;
+  /** Effect intensity, 0..1. */
+  amount: number;
+}
+
 /** Horizontal alignment of a text clip's lines inside its wrap box. */
 export type TextAlign = 'left' | 'center' | 'right';
 
@@ -298,6 +316,12 @@ interface BaseClip {
   pan?: number;
   /** Downmix the clip's audio to mono. */
   mono?: boolean;
+  /**
+   * Audio effects applied to this clip, in chain order. Native Web Audio nodes
+   * inserted into the per-clip mix chain, so they render the same in preview and
+   * export. Undefined/empty = dry.
+   */
+  audioFx?: AudioFx[];
   /**
    * Link group: every clip sharing one `linkId` moves, trims, splits and
    * deletes together. A group is generic and holds any number of clips on video
