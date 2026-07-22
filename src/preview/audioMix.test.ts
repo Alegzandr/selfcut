@@ -80,6 +80,7 @@ describe('sameAudioMix', () => {
       ['audio track index', { audioTrackIndex: 1 }],
       ['link membership', { linkId: 'l1' }],
       ['clip identity', { id: 'c2' }],
+      ['audio effect added', { audioFx: [{ type: 'reverb', amount: 0.5 }] }],
     ];
     for (const [name, over] of cases) {
       it(name, () => {
@@ -87,6 +88,22 @@ describe('sameAudioMix', () => {
         expect(sameAudioMix(a, b)).toBe(false);
       });
     }
+
+    it('audio effect intensity', () => {
+      const a = project({}, [clip({ audioFx: [{ type: 'reverb', amount: 0.3 }] })]);
+      const b = project({}, [clip({ audioFx: [{ type: 'reverb', amount: 0.8 }] })]);
+      expect(sameAudioMix(a, b)).toBe(false);
+    });
+
+    it('audio effect order', () => {
+      const a = project({}, [
+        clip({ audioFx: [{ type: 'voice', amount: 0.5 }, { type: 'reverb', amount: 0.5 }] }),
+      ]);
+      const b = project({}, [
+        clip({ audioFx: [{ type: 'reverb', amount: 0.5 }, { type: 'voice', amount: 0.5 }] }),
+      ]);
+      expect(sameAudioMix(a, b)).toBe(false);
+    });
 
     it('track mute', () => {
       expect(sameAudioMix(project(), project({ muted: true }))).toBe(false);

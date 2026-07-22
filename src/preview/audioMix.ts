@@ -1,4 +1,4 @@
-import { Clip, Project } from '../types';
+import { AudioFx, Clip, Project } from '../types';
 import {
   clipEndMs,
   clipEnvelopeGainAt,
@@ -6,6 +6,7 @@ import {
   isGeneratedClip,
   trackCrossfades,
 } from '../model';
+import { buildAudioFxChain } from './audioFx';
 
 export interface ScheduledSource {
   source: AudioBufferSourceNode;
@@ -101,7 +102,17 @@ function scheduleClip(
     nodes.push(panner);
     tail = panner;
   }
-  tail.connect(destination);
+
+  // Audio effects sit at the end of the clip chain (after gain/mono/pan), so
+  // they process the clip's final signal before it reaches the mix bus.
+  const fxChain = buildAudioFxChain(ctx, clip.audioFx);
+  if (fxChain) {
+    tail.connect(fxChain.input);
+    fxChain.output.connect(destination);
+    nodes.push(...fxChain.nodes);
+  } else {
+    tail.connect(destination);
+  }
 
   const clipStart = clip.timelineStartMs;
   const clipEnd = clipEndMs(clip);
@@ -193,8 +204,20 @@ function sameAudioClip(a: Clip, b: Clip): boolean {
     a.fadeInMs === b.fadeInMs &&
     a.fadeOutMs === b.fadeOutMs &&
     (a.pan ?? 0) === (b.pan ?? 0) &&
-    !!a.mono === !!b.mono
+    !!a.mono === !!b.mono &&
+    sameAudioFx(a.audioFx, b.audioFx)
   );
+}
+
+/** Whether two clips carry the same audio effects, in the same order and amounts. */
+function sameAudioFx(a: AudioFx[] | undefined, b: AudioFx[] | undefined): boolean {
+  const la = a?.length ?? 0;
+  const lb = b?.length ?? 0;
+  if (la !== lb) return false;
+  for (let i = 0; i < la; i++) {
+    if (a![i]!.type !== b![i]!.type || a![i]!.amount !== b![i]!.amount) return false;
+  }
+  return true;
 }
 
 export function stopScheduled(scheduled: ScheduledSource[]): void {

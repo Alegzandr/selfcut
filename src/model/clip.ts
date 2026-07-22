@@ -1,6 +1,8 @@
 import {
+  AnimatableProp,
   AudioTrackInfo,
   Clip,
+  ClipAnimation,
   ClipTransform,
   MediaAsset,
   ShapeClip,
@@ -8,6 +10,7 @@ import {
   TextClip,
   isTrackPlayable,
 } from '../types';
+import { sampleChannel } from './animation';
 
 /**
  * Clip-level model math: durations, source<->timeline mapping, fade/zoom
@@ -105,6 +108,115 @@ export function clipZoomAt(clip: Clip, timelineMs: number): number {
   if (dur <= 0) return 1;
   const progress = Math.min(1, Math.max(0, (timelineMs - clip.timelineStartMs) / dur));
   return 1 + (zoomEnd - 1) * progress;
+}
+
+/** A clip transform with every animatable field resolved to a plain number. */
+export interface ResolvedTransform {
+  crop: ClipTransform['crop'];
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+}
+
+/** Value of an animatable property at a clip-local time, or its static fallback. */
+function animatedValue(
+  anim: ClipAnimation | undefined,
+  prop: AnimatableProp,
+  fallback: number,
+  localMs: number,
+): number {
+  const keys = anim?.[prop];
+  return keys && keys.length ? sampleChannel(keys, localMs) : fallback;
+}
+
+/**
+ * The clip's transform at a timeline time, with any keyframed property sampled
+ * and any static one passed through. The one place animation is folded into
+ * geometry — preview, export and hit-testing all resolve through here, so a
+ * moving clip is framed identically wherever it is drawn or picked. Crop is not
+ * animatable in v1 and is passed through as-is.
+ */
+export function resolveTransform(clip: Clip, timelineMs: number): ResolvedTransform {
+  const t = clip.transform ?? DEFAULT_TRANSFORM;
+  const local = timelineMs - clip.timelineStartMs;
+  const a = clip.animation;
+  return {
+    crop: t.crop,
+    x: animatedValue(a, 'x', t.x, local),
+    y: animatedValue(a, 'y', t.y, local),
+    scale: animatedValue(a, 'scale', t.scale, local),
+    rotation: animatedValue(a, 'rotation', t.rotation ?? 0, local),
+  };
+}
+
+/**
+ * Per-clip opacity at a timeline time: the sampled `opacity` channel (clamped
+ * 0..1) when the clip animates it, otherwise 1. Multiplied into the draw alpha
+ * on top of fades and track opacity, so an opacity keyframe animates a clip's
+ * transparency without touching the fade envelope.
+ */
+export function resolveOpacity(clip: Clip, timelineMs: number): number {
+  const keys = clip.animation?.opacity;
+  if (!keys || !keys.length) return 1;
+  return Math.max(0, Math.min(1, sampleChannel(keys, timelineMs - clip.timelineStartMs)));
+}
+
+/** Rotation (degrees) at a timeline time, sampling the channel or the static value. */
+export function clipRotationAt(clip: Clip, timelineMs: number): number {
+  return animatedValue(clip.animation, 'rotation', clip.transform?.rotation ?? 0, timelineMs - clip.timelineStartMs);
+}
+
+/**
+ * Blur amount (0..1) at a timeline time — a fraction of the output height,
+ * applied as a Canvas 2D `filter` when the clip is composited. Separate from
+ * `resolveColor` because blur is a spatial filter, not a WebGL colour grade, and
+ * a blur-only clip must not spin up the colour pass.
+ */
+export function resolveBlur(clip: Clip, timelineMs: number): number {
+  const b = clip.color?.blur;
+  if (b === undefined) return 0;
+  return Math.max(0, sampleChannel(b, timelineMs - clip.timelineStartMs));
+}
+
+/** Colour grading resolved to plain numbers at a timeline time. */
+export interface ResolvedColor {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  temperature: number;
+  tint: number;
+  vignette: number;
+}
+
+/**
+ * The clip's colour grade at a timeline time, sampling every (keyframable)
+ * channel — or null when the clip has no grade or every field is the identity,
+ * so the compositor skips the WebGL pass entirely for the common ungraded case.
+ */
+export function resolveColor(clip: Clip, timelineMs: number): ResolvedColor | null {
+  const c = clip.color;
+  if (!c) return null;
+  const local = timelineMs - clip.timelineStartMs;
+  const r: ResolvedColor = {
+    brightness: sampleChannel(c.brightness ?? 0, local),
+    contrast: sampleChannel(c.contrast ?? 0, local),
+    saturation: sampleChannel(c.saturation ?? 0, local),
+    temperature: sampleChannel(c.temperature ?? 0, local),
+    tint: sampleChannel(c.tint ?? 0, local),
+    vignette: sampleChannel(c.vignette ?? 0, local),
+  };
+  if (
+    r.brightness === 0 &&
+    r.contrast === 0 &&
+    r.saturation === 0 &&
+    r.temperature === 0 &&
+    r.tint === 0 &&
+    r.vignette === 0
+  ) {
+    return null;
+  }
+  return r;
 }
 
 /**

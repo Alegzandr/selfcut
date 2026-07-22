@@ -189,6 +189,103 @@ export interface ClipTransform {
   rotation?: number;
 }
 
+/**
+ * Easing of the segment LEAVING a keyframe toward the next one. `hold` steps (no
+ * interpolation until the next key); the rest are smooth. `inOut` is the
+ * flow-first default that makes CapCut-style motion feel good. The math lives in
+ * `src/model/animation.ts`.
+ */
+export type EaseId = 'hold' | 'linear' | 'in' | 'out' | 'inOut';
+
+export interface Keyframe {
+  /** Clip-local timeline ms (0 = clip start), the same reference as fades/zoom. Kept sorted by `t`. */
+  t: number;
+  value: number;
+  /** Easing of the segment from this keyframe to the next. Undefined = `inOut`. */
+  ease?: EaseId;
+  /**
+   * Custom cubic-Bézier control points `[x1, y1, x2, y2]` (implicit endpoints
+   * (0,0)/(1,1)) — the desktop graph editor's per-segment curve. Overrides
+   * `ease` when present.
+   */
+  bezier?: [number, number, number, number];
+}
+
+/**
+ * An animatable property: a constant value (the common case, costs nothing), or
+ * a sorted non-empty keyframe list sampled over clip-local time.
+ */
+export type Channel = number | Keyframe[];
+
+/** A clip property that can be keyframed. Extended as effects gain channels. */
+export type AnimatableProp = 'x' | 'y' | 'scale' | 'rotation' | 'opacity';
+
+/**
+ * Keyframed overrides for a clip's animatable properties, keyed by property. A
+ * property present here (with keyframes) is authoritative over its static
+ * counterpart in `transform`; absent means the static value is used. Stored
+ * apart from `transform` so the compositor's static-value read sites stay
+ * numbers and only the render/hit-test paths sample over time.
+ */
+export type ClipAnimation = Partial<Record<AnimatableProp, Keyframe[]>>;
+
+/**
+ * A named audio effect a clip can carry. All are native Web Audio nodes, so they
+ * cost nothing to bundle and render identically in the preview
+ * (`AudioContext`) and the export (`OfflineAudioContext`):
+ * - `leveler`   — `DynamicsCompressor` + makeup, evens out an uneven voice-over.
+ * - `voice`     — high-pass (rumble) + a presence peak, clarity for talking head.
+ * - `bass`      — low-shelf boost, warmth.
+ * - `reverb`    — `Convolver` on a synthesized tail, adds space (wet mix).
+ * - `echo`      — `Delay` with feedback, a repeating slap (wet mix).
+ */
+export type AudioFxType = 'leveler' | 'voice' | 'bass' | 'reverb' | 'echo';
+
+export interface AudioFx {
+  type: AudioFxType;
+  /** Effect intensity, 0..1. */
+  amount: number;
+}
+
+/**
+ * Colour grading applied to a clip before compositing, run as an isolated WebGL
+ * pass (`src/preview/colorPass.ts`). Every field is an animatable `Channel`
+ * (keyframable), defaults to the identity (0), and is optional so a project
+ * saved before a field existed still loads. `vignette` is 0..1; the rest are
+ * roughly -1..1.
+ */
+export interface ClipColor {
+  brightness?: Channel;
+  contrast?: Channel;
+  saturation?: Channel;
+  /** White balance, warm (+) to cool (-). */
+  temperature?: Channel;
+  /** Green (-) to magenta (+) tint. */
+  tint?: Channel;
+  vignette?: Channel;
+  /** Gaussian blur, 0..1 (fraction of the output height), applied when compositing. */
+  blur?: Channel;
+}
+
+/**
+ * How a clip enters over its overlap with the previous clip on the track (the
+ * Vegas-style crossfade window). `dissolve` (the default when unset) is the
+ * classic cross-dissolve; `dipBlack`/`dipWhite` dip through a colour; the slides
+ * push the incoming frame in from an edge; `wipe` reveals it left to right;
+ * `zoom` scales it up as it fades in. Rendered in `drawClip` over the overlap,
+ * so it has no effect on a clip with no incoming overlap.
+ */
+export type TransitionType =
+  | 'dissolve'
+  | 'dipBlack'
+  | 'dipWhite'
+  | 'slideLeft'
+  | 'slideRight'
+  | 'slideUp'
+  | 'slideDown'
+  | 'wipe'
+  | 'zoom';
+
 /** Horizontal alignment of a text clip's lines inside its wrap box. */
 export type TextAlign = 'left' | 'center' | 'right';
 
@@ -269,6 +366,12 @@ interface BaseClip {
   /** Downmix the clip's audio to mono. */
   mono?: boolean;
   /**
+   * Audio effects applied to this clip, in chain order. Native Web Audio nodes
+   * inserted into the per-clip mix chain, so they render the same in preview and
+   * export. Undefined/empty = dry.
+   */
+  audioFx?: AudioFx[];
+  /**
    * Link group: every clip sharing one `linkId` moves, trims, splits and
    * deletes together. A group is generic and holds any number of clips on video
    * and audio tracks, with no master side - an import puts the video clip and
@@ -286,6 +389,21 @@ interface BaseClip {
    */
   audioTrackIndex?: number;
   transform?: ClipTransform;
+  /** Colour grading (WebGL pass). Undefined/identity = the clip is drawn as-is. */
+  color?: ClipColor;
+  /**
+   * How this clip enters over its overlap with the previous clip. Undefined =
+   * `dissolve` (the historical cross-dissolve). Only takes effect where an
+   * overlap exists.
+   */
+  transition?: TransitionType;
+  /**
+   * Keyframed overrides for animatable properties. Undefined = the clip is fully
+   * static and reads its transform values directly. A property listed here (with
+   * keyframes) animates and overrides the matching static value; `opacity` has no
+   * static counterpart and defaults to 1 when absent.
+   */
+  animation?: ClipAnimation;
   /**
    * Animated zoom (Ken Burns): scale multiplier reached at the END of the
    * clip, interpolated linearly from 1 at the start. 1/undefined = static.

@@ -1,12 +1,18 @@
-import { Clip, ClipShape, ClipText, ShapeClip, SolidClip, TextClip, Track } from '../types';
+import { Clip, ClipShape, ClipText, ShapeClip, SolidClip, TextClip, Track, TransitionType } from '../types';
 import {
   DEFAULT_TEXT_WIDTH_FRAC,
   DEFAULT_TRANSFORM,
   clipEnvelopeGainAt,
+  clipRotationAt,
   clipZoomAt,
   isTextClip,
+  resolveBlur,
+  resolveColor,
+  resolveOpacity,
+  resolveTransform,
   trackCrossfades,
 } from '../model';
+import { gradeFrame } from './colorPass';
 import { fontStack } from '../lib/fonts';
 import type { DrawableFrame } from '../media/stillImage';
 
@@ -86,14 +92,14 @@ export function clipDestRect(
   outH: number,
   timelineMs?: number,
 ): DestRect {
-  const t = clip.transform ?? DEFAULT_TRANSFORM;
+  const rt = resolveTransform(clip, timelineMs ?? clip.timelineStartMs);
   const zoom = timelineMs !== undefined ? clipZoomAt(clip, timelineMs) : 1;
-  const cropW = Math.max(1, t.crop.w * srcW);
-  const cropH = Math.max(1, t.crop.h * srcH);
-  const fit = Math.min(outW / cropW, outH / cropH) * t.scale * zoom;
+  const cropW = Math.max(1, rt.crop.w * srcW);
+  const cropH = Math.max(1, rt.crop.h * srcH);
+  const fit = Math.min(outW / cropW, outH / cropH) * rt.scale * zoom;
   const dw = cropW * fit;
   const dh = cropH * fit;
-  return { dx: t.x * outW - dw / 2, dy: t.y * outH - dh / 2, dw, dh };
+  return { dx: rt.x * outW - dw / 2, dy: rt.y * outH - dh / 2, dw, dh };
 }
 
 /**
@@ -116,7 +122,7 @@ export function drawClipSample(
   alphaMul = 1,
   xfadeInMs = 0,
 ): void {
-  const alpha = clipEnvelopeGainAt(clip, timelineMs, xfadeInMs, 0) * alphaMul;
+  const alpha = clipEnvelopeGainAt(clip, timelineMs, xfadeInMs, 0) * alphaMul * resolveOpacity(clip, timelineMs);
   if (alpha <= 0) return;
 
   const t = clip.transform ?? DEFAULT_TRANSFORM;
@@ -128,10 +134,23 @@ export function drawClipSample(
   const cropH = Math.max(1, t.crop.h * sh);
   const { dx, dy, dw, dh } = clipDestRect(clip, sw, sh, outW, outH, timelineMs);
 
+  // Colour grade runs as an isolated WebGL pass that returns a canvas drawn in
+  // the frame's place; a null grade (no adjustment or no WebGL) draws the frame
+  // directly, so the ungraded path is untouched.
+  const color = resolveColor(clip, timelineMs);
+  const graded = color ? gradeFrame(sample, sw, sh, color) : null;
+  // Blur is the browser's own gaussian via the 2D filter — GPU-accelerated and
+  // higher quality than a hand-rolled shader blur; scaled to the output height
+  // so it looks the same across the preview's resolution rungs and the export.
+  const blurPx = resolveBlur(clip, timelineMs) * outH * 0.06;
+
   ctx.globalAlpha = alpha;
-  withRotation(ctx, t.rotation ?? 0, dx + dw / 2, dy + dh / 2, () =>
-    sample.draw(ctx, sx, sy, cropW, cropH, dx, dy, dw, dh),
-  );
+  if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
+  withRotation(ctx, clipRotationAt(clip, timelineMs), dx + dw / 2, dy + dh / 2, () => {
+    if (graded) ctx.drawImage(graded, sx, sy, cropW, cropH, dx, dy, dw, dh);
+    else sample.draw(ctx, sx, sy, cropW, cropH, dx, dy, dw, dh);
+  });
+  if (blurPx > 0) ctx.filter = 'none';
   ctx.globalAlpha = 1;
 }
 
@@ -229,26 +248,26 @@ export function drawTextClip(
 ): void {
   const text = clip.text;
   if (!text.content) return;
-  const alpha = clipEnvelopeGainAt(clip, timelineMs, xfadeInMs, 0) * alphaMul;
+  const alpha = clipEnvelopeGainAt(clip, timelineMs, xfadeInMs, 0) * alphaMul * resolveOpacity(clip, timelineMs);
   if (alpha <= 0) return;
 
-  const t = clip.transform ?? DEFAULT_TRANSFORM;
-  const { font, px } = textFont(text, outH, t.scale);
+  const rt = resolveTransform(clip, timelineMs);
+  const { font, px } = textFont(text, outH, rt.scale);
 
   ctx.save();
   ctx.globalAlpha = alpha;
   // Rotates the caption block as a whole, inside the save/restore already here.
   // Around the transform centre, not the text baseline, so a rotated caption
   // stays where it was placed.
-  applyRotation(ctx, t.rotation ?? 0, t.x * outW, t.y * outH);
+  applyRotation(ctx, rt.rotation, rt.x * outW, rt.y * outH);
   // Set before laying out: wrapping measures against this exact font.
   ctx.font = font;
   const lines = layoutTextLines(ctx, text, outW);
   const lineHeight = px * 1.2;
   ctx.textAlign = text.align ?? 'center';
   ctx.textBaseline = 'middle';
-  const anchorX = textAnchorX(text, t.x, outW);
-  const cy = t.y * outH;
+  const anchorX = textAnchorX(text, rt.x, outW);
+  const cy = rt.y * outH;
   const lineY = (i: number) => cy + (i - (lines.length - 1) / 2) * lineHeight;
 
   // Caption pill: rounded dark panel behind each line.
@@ -305,7 +324,7 @@ export function drawSolidClip(
   xfadeInMs = 0,
 ): void {
   const solid = clip.solid;
-  const alpha = clipEnvelopeGainAt(clip, timelineMs, xfadeInMs, 0) * alphaMul;
+  const alpha = clipEnvelopeGainAt(clip, timelineMs, xfadeInMs, 0) * alphaMul * resolveOpacity(clip, timelineMs);
   if (alpha <= 0) return;
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -329,11 +348,11 @@ export function drawSolidClip(
  * fraction of the frame, the centre and the scale come from the transform - so
  * hit-testing, the selection outline and the corner handles need no extra case.
  */
-export function shapeClipRect(clip: ShapeClip, outW: number, outH: number): DestRect {
-  const t = clip.transform ?? DEFAULT_TRANSFORM;
-  const dw = clip.shape.w * outW * t.scale;
-  const dh = clip.shape.h * outH * t.scale;
-  return { dx: t.x * outW - dw / 2, dy: t.y * outH - dh / 2, dw, dh };
+export function shapeClipRect(clip: ShapeClip, outW: number, outH: number, timelineMs?: number): DestRect {
+  const rt = resolveTransform(clip, timelineMs ?? clip.timelineStartMs);
+  const dw = clip.shape.w * outW * rt.scale;
+  const dh = clip.shape.h * outH * rt.scale;
+  return { dx: rt.x * outW - dw / 2, dy: rt.y * outH - dh / 2, dw, dh };
 }
 
 /** Trace the outline into the current path, centred on (cx, cy). */
@@ -373,15 +392,15 @@ export function drawShapeClip(
   alphaMul = 1,
   xfadeInMs = 0,
 ): void {
-  const alpha = clipEnvelopeGainAt(clip, timelineMs, xfadeInMs, 0) * alphaMul;
+  const alpha = clipEnvelopeGainAt(clip, timelineMs, xfadeInMs, 0) * alphaMul * resolveOpacity(clip, timelineMs);
   if (alpha <= 0) return;
-  const rect = shapeClipRect(clip, outW, outH);
+  const rect = shapeClipRect(clip, outW, outH, timelineMs);
   if (rect.dw <= 0 || rect.dh <= 0) return;
 
   const shape = clip.shape;
   ctx.save();
   ctx.globalAlpha = alpha;
-  applyRotation(ctx, clipRotation(clip), rect.dx + rect.dw / 2, rect.dy + rect.dh / 2);
+  applyRotation(ctx, clipRotationAt(clip, timelineMs), rect.dx + rect.dw / 2, rect.dy + rect.dh / 2);
   ctx.beginPath();
   traceShape(ctx, shape, rect);
   ctx.fillStyle = shape.fill;
@@ -403,17 +422,17 @@ let measureCtx: Ctx2D | null = null;
  * Bounding box of a text clip in output coordinates (hit-testing and the
  * preview selection overlay). Uses a shared 1×1 measuring context.
  */
-export function textClipRect(clip: TextClip, outW: number, outH: number): DestRect {
+export function textClipRect(clip: TextClip, outW: number, outH: number, timelineMs?: number): DestRect {
   const text = clip.text;
-  const t = clip.transform ?? DEFAULT_TRANSFORM;
-  if (!text.content) return { dx: t.x * outW, dy: t.y * outH, dw: 0, dh: 0 };
+  const rt = resolveTransform(clip, timelineMs ?? clip.timelineStartMs);
+  if (!text.content) return { dx: rt.x * outW, dy: rt.y * outH, dw: 0, dh: 0 };
   if (!measureCtx) {
     measureCtx =
       typeof OffscreenCanvas !== 'undefined'
         ? new OffscreenCanvas(1, 1).getContext('2d')
         : (document.createElement('canvas').getContext('2d') as CanvasRenderingContext2D);
   }
-  const { font, px } = textFont(text, outH, t.scale);
+  const { font, px } = textFont(text, outH, rt.scale);
   measureCtx!.font = font;
   const lines = layoutTextLines(measureCtx!, text, outW);
   let dw = 0;
@@ -425,7 +444,7 @@ export function textClipRect(clip: TextClip, outW: number, outH: number): DestRe
   }
   // Same anchor as the drawing pass, so the overlay frames the painted block
   // whatever the alignment.
-  return { dx: lineLeft(text.align, textAnchorX(text, t.x, outW), dw), dy: t.y * outH - dh / 2, dw, dh };
+  return { dx: lineLeft(text.align, textAnchorX(text, rt.x, outW), dw), dy: rt.y * outH - dh / 2, dw, dh };
 }
 
 /**
@@ -466,7 +485,7 @@ export function visibleVideoClips(track: Track, tMs: number): VisibleClip[] {
  * kind rendering is decided, shared by preview and export. Media clips need a
  * decoded `sample` (null skips them); text and solid clips are self-contained.
  */
-export function drawClip(
+function dispatchClipDraw(
   ctx: Ctx2D,
   clip: Clip,
   outW: number,
@@ -485,4 +504,99 @@ export function drawClip(
   } else if (sample) {
     drawClipSample(ctx, sample, clip, outW, outH, timelineMs, alphaMul, xfadeInMs);
   }
+}
+
+/**
+ * How a non-dissolve transition renders the incoming clip at overlap progress
+ * `p` (0 at the cut, 1 fully in): an alpha multiplier plus an optional edge
+ * slide, reveal clip, zoom, or a full-frame colour dip drawn over the outgoing
+ * clip. Pure geometry so it can be unit-tested.
+ */
+export interface TransitionTreatment {
+  alpha: number;
+  translate?: { x: number; y: number };
+  scale?: number;
+  clip?: { x: number; y: number; w: number; h: number };
+  overlay?: { color: string; alpha: number };
+}
+
+export function transitionTreatment(
+  type: TransitionType,
+  p: number,
+  outW: number,
+  outH: number,
+): TransitionTreatment {
+  // The dip fades the outgoing clip into a colour (alpha peaks at the midpoint)
+  // then the incoming clip fades up out of it.
+  const dip = 1 - Math.abs(2 * p - 1);
+  switch (type) {
+    case 'dipBlack':
+      return { alpha: Math.max(0, 2 * p - 1), overlay: { color: '#000', alpha: dip } };
+    case 'dipWhite':
+      return { alpha: Math.max(0, 2 * p - 1), overlay: { color: '#fff', alpha: dip } };
+    case 'slideLeft':
+      return { alpha: 1, translate: { x: (1 - p) * outW, y: 0 } };
+    case 'slideRight':
+      return { alpha: 1, translate: { x: -(1 - p) * outW, y: 0 } };
+    case 'slideUp':
+      return { alpha: 1, translate: { x: 0, y: (1 - p) * outH } };
+    case 'slideDown':
+      return { alpha: 1, translate: { x: 0, y: -(1 - p) * outH } };
+    case 'wipe':
+      return { alpha: 1, clip: { x: 0, y: 0, w: p * outW, h: outH } };
+    case 'zoom':
+      return { alpha: p, scale: 0.6 + 0.4 * p };
+    default:
+      return { alpha: p };
+  }
+}
+
+/**
+ * Draw a single clip, applying its entry transition over the overlap. Dissolve
+ * (and any clip past its overlap) takes the plain alpha-ramp path unchanged;
+ * other types wrap the draw with a slide/wipe/zoom/dip while the transition,
+ * not the crossfade ramp, drives the incoming clip's visibility. The outgoing
+ * clip is already on the canvas, so a dip's colour overlay covers it and a
+ * slide/wipe lets it show through. Shared by preview and export.
+ */
+export function drawClip(
+  ctx: Ctx2D,
+  clip: Clip,
+  outW: number,
+  outH: number,
+  timelineMs: number,
+  alphaMul: number,
+  xfadeInMs: number,
+  sample: DrawableFrame | null,
+): void {
+  const type = clip.transition ?? 'dissolve';
+  const p = xfadeInMs > 0 ? Math.max(0, Math.min(1, (timelineMs - clip.timelineStartMs) / xfadeInMs)) : 1;
+  if (type === 'dissolve' || xfadeInMs <= 0 || p >= 1) {
+    dispatchClipDraw(ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs, sample);
+    return;
+  }
+
+  const treat = transitionTreatment(type, p, outW, outH);
+  ctx.save();
+  if (treat.overlay && treat.overlay.alpha > 0) {
+    ctx.globalAlpha = treat.overlay.alpha * alphaMul;
+    ctx.fillStyle = treat.overlay.color;
+    ctx.fillRect(0, 0, outW, outH);
+    ctx.globalAlpha = 1;
+  }
+  if (treat.translate) ctx.translate(treat.translate.x, treat.translate.y);
+  if (treat.scale && treat.scale !== 1) {
+    ctx.translate(outW / 2, outH / 2);
+    ctx.scale(treat.scale, treat.scale);
+    ctx.translate(-outW / 2, -outH / 2);
+  }
+  if (treat.clip) {
+    ctx.beginPath();
+    ctx.rect(treat.clip.x, treat.clip.y, treat.clip.w, treat.clip.h);
+    ctx.clip();
+  }
+  // The transition owns the incoming clip's visibility, so pass its alpha and
+  // disable the crossfade ramp (xfadeInMs = 0); the clip's own fades still apply.
+  dispatchClipDraw(ctx, clip, outW, outH, timelineMs, alphaMul * treat.alpha, 0, sample);
+  ctx.restore();
 }

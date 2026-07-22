@@ -19,6 +19,7 @@ import { useIsCoarsePointer } from '../lib/device';
 import { Waveform } from './Waveform';
 import { Filmstrip } from './Filmstrip';
 import { ClipFades } from './ClipFades';
+import { ClipKeyframes } from './ClipKeyframes';
 import { ClipVolumeLine } from './ClipVolumeLine';
 import { useClipDrag } from './hooks/useClipDrag';
 
@@ -290,6 +291,9 @@ export const ClipView = memo(function ClipView({
       )}
 
       <ClipFades clip={clip} width={width} pxPerMs={pxPerMs} xfadeInMs={xfadeInMs} xfadeOutMs={xfadeOutMs} />
+
+      {/* Keyframe markers on the selected clip (click a diamond to jump to it). */}
+      {selected && <ClipKeyframes clip={clip} pxPerMs={pxPerMs} coarse={coarse} />}
 
       {hasAudio && (
         <ClipVolumeLine
