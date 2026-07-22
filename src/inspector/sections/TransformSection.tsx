@@ -3,7 +3,7 @@ import { Crop, LayoutPanelTop, RotateCcw } from 'lucide-react';
 import { useStore } from '../../store/store';
 import { Tooltip } from '../../ui/Tooltip';
 import { AnimatableProp, Clip, EaseId } from '../../types';
-import { resolveTransform } from '../../model';
+import { EASE_IDS, keyframesOf, resolveTransform } from '../../model';
 import { SliderRow, type KeyframeControl } from '../SliderRow';
 import { pct } from '../format';
 import { CropSection } from './CropSection';
@@ -11,8 +11,6 @@ import { CropSection } from './CropSection';
 /** Two keyframe times within this many ms count as sitting on the same playhead. */
 const ON_KEY_EPSILON_MS = 1;
 
-/** Easing presets offered for the keyframe under the playhead. */
-const EASES: EaseId[] = ['linear', 'in', 'out', 'inOut', 'hold'];
 const TRANSFORM_PROPS: AnimatableProp[] = ['scale', 'x', 'y', 'rotation'];
 
 export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boolean }) {
@@ -72,7 +70,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
       let found: EaseId | undefined;
       for (const track of useStore.getState().project.tracks) {
         const c = track.clips.find((cc) => cc.id === ref.clipId);
-        const k = c?.animation?.[ref.prop]?.find((kk) => Math.abs(kk.t - ref.t) < ON_KEY_EPSILON_MS);
+        const k = c && keyframesOf(c, ref.prop)?.find((kk) => Math.abs(kk.t - ref.t) < ON_KEY_EPSILON_MS);
         if (k) {
           found = k.ease ?? 'inOut';
           break;
@@ -146,7 +144,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
             {boxed ? t('inspector.easing.selected', { count: boxed }) : t('inspector.easing')}
           </span>
           <div className="flex flex-1 flex-wrap gap-1">
-            {EASES.map((e) => (
+            {EASE_IDS.map((e) => (
               <button
                 key={e}
                 type="button"

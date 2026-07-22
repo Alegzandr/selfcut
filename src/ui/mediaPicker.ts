@@ -11,6 +11,7 @@
  * validates for real, this list only drives the OS dialog filter.
  */
 import { PROJECT_FILE_EXT } from '../lib/projectFile';
+import { PRESET_FILE_EXT } from '../effects/presetFile';
 
 /** Subtitle containers the parser reads. */
 export const SUBTITLE_ACCEPT = '.srt,.vtt,.ass,.ssa';
@@ -49,6 +50,22 @@ export function openProjectPicker(onFile: (file: File) => void): void {
     },
     false,
     { accept: PROJECT_FILE_EXT, multiple: false },
+  );
+}
+
+/**
+ * Effects-preset variant: a single `.sfx` document. Some OS dialogs will not
+ * filter on an extension they do not know, which is harmless - the parser
+ * rejects anything that is not a preset.
+ */
+export function openPresetPicker(onFile: (file: File) => void): void {
+  pick(
+    (files) => {
+      const file = files[0];
+      if (file) onFile(file);
+    },
+    false,
+    { accept: PRESET_FILE_EXT, multiple: false },
   );
 }
 

@@ -26,6 +26,13 @@ export type { Channel, EaseId, Keyframe } from '../types';
 /** The flow-first default easing: nothing snaps unless the user asks it to. */
 export const DEFAULT_EASE: EaseId = 'inOut';
 
+/**
+ * Every named easing at runtime, in picker order (smooth curves first, the
+ * stepping `hold` last). Doubles as the guard an imported file is checked
+ * against, so the pickers and the parser can never disagree on what exists.
+ */
+export const EASE_IDS: readonly EaseId[] = ['linear', 'in', 'out', 'inOut', 'hold'];
+
 /** Whether a channel actually animates (has keyframes) rather than being constant. */
 export function isAnimated(channel: Channel): channel is Keyframe[] {
   return Array.isArray(channel) && channel.length > 0;

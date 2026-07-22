@@ -278,7 +278,7 @@ export const TimelineOverlay = memo(function TimelineOverlay({
   const totalHeight = useStore((s) => {
     const expanded = new Set(s.expandedTrackIds);
     let h = 0;
-    for (const t of s.project.tracks) h += trackRowHeightPx(s.trackHeightPx, expanded.has(t.id));
+    for (const t of s.project.tracks) h += trackRowHeightPx(t, s.trackHeightPx, expanded.has(t.id));
     return h;
   });
 

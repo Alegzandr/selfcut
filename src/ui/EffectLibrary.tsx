@@ -4,8 +4,10 @@ import { useStore } from '../store/store';
 import type { TransitionType } from '../types';
 import { EFFECTS, TRANSITIONS, type EffectGroup } from '../effects/catalog';
 import { resolveEffectTargets } from '../effects/apply';
-import { EFFECT_DRAG_MIME, TRANSITION_DRAG_MIME } from '../app/config';
+import { EFFECT_DRAG_MIME, PRESET_DRAG_MIME, TRANSITION_DRAG_MIME } from '../app/config';
 import { useIsCoarsePointer } from '../lib/device';
+import { applyPresetToClips, importPreset } from './presetActions';
+import { Upload, X } from 'lucide-react';
 
 /**
  * The Effects and Transitions panes of the media library. Both are catalogues
@@ -96,6 +98,76 @@ function dismissOnTouch(coarse: boolean) {
   if (coarse) useStore.getState().setLibraryOpen(false);
 }
 
+/**
+ * The presets imported this session, above the built-in catalogue.
+ *
+ * They sit in the Effects pane rather than behind a tab of their own: a preset
+ * is an effect, and a fourth tab in a strip that already truncates would cost
+ * more than it buys. The shelf is session state - the `.sfx` files on disk are
+ * what actually persists - which the empty line says out loud so nobody expects
+ * to find their presets here tomorrow.
+ */
+function PresetsGroup({ coarse }: { coarse: boolean }) {
+  const { t } = useTranslation();
+  const presets = useStore((s) => s.loadedPresets);
+  const selectedClipIds = useStore((s) => s.selectedClipIds);
+
+  const apply = (id: string) => {
+    const st = useStore.getState();
+    if (selectedClipIds.length === 0) {
+      st.setNotice(t('library.effects.noSelection'));
+      return;
+    }
+    const preset = st.loadedPresets.find((p) => p.id === id);
+    if (!preset) return;
+    applyPresetToClips(preset.look, selectedClipIds);
+    dismissOnTouch(coarse);
+  };
+
+  return (
+    <div className="space-y-1">
+      <GroupHeading>{t('library.effects.presets')}</GroupHeading>
+      <button
+        type="button"
+        className="touch-hit flex w-full items-center gap-1.5 rounded border border-dashed border-zinc-700 px-2 py-1.5 text-2xs font-medium text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800/60 active:bg-zinc-800 pointer-coarse:py-2.5"
+        onClick={() => importPreset((name, look) => useStore.getState().addLoadedPreset(name, look))}
+      >
+        <Upload className="h-3.5 w-3.5" />
+        {t('library.presets.import')}
+      </button>
+      {presets.length === 0 ? (
+        <p className="px-0.5 text-2xs leading-snug text-zinc-600">{t('library.presets.empty')}</p>
+      ) : (
+        <CatalogGrid>
+          {presets.map((preset) => (
+            <div key={preset.id} className="relative">
+              <CatalogTile
+                label={preset.name}
+                coarse={coarse}
+                enabled={selectedClipIds.length > 0}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(PRESET_DRAG_MIME, preset.id);
+                  e.dataTransfer.effectAllowed = 'copy';
+                }}
+                onApply={() => apply(preset.id)}
+              />
+              <button
+                type="button"
+                title={t('library.presets.remove')}
+                aria-label={t('library.presets.remove')}
+                className="absolute right-0.5 top-0.5 rounded p-0.5 text-zinc-600 hover:bg-zinc-700 hover:text-zinc-200"
+                onClick={() => useStore.getState().removeLoadedPreset(preset.id)}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </CatalogGrid>
+      )}
+    </div>
+  );
+}
+
 export function EffectsPane() {
   const { t } = useTranslation();
   const coarse = useIsCoarsePointer();
@@ -121,6 +193,7 @@ export function EffectsPane() {
   return (
     <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-1.5">
       <CatalogHint />
+      <PresetsGroup coarse={coarse} />
       {groups.map((group) => (
         <div key={group} className="space-y-1">
           <GroupHeading>{t(`library.effects.${group}`)}</GroupHeading>

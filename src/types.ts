@@ -220,6 +220,24 @@ export type Channel = number | Keyframe[];
 /** A clip property that can be keyframed. Extended as effects gain channels. */
 export type AnimatableProp = 'x' | 'y' | 'scale' | 'rotation' | 'opacity';
 
+/** A colour grading parameter. Every one of them is a keyframable `Channel`. */
+export type ColorProp =
+  | 'brightness'
+  | 'contrast'
+  | 'saturation'
+  | 'temperature'
+  | 'tint'
+  | 'vignette'
+  | 'blur';
+
+/**
+ * Any property a keyframe can sit on. The two unions do not overlap, so a flat
+ * union addresses both families with no discriminant to carry around - which is
+ * the whole reason the accessors in `src/model/keyframeTarget.ts` can be plain
+ * functions rather than a tagged-target scheme.
+ */
+export type KeyframeProp = AnimatableProp | ColorProp;
+
 /**
  * Keyframed overrides for a clip's animatable properties, keyed by property. A
  * property present here (with keyframes) is authoritative over its static
@@ -237,7 +255,11 @@ export type ClipAnimation = Partial<Record<AnimatableProp, Keyframe[]>>;
  */
 export interface KeyframeRef {
   clipId: string;
-  prop: AnimatableProp;
+  /**
+   * Either family: a transform prop kept in `animation`, or a colour param kept
+   * as a `Channel` in `color`. `src/model/keyframeTarget.ts` resolves which.
+   */
+  prop: KeyframeProp;
   /** Clip-local ms, matching `Keyframe.t`. */
   t: number;
 }

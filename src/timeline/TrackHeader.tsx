@@ -23,8 +23,9 @@ import { TrackMeter } from './TrackMeter';
 import { gainDb } from '../inspector/format';
 import { DB_STEP_FADER, faderToGainStepped, gainToFader } from '../lib/gain';
 import { useVolumeEntry } from '../ui/VolumeEntry';
-import { EXPANDED_TRACK_PROPS, KEYFRAME_LANE_HEIGHT_PX, KEYFRAME_LANES_GAP_PX } from './trackHeight';
-import { AnimatableProp } from '../types';
+import { KEYFRAME_LANE_HEIGHT_PX, KEYFRAME_LANES_GAP_PX, lanesHeightPx, trackLanes } from './trackHeight';
+import { KeyframeProp } from '../types';
+import type { ParseKeys } from 'i18next';
 
 interface Props {
   track: Track;
@@ -52,6 +53,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
   };
   const trackHeightPx = useStore((s) => s.trackHeightPx);
   const expanded = useStore((s) => s.expandedTrackIds.includes(track.id));
+  const lanes = trackLanes(track);
   const {
     toggleTrackMuted,
     toggleTrackHidden,
@@ -268,11 +270,11 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
         <div
           className="flex flex-col"
           style={{
-            height: KEYFRAME_LANE_HEIGHT_PX * EXPANDED_TRACK_PROPS.length + KEYFRAME_LANES_GAP_PX,
+            height: lanesHeightPx(lanes.length),
             paddingTop: KEYFRAME_LANES_GAP_PX,
           }}
         >
-          {EXPANDED_TRACK_PROPS.map((prop) => (
+          {lanes.map((prop) => (
             <div
               key={prop}
               className="flex items-center gap-1 border-t border-zinc-800/50 bg-zinc-900/40 px-1.5 text-4xs uppercase tracking-wide text-zinc-500"
@@ -289,17 +291,20 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
 });
 
 /** Inspector i18n key for the property label shown in an expanded track header. */
-function propHeaderKey(prop: AnimatableProp) {
+function propHeaderKey(prop: KeyframeProp): ParseKeys {
   switch (prop) {
     case 'x':
-      return 'inspector.positionX' as const;
+      return 'inspector.positionX';
     case 'y':
-      return 'inspector.positionY' as const;
+      return 'inspector.positionY';
     case 'scale':
-      return 'inspector.scale' as const;
+      return 'inspector.scale';
     case 'rotation':
-      return 'inspector.rotation' as const;
+      return 'inspector.rotation';
     case 'opacity':
-      return 'inspector.opacity' as const;
+      return 'inspector.opacity';
+    // Same labels the inspector's Adjust sliders carry.
+    default:
+      return `inspector.adjust.${prop}` as ParseKeys;
   }
 }

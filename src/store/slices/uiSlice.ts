@@ -25,6 +25,12 @@ import {
   PREVIEW_MUTED_KEY,
 } from '../constants';
 
+/** How many imported presets the session shelf holds before dropping the oldest. */
+const MAX_LOADED_PRESETS = 24;
+
+/** Session-unique ids for the shelf. Never persisted, so a counter is enough. */
+let nextPresetSeq = 1;
+
 /** Keys of the persisted pane-width fields - all three resize the same way. */
 type WidthKey = 'trackHeaderWidthPx' | 'libraryWidthPx' | 'inspectorWidthPx';
 
@@ -90,8 +96,20 @@ export function createUiSlice(
   | 'setExportOpen'
   | 'setError'
   | 'setNotice'
+  | 'addLoadedPreset'
+  | 'removeLoadedPreset'
 > {
   return {
+    addLoadedPreset: (name, look) => {
+      const id = `preset-${nextPresetSeq++}`;
+      // Newest first, and capped: the shelf is a convenience over the files on
+      // disk, not a library the user is expected to curate.
+      set({ loadedPresets: [{ id, name, look }, ...get().loadedPresets].slice(0, MAX_LOADED_PRESETS) });
+    },
+
+    removeLoadedPreset: (id) =>
+      set({ loadedPresets: get().loadedPresets.filter((p) => p.id !== id) }),
+
     toggleSnap: () => set({ snapEnabled: !get().snapEnabled }),
 
     setSnapGuide: (ms) => {

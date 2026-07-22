@@ -16,11 +16,13 @@
  * pointer mid-edit.
  */
 import { memo, useRef } from 'react';
+import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { AnimatableProp, Clip, KeyframeRef, Track } from '../types';
+import { Clip, KeyframeProp, KeyframeRef, Track } from '../types';
 import { useStore } from '../store/store';
 import { formatTime } from '../lib/time';
-import { EXPANDED_TRACK_PROPS, KEYFRAME_LANE_HEIGHT_PX, KEYFRAME_LANES_GAP_PX } from './trackHeight';
+import { KEYFRAME_LANE_HEIGHT_PX, KEYFRAME_LANES_GAP_PX, lanesHeightPx, trackLanes } from './trackHeight';
+import { keyframesOf } from '../model';
 import { keyframeKey, keyframeKeySet, selectionDragBounds } from './keyframeSelection';
 
 interface Drag {
@@ -35,11 +37,9 @@ interface Drag {
   moved: boolean;
 }
 
-/** Clip-local ms of every keyframe on `clip.animation[prop]`, sorted. */
-function keyTimes(clip: Clip, prop: AnimatableProp): number[] {
-  const keys = clip.animation?.[prop];
-  if (!keys?.length) return [];
-  return keys.map((k) => k.t);
+/** Clip-local ms of every keyframe on a property, sorted. */
+function keyTimes(clip: Clip, prop: KeyframeProp): number[] {
+  return (keyframesOf(clip, prop) ?? []).map((k) => k.t);
 }
 
 export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
@@ -54,8 +54,9 @@ export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
   const selectedKeyframes = useStore((s) => s.selectedKeyframes);
   const selectedKeys = keyframeKeySet(selectedKeyframes);
   const drag = useRef<Drag | null>(null);
+  const lanes = trackLanes(track);
 
-  const onDown = (e: React.PointerEvent, clip: Clip, prop: AnimatableProp, time: number) => {
+  const onDown = (e: React.PointerEvent, clip: Clip, prop: KeyframeProp, time: number) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -113,11 +114,11 @@ export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
     <div
       className="absolute inset-x-0 bottom-0 z-10"
       style={{
-        height: KEYFRAME_LANE_HEIGHT_PX * EXPANDED_TRACK_PROPS.length + KEYFRAME_LANES_GAP_PX,
+        height: lanesHeightPx(lanes.length),
         paddingTop: KEYFRAME_LANES_GAP_PX,
       }}
     >
-      {EXPANDED_TRACK_PROPS.map((prop) => (
+      {lanes.map((prop) => (
         <div
           key={prop}
           data-track-lane={prop}
@@ -163,18 +164,22 @@ export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
   );
 });
 
-/** Inspector i18n key for the label of an animatable property. */
-function propLabelKey(prop: AnimatableProp) {
+/** Inspector i18n key for the label of a keyframable property. */
+function propLabelKey(prop: KeyframeProp): ParseKeys {
   switch (prop) {
     case 'x':
-      return 'inspector.positionX' as const;
+      return 'inspector.positionX';
     case 'y':
-      return 'inspector.positionY' as const;
+      return 'inspector.positionY';
     case 'scale':
-      return 'inspector.scale' as const;
+      return 'inspector.scale';
     case 'rotation':
-      return 'inspector.rotation' as const;
+      return 'inspector.rotation';
     case 'opacity':
-      return 'inspector.opacity' as const;
+      return 'inspector.opacity';
+    // The colour params reuse the inspector's own Adjust labels, so a lane and
+    // the slider it mirrors are named with the same word in every locale.
+    default:
+      return `inspector.adjust.${prop}` as ParseKeys;
   }
 }

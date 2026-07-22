@@ -5,10 +5,12 @@ import {
   ASSET_DRAG_MIME,
   EFFECT_DRAG_MIME,
   MARKER_BAR_HEIGHT_PX,
+  PRESET_DRAG_MIME,
   RULER_HEIGHT_PX,
   TRANSITION_DRAG_MIME,
 } from '../../app/config';
 import { isTransitionType } from '../../effects/catalog';
+import { applyPresetToClips } from '../../ui/presetActions';
 import { t } from '../../i18n';
 import { NEW_TRACK_TARGET } from '../../store/projectOps';
 import { trackTops } from '../trackHeight';
@@ -49,7 +51,11 @@ export function useAssetDrop() {
     }
     // Catalogue entries land on a clip, never on empty timeline: refusing the
     // drop off-clip is what tells the user where they are allowed to let go.
-    if (types.includes(EFFECT_DRAG_MIME) || types.includes(TRANSITION_DRAG_MIME)) {
+    if (
+      types.includes(EFFECT_DRAG_MIME) ||
+      types.includes(TRANSITION_DRAG_MIME) ||
+      types.includes(PRESET_DRAG_MIME)
+    ) {
       if (!clipUnder(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
@@ -65,7 +71,8 @@ export function useAssetDrop() {
     setNewTrackDragOver(false);
     const effectId = e.dataTransfer.getData(EFFECT_DRAG_MIME);
     const transition = e.dataTransfer.getData(TRANSITION_DRAG_MIME);
-    if (effectId || transition) {
+    const presetId = e.dataTransfer.getData(PRESET_DRAG_MIME);
+    if (effectId || transition || presetId) {
       const clipId = clipUnder(e);
       if (!clipId) return;
       e.preventDefault();
@@ -73,6 +80,12 @@ export function useAssetDrop() {
       const s = useStore.getState();
       if (effectId) {
         s.applyEffectPreset(effectId, [clipId]);
+      } else if (presetId) {
+        // The shelf is session state, so a preset can be gone by the time a drag
+        // that started before an undo/reset lands. Silence would read as broken.
+        const preset = s.loadedPresets.find((p) => p.id === presetId);
+        if (preset) applyPresetToClips(preset.look, [clipId]);
+        else s.setError(t('errors.preset.invalidFile'));
       } else if (isTransitionType(transition) && !s.applyTransition(clipId, transition)) {
         // Silent failure here would read as a broken drop: the clip has no
         // predecessor to transition from, or a gap it refuses to close.

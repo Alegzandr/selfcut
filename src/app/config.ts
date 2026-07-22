@@ -67,6 +67,8 @@ export const ASSET_DRAG_MIME = 'application/x-selfcut-asset';
 export const EFFECT_DRAG_MIME = 'application/x-selfcut-effect';
 /** DataTransfer type used to drag a transition from the library onto a clip. */
 export const TRANSITION_DRAG_MIME = 'application/x-selfcut-transition';
+/** DataTransfer type used to drag an imported `.sfx` preset onto a clip. */
+export const PRESET_DRAG_MIME = 'application/x-selfcut-preset';
 /**
  * Overlap a transition creates when dropped on a clip that does not yet have
  * one. Transitions are rendered purely from clip overlap (Vegas-style), so

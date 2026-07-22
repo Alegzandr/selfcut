@@ -1,8 +1,8 @@
 import { RefObject, useEffect, useRef } from 'react';
 import { useStore } from '../store/store';
-import { msFromClientX } from './coords';
 import { MARKER_BAR_HEIGHT_PX, RULER_HEIGHT_PX } from '../app/config';
 import { trackRowHeightPx } from './trackHeight';
+import { useScrub } from './hooks/useScrub';
 
 const HEAD_HEIGHT_PX = MARKER_BAR_HEIGHT_PX + RULER_HEIGHT_PX;
 
@@ -25,7 +25,7 @@ export function Playhead({ scrollerRef }: Props) {
   const totalHeight = useStore((s) => {
     const expanded = new Set(s.expandedTrackIds);
     let h = 0;
-    for (const t of s.project.tracks) h += trackRowHeightPx(s.trackHeightPx, expanded.has(t.id));
+    for (const t of s.project.tracks) h += trackRowHeightPx(t, s.trackHeightPx, expanded.has(t.id));
     return h;
   });
 
@@ -64,10 +64,8 @@ export function Playhead({ scrollerRef }: Props) {
     });
   }, [scrollerRef]);
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!(e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) return;
-    useStore.getState().seek(msFromClientX(e.currentTarget as HTMLElement, e.clientX));
-  };
+  // Grabbing the handle must not move the playhead - only dragging it does.
+  const scrub = useScrub({ seekOnDown: false });
 
   // The playhead is three siblings rather than one transformed wrapper: a
   // wrapper with a transform would create a stacking context, forcing them to
@@ -86,15 +84,19 @@ export function Playhead({ scrollerRef }: Props) {
         className={`${bar} z-10`}
         style={{ top: HEAD_HEIGHT_PX, height: totalHeight }}
       />
+      {/* Hit area is wider than the grip it draws: a 16px target is a miss
+          waiting to happen, and widening the grip itself would put a red block
+          over the first frames of the timeline. Keyboard seeking lives in the
+          hotkeys and the timecode field, and a slider role rewriting its value
+          60 times a second would only flood a screen reader - hence hidden. */}
       <div
         ref={handleRef}
-        className="absolute -ml-2 left-0 top-0 z-40 h-5 w-4 cursor-col-resize touch-none rounded-b-md bg-red-500 will-change-transform"
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-        }}
-        onPointerMove={onPointerMove}
-      />
+        aria-hidden="true"
+        className="group absolute -ml-3 left-0 top-0 z-40 flex h-6 w-6 justify-center cursor-col-resize touch-none will-change-transform"
+        {...scrub}
+      >
+        <div className="h-5 w-4 rounded-b-md bg-red-500 transition-[background-color,box-shadow] duration-150 ease-out group-hover:bg-red-400 group-active:bg-red-300 group-active:shadow-[0_0_0_3px_rgba(239,68,68,0.3)]" />
+      </div>
     </>
   );
 }

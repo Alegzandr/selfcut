@@ -189,6 +189,7 @@ export const useStore = create<EditorState>((set, get) => {
     inspectorTab: 'clip',
     libraryOpen: false,
     libraryTab: 'media',
+    loadedPresets: [],
     shortcutsOpen: false,
     preferencesOpen: false,
     aboutOpen: false,

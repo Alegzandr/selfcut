@@ -8,12 +8,12 @@
  * use, so a key found by the box is the key those actions will edit.
  */
 import type { Clip, KeyframeRef, Project, Track } from '../types';
-import { clipDurationMs } from '../model';
+import { clipDurationMs, keyframesOf } from '../model';
 import {
-  EXPANDED_TRACK_PROPS,
   KEYFRAME_LANE_HEIGHT_PX,
   KEYFRAME_LANES_GAP_PX,
-  expandedLanesHeightPx,
+  lanesHeightPx,
+  trackLanes,
 } from './trackHeight';
 
 /** Two keyframe times within this many ms are the same key (matches the store). */
@@ -30,13 +30,14 @@ export function keyframeKeySet(refs: KeyframeRef[]): Set<string> {
 }
 
 /**
- * Y band (relative to the top of the tracks area) occupied by the lane of
- * `prop` on the track whose row spans `[rowTop, rowBottom)`. Mirrors the layout
- * of `TrackKeyframeLanes`: the stack is pinned to the bottom of the row, one
- * lane per entry of `EXPANDED_TRACK_PROPS`, under a small gap.
+ * Y band (relative to the top of the tracks area) occupied by lane `laneIndex`
+ * of a track whose row ends at `rowBottom` and shows `laneCount` lanes. Mirrors
+ * the layout of `TrackKeyframeLanes`: the stack is pinned to the bottom of the
+ * row, under a small gap. The count is passed in because it varies per track -
+ * a track with animated colour params is taller than one without.
  */
-function laneBand(rowBottom: number, laneIndex: number): [number, number] {
-  const stackTop = rowBottom - expandedLanesHeightPx + KEYFRAME_LANES_GAP_PX;
+function laneBand(rowBottom: number, laneCount: number, laneIndex: number): [number, number] {
+  const stackTop = rowBottom - lanesHeightPx(laneCount) + KEYFRAME_LANES_GAP_PX;
   const top = stackTop + laneIndex * KEYFRAME_LANE_HEIGHT_PX;
   return [top, top + KEYFRAME_LANE_HEIGHT_PX];
 }
@@ -65,12 +66,13 @@ export function keyframesInBox(
     const track = tracks[row]!;
     if (track.locked || !expanded.has(track.id)) continue;
     const rowBottom = tops[row + 1]!;
-    for (let lane = 0; lane < EXPANDED_TRACK_PROPS.length; lane++) {
-      const [laneTop, laneBottom] = laneBand(rowBottom, lane);
+    const lanes = trackLanes(track);
+    for (let lane = 0; lane < lanes.length; lane++) {
+      const [laneTop, laneBottom] = laneBand(rowBottom, lanes.length, lane);
       if (laneBottom <= box.minY || laneTop >= box.maxY) continue;
-      const prop = EXPANDED_TRACK_PROPS[lane]!;
+      const prop = lanes[lane]!;
       for (const clip of track.clips) {
-        for (const k of clip.animation?.[prop] ?? []) {
+        for (const k of keyframesOf(clip, prop) ?? []) {
           const at = clip.timelineStartMs + k.t;
           if (at >= box.t0 && at <= box.t1) hits.push({ clipId: clip.id, prop, t: k.t });
         }
@@ -99,8 +101,8 @@ export function selectionDragBounds(project: Project, refs: KeyframeRef[]): [num
   for (const ref of refs) {
     const clip = clips.get(ref.clipId);
     if (!clip) continue;
-    const keys = clip.animation?.[ref.prop];
-    if (!keys?.length) continue;
+    const keys = keyframesOf(clip, ref.prop);
+    if (!keys) continue;
     const idx = keys.findIndex((k) => Math.abs(k.t - ref.t) < SAME_KEY_EPSILON_MS);
     if (idx < 0) continue;
     let lo = 0;

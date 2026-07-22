@@ -5,7 +5,13 @@ import {
   keyframesInBox,
   selectionDragBounds,
 } from '../timeline/keyframeSelection';
-import { trackTops, KEYFRAME_LANE_HEIGHT_PX, KEYFRAME_LANES_GAP_PX, expandedLanesHeightPx } from '../timeline/trackHeight';
+import {
+  trackTops,
+  trackLanes,
+  KEYFRAME_LANE_HEIGHT_PX,
+  KEYFRAME_LANES_GAP_PX,
+  lanesHeightPx,
+} from '../timeline/trackHeight';
 
 /**
  * Box-selecting keyframes: which diamonds a marquee encloses, how far the boxed
@@ -62,11 +68,11 @@ beforeEach(() => {
   });
 });
 
-/** Y of the middle of the lane at `laneIndex`, for a single expanded track. */
-function laneMidY(rowBottom: number, laneIndex: number): number {
+/** Y of the middle of the lane at `laneIndex`, for a track showing `laneCount` lanes. */
+function laneMidY(rowBottom: number, laneCount: number, laneIndex: number): number {
   return (
     rowBottom -
-    expandedLanesHeightPx +
+    lanesHeightPx(laneCount) +
     KEYFRAME_LANES_GAP_PX +
     laneIndex * KEYFRAME_LANE_HEIGHT_PX +
     KEYFRAME_LANE_HEIGHT_PX / 2
@@ -78,8 +84,8 @@ describe('keyframesInBox', () => {
     const tracks = s().project.tracks;
     const expanded = new Set([tracks[0]!.id]);
     const tops = trackTops(tracks, s().trackHeightPx, expanded);
-    // Lane 0 is `scale` (EXPANDED_TRACK_PROPS order); band it alone.
-    const y = laneMidY(tops[1]!, 0);
+    // Lane 0 is `scale` (TRANSFORM_LANE_PROPS order); band it alone.
+    const y = laneMidY(tops[1]!, trackLanes(tracks[0]!).length, 0);
     const hits = keyframesInBox(tracks, expanded, tops, { minY: y - 1, maxY: y + 1, t0: 0, t1: 3000 });
     expect(hits).toHaveLength(3);
     expect(new Set(hits.map((h) => h.prop))).toEqual(new Set(['scale']));
@@ -89,7 +95,7 @@ describe('keyframesInBox', () => {
     const tracks = s().project.tracks;
     const expanded = new Set([tracks[0]!.id]);
     const tops = trackTops(tracks, s().trackHeightPx, expanded);
-    const y = laneMidY(tops[1]!, 0);
+    const y = laneMidY(tops[1]!, trackLanes(tracks[0]!).length, 0);
     const hits = keyframesInBox(tracks, expanded, tops, {
       minY: y - 1,
       maxY: y + 1,
@@ -97,6 +103,59 @@ describe('keyframesInBox', () => {
       t1: 1100,
     });
     expect(hits.map((h) => h.t)).toEqual([1000]);
+  });
+
+  it('grows a lane for a colour param once it carries a key, and boxes it', () => {
+    const tracks0 = s().project.tracks;
+    const before = trackLanes(tracks0[0]!).length;
+    const expanded = new Set([tracks0[0]!.id]);
+    const heightBefore = trackTops(tracks0, s().trackHeightPx, expanded)[1]!;
+
+    s().toggleClipKeyframe(clip().id, 'contrast', 1000);
+
+    const tracks = s().project.tracks;
+    const lanes = trackLanes(tracks[0]!);
+    expect(lanes.length).toBe(before + 1);
+    // Colour lanes stack under the fixed transform set, never among it.
+    expect(lanes[lanes.length - 1]).toBe('contrast');
+
+    const tops = trackTops(tracks, s().trackHeightPx, expanded);
+    expect(tops[1]!).toBe(heightBefore + KEYFRAME_LANE_HEIGHT_PX);
+
+    const y = laneMidY(tops[1]!, lanes.length, lanes.length - 1);
+    const hits = keyframesInBox(tracks, expanded, tops, {
+      minY: y - 1,
+      maxY: y + 1,
+      t0: 0,
+      t1: 5000,
+    });
+    expect(hits).toEqual([{ clipId: clip().id, prop: 'contrast', t: 1000 }]);
+  });
+
+  it('keeps a colour lane alive when a drag clamps its keys onto one time', () => {
+    // The row height must not change under a drag in flight. Dragging can only
+    // clamp keys, never remove them, so the lane survives even when the whole
+    // selection piles onto the clip's last instant.
+    const id = clip().id;
+    s().updateClip(id, {
+      color: {
+        contrast: [
+          { t: 1000, value: 0.1 },
+          { t: 2000, value: 0.9 },
+        ],
+      },
+    });
+    s().setSelectedKeyframes([
+      { clipId: id, prop: 'contrast', t: 1000 },
+      { clipId: id, prop: 'contrast', t: 2000 },
+    ]);
+    s().moveSelectedKeyframes(50000);
+    expect(trackLanes(s().project.tracks[0]!)).toContain('contrast');
+  });
+
+  it('keeps the transform lanes when a colour param has no key', () => {
+    // The seven colour params must not each claim a permanently empty strip.
+    expect(trackLanes(s().project.tracks[0]!)).toEqual(['scale', 'x', 'y', 'rotation', 'opacity']);
   });
 
   it('ignores collapsed tracks - they show no lanes to box', () => {

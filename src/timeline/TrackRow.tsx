@@ -23,7 +23,7 @@ export const TrackRow = memo(function TrackRow({ track, index, pxPerMs }: Props)
   const xfades = trackCrossfades(track.clips);
   const baseHeightPx = useStore((s) => s.trackHeightPx);
   const expanded = useStore((s) => s.expandedTrackIds.includes(track.id));
-  const rowHeight = trackRowHeightPx(baseHeightPx, expanded);
+  const rowHeight = trackRowHeightPx(track, baseHeightPx, expanded);
 
   // "Video track 2, muted, locked" - the row's name plus its toggled states,
   // so a screen reader hears why the clips inside refuse to change.
@@ -57,7 +57,15 @@ export const TrackRow = memo(function TrackRow({ track, index, pxPerMs }: Props)
       {/* Clip lane sits at the top; when the track is expanded, the keyframe
           lanes take the rest, so the clip band stays the same size the user
           set with the vertical-zoom slider. */}
-      <div className="relative" style={{ height: baseHeightPx }}>
+      {/* data-clip-lane: this wrapper covers the whole clip band, so every press
+          on empty space in the band lands here rather than on the row
+          background. Without the marker the timeline reads those presses as
+          "not a background surface" and a collapsed track loses click-to-seek,
+          marquee select and its context menu entirely. It cannot simply carry
+          `data-rowbg`: the clip drag resolves its rows container with
+          `closest('[data-rowbg]').parentElement`, which this element would
+          intercept. */}
+      <div className="relative" data-clip-lane style={{ height: baseHeightPx }}>
         {/* `contents` when unlocked so the wrapper adds no box at all; when locked
             it turns into a plain static div, which swallows pointer events for
             its children without becoming their positioning ancestor. */}

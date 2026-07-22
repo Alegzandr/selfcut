@@ -1,7 +1,6 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
 import {
-  AnimatableProp,
   Clip,
   ClipAnimation,
   ClipTransform,
@@ -12,15 +11,19 @@ import {
 } from '../../types';
 import {
   DEFAULT_TRANSFORM,
+  animatedProps,
   clipDurationMs,
   clipEndMs,
   cloneClip,
   delegatedLinkIds,
+  keyframesOf,
   outputDimensions,
   removeKeyframe,
   sampleChannel,
   setKeyframe,
+  staticValueOf,
   timelineToSourceMs,
+  writeChannel,
 } from '../../model';
 import { uid } from '../../lib/id';
 import {
@@ -98,13 +101,6 @@ function shiftEdits(clipIds: string[], delta: number): Map<string, (c: Clip) => 
   return edits;
 }
 
-/** The clip's static (non-animated) value for an animatable property. */
-function staticPropValue(clip: Clip, prop: AnimatableProp): number {
-  if (prop === 'opacity') return 1;
-  const t = clip.transform ?? DEFAULT_TRANSFORM;
-  return prop === 'rotation' ? t.rotation ?? 0 : t[prop];
-}
-
 export function createClipsSlice(
   set: StoreSet,
   get: StoreGet,
@@ -119,6 +115,7 @@ export function createClipsSlice(
   | 'updateClip'
   | 'updateClipCommitted'
   | 'updateClipTransformLive'
+  | 'updateClipColorLive'
   | 'toggleClipKeyframe'
   | 'moveClipKeyframes'
   | 'setClipKeyframesEase'
@@ -452,41 +449,54 @@ export function createClipsSlice(
         ),
       }),
 
+    updateClipColorLive: (clipId, prop, value, timelineMs) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([
+            [
+              clipId,
+              (c: Clip): Clip => {
+                const next = { ...c } as Clip;
+                const existing = keyframesOf(next, prop);
+                // Same rule as the transform sliders: once a parameter animates,
+                // dragging it writes the key under the playhead rather than a
+                // constant that would silently wipe the animation.
+                writeChannel(
+                  next,
+                  prop,
+                  existing ? setKeyframe(existing, timelineMs - c.timelineStartMs, value) : value,
+                );
+                return next;
+              },
+            ],
+          ]),
+        ),
+      }),
+
     toggleClipKeyframe: (clipId, prop, timelineMs) =>
       withHistory((p) => {
         const found = findClip(p, clipId);
         if (!found) return;
         const clip = found.clip;
         const local = timelineMs - clip.timelineStartMs;
-        const existing = clip.animation?.[prop];
-        if (existing && existing.length) {
+        const existing = keyframesOf(clip, prop);
+        if (existing) {
           const onKey = existing.some((k) => Math.abs(k.t - local) < 1);
           // A key on the playhead is removed; otherwise one is added at the value
           // the property currently shows, so toggling never makes the clip jump.
-          const next = onKey
-            ? removeKeyframe(existing, local)
-            : setKeyframe(existing, local, sampleChannel(existing, local));
-          const anim: ClipAnimation = { ...clip.animation };
-          if (Array.isArray(next)) {
-            anim[prop] = next;
-            clip.animation = anim;
-          } else {
-            // The last keyframe went: the property is static again. Keep the value
-            // it collapsed to so the look is preserved (opacity has no static field).
-            delete anim[prop];
-            clip.animation = Object.keys(anim).length ? anim : undefined;
-            if (prop !== 'opacity') {
-              const tf = clip.transform ?? structuredClone(DEFAULT_TRANSFORM);
-              tf[prop] = next;
-              clip.transform = tf;
-            }
-          }
+          // Collapsing back to a constant on the last removal - and where that
+          // constant has to be stored - is `writeChannel`'s business.
+          writeChannel(
+            clip,
+            prop,
+            onKey
+              ? removeKeyframe(existing, local)
+              : setKeyframe(existing, local, sampleChannel(existing, local)),
+          );
         } else {
           // Not animated yet: enable it, seeding one keyframe at the current value.
-          clip.animation = {
-            ...clip.animation,
-            [prop]: [{ t: local, value: staticPropValue(clip, prop) }],
-          };
+          writeChannel(clip, prop, [{ t: local, value: staticValueOf(clip, prop) }]);
         }
       }),
 
@@ -498,21 +508,25 @@ export function createClipsSlice(
             [
               clipId,
               (c: Clip): Clip => {
-                if (!c.animation) return c;
+                const animated = animatedProps(c);
+                if (!animated.length) return c;
                 const dest = Math.max(0, Math.min(clipDurationMs(c), toT));
-                let animation: ClipAnimation = c.animation;
+                // Cloned before mutating: `writeChannel` writes into the clip it
+                // is given, and this path is outside the immer draft.
+                const next = { ...c } as Clip;
                 let changed = false;
-                for (const [key, keys] of Object.entries(c.animation)) {
-                  if (!keys?.some((k) => Math.abs(k.t - fromT) < 1)) continue;
-                  animation = {
-                    ...animation,
-                    [key as AnimatableProp]: keys
+                for (const { prop, keys } of animated) {
+                  if (!keys.some((k) => Math.abs(k.t - fromT) < 1)) continue;
+                  writeChannel(
+                    next,
+                    prop,
+                    keys
                       .map((k) => (Math.abs(k.t - fromT) < 1 ? { ...k, t: dest } : k))
                       .sort((a, b) => a.t - b.t),
-                  };
+                  );
                   changed = true;
                 }
-                return changed ? ({ ...c, animation } as Clip) : c;
+                return changed ? next : c;
               },
             ],
           ]),
@@ -521,10 +535,12 @@ export function createClipsSlice(
 
     setClipKeyframesEase: (clipId, atT, ease) =>
       withHistory((p) => {
-        const anim = findClip(p, clipId)?.clip.animation;
-        if (!anim) return;
-        for (const keys of Object.values(anim)) {
-          const k = keys?.find((kk) => Math.abs(kk.t - atT) < 1);
+        const clip = findClip(p, clipId)?.clip;
+        if (!clip) return;
+        // Both families: a column under the playhead can hold a scale key and a
+        // contrast key, and the picker re-eases the column, not one of them.
+        for (const { keys } of animatedProps(clip)) {
+          const k = keys.find((kk) => Math.abs(kk.t - atT) < 1);
           if (k) k.ease = ease;
         }
       }),

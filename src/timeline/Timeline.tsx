@@ -7,7 +7,8 @@ import { Ruler } from './Ruler';
 import { Playhead } from './Playhead';
 import { MarkerBar, TimelineOverlay } from './MarkerBar';
 import { TrackHeader } from './TrackHeader';
-import { msFromClientX, msFromContentX, timelineContentEl } from './coords';
+import { msFromContentX, timelineContentEl } from './coords';
+import { seekAtClientX } from './hooks/useScrub';
 import {
   MARKER_BAR_HEIGHT_PX,
   RULER_HEIGHT_PX,
@@ -234,9 +235,11 @@ export function Timeline() {
 
   const { addTrack, selectClip } = useStore.getState();
 
-  // Desktop: click on empty track background moves the playhead there (and scrubs while held).
+  // Desktop: click on empty track background moves the playhead there. It goes
+  // through the scrub's own rule, so a click here and a click on the ruler mean
+  // exactly the same thing - same magnetism, same frame, same stopped transport.
   const seekToClientX = (e: React.PointerEvent) => {
-    useStore.getState().seek(msFromClientX(e.currentTarget as HTMLElement, e.clientX));
+    seekAtClientX(e.currentTarget as HTMLElement, e.clientX, e.shiftKey);
   };
 
   /**
@@ -303,7 +306,10 @@ export function Timeline() {
     // game to start a box on - a lane is where the keyframes are, so refusing
     // it would put the diamonds out of reach of the very gesture that selects
     // them. A diamond itself stops the event before it ever gets here.
-    const onBackground = target.dataset.rowbg !== undefined || target.dataset.trackLane !== undefined;
+    const onBackground =
+      target.dataset.rowbg !== undefined ||
+      target.dataset.clipLane !== undefined ||
+      target.dataset.trackLane !== undefined;
     if (!onBackground) return;
     // Left-drag on the background (desktop): marquee / rubber-band select, the
     // reflex every NLE trained. Shift keeps the existing selection and adds to
@@ -414,7 +420,9 @@ export function Timeline() {
               onPointerCancel={onBgPointerUp}
               onContextMenu={(e) => {
                 // Only the empty track background: clips / headers open their own menus.
-                if (coarse || (e.target as HTMLElement).dataset.rowbg === undefined) return;
+                const bg = e.target as HTMLElement;
+                if (coarse || (bg.dataset.rowbg === undefined && bg.dataset.clipLane === undefined))
+                  return;
                 e.preventDefault();
                 useStore.getState().openContextMenu(e.clientX, e.clientY, { kind: 'timeline' });
               }}

@@ -1,8 +1,9 @@
 import {
-  AnimatableProp,
   Clip,
   ClipShape,
+  ColorProp,
   EaseId,
+  KeyframeProp,
   KeyframeRef,
   LoopRegion,
   MediaAsset,
@@ -16,6 +17,15 @@ import type { PreviewResolutionMode } from '../app/config';
 import type { PreviewTool, PreviewView } from '../preview/view';
 import type { SubtitleCue } from '../lib/subtitles';
 import type { FFmpegProgress } from '../media/ffmpeg';
+import type { PresetLook } from '../effects/presetFile';
+
+/** An imported `.sfx` preset, held for the session so it can be re-applied by drag. */
+export interface LoadedPreset {
+  /** Stable id: the drag payload and the React key. */
+  id: string;
+  name: string;
+  look: PresetLook;
+}
 
 /** Panes of the inspector column. */
 export type InspectorTab = 'clip' | 'subtitles';
@@ -312,7 +322,7 @@ export interface EditorState {
    * does; a property becomes animated on its first keyframe and static again
    * when its last one is removed.
    */
-  toggleClipKeyframe: (clipId: string, prop: AnimatableProp, timelineMs: number) => void;
+  toggleClipKeyframe: (clipId: string, prop: KeyframeProp, timelineMs: number) => void;
   /**
    * Retime every keyframe sitting at clip-local `fromT` (across all animated
    * properties, so a keyframe column moves as one) to `toT`, clamped to the
@@ -416,6 +426,37 @@ export interface EditorState {
    * can explain the no-op instead of silently doing nothing.
    */
   applyTransition: (clipId: string, type: TransitionType) => boolean;
+  /**
+   * Live (uncommitted) edit of one colour parameter, the counterpart of
+   * `updateClipTransformLive`: it writes the keyframe under the playhead once
+   * the parameter animates, and the constant otherwise.
+   */
+  updateClipColorLive: (
+    clipId: string,
+    prop: ColorProp,
+    value: number,
+    timelineMs: number,
+  ) => void;
+  /**
+   * Apply an imported `.sfx` preset to each of `clipIds` (one undo step). Sections
+   * replace rather than merge, keyframe times stay absolute and are trimmed
+   * against each target's own duration, and the audio chain follows the same
+   * linked-partner redirect a catalogue audio effect does. Returns the clip ids
+   * actually patched (empty when no target could take any part of the preset)
+   * and whether anything was trimmed, so the caller can report both.
+   */
+  applyClipPreset: (
+    look: PresetLook,
+    clipIds: string[],
+  ) => { changed: string[]; truncated: boolean };
+  /**
+   * Presets imported this session, newest first. Session state on purpose: the
+   * files on disk are the source of truth, this is the shelf that saves a user
+   * applying one look to a dozen clips from opening a dozen file dialogs.
+   */
+  loadedPresets: LoadedPreset[];
+  addLoadedPreset: (name: string, look: PresetLook) => void;
+  removeLoadedPreset: (id: string) => void;
   /** Preview crop-edit mode for the selected video clip (session state). */
   cropEditing: boolean;
   setCropEditing: (v: boolean) => void;

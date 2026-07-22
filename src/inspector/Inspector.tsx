@@ -21,13 +21,14 @@ import { FadeSection } from './sections/FadeSection';
 import { TransformSection } from './sections/TransformSection';
 import { ColorSection } from './sections/ColorSection';
 import { TransitionSection } from './sections/TransitionSection';
+import { PresetSection } from './sections/PresetSection';
 
 /**
  * Heading of the inspector: a generated clip is named after what it renders, a
  * media clip after its file. Shared by the docked column and the mobile sheet -
  * which is why it is a function and not an inline ternary in both.
  */
-function clipDisplayName(clip: Clip, asset: MediaAsset | undefined, t: TFunction): string {
+export function clipDisplayName(clip: Clip, asset: MediaAsset | undefined, t: TFunction): string {
   switch (clip.kind) {
     case 'text':
       return t('inspector.textClip');
@@ -235,6 +236,7 @@ function InspectorBody({
       {(isVideo || isText || isShape) && <TransformSection clip={clip} isVideo={isVideo} />}
       {isVideo && <ColorSection clip={clip} />}
       {(isVideo || isText || isShape) && <TransitionSection clip={clip} />}
+      <PresetSection clip={clip} name={name} />
     </>
   );
 }

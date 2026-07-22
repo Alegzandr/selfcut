@@ -39,6 +39,12 @@ export interface EffectPreset {
   patch: (clip: Clip) => Partial<Clip>;
 }
 
+/**
+ * Every audio effect type, in chain order. Exported so the preset parser can
+ * check an imported chain against the same list the catalogue is built from.
+ */
+export const AUDIO_FX_TYPES: AudioFxType[] = ['leveler', 'voice', 'bass', 'reverb', 'echo'];
+
 /** A clip that paints picture: the only kind a colour grade or a zoom can touch. */
 function paintsPicture(_clip: Clip, asset: MediaAsset | undefined): boolean {
   return !!asset && asset.kind !== 'audio';
@@ -108,7 +114,7 @@ export const EFFECTS: EffectPreset[] = [
     accepts: paintsPicture,
     patch: () => ({ zoomEnd: 1.2 }),
   },
-  ...(['leveler', 'voice', 'bass', 'reverb', 'echo'] as AudioFxType[]).map(
+  ...AUDIO_FX_TYPES.map(
     (type): EffectPreset => ({
       id: type,
       group: 'audio',

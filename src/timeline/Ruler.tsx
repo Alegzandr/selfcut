@@ -1,9 +1,9 @@
 import { memo, useMemo } from 'react';
 import { useStore } from '../store/store';
 import { formatTimeShort } from '../lib/time';
-import { msFromClientX } from './coords';
 import { MARKER_BAR_HEIGHT_PX, RULER_HEIGHT_PX } from '../app/config';
 import { useTimelineViewport } from './viewport';
+import { useScrub } from './hooks/useScrub';
 
 const TICK_STEPS_SEC = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
 
@@ -36,21 +36,16 @@ export const Ruler = memo(function Ruler({ durationMs, pxPerMs, overscanMs }: Pr
     return out;
   }, [durationMs, stepSec, overscanMs, viewport, padLeft, pxPerMs]);
 
-  const scrubTo = (e: React.PointerEvent) => {
-    useStore.getState().seek(msFromClientX(e.currentTarget as HTMLElement, e.clientX));
-  };
+  // A press anywhere on the ruler is a seek, so the scrub starts on the way down.
+  const scrub = useScrub({ seekOnDown: true });
 
   return (
     <div
-      className="sticky z-30 cursor-col-resize touch-none border-b border-zinc-800 bg-zinc-900/95"
+      // select-none: without it a mouse drag across the ruler highlights the
+      // tick labels, and the scrub ends up dragging a text selection with it.
+      className="sticky z-30 cursor-col-resize touch-none select-none border-b border-zinc-800 bg-zinc-900/95"
       style={{ top: MARKER_BAR_HEIGHT_PX, height: RULER_HEIGHT_PX }}
-      onPointerDown={(e) => {
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-        scrubTo(e);
-      }}
-      onPointerMove={(e) => {
-        if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) scrubTo(e);
-      }}
+      {...scrub}
     >
       {ticks.map((tMs) => (
         <div

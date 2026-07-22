@@ -1,10 +1,11 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
-import type { Clip } from '../../types';
+import type { Clip, MediaAsset } from '../../types';
 import { clipDurationMs, clipEndMs } from '../../model';
 import { findClip, linkedPartnerIds } from '../projectOps';
 import { EFFECTS_BY_ID } from '../../effects/catalog';
-import { resolveEffectTargets } from '../../effects/apply';
+import { audioTarget, resolveEffectTargets } from '../../effects/apply';
+import { presetPatch } from '../../effects/presetApply';
 import { DEFAULT_CROSSFADE_MS, MIN_CLIP_DURATION_MS } from '../../app/config';
 
 /** The clip immediately before `clip` on its track, or null when it is the first. */
@@ -23,12 +24,73 @@ function previousClip(clips: Clip[], clip: Clip): Clip | null {
   return best;
 }
 
+/**
+ * Whether a clip paints picture, for preset targeting.
+ *
+ * Not `catalog.ts`'s `paintsPicture`: that one requires a backing asset, which
+ * the generated clips (text, solid, shape) do not have - yet they very much
+ * paint, and the inspector already offers them a Transform section.
+ */
+function paintsPicture(clip: Clip, asset: MediaAsset | undefined): boolean {
+  return clip.kind === 'media' ? !!asset && asset.kind !== 'audio' : true;
+}
+
 export function createEffectsSlice(
-  _set: StoreSet,
+  set: StoreSet,
   get: StoreGet,
   { withHistory }: SliceHelpers,
-): Pick<EditorState, 'applyEffectPreset' | 'applyTransition'> {
+): Pick<EditorState, 'applyEffectPreset' | 'applyTransition' | 'applyClipPreset'> {
   return {
+    applyClipPreset: (look, clipIds) => {
+      const { project, assets } = get();
+      // Merged per target id: the audio half of a preset redirects onto a linked
+      // partner, so one selected clip can produce patches for two.
+      const patches = new Map<string, Partial<Clip>>();
+      let truncated = false;
+
+      for (const clipId of clipIds) {
+        const found = findClip(project, clipId);
+        if (!found) continue;
+        const clip = found.clip;
+        const sound = audioTarget(project, clip);
+
+        // Picture and sound are patched separately because they may land on
+        // different clips; each half is asked for on the clip that can take it.
+        const picture = presetPatch(look, clip, clipDurationMs(clip), {
+          hasPicture: paintsPicture(clip, assets[clip.assetId]),
+          hasAudio: false,
+        });
+        truncated ||= picture.truncated;
+        if (Object.keys(picture.patch).length) {
+          patches.set(clip.id, { ...patches.get(clip.id), ...picture.patch });
+        }
+
+        if (assets[sound.assetId]?.hasAudio) {
+          const audio = presetPatch(look, sound, clipDurationMs(sound), {
+            hasPicture: false,
+            hasAudio: true,
+          });
+          if (Object.keys(audio.patch).length) {
+            patches.set(sound.id, { ...patches.get(sound.id), ...audio.patch });
+          }
+        }
+      }
+
+      if (patches.size === 0) return { changed: [], truncated: false };
+
+      withHistory((p) => {
+        for (const [id, patch] of patches) {
+          const found = findClip(p, id);
+          if (found) Object.assign(found.clip, patch);
+        }
+      });
+      // A box-selection can name keys the trimming just removed, and a stale ref
+      // would then re-ease or delete whatever moved into its slot.
+      set({ selectedKeyframes: [] });
+
+      return { changed: [...patches.keys()], truncated };
+    },
+
     applyEffectPreset: (effectId, clipIds) => {
       const preset = EFFECTS_BY_ID[effectId];
       if (!preset || clipIds.length === 0) return;
