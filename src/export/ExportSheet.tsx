@@ -118,7 +118,7 @@ export function ExportSheet() {
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-zinc-100">{t('export.title')}</h2>
               <button
-                className="touch-hit rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800 disabled:opacity-40 pointer-coarse:p-2.5"
+                className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 disabled:opacity-40 pointer-coarse:p-2.5"
                 aria-label={t('export.close')}
                 // Mid-render the X must not silently throw the export away, same
                 // as Escape and the backdrop: cancel stays an explicit button.
@@ -137,7 +137,7 @@ export function ExportSheet() {
                   {presets.map((preset) => (
                     <button
                       key={preset.id}
-                      className={`block w-full rounded-xl border p-3 text-left ${selected.id === preset.id ? 'border-sky-500 bg-sky-500/10' : 'border-zinc-800 bg-zinc-950 active:bg-zinc-800'}`}
+                      className={`block w-full rounded-xl border p-3 text-left ${selected.id === preset.id ? 'border-sky-500 bg-sky-500/10' : 'border-zinc-700 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'}`}
                       onClick={() => setSelectedId(preset.id)}
                     >
                       <div className="text-sm font-medium text-zinc-100">
@@ -175,7 +175,7 @@ export function ExportSheet() {
                 )}
 
                 <button
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-500 py-3 text-sm font-semibold text-white active:bg-sky-600"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-500 py-3 text-sm font-semibold text-white hover:bg-sky-400 active:bg-sky-600"
                   onClick={() => run(selected)}
                 >
                   <Download className="h-4 w-4" />
@@ -183,7 +183,7 @@ export function ExportSheet() {
                     preset: `${t(selected.labelKey)}${selected.qualityKey ? ` · ${t(selected.qualityKey)}` : ''}`,
                   })}
                 </button>
-                <p className="text-center text-[11px] text-zinc-400">{t('export.privacy')}</p>
+                <p className="text-center text-2xs text-zinc-400">{t('export.privacy')}</p>
               </>
             )}
 
@@ -207,7 +207,7 @@ export function ExportSheet() {
                   />
                 </div>
                 <button
-                  className="w-full rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 active:bg-zinc-800"
+                  className="w-full rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
                   onClick={() => {
                     canceledRef.current = true;
                     handleRef.current?.cancel();
@@ -234,14 +234,14 @@ export function ExportSheet() {
                 <div className="flex gap-2">
                   {phase.blob && (
                     <button
-                      className="flex-1 rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 active:bg-zinc-800"
+                      className="flex-1 rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
                       onClick={() => downloadBlob(phase.blob!, phase.filename)}
                     >
                       {t('export.downloadAgain')}
                     </button>
                   )}
                   <button
-                    className="flex-1 rounded-xl bg-sky-500 py-2 text-sm font-semibold text-white active:bg-sky-600"
+                    className="flex-1 rounded-xl bg-sky-500 py-2 text-sm font-semibold text-white hover:bg-sky-400 active:bg-sky-600"
                     onClick={() => setPhase({ kind: 'idle' })}
                   >
                     {t('export.newExport')}
@@ -256,7 +256,7 @@ export function ExportSheet() {
                 {/* Already translated by the exporter, worker codes included. */}
                 <p className="text-sm text-red-300">{phase.message}</p>
                 <button
-                  className="w-full rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 active:bg-zinc-800"
+                  className="w-full rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
                   onClick={() => setPhase({ kind: 'idle' })}
                 >
                   {t('export.back')}

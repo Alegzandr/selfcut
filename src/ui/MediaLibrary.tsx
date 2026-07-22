@@ -47,7 +47,7 @@ export function MediaLibrary() {
 
   const body = (
     <>
-      <div className="flex h-8 flex-none items-center gap-1.5 border-b border-zinc-800 px-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+      <div className="flex h-8 flex-none items-center gap-1.5 border-b border-zinc-800 px-2 text-2xs font-semibold uppercase tracking-wide text-zinc-400">
         <FolderOpen className="h-3.5 w-3.5" />
         {t('library.title')}
         {/* Bare count badge: no unit to translate, but it needs a spoken label. */}
@@ -73,7 +73,7 @@ export function MediaLibrary() {
           </Tooltip>
           {coarse && (
             <button
-              className="touch-hit -mr-1 rounded p-1 text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2"
+              className="touch-hit -mr-1 rounded p-1 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:p-2"
               onClick={() => useStore.getState().setLibraryOpen(false)}
               title={t('library.close')}
             >
@@ -84,7 +84,7 @@ export function MediaLibrary() {
       </div>
 
       {list.length === 0 ? (
-        <p className="p-3 text-[11px] leading-relaxed text-zinc-400">{t('library.empty')}</p>
+        <p className="p-3 text-2xs leading-relaxed text-zinc-400">{t('library.empty')}</p>
       ) : (
         // Reflowing grid rather than a stack: widening the column adds columns
         // of cards instead of inflating one card, so the extra room buys more
@@ -238,13 +238,13 @@ function TrackAction({
 }) {
   return (
     <div>
-      <div className="truncate text-[9px] text-zinc-400" title={title}>
+      <div className="truncate text-4xs text-zinc-400" title={title}>
         {`${name} · ${detail}`}
       </div>
       <div className="flex justify-end">
         <Tooltip label={hint}>
           <button
-            className="touch-hit rounded bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-medium text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 pointer-coarse:p-2"
+            className="touch-hit rounded bg-sky-500/15 px-1.5 py-0.5 text-4xs font-medium text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 pointer-coarse:p-2"
             onClick={onClick}
           >
             {icon}
@@ -310,7 +310,7 @@ function TrackGroup({
         {idle.length > INLINE_MAX ? (
           <Tooltip label={t('library.tracks.browse')}>
             <button
-              className="touch-hit flex w-full items-center gap-1 rounded px-0.5 py-1 text-[9px] text-zinc-400 hover:bg-zinc-800/60 pointer-coarse:py-2"
+              className="touch-hit flex w-full items-center gap-1 rounded px-0.5 py-1 text-4xs text-zinc-400 hover:bg-zinc-800/60 pointer-coarse:py-2"
               onClick={() => setPickerOpen(true)}
             >
               <span className="min-w-0 flex-1 truncate text-left">{summary}</span>
@@ -322,7 +322,7 @@ function TrackGroup({
             track.unavailable ? (
               <div
                 key={track.index}
-                className="truncate text-[9px] text-zinc-500"
+                className="truncate text-4xs text-zinc-500"
                 title={rowTitle(track)}
               >
                 {`${track.name} · ${track.detail} · ${track.unavailable}`}
@@ -528,14 +528,14 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
             title={t('library.reconnect')}
           >
             <PlugZap className="h-5 w-5" />
-            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide">
+            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-4xs font-semibold uppercase tracking-wide">
               {t('library.disconnected')}
             </span>
           </button>
         )}
         {/* A still has no intrinsic duration - a time badge would only mislead. */}
         {asset.kind !== 'image' && (
-          <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[9px] tabular-nums text-zinc-200">
+          <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-4xs tabular-nums text-zinc-200">
             {formatTimeShort(asset.durationMs)}
           </span>
         )}
@@ -554,12 +554,12 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
       <SubtitleTracks asset={asset} />
 
       <div className="flex items-center gap-1 p-1">
-        <span className="min-w-0 flex-1 truncate text-[10px] text-zinc-300" title={asset.file.name}>
+        <span className="min-w-0 flex-1 truncate text-3xs text-zinc-300" title={asset.file.name}>
           {asset.file.name}
         </span>
         <Tooltip label={t('library.remove')}>
           <button
-            className="touch-hit flex-none rounded p-1 text-zinc-400 active:bg-zinc-800 active:text-red-400 pointer-coarse:p-2"
+            className="touch-hit flex-none rounded p-1 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 hover:text-red-400 active:text-red-400 pointer-coarse:p-2"
             onClick={() => removeAsset(asset.id)}
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -568,7 +568,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
         {disconnected ? (
           <Tooltip label={t('library.reconnect')}>
             <button
-              className="touch-hit flex-none rounded bg-amber-500/15 p-1 text-amber-300 active:bg-amber-500/30 pointer-coarse:p-2"
+              className="touch-hit flex-none rounded bg-amber-500/15 p-1 text-amber-300 hover:bg-amber-500/25 active:bg-amber-500/30 pointer-coarse:p-2"
               onClick={() => reconnectAssetViaPicker(asset.id)}
             >
               <PlugZap className="h-3.5 w-3.5" />
@@ -577,7 +577,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
         ) : (
           <Tooltip label={t('library.add')}>
             <button
-              className="touch-hit flex-none rounded bg-sky-500/15 p-1 text-sky-300 active:bg-sky-500/30 pointer-coarse:p-2"
+              className="touch-hit flex-none rounded bg-sky-500/15 p-1 text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 pointer-coarse:p-2"
               onClick={() => {
                 addClipFromAsset(asset.id);
                 // Mobile drawer: close it so the freshly placed clip is visible.

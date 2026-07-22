@@ -76,7 +76,7 @@ export function Preferences() {
               <h2 className="text-sm font-semibold text-zinc-100">{t('preferences.title')}</h2>
               <Tooltip label={t('preferences.close')} shortcut="Esc">
                 <button
-                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800"
+                  className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800"
                   onClick={() => setPreferencesOpen(false)}
                 >
                   <X className="h-4 w-4" />
@@ -88,6 +88,7 @@ export function Preferences() {
               <Row label={t('topbar.language')}>
                 <select
                   className={SELECT_CLASS}
+                  aria-label={t('a11y.preferences.language')}
                   value={currentLang}
                   onChange={(e) => void i18n.changeLanguage(e.target.value)}
                 >
@@ -102,6 +103,7 @@ export function Preferences() {
               <Row label={t('preferences.timeFormat')}>
                 <select
                   className={SELECT_CLASS}
+                  aria-label={t('a11y.preferences.timeFormat')}
                   value={timeFormat}
                   onChange={(e) => setTimeFormat(e.target.value as TimeFormat)}
                 >

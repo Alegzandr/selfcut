@@ -28,7 +28,7 @@ export function ToolOverflowMenu({ entries }: { entries: MenuEntry[] }) {
           type="button"
           aria-haspopup="menu"
           aria-expanded={open}
-          className={`touch-hit rounded-lg p-2 active:bg-zinc-800 ${
+          className={`touch-hit rounded-lg p-2 hover:bg-zinc-800/70 active:bg-zinc-800 ${
             open ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400'
           }`}
           onClick={() => setOpen((v) => !v)}

@@ -79,7 +79,7 @@ function ToolButton({ command }: { command: Command | undefined }) {
       shortcut={command.shortcut}
     >
       <button
-        className={`touch-hit rounded-lg p-2 enabled:active:bg-zinc-800 disabled:opacity-30 ${
+        className={`touch-hit rounded-lg p-2 enabled:hover:bg-zinc-800/70 enabled:hover:bg-zinc-800/70 active:bg-zinc-800 disabled:opacity-30 ${
           command.checked ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400'
         }`}
         disabled={command.disabled}
@@ -154,7 +154,7 @@ function NewProjectButton() {
   return (
     <Tooltip label={t('topbar.newProject.title')}>
       <button
-        className="touch-hit rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+        className="touch-hit rounded-lg p-2 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
         onClick={() => {
           void confirmDiscardProject().then((ok) => {
             if (!ok) return;
@@ -198,7 +198,7 @@ export function TopBar() {
       {/* Mobile: the media library lives in a drawer. */}
       {coarse && (
         <button
-          className="touch-hit relative flex-none rounded-lg p-2 text-zinc-400 active:bg-zinc-800"
+          className="touch-hit relative flex-none rounded-lg p-2 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
           onClick={() => setLibraryOpen(true)}
           // aria-label, not title: with a title alone the badge text becomes
           // the accessible name (a screen reader hears "3" for this button).
@@ -209,7 +209,7 @@ export function TopBar() {
           {assetCount > 0 && (
             <span
               aria-hidden="true"
-              className="absolute -right-0.5 -top-0.5 rounded-full bg-sky-500 px-1 text-[9px] font-bold leading-3.5 text-white"
+              className="absolute -right-0.5 -top-0.5 rounded-full bg-sky-500 px-1 text-4xs font-bold leading-3.5 text-white"
             >
               {assetCount}
             </span>
@@ -246,7 +246,7 @@ export function TopBar() {
           {ASPECTS.map(({ value, titleKey }) => (
             <Tooltip key={value} label={t(titleKey)}>
               <button
-                className={`touch-hit px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 active:bg-zinc-800'}`}
+                className={`touch-hit px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800'}`}
                 onClick={() => setAspectRatio(value)}
               >
                 {value}

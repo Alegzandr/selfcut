@@ -43,10 +43,10 @@ export function TransitionSection({ clip }: { clip: Clip }) {
               key={type}
               type="button"
               onClick={() => updateClipCommitted(clip.id, { transition: type })}
-              className={`touch-hit rounded px-2 py-1 text-[11px] font-medium ${
+              className={`touch-hit rounded px-2 py-1 text-2xs font-medium ${
                 current === type
                   ? 'bg-sky-500/20 text-sky-300'
-                  : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'
+                  : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
               }`}
             >
               {t(`inspector.transition.${type}`)}
@@ -54,7 +54,7 @@ export function TransitionSection({ clip }: { clip: Clip }) {
           ))}
         </div>
       ) : (
-        <p className="text-[11px] leading-snug text-zinc-500">{t('inspector.transition.hint')}</p>
+        <p className="text-2xs leading-snug text-zinc-500">{t('inspector.transition.hint')}</p>
       )}
     </div>
   );

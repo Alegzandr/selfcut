@@ -47,7 +47,7 @@ export function TrackHeightMenu() {
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label={t('timeline.trackHeight.label')}
-          className={`touch-hit flex items-center gap-0.5 rounded-lg py-2 pl-2 pr-1 active:bg-zinc-800 ${
+          className={`touch-hit flex items-center gap-0.5 rounded-lg py-2 pl-2 pr-1 hover:bg-zinc-800/70 active:bg-zinc-800 ${
             open ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400'
           }`}
           onClick={() => setOpen((v) => !v)}

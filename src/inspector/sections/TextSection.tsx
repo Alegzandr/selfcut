@@ -32,6 +32,9 @@ export function TextSection({ clip }: { clip: TextClip }) {
         value={text.content}
         rows={2}
         placeholder={t('inspector.textPlaceholder')}
+        // A placeholder is not an accessible name: it disappears the moment the
+        // field has content, which is most of the time here.
+        aria-label={t('a11y.text.content')}
         className="w-full resize-y rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-sky-500"
         onFocus={beginGesture}
         onBlur={endGesture}
@@ -42,6 +45,9 @@ export function TextSection({ clip }: { clip: TextClip }) {
         <span className="w-16 flex-none">{t('inspector.font')}</span>
         <select
           value={text.font ?? DEFAULT_FONT_ID}
+          // The visible "Font" caption is a sibling <span>, not a <label>, so it
+          // names the row for sighted users only.
+          aria-label={t('a11y.text.font')}
           className="min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-sky-500"
           // Each option renders in its own face, which only works once the face
           // is registered - fetched when the user reaches for the list, not on

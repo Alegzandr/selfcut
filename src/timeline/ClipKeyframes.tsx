@@ -100,7 +100,7 @@ export const ClipKeyframes = memo(function ClipKeyframes({
           type="button"
           aria-label={`${t('inspector.keyframe')} · ${formatTime(clip.timelineStartMs + time)}`}
           title={`${t('inspector.keyframe')} · ${formatTime(clip.timelineStartMs + time)}`}
-          className={`pointer-events-auto absolute bottom-0.5 -translate-x-1/2 rotate-45 rounded-[1px] border border-zinc-900 bg-zinc-100 shadow cursor-ew-resize touch-none active:bg-sky-300 ${size}`}
+          className={`pointer-events-auto absolute bottom-0.5 -translate-x-1/2 rotate-45 rounded-[1px] border border-zinc-900 bg-zinc-100 shadow cursor-ew-resize touch-none hover:bg-sky-200 active:bg-sky-300 ${size}`}
           style={{ left: time * pxPerMs }}
           onPointerDown={(e) => onDown(e, time)}
           onPointerMove={onMove}

@@ -1,4 +1,5 @@
 import { clamp } from '../lib/time';
+import { PREVIEW_COLORS } from '../lib/palette';
 import { FULL_FRAME_BOUNDS, type HandleBounds } from './transformSnap';
 
 /**
@@ -11,7 +12,7 @@ import { FULL_FRAME_BOUNDS, type HandleBounds } from './transformSnap';
 export type PreviewTool = 'select' | 'hand' | 'zoom' | 'shape';
 
 /** Default look of a freshly drawn shape. */
-export const DEFAULT_SHAPE_FILL = '#38bdf8';
+export const DEFAULT_SHAPE_FILL = PREVIEW_COLORS.shapeFill;
 /** Below this fraction of the frame a drag counts as a slip, not a shape. */
 export const MIN_DRAWN_SHAPE = 0.01;
 

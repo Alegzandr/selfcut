@@ -208,7 +208,7 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
           }
         >
           <div
-            className="absolute top-0 z-10 flex h-full max-w-[160px] cursor-grab touch-none items-center gap-1 rounded-r-sm border-l-2 border-cyan-400 bg-cyan-500/25 pl-1 pr-1.5 text-[10px] leading-none text-cyan-100 active:cursor-grabbing"
+            className="absolute top-0 z-10 flex h-full max-w-[160px] cursor-grab touch-none items-center gap-1 rounded-r-sm border-l-2 border-cyan-400 bg-cyan-500/25 pl-1 pr-1.5 text-3xs leading-none text-cyan-100 active:cursor-grabbing"
             style={{ left: xOf(marker.timeMs) }}
             onPointerDown={(e) => onMarkerPointerDown(e, marker)}
             onPointerMove={onPointerMove}
@@ -240,7 +240,11 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
           placeholder={t('marker.placeholder', {
             n: markers.findIndex((m) => m.id === editing.id) + 1,
           })}
-          className="absolute top-0 z-20 h-full w-32 rounded-sm border border-cyan-400 bg-zinc-950 px-1 text-[10px] text-cyan-100 outline-none focus:border-cyan-200 focus:ring-1 focus:ring-cyan-300"
+          aria-label={t('a11y.marker.label')}
+          // Cyan at rest, because the field belongs to a marker; sky on focus,
+          // because focus is an app-wide signal and every other input in the
+          // editor says it the same way.
+          className="absolute top-0 z-20 h-full w-32 rounded-sm border border-cyan-400 bg-zinc-950 px-1 text-3xs text-cyan-100 outline-none focus:border-sky-500"
           style={{ left: xOf(editing.timeMs) }}
           onPointerDown={(e) => e.stopPropagation()}
           onBlur={(e) => commitRename(e.target.value)}

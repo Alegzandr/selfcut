@@ -57,13 +57,19 @@ export function SliderRow({
               ? 'text-sky-400'
               : keyframe.animated
                 ? 'text-sky-400/50 hover:text-sky-400'
-                : 'text-zinc-600 hover:text-zinc-400'
+                : 'text-zinc-500 hover:text-zinc-300'
           }`}
         >
           <Diamond className="h-3 w-3" fill={keyframe.onKey ? 'currentColor' : 'none'} />
         </button>
       )}
-      <label className="flex flex-1 items-center gap-3 text-xs text-zinc-400" title={hint}>
+      {/* `min-w-0`: without it the row keeps its `min-width: auto` floor, which
+          is the sum of the two 64px columns plus the range input's intrinsic
+          129px. That floor is wider than the inspector, so the panel's
+          `overflow-x-hidden` was quietly cutting the value column off - "0,0 dB"
+          rendered as "0,0 d". The slider itself already carries `min-w-0`, so
+          once the row can shrink it is the slider that gives up the space. */}
+      <label className="flex min-w-0 flex-1 items-center gap-3 text-xs text-zinc-400" title={hint}>
         <span className="w-16 flex-none">{label}</span>
         <input
           type="range"

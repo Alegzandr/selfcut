@@ -62,7 +62,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
           {t('inspector.transform')}
         </h3>
         <button
-          className="touch-hit flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800"
+          className="touch-hit flex items-center gap-1 rounded-md px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
           onClick={() => updateClipCommitted(clip.id, { transform: undefined, animation: undefined })}
         >
           <RotateCcw className="h-3 w-3" />
@@ -73,7 +73,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
         <div className="flex items-center gap-2">
           <Tooltip label={t('inspector.crop.hint')}>
             <button
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium ${cropEditing ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-2xs font-medium ${cropEditing ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'}`}
               onClick={() => setCropEditing(!cropEditing)}
             >
               <Crop className="h-3.5 w-3.5" />
@@ -82,7 +82,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
           </Tooltip>
           <Tooltip label={t('inspector.streamLayout.hint')}>
             <button
-              className="touch-hit flex flex-1 items-center justify-center gap-1.5 rounded-md bg-zinc-800 px-2 py-1.5 text-[11px] font-medium text-zinc-300 active:bg-zinc-700"
+              className="touch-hit flex flex-1 items-center justify-center gap-1.5 rounded-md bg-zinc-800 px-2 py-1.5 text-2xs font-medium text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700"
               onClick={() => useStore.getState().applyStreamLayout(clip.id)}
             >
               <LayoutPanelTop className="h-3.5 w-3.5" />
@@ -117,10 +117,10 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
                 key={e}
                 type="button"
                 onClick={() => setClipKeyframesEase(clip.id, local, e)}
-                className={`touch-hit rounded px-1.5 py-1 text-[11px] ${
+                className={`touch-hit rounded px-1.5 py-1 text-2xs ${
                   easeAtPlayhead === e
                     ? 'bg-sky-500/20 text-sky-300'
-                    : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'
+                    : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                 }`}
               >
                 {t(`inspector.easing.${e}`)}

@@ -1,4 +1,5 @@
 import { Clip } from '../types';
+import { CLIP_COLORS } from '../lib/palette';
 
 /**
  * Fade and crossfade visuals for a clip: pure, pointer-transparent overlays.
@@ -45,7 +46,7 @@ export function ClipFades({
               y1={100}
               x2={clip.fadeInMs * pxPerMs}
               y2={0}
-              stroke="rgba(251,191,36,0.95)"
+              stroke={CLIP_COLORS.fadeRamp}
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
             />
@@ -56,7 +57,7 @@ export function ClipFades({
               y1={0}
               x2={width}
               y2={100}
-              stroke="rgba(251,191,36,0.95)"
+              stroke={CLIP_COLORS.fadeRamp}
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
             />
@@ -78,7 +79,7 @@ export function ClipFades({
               y1={100}
               x2={100}
               y2={0}
-              stroke="rgba(125,211,252,0.9)"
+              stroke={CLIP_COLORS.crossfadeRamp}
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
             />
@@ -96,7 +97,7 @@ export function ClipFades({
               y1={0}
               x2={100}
               y2={100}
-              stroke="rgba(125,211,252,0.9)"
+              stroke={CLIP_COLORS.crossfadeRamp}
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
             />

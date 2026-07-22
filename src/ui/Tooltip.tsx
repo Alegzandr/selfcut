@@ -180,7 +180,7 @@ export function Tooltip({
             >
               <span>{label}</span>
               {shortcut && (
-                <kbd className="flex-none rounded border border-zinc-700 bg-zinc-800/80 px-1 py-px font-mono text-[10px] leading-none tracking-tight text-zinc-400">
+                <kbd className="flex-none rounded border border-zinc-700 bg-zinc-800/80 px-1 py-px font-mono text-3xs leading-none tracking-tight text-zinc-400">
                   {shortcut}
                 </kbd>
               )}

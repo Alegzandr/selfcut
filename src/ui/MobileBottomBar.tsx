@@ -84,7 +84,7 @@ function Rail({ tiles }: { tiles: readonly Tile[] }) {
             key={tile.cmd}
             type="button"
             disabled={command.disabled}
-            className={`flex min-w-16 flex-none flex-col items-center gap-1.5 rounded-lg px-2 py-1 text-[10px] font-medium ${color} active:bg-zinc-800 disabled:opacity-30`}
+            className={`flex min-w-16 flex-none flex-col items-center gap-1.5 rounded-lg px-2 py-1 text-3xs font-medium ${color} hover:bg-zinc-800/70 active:bg-zinc-800 disabled:opacity-30`}
             onClick={command.onClick}
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800/70">

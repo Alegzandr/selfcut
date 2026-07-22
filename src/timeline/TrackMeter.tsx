@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { subscribeLevels } from '../preview/meterBus';
 import { Tooltip } from '../ui/Tooltip';
+import { METER_COLORS } from '../lib/palette';
 
 /** Meter floor: -48 dBFS maps to an empty bar, 0 dBFS to a full one. */
 const MIN_DB = -48;
@@ -28,7 +29,8 @@ export function TrackMeter({ trackId }: { trackId: string }) {
       const bar = barRef.current;
       if (bar) {
         bar.style.width = `${frac * 100}%`;
-        bar.style.backgroundColor = db > -3 ? '#f87171' : db > -12 ? '#fbbf24' : '#34d399';
+        bar.style.backgroundColor =
+          db > -3 ? METER_COLORS.hot : db > -12 ? METER_COLORS.warm : METER_COLORS.normal;
       }
       if ((peak ?? 0) >= 1) clipUntil.current = performance.now() + 1000;
       const dot = clipDotRef.current;

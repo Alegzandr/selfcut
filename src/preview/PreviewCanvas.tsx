@@ -23,6 +23,7 @@ import {
   unrotatePoint,
 } from './compositor';
 import { clamp } from '../lib/time';
+import { PREVIEW_COLORS } from '../lib/palette';
 import { hapticOnSnap, type SnapHapticState } from '../lib/haptics';
 import { PREVIEW_SNAP_THRESHOLD_PX } from '../app/config';
 import {
@@ -162,7 +163,7 @@ function CropOverlay({ clip, asset }: { clip: Clip; asset: MediaAsset }) {
             top: `${crop.y * 100}%`,
             width: `${crop.w * 100}%`,
             height: `${crop.h * 100}%`,
-            boxShadow: '0 0 0 9999px rgba(9,9,11,0.6)',
+            boxShadow: `0 0 0 9999px ${PREVIEW_COLORS.cropScrim}`,
           }}
           onPointerDown={(e) => onDown(e, 'move')}
           onPointerMove={onMove}
@@ -183,7 +184,7 @@ function CropOverlay({ clip, asset }: { clip: Clip; asset: MediaAsset }) {
           ))}
         </div>
 
-        <span className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-zinc-900/90 px-2.5 py-1 text-[11px] text-amber-200">
+        <span className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-zinc-900/90 px-2.5 py-1 text-2xs text-amber-200">
           {t('inspector.crop.hint')}
         </span>
       </div>
@@ -242,7 +243,7 @@ interface PreviewRotate {
  */
 const ROTATE_CURSOR_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
-  '<g fill="none" stroke="#18181b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">' +
+  `<g fill="none" stroke="${PREVIEW_COLORS.cursorOutline}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">` +
   '<path d="M17.2 7.8a6.6 6.6 0 1 0 1.7 5.4"/><path d="M18.6 3.4v4.6h-4.6"/></g>' +
   '<g fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' +
   '<path d="M17.2 7.8a6.6 6.6 0 1 0 1.7 5.4"/><path d="M18.6 3.4v4.6h-4.6"/></g></svg>';
@@ -581,7 +582,7 @@ function PreviewOverlays({
           ))}
           {angleBadge !== null && (
             <span
-              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-[11px] font-medium tabular-nums text-sky-200"
+              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-2xs font-medium tabular-nums text-sky-200"
               style={{
                 left: `${((selectedRect.dx + selectedRect.dw / 2) / outW) * 100}%`,
                 top: `${((selectedRect.dy + selectedRect.dh / 2) / outH) * 100}%`,

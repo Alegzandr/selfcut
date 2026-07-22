@@ -37,7 +37,7 @@ export function MasterVolume() {
       onMouseLeave={() => setActive(false)}
     >
       <span
-        className={`w-14 select-none text-right font-mono text-[10px] tabular-nums text-zinc-500 transition-opacity ${
+        className={`w-14 select-none text-right font-mono text-3xs tabular-nums text-zinc-500 transition-opacity ${
           active ? 'opacity-100' : 'opacity-0'
         }`}
         aria-hidden
@@ -48,7 +48,7 @@ export function MasterVolume() {
       <Tooltip label={label} placement="bottom">
         <button
           type="button"
-          className={`flex h-5 w-5 items-center justify-center rounded hover:bg-zinc-800/60 ${
+          className={`touch-hit flex h-5 w-5 items-center justify-center rounded hover:bg-zinc-800/60 ${
             muted ? 'text-red-400' : 'text-zinc-400'
           }`}
           onClick={togglePreviewMuted}

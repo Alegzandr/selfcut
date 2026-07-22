@@ -186,7 +186,7 @@ function SoftwareRenderingBanner() {
       <Zap className="h-4 w-4 flex-none text-amber-300" />
       <span className="min-w-0 flex-1">{t('gpu.softwareRendering')}</span>
       <button
-        className="flex-none rounded p-1 text-amber-200/80 hover:bg-amber-400/10 hover:text-amber-100"
+        className="touch-hit flex-none rounded p-1 text-amber-200/80 hover:bg-amber-400/10 hover:text-amber-100"
         title={t('gpu.dismiss')}
         aria-label={t('gpu.dismiss')}
         onClick={() => {

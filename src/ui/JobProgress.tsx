@@ -23,7 +23,7 @@ export function JobProgress({
   const { t } = useTranslation();
   const percent = progress.ratio == null ? null : Math.round(progress.ratio * 100);
   const phase = t(`library.job.phase.${progress.phase}`);
-  const text = dense ? 'text-[9px]' : 'text-xs';
+  const text = dense ? 'text-4xs' : 'text-xs';
   return (
     <div>
       <div className="flex items-center gap-1">

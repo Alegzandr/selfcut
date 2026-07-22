@@ -134,7 +134,7 @@ export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
                   type="button"
                   aria-label={`${t('inspector.keyframe')} · ${propLabel} · ${timeLabel}`}
                   title={`${propLabel} · ${timeLabel}`}
-                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[1px] border border-zinc-900 bg-zinc-100 shadow cursor-ew-resize touch-none active:bg-sky-300"
+                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[1px] border border-zinc-900 bg-zinc-100 shadow cursor-ew-resize touch-none hover:bg-sky-200 active:bg-sky-300"
                   style={{ left }}
                   onPointerDown={(e) => onDown(e, clip, time)}
                   onPointerMove={onMove}

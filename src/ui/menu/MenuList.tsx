@@ -38,7 +38,7 @@ export function MenuItemRow({ command, onRun }: { command: Command; onRun: () =>
       </span>
       <span className="flex-1 whitespace-nowrap">{command.label ?? t(command.labelKey)}</span>
       {command.shortcut && (
-        <span className="flex-none pl-4 font-mono text-[10px] tracking-tight text-zinc-400">
+        <span className="flex-none pl-4 font-mono text-3xs tracking-tight text-zinc-400">
           {command.shortcut}
         </span>
       )}

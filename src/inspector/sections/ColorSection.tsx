@@ -50,7 +50,7 @@ export function ColorSection({ clip }: { clip: Clip }) {
           {t('inspector.adjust')}
         </h3>
         <button
-          className="touch-hit flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800"
+          className="touch-hit flex items-center gap-1 rounded-md px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
           onClick={() => updateClipCommitted(clip.id, { color: undefined })}
         >
           <RotateCcw className="h-3 w-3" />
@@ -66,7 +66,7 @@ export function ColorSection({ clip }: { clip: Clip }) {
             onClick={() =>
               updateClipCommitted(clip.id, { color: { ...f.color, blur: color?.blur } })
             }
-            className="touch-hit rounded bg-zinc-800 px-2 py-1 text-[11px] font-medium text-zinc-300 active:bg-zinc-700"
+            className="touch-hit rounded bg-zinc-800 px-2 py-1 text-2xs font-medium text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700"
           >
             {t(`inspector.filters.${f.name}`)}
           </button>

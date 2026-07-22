@@ -198,7 +198,7 @@ export function Timeline() {
         <p className="text-sm text-zinc-500">
           {importing ? t('timeline.importing') : t('timeline.dropzone.title')}
         </p>
-        <label className="cursor-pointer rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 active:bg-zinc-700">
+        <label className="cursor-pointer rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-700/60 active:bg-zinc-700">
           {t('timeline.dropzone.choose')}
           <input
             type="file"
@@ -393,7 +393,7 @@ export function Timeline() {
                 className="pointer-events-none flex items-center border-y border-dashed border-sky-400/60 bg-sky-400/10"
                 style={{ height: trackHeightPx }}
               >
-                <span className="sticky left-0 px-3 text-[11px] font-medium text-sky-300">
+                <span className="sticky left-0 px-3 text-2xs font-medium text-sky-300">
                   {t('timeline.dropNewTrack')}
                 </span>
               </div>
@@ -406,14 +406,14 @@ export function Timeline() {
               reachable however far the timeline is scrolled. */}
             <div className="sticky left-0 z-20 flex w-fit gap-2 bg-zinc-950 p-2">
               <button
-                className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800 pointer-coarse:py-2"
+                className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:py-2"
                 onClick={() => addTrack('video')}
               >
                 <Plus className="mr-1 inline h-3 w-3" />
                 {t('timeline.addVideoTrack')}
               </button>
               <button
-                className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 active:bg-zinc-800 pointer-coarse:py-2"
+                className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:py-2"
                 onClick={() => addTrack('audio')}
               >
                 <Plus className="mr-1 inline h-3 w-3" />

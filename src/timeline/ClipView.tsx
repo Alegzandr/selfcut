@@ -16,6 +16,7 @@ import { gainDb } from '../inspector/format';
 import { UNITY_FADER, gainToFader } from '../lib/gain';
 import { useVolumeEntry } from '../ui/VolumeEntry';
 import { useIsCoarsePointer } from '../lib/device';
+import { CLIP_COLORS } from '../lib/palette';
 import { Waveform } from './Waveform';
 import { Filmstrip } from './Filmstrip';
 import { ClipFades } from './ClipFades';
@@ -144,7 +145,7 @@ export const ClipView = memo(function ClipView({
         e.stopPropagation();
         useStore.getState().selectClip(clip.id);
       }}
-      className={`group absolute top-1 bottom-1 isolate overflow-hidden rounded-md border focus-visible:ring-2 focus-visible:ring-sky-300 ${touch} ${border} ${isVideo ? 'bg-sky-950' : 'bg-emerald-950'}`}
+      className={`group absolute top-1 bottom-1 isolate overflow-hidden rounded-md border outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${touch} ${border} ${isVideo ? 'bg-sky-950' : 'bg-emerald-950'}`}
       style={{ left, width }}
       onPointerDown={(e) => beginDrag(e, 'move')}
       onPointerMove={onPointerMove}
@@ -176,7 +177,7 @@ export const ClipView = memo(function ClipView({
       {clip.kind === 'text' ? (
         <div className="pointer-events-none flex h-full w-full items-center gap-1 bg-gradient-to-b from-violet-900/60 to-violet-950 px-1.5">
           <Type className="h-3 w-3 flex-none text-violet-300" />
-          <span className="truncate text-[11px] font-medium text-violet-100">
+          <span className="truncate text-2xs font-medium text-violet-100">
             {clip.text.content.split('\n')[0] || t('clip.text.placeholder')}
           </span>
         </div>
@@ -190,7 +191,7 @@ export const ClipView = memo(function ClipView({
                 : clip.solid.color,
           }}
         >
-          <span className="truncate text-[11px] font-medium text-white drop-shadow">{t(`clip.solid.${clip.solid.kind}`)}</span>
+          <span className="truncate text-2xs font-medium text-white drop-shadow">{t(`clip.solid.${clip.solid.kind}`)}</span>
         </div>
       ) : clip.kind === 'shape' ? (
         <div className="pointer-events-none flex h-full w-full items-center gap-1 bg-gradient-to-b from-amber-900/60 to-amber-950 px-1.5">
@@ -203,7 +204,7 @@ export const ClipView = memo(function ClipView({
               borderRadius: clip.shape.kind === 'ellipse' ? '9999px' : undefined,
             }}
           />
-          <span className="truncate text-[11px] font-medium text-amber-100">
+          <span className="truncate text-2xs font-medium text-amber-100">
             {t(`clip.shape.${clip.shape.kind}`)}
           </span>
         </div>
@@ -217,7 +218,7 @@ export const ClipView = memo(function ClipView({
         <div className="pointer-events-none relative h-full w-full bg-gradient-to-b from-emerald-900/60 to-emerald-950">
           {hasPeaks && asset && (
             <div className="absolute inset-0">
-              <Waveform asset={asset} clip={clip} widthPx={width} clipLeftPx={left} color="rgba(110,231,183,0.65)" />
+              <Waveform asset={asset} clip={clip} widthPx={width} clipLeftPx={left} color={CLIP_COLORS.audioWaveform} />
             </div>
           )}
           <div className="absolute left-0 top-0 flex max-w-full items-center gap-1 px-1.5 py-0.5">
@@ -226,9 +227,9 @@ export const ClipView = memo(function ClipView({
             ) : (
               <Music className="h-3 w-3 flex-none text-emerald-300" />
             )}
-            <span className="truncate text-[10px] text-emerald-100">{asset?.file.name}</span>
+            <span className="truncate text-3xs text-emerald-100">{asset?.file.name}</span>
             {trackBadge && (
-              <span className="flex-none rounded bg-emerald-800/80 px-1 text-[9px] font-medium text-emerald-100">
+              <span className="flex-none rounded bg-emerald-800/80 px-1 text-4xs font-medium text-emerald-100">
                 {trackBadge}
               </span>
             )}
@@ -245,7 +246,7 @@ export const ClipView = memo(function ClipView({
 
       {/* Speed / volume badge */}
       {(clip.speed !== 1 || clip.volume !== 1) && (
-        <div className="pointer-events-none absolute right-1 top-0.5 rounded bg-black/60 px-1 text-[9px] text-zinc-200">
+        <div className="pointer-events-none absolute right-1 top-0.5 rounded bg-black/60 px-1 text-4xs text-zinc-200">
           {clip.speed !== 1 ? `${clip.speed}×` : ''}
           {clip.speed !== 1 && clip.volume !== 1 ? ' · ' : ''}
           {clip.volume !== 1 ? gainDb(clip.volume) : ''}
@@ -257,7 +258,7 @@ export const ClipView = memo(function ClipView({
           bubble and the pro-NLE numeric feedback in one. Store-held so it
           survives the remount when the drag crosses onto another track. */}
       {dragBadgeText && (
-        <div className="pointer-events-none absolute left-1/2 top-1 z-30 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-950/85 px-1.5 py-0.5 font-mono text-[10px] leading-tight text-zinc-100 shadow">
+        <div className="pointer-events-none absolute left-1/2 top-1 z-30 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-950/85 px-1.5 py-0.5 font-mono text-3xs leading-tight text-zinc-100 shadow">
           {dragBadgeText}
         </div>
       )}

@@ -1,5 +1,33 @@
 @import 'tailwindcss';
 
+/* Type scale below `text-xs`.
+   The editor chrome runs denser than Tailwind's smallest step: track headers,
+   clip badges and lane labels all sit at 9-11px. Those three sizes were spelled
+   as arbitrary values at ~50 call sites, which made an undeclared scale read as
+   a pile of magic numbers. Declared here, they are the scale.
+   Font size only, no paired line-height: the arbitrary values had none either,
+   and adding one would reflow every label that uses them. */
+@theme {
+  --text-2xs: 0.6875rem; /* 11px - secondary labels, list details */
+  --text-3xs: 0.625rem; /* 10px - badges, read-outs, menu hints */
+  --text-4xs: 0.5625rem; /* 9px - keyframe lane headers, densest chrome */
+}
+
+/* The one focus treatment, for every keyboard-reachable control.
+   Applied here rather than as a utility every button has to remember: there are
+   over a hundred of them, and the one that forgets is the accessibility bug.
+   `:where()` contributes no specificity, so any component that needs its own
+   treatment (the timeline clip, whose ring has to hug the clip rather than sit
+   2px outside it) still wins by simply setting `outline-none`.
+   Text inputs are deliberately absent: they already say focus by turning their
+   border sky-500, which is the idiom across the inspector and the dialogs. */
+@layer base {
+  :where(button, [role='button'], a, select, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-sky-400);
+    outline-offset: 2px;
+  }
+}
+
 html,
 body,
 #root {
@@ -20,7 +48,7 @@ textarea {
    The thumb "floats" thanks to a transparent border + background-clip. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(63 63 70) transparent;
+  scrollbar-color: var(--color-zinc-700) transparent;
 }
 ::-webkit-scrollbar {
   width: 12px;
@@ -30,16 +58,16 @@ textarea {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: rgb(63 63 70);
+  background-color: var(--color-zinc-700);
   border-radius: 9999px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(82 82 91);
+  background-color: var(--color-zinc-500);
 }
 ::-webkit-scrollbar-thumb:active {
-  background-color: rgb(113 113 122);
+  background-color: var(--color-zinc-400);
 }
 ::-webkit-scrollbar-corner {
   background: transparent;
@@ -84,12 +112,12 @@ textarea {
 .slider-thin::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 9999px;
-  background-color: rgb(63 63 70);
+  background-color: var(--color-zinc-700);
 }
 .slider-thin::-moz-range-track {
   height: 4px;
   border-radius: 9999px;
-  background-color: rgb(63 63 70);
+  background-color: var(--color-zinc-700);
 }
 .slider-thin::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -107,7 +135,10 @@ textarea {
   border-radius: 9999px;
   background-color: currentColor;
 }
+/* Same treatment as the base focus rule above; spelled out because a range
+   input is not in that selector list (inputs say focus their own way, but this
+   one has no border to turn sky-500). */
 .slider-thin:focus-visible {
-  outline: 2px solid rgb(56 189 248);
+  outline: 2px solid var(--color-sky-400);
   outline-offset: 2px;
 }

@@ -120,7 +120,7 @@ function VolumeEntryPanel({
         />
         <span className="text-xs text-zinc-400">dB</span>
       </div>
-      <p className="mt-1.5 max-w-40 text-[10px] leading-tight text-zinc-500">
+      <p className="mt-1.5 max-w-40 text-3xs leading-tight text-zinc-500">
         {t('volume.entry.hint', { min: MIN_DB })}
       </p>
     </div>,

@@ -194,7 +194,7 @@ function InspectorBody({
         <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-100">{name}</h2>
         <Tooltip label={t('inspector.deleteClip')}>
           <button
-            className="touch-hit rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2.5"
+            className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:p-2.5"
             // The whole selection, like every other delete surface: two trash
             // buttons on screen must not mean two different things.
             onClick={() => deleteClips(useStore.getState().selectedClipIds, false)}
@@ -204,7 +204,7 @@ function InspectorBody({
         </Tooltip>
         <Tooltip label={t('inspector.close')}>
           <button
-            className="touch-hit rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800 pointer-coarse:p-2.5"
+            className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:p-2.5"
             onClick={() => (coarse ? setInspectorOpen(false) : selectClip(null))}
           >
             <X className="h-4 w-4" />

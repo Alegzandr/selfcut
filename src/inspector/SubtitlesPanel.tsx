@@ -53,7 +53,7 @@ export function SubtitlesPanel() {
           <FilePlus className="h-3.5 w-3.5" />
           {t('subtitles.import')}
         </button>
-        <p className="text-[11px] text-zinc-500">{t('subtitles.empty.formats')}</p>
+        <p className="text-2xs text-zinc-500">{t('subtitles.empty.formats')}</p>
       </div>
     );
   }
@@ -66,7 +66,7 @@ export function SubtitlesPanel() {
         </span>
         <Tooltip label={t('subtitles.import')}>
           <button
-            className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="touch-hit rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
             onClick={importSubtitles}
           >
             <FilePlus className="h-4 w-4" />
@@ -105,7 +105,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
     >
       <div className="flex items-center gap-2">
         <button
-          className="font-mono text-[11px] tabular-nums text-zinc-400 hover:text-sky-400"
+          className="font-mono text-2xs tabular-nums text-zinc-400 hover:text-sky-400"
           title={t('subtitles.goto')}
           onClick={focusCue}
         >
@@ -116,7 +116,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
         <span className="flex-1" />
         <Tooltip label={t('subtitles.delete')}>
           <button
-            className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-400"
+            className="touch-hit rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-400"
             onClick={() => deleteClips([clip.id], false)}
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -126,6 +126,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
       <textarea
         value={clip.text.content}
         rows={1}
+        aria-label={t('a11y.subtitles.cue')}
         className="mt-1 w-full resize-y rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-zinc-100 outline-none hover:border-zinc-700 focus:border-sky-500 focus:bg-zinc-800"
         // The gesture snapshots the text as it was on entry, so a whole retype
         // undoes in one step instead of one entry per keystroke.

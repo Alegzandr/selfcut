@@ -65,7 +65,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
   } = useStore.getState();
 
   const btn =
-    'touch-hit flex h-4.5 w-4.5 items-center justify-center rounded text-zinc-500 active:bg-zinc-700 pointer-coarse:h-7 pointer-coarse:w-7';
+    'touch-hit flex h-4.5 w-4.5 items-center justify-center rounded text-zinc-500 hover:bg-zinc-700/60 active:bg-zinc-700 pointer-coarse:h-7 pointer-coarse:w-7';
   const slider = 'slider-thin w-full min-w-0 cursor-ew-resize';
   const volumeEntry = useVolumeEntry({
     gain: track.volume ?? 1,
@@ -250,7 +250,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
             {badgeAt &&
               createPortal(
                 <div
-                  className="pointer-events-none fixed z-[200] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-zinc-950/85 px-1 py-0.5 font-mono text-[10px] leading-tight text-zinc-100 shadow"
+                  className="pointer-events-none fixed z-[200] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-zinc-950/85 px-1 py-0.5 font-mono text-3xs leading-tight text-zinc-100 shadow"
                   style={{ left: badgeAt.left, top: badgeAt.top }}
                 >
                   {badgeAt.kind === 'volume'
@@ -275,7 +275,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
           {EXPANDED_TRACK_PROPS.map((prop) => (
             <div
               key={prop}
-              className="flex items-center gap-1 border-t border-zinc-800/50 bg-zinc-900/40 px-1.5 text-[9px] uppercase tracking-wide text-zinc-500"
+              className="flex items-center gap-1 border-t border-zinc-800/50 bg-zinc-900/40 px-1.5 text-4xs uppercase tracking-wide text-zinc-500"
               style={{ height: KEYFRAME_LANE_HEIGHT_PX }}
             >
               <Diamond className="h-2 w-2 -rotate-45 fill-zinc-500 text-zinc-500" />

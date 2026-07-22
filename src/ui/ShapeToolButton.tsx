@@ -60,8 +60,6 @@ export function ShapeToolButton() {
             active ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-300'
           }`}
           aria-pressed={active}
-          aria-haspopup="menu"
-          aria-expanded={open}
           onClick={() => setPreviewTool('shape')}
           // Right-click and long-press both reveal the group, like Adobe.
           onContextMenu={(e) => {
@@ -70,26 +68,28 @@ export function ShapeToolButton() {
           }}
         >
           <Icon className="h-4 w-4" />
-          {/* The corner notch: the "this tool has variants" tell. */}
-          <span
-            role="button"
-            tabIndex={0}
-            aria-label={t('preview.shape.pick')}
-            className="absolute bottom-0.5 right-0.5 h-0 w-0 border-b-[5px] border-l-[5px] border-b-current border-l-transparent opacity-70"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen((v) => !v);
-            }}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter' && e.key !== ' ') return;
-              e.preventDefault();
-              e.stopPropagation();
-              setOpen((v) => !v);
-            }}
-          />
         </button>
       </Tooltip>
+
+      {/* The corner notch: the "this tool has variants" tell, and the button
+          that opens them. A sibling of the tool button rather than a child:
+          nested interactive elements are invalid, and screen readers reach only
+          one of the two. It overlays the tool button's corner, so it keeps the
+          Adobe look while owning its own focus and its own accessible name. */}
+      <button
+        aria-label={t('preview.shape.pick')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`absolute bottom-0 right-0 rounded-br-md p-0.5 ${
+          active ? 'text-sky-300' : 'text-zinc-300'
+        }`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span
+          aria-hidden
+          className="block h-0 w-0 border-b-[5px] border-l-[5px] border-b-current border-l-transparent opacity-70"
+        />
+      </button>
 
       {open && (
         <div
@@ -101,7 +101,7 @@ export function ShapeToolButton() {
               key={kind}
               role="menuitemradio"
               aria-checked={kind === shapeKind}
-              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs active:bg-zinc-800 ${
+              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-zinc-800 active:bg-zinc-700 ${
                 kind === shapeKind ? 'text-sky-300' : 'text-zinc-300'
               }`}
               onClick={() => {

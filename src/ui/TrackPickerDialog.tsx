@@ -137,7 +137,7 @@ export function TrackPickerDialog({
               <h2 className="min-w-0 text-sm font-semibold text-zinc-100">{title}</h2>
               <Tooltip label={t('library.tracks.close')} shortcut="Esc">
                 <button
-                  className="-mt-1 flex-none rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800"
+                  className="touch-hit -mt-1 flex-none rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800"
                   onClick={onClose}
                 >
                   <X className="h-4 w-4" />
@@ -147,10 +147,13 @@ export function TrackPickerDialog({
             {hint && <p className="text-xs leading-relaxed text-zinc-400">{hint}</p>}
 
             {tracks.length > FILTER_ABOVE && (
-              <div className="mt-3 flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5">
+              // The border lives on the wrapper, so focus has to be shown there
+              // too: `outline-none` on the input alone left the field with no
+              // visible focus at all.
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 focus-within:border-sky-500">
                 <Search className="h-3.5 w-3.5 flex-none text-zinc-500" />
                 <input
-                  className="min-w-0 flex-1 bg-transparent text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+                  className="min-w-0 flex-1 bg-transparent text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
                   placeholder={t('library.tracks.filter')}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
@@ -181,7 +184,7 @@ export function TrackPickerDialog({
                         <Row tickable={multiple && !track.unavailable}>
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-xs text-zinc-200">{track.name}</div>
-                            <div className="mt-0.5 truncate text-[11px] text-zinc-500">
+                            <div className="mt-0.5 truncate text-2xs text-zinc-500">
                               {track.unavailable
                                 ? `${track.detail} · ${track.unavailable}`
                                 : track.detail}
@@ -226,12 +229,12 @@ export function TrackPickerDialog({
               // appears on the first tick shifts the list under the finger that
               // just tapped it.
               <div className="mt-3 flex items-center justify-between gap-3 border-t border-zinc-800 pt-3">
-                <span className="min-w-0 truncate text-[11px] text-zinc-500">
+                <span className="min-w-0 truncate text-2xs text-zinc-500">
                   {t('library.tracks.selected', { count: picked.length })}
                 </span>
                 <Tooltip label={actionHint}>
                   <button
-                    className="touch-hit flex-none rounded-lg bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600"
+                    className="touch-hit flex-none rounded-lg bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-400"
                     disabled={picked.length === 0}
                     onClick={() => onPick(picked)}
                   >

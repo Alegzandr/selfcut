@@ -184,7 +184,7 @@ export function ShortcutsHelp() {
               <h2 className="text-sm font-semibold text-zinc-100">{t('shortcuts.title')}</h2>
               <Tooltip label={t('shortcuts.close')} shortcut="Esc">
                 <button
-                  className="rounded-lg p-1.5 text-zinc-400 active:bg-zinc-800"
+                  className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
                   onClick={() => setShortcutsOpen(false)}
                 >
                   <X className="h-4 w-4" />
@@ -194,7 +194,7 @@ export function ShortcutsHelp() {
             <div className="grid gap-4 sm:grid-cols-2">
               {GROUPS.map((g) => (
                 <div key={g.title}>
-                  <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                  <h3 className="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-zinc-400">
                     {t(g.title)}
                   </h3>
                   <dl className="space-y-1">

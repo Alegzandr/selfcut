@@ -54,7 +54,7 @@ export function About() {
               <h2 className="text-sm font-semibold text-zinc-100">{t('menu.help.about')}</h2>
               <Tooltip label={t('about.close')} shortcut="Esc">
                 <button
-                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800"
+                  className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800"
                   onClick={() => setAboutOpen(false)}
                 >
                   <X className="h-4 w-4" />
