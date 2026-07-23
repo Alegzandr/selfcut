@@ -551,5 +551,16 @@
   "library.effects.presets": "Meus presets",
   "mobile.preset": "Preset",
   "library.presets.empty": "Os presets importados ficam aqui pelo resto desta sessão.",
-  "library.presets.remove": "Remover desta sessão"
+  "library.presets.remove": "Remover desta sessão",
+  "inspector.lut": "LUT",
+  "inspector.lut.none": "Nenhuma",
+  "inspector.lut.import": "Importar",
+  "inspector.lut.intensity": "Intensidade",
+  "library.effects.lut": "LUTs",
+  "library.lut.import": "Importar .cube",
+  "library.lut.empty": "Nenhuma LUT importada ainda",
+  "library.lut.remove": "Remover LUT",
+  "library.lut.imported": "LUT importada: {{name}}",
+  "errors.lut.invalid": "Este não é um arquivo LUT .cube válido.",
+  "errors.lut.unreadable": "Não foi possível ler o arquivo LUT."
 }

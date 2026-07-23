@@ -18,6 +18,7 @@ import type { PreviewTool, PreviewView } from '../preview/view';
 import type { SubtitleCue } from '../lib/subtitles';
 import type { FFmpegProgress } from '../media/ffmpeg';
 import type { PresetLook } from '../effects/presetFile';
+import type { ParsedCube } from '../effects/lut';
 
 /** An imported `.sfx` preset, held for the session so it can be re-applied by drag. */
 export interface LoadedPreset {
@@ -437,6 +438,19 @@ export interface EditorState {
     value: number,
     timelineMs: number,
   ) => void;
+  /**
+   * Import a parsed `.cube` LUT into the project (one undo step) and return its
+   * new id, so the caller can immediately apply it to the selection.
+   */
+  importLut: (name: string, parsed: ParsedCube) => string;
+  /** Remove a LUT and strip its reference from every clip that used it. */
+  removeLut: (id: string) => void;
+  /** Point each of `clipIds` at a LUT, preserving each clip's current intensity. */
+  setClipsLut: (clipIds: string[], lutId: string) => void;
+  /** Live (uncommitted) intensity edit; history is committed by the slider gesture. */
+  setClipLutIntensity: (clipId: string, intensity: number) => void;
+  /** Drop the LUT from a clip, leaving its numeric grades untouched. */
+  clearClipLut: (clipId: string) => void;
   /**
    * Apply an imported `.sfx` preset to each of `clipIds` (one undo step). Sections
    * replace rather than merge, keyframe times stay absolute and are trimmed

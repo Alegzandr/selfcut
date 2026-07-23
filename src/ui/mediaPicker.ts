@@ -70,6 +70,22 @@ export function openPresetPicker(onFile: (file: File) => void): void {
 }
 
 /**
+ * LUT variant: a single `.cube` colour table. Some OS dialogs won't filter on an
+ * extension they don't know, which is harmless - the parser rejects anything
+ * that is not a valid cube file.
+ */
+export function openCubePicker(onFile: (file: File) => void): void {
+  pick(
+    (files) => {
+      const file = files[0];
+      if (file) onFile(file);
+    },
+    false,
+    { accept: '.cube', multiple: false },
+  );
+}
+
+/**
  * Folder variant: the OS dialog selects a directory and hands back every file
  * inside it. Used to relink sources in bulk after a folder was renamed or moved
  * - the browser never exposes a path, so the caller matches on `file.name`.

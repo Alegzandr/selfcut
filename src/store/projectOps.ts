@@ -13,7 +13,7 @@ import { MIN_CLIP_DURATION_MS, PROJECT_FPS } from '../app/config';
 const DEFAULT_ASPECT: AspectRatio = '16:9';
 
 export function createEmptyProject(): Project {
-  return { id: uid('proj'), aspectRatio: DEFAULT_ASPECT, fps: PROJECT_FPS, tracks: [], markers: [] };
+  return { id: uid('proj'), aspectRatio: DEFAULT_ASPECT, fps: PROJECT_FPS, tracks: [], markers: [], luts: [] };
 }
 
 /**

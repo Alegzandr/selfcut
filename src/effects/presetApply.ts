@@ -88,9 +88,16 @@ function truncateColor(
 ): { color: ClipColor; truncated: boolean } {
   const out: ClipColor = {};
   let truncated = false;
-  for (const [key, ch] of Object.entries(color) as [keyof ClipColor, Channel][]) {
+  for (const [key, value] of Object.entries(color)) {
+    // `lut` is a reference, not a time-based channel: it carries through a
+    // preset unchanged, with nothing to trim against the clip's length.
+    if (key === 'lut') {
+      out.lut = color.lut;
+      continue;
+    }
+    const ch = value as Channel;
     if (channelTruncated(ch, durationMs)) truncated = true;
-    out[key] = truncateChannel(ch, durationMs);
+    (out as Record<string, Channel>)[key] = truncateChannel(ch, durationMs);
   }
   return { color: out, truncated };
 }

@@ -20,6 +20,7 @@ import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
 import { Clip } from '../types';
 import { isTextClip, timelineToSourceMs } from '../model';
 import { drawClip, visibleVideoClips } from '../preview/compositor';
+import { syncLuts } from '../preview/colorPass';
 import { loadFonts } from '../lib/fonts';
 import { StillFrame, type DrawableFrame } from '../media/stillImage';
 import type { Mp4Preset } from './presets';
@@ -175,6 +176,9 @@ function postProgress(value: number): void {
 
 async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   const { project, files, startMs, durationMs, audio } = req;
+  // Register the project's LUTs on this worker's colour pass, exactly as the
+  // preview does, so the export grades every clip identically to what was seen.
+  syncLuts(project.luts);
   // Still-image assets arrive pre-rasterized from the main thread.
   const stills = new Map<string, StillFrame>(
     Object.entries(req.stills).map(([assetId, bitmap]) => [assetId, new StillFrame(bitmap)]),

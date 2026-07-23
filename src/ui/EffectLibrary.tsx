@@ -7,7 +7,8 @@ import { resolveEffectTargets } from '../effects/apply';
 import { EFFECT_DRAG_MIME, PRESET_DRAG_MIME, TRANSITION_DRAG_MIME } from '../app/config';
 import { useIsCoarsePointer } from '../lib/device';
 import { applyPresetToClips } from './presetActions';
-import { X } from 'lucide-react';
+import { importLutFromDisk } from './lutActions';
+import { Plus, X } from 'lucide-react';
 
 /**
  * The Effects and Transitions panes of the media library. Both are catalogues
@@ -163,6 +164,92 @@ function PresetsGroup({ coarse }: { coarse: boolean }) {
   );
 }
 
+/**
+ * The project's imported LUTs, with an Import button. A LUT tile applies to the
+ * selection like an effect does; the inspector is where its strength is tuned.
+ * The list lives on the project (it persists and exports), unlike the session
+ * preset shelf above it — so it says "no LUT imported", not "gone tomorrow".
+ *
+ * LUTs only mean something on a picture clip, so the tiles dim when the
+ * selection has none, matching the built-in effect tiles.
+ */
+function LutsGroup({ coarse }: { coarse: boolean }) {
+  const { t } = useTranslation();
+  const luts = useStore((s) => s.project.luts) ?? [];
+  const assets = useStore((s) => s.assets);
+  const project = useStore((s) => s.project);
+  const selectedClipIds = useStore((s) => s.selectedClipIds);
+
+  // Selected clips that actually paint: generated clips always do, a media clip
+  // does when its asset is not pure audio. The same gate the effect catalogue uses.
+  const pictureIds = selectedClipIds.filter((id) => {
+    for (const track of project.tracks) {
+      const clip = track.clips.find((c) => c.id === id);
+      if (!clip) continue;
+      return clip.kind !== 'media' || (!!assets[clip.assetId] && assets[clip.assetId]!.kind !== 'audio');
+    }
+    return false;
+  });
+  const enabled = pictureIds.length > 0;
+
+  const apply = (lutId: string) => {
+    const st = useStore.getState();
+    if (selectedClipIds.length === 0) {
+      st.setNotice(t('library.effects.noSelection'));
+      return;
+    }
+    if (pictureIds.length === 0) {
+      st.setNotice(t('library.effects.rejected'));
+      return;
+    }
+    st.setClipsLut(pictureIds, lutId);
+    dismissOnTouch(coarse);
+  };
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between px-0.5 pt-1">
+        <GroupHeading>{t('library.effects.lut')}</GroupHeading>
+        <button
+          type="button"
+          className="touch-hit flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
+          onClick={() => importLutFromDisk()}
+          title={t('library.lut.import')}
+        >
+          <Plus className="h-3 w-3" />
+          {t('library.lut.import')}
+        </button>
+      </div>
+      {luts.length === 0 ? (
+        <p className="px-0.5 text-2xs leading-snug text-zinc-600">{t('library.lut.empty')}</p>
+      ) : (
+        <CatalogGrid>
+          {luts.map((lut) => (
+            <div key={lut.id} className="relative">
+              <CatalogTile
+                label={lut.name}
+                coarse={coarse}
+                enabled={enabled}
+                onDragStart={(e) => e.preventDefault()}
+                onApply={() => apply(lut.id)}
+              />
+              <button
+                type="button"
+                title={t('library.lut.remove')}
+                aria-label={t('library.lut.remove')}
+                className="absolute right-0.5 top-0.5 rounded p-0.5 text-zinc-600 hover:bg-zinc-700 hover:text-zinc-200"
+                onClick={() => useStore.getState().removeLut(lut.id)}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </CatalogGrid>
+      )}
+    </div>
+  );
+}
+
 export function EffectsPane() {
   const { t } = useTranslation();
   const coarse = useIsCoarsePointer();
@@ -189,6 +276,7 @@ export function EffectsPane() {
     <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-1.5">
       <CatalogHint />
       <PresetsGroup coarse={coarse} />
+      <LutsGroup coarse={coarse} />
       {groups.map((group) => (
         <div key={group} className="space-y-1">
           <GroupHeading>{t(`library.effects.${group}`)}</GroupHeading>

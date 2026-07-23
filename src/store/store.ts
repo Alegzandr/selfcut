@@ -42,6 +42,7 @@ import { createPlaybackSlice } from './slices/playbackSlice';
 import { createClipsSlice } from './slices/clipsSlice';
 import { createKeyframesSlice } from './slices/keyframesSlice';
 import { createEffectsSlice } from './slices/effectsSlice';
+import { createLutsSlice } from './slices/lutsSlice';
 import { createTracksSlice } from './slices/tracksSlice';
 import { createMarkersSlice } from './slices/markersSlice';
 import { createHistorySlice } from './slices/historySlice';
@@ -242,6 +243,7 @@ export const useStore = create<EditorState>((set, get) => {
     ...createClipsSlice(set, get, helpers),
     ...createKeyframesSlice(set, get, helpers),
     ...createEffectsSlice(set, get, helpers),
+    ...createLutsSlice(set, get, helpers),
     ...createTracksSlice(set, get, helpers),
     ...createMarkersSlice(set, get, helpers),
     ...createHistorySlice(set, get, helpers),

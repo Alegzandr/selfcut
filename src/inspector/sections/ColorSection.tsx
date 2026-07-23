@@ -4,6 +4,7 @@ import { useStore } from '../../store/store';
 import { Channel, Clip, ColorProp, EaseId } from '../../types';
 import { COLOR_PROPS, EASE_IDS, keyframesOf, sampleChannel } from '../../model';
 import { SliderRow, type KeyframeControl } from '../SliderRow';
+import { importLutFromDisk } from '../../ui/lutActions';
 
 /** Two keyframe times within this many ms count as sitting on the same playhead. */
 const ON_KEY_EPSILON_MS = 1;
@@ -22,6 +23,60 @@ const RANGES: Record<ColorProp, { min: number; max: number }> = {
 /** Value of a colour channel at a clip-local time. Absent means identity (0). */
 function valueAt(ch: Channel | undefined, localMs: number): number {
   return ch === undefined ? 0 : sampleChannel(ch, localMs);
+}
+
+/**
+ * The LUT control: pick an imported table (or import a new `.cube`) and dial its
+ * strength. Sits above the numeric sliders because the LUT is applied first — a
+ * LOG→Rec.709 conversion is the base the sliders then fine-tune. Intensity is
+ * live-set while dragging and committed as one undo step by the slider gesture.
+ */
+function LutRow({ clip }: { clip: Clip }) {
+  const { t } = useTranslation();
+  const luts = useStore((s) => s.project.luts) ?? [];
+  const { setClipsLut, setClipLutIntensity, clearClipLut } = useStore.getState();
+  const active = clip.color?.lut;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="w-16 flex-none text-xs text-zinc-500">{t('inspector.lut')}</span>
+        <select
+          value={active?.id ?? ''}
+          onChange={(e) =>
+            e.target.value ? setClipsLut([clip.id], e.target.value) : clearClipLut(clip.id)
+          }
+          className="min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-sky-500"
+        >
+          <option value="">{t('inspector.lut.none')}</option>
+          {luts.map((lut) => (
+            <option key={lut.id} value={lut.id}>
+              {lut.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="touch-hit flex-none rounded-md border border-zinc-700 px-2 py-1 text-2xs text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
+          onClick={() => importLutFromDisk((id) => setClipsLut([clip.id], id))}
+          title={t('inspector.lut.import')}
+        >
+          {t('inspector.lut.import')}
+        </button>
+      </div>
+      {active && (
+        <SliderRow
+          label={t('inspector.lut.intensity')}
+          value={active.intensity}
+          min={0}
+          max={1}
+          step={0.01}
+          format={(v) => `${Math.round(v * 100)}%`}
+          onChange={(v) => setClipLutIntensity(clip.id, v)}
+        />
+      )}
+    </div>
+  );
 }
 
 /**
@@ -83,6 +138,7 @@ export function ColorSection({ clip }: { clip: Clip }) {
           {t('inspector.reset')}
         </button>
       </div>
+      <LutRow clip={clip} />
       {COLOR_PROPS.map((key) => {
         const { min, max } = RANGES[key];
         const label = t(`inspector.adjust.${key}`);

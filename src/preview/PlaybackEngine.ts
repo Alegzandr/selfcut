@@ -13,6 +13,7 @@ import { audioKey, getAudioBuffer, getStillFrame } from '../media/mediaCache';
 import type { DrawableFrame } from '../media/stillImage';
 import { FrameCursor } from './FrameCursor';
 import { drawClip, visibleVideoClips } from './compositor';
+import { syncLuts } from './colorPass';
 import { ScheduledSource, sameAudioMix, scheduleProjectAudio, stopScheduled } from './audioMix';
 import { TrackLevels, hasLevelListeners, publishLevels } from './meterBus';
 
@@ -304,6 +305,9 @@ export class PlaybackEngine {
   };
 
   private draw(state: EditorState, tMs: number, scale: number): void {
+    // Hand the colour pass the project's current LUT set before any clip grades.
+    // Reference-equal when nothing changed, so this is a cheap per-frame guard.
+    syncLuts(state.project.luts);
     const { width, height } = outputDimensions(state.project.aspectRatio);
     // Composite at a fraction of the export size - cheaper, and the browser
     // upscales the backing store to fill the monitor.

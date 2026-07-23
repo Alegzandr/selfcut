@@ -187,6 +187,12 @@ export interface ResolvedColor {
   temperature: number;
   tint: number;
   vignette: number;
+  /**
+   * The LUT to apply before the numeric adjustments, when the clip carries one
+   * at a non-zero intensity. `id` is looked up in the renderer's LUT registry
+   * (fed from `Project.luts`); a LUT that isn't registered is drawn as no LUT.
+   */
+  lut?: { id: string; intensity: number };
 }
 
 /**
@@ -206,16 +212,20 @@ export function resolveColor(clip: Clip, timelineMs: number): ResolvedColor | nu
     tint: sampleChannel(c.tint ?? 0, local),
     vignette: sampleChannel(c.vignette ?? 0, local),
   };
+  // A LUT at intensity 0 is a no-op the WebGL pass shouldn't spin up for.
+  const lut = c.lut && c.lut.intensity > 0 ? { id: c.lut.id, intensity: Math.min(1, c.lut.intensity) } : undefined;
   if (
     r.brightness === 0 &&
     r.contrast === 0 &&
     r.saturation === 0 &&
     r.temperature === 0 &&
     r.tint === 0 &&
-    r.vignette === 0
+    r.vignette === 0 &&
+    !lut
   ) {
     return null;
   }
+  if (lut) r.lut = lut;
   return r;
 }
 

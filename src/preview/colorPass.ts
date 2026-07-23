@@ -16,6 +16,7 @@
  */
 import type { DrawableFrame } from '../media/stillImage';
 import type { ResolvedColor } from '../model';
+import type { Lut } from '../types';
 
 type AnyCanvas = OffscreenCanvas;
 type Ctx2D = OffscreenCanvasRenderingContext2D;
@@ -30,13 +31,24 @@ void main() {
 
 const FRAG = `#version 300 es
 precision highp float;
+precision highp sampler3D;
 in vec2 uv;
 out vec4 outColor;
 uniform sampler2D tex;
-uniform float uBright, uContrast, uSat, uTemp, uTint, uVignette;
+uniform sampler3D uLut;
+uniform float uBright, uContrast, uSat, uTemp, uTint, uVignette, uLutAmount, uLutSize;
 void main() {
   vec4 c = texture(tex, uv);
   vec3 rgb = c.rgb;
+  // LUT first: the technical LOG->Rec.709 transform (or a creative grade) maps
+  // the raw frame, then the sliders tune the mapped result. The half-texel
+  // scale keeps the trilinear fetch centred on the LUT's grid points, so the
+  // endpoints land exactly instead of drifting half a cell in.
+  if (uLutAmount > 0.0) {
+    vec3 luv = (rgb * (uLutSize - 1.0) + 0.5) / uLutSize;
+    vec3 graded = texture(uLut, luv).rgb;
+    rgb = mix(rgb, graded, uLutAmount);
+  }
   rgb += uBright;                              // exposure
   rgb.r += uTemp * 0.12;                        // white balance: warm/cool
   rgb.b -= uTemp * 0.12;
@@ -59,6 +71,33 @@ interface Uniforms {
   uTemp: WebGLUniformLocation | null;
   uTint: WebGLUniformLocation | null;
   uVignette: WebGLUniformLocation | null;
+  uLutAmount: WebGLUniformLocation | null;
+  uLutSize: WebGLUniformLocation | null;
+}
+
+/**
+ * The LUTs currently in scope, keyed by id, kept in sync with `Project.luts` by
+ * `syncLuts`. Module-level so both the preview grader (main thread) and the
+ * export grader (worker) read the set their own draft was told about, without
+ * threading a registry through the compositor's every call. The grader uploads
+ * each one to a `sampler3D` lazily on first use and caches the GPU texture.
+ */
+const lutRegistry = new Map<string, Lut>();
+/** Last array `syncLuts` saw, so an unchanged project skips the rebuild each frame. */
+let lastLuts: Lut[] | null = null;
+
+/**
+ * Point the renderer at the project's current LUT set. Called once per frame by
+ * each draw driver; a reference-equal array (the common case: nothing changed)
+ * returns immediately. Ids no longer present drop out of the registry, so a
+ * clip referencing a removed LUT falls back to no LUT.
+ */
+export function syncLuts(luts: readonly Lut[] | undefined): void {
+  const next = (luts ?? []) as Lut[];
+  if (next === lastLuts) return;
+  lastLuts = next;
+  lutRegistry.clear();
+  for (const lut of next) lutRegistry.set(lut.id, lut);
 }
 
 class ColorGrader {
@@ -71,6 +110,10 @@ class ColorGrader {
   private scratchCtx: Ctx2D;
   private w = 0;
   private h = 0;
+  /** Uploaded LUTs, keyed by `Lut.id`. Built on first use, kept for the session. */
+  private lutTextures = new Map<string, { tex: WebGLTexture; size: number }>();
+  /** Bound when no LUT is active, so the `sampler3D` always has a valid texture. */
+  private identityLut: WebGLTexture;
 
   constructor(gl: WebGL2RenderingContext, canvas: AnyCanvas) {
     this.canvas = canvas;
@@ -87,13 +130,18 @@ class ColorGrader {
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
 
     this.texture = gl.createTexture()!;
+    gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+
+    // Frame on unit 0, LUT on unit 1: two samplers, two permanently-assigned units.
     gl.uniform1i(gl.getUniformLocation(program, 'tex'), 0);
+    gl.uniform1i(gl.getUniformLocation(program, 'uLut'), 1);
+    this.identityLut = buildIdentityLut(gl);
 
     this.uniforms = {
       uBright: gl.getUniformLocation(program, 'uBright'),
@@ -102,10 +150,46 @@ class ColorGrader {
       uTemp: gl.getUniformLocation(program, 'uTemp'),
       uTint: gl.getUniformLocation(program, 'uTint'),
       uVignette: gl.getUniformLocation(program, 'uVignette'),
+      uLutAmount: gl.getUniformLocation(program, 'uLutAmount'),
+      uLutSize: gl.getUniformLocation(program, 'uLutSize'),
     };
 
     this.scratch = new OffscreenCanvas(1, 1);
     this.scratchCtx = this.scratch.getContext('2d')!;
+  }
+
+  /**
+   * Upload a registered LUT to a 3D texture (once), or return the cached one.
+   * Stored as `RGB8` with `LINEAR` filtering, which is core WebGL2 and gives the
+   * trilinear interpolation between grid points for free — no float-texture
+   * extension, and 8-bit precision is what an SDR export lands at anyway.
+   */
+  private lutTexture(id: string): { tex: WebGLTexture; size: number } | null {
+    const cached = this.lutTextures.get(id);
+    if (cached) return cached;
+    const lut = lutRegistry.get(id);
+    if (!lut) return null;
+
+    const gl = this.gl;
+    const n = lut.size;
+    const bytes = new Uint8Array(n * n * n * 3);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.round(lut.data[i]! * 255);
+
+    const tex = gl.createTexture()!;
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_3D, tex);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+    // ArrayBufferView uploads ignore UNPACK_FLIP_Y, so the data's r-fastest
+    // ordering maps straight onto (x=r, y=g, z=b) with no axis surprises.
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB8, n, n, n, 0, gl.RGB, gl.UNSIGNED_BYTE, bytes);
+
+    const entry = { tex, size: n };
+    this.lutTextures.set(id, entry);
+    return entry;
   }
 
   private resize(w: number, h: number): void {
@@ -129,6 +213,16 @@ class ColorGrader {
     sample.draw(this.scratchCtx, 0, 0, w, h, 0, 0, w, h);
 
     const gl = this.gl;
+
+    // Bind the LUT on unit 1 (or the identity, so the sampler is never unbound),
+    // and only turn the LUT branch on when the clip's LUT is actually registered.
+    const lut = adj.lut ? this.lutTexture(adj.lut.id) : null;
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_3D, lut ? lut.tex : this.identityLut);
+    gl.uniform1f(this.uniforms.uLutAmount, lut ? adj.lut!.intensity : 0);
+    gl.uniform1f(this.uniforms.uLutSize, lut ? lut.size : 2);
+
+    gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.scratch);
     gl.uniform1f(this.uniforms.uBright, adj.brightness);
@@ -140,6 +234,29 @@ class ColorGrader {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return this.canvas;
   }
+}
+
+/**
+ * A 2×2×2 identity 3D LUT, bound to the LUT sampler whenever no real LUT is
+ * active. `sampler3D` in GLSL always samples, even under a dead `if`, so the
+ * unit must never be left without a valid texture — the identity keeps that
+ * fetch harmless (and its result is discarded, since `uLutAmount` is 0 then).
+ */
+function buildIdentityLut(gl: WebGL2RenderingContext): WebGLTexture {
+  const tex = gl.createTexture()!;
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_3D, tex);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+  // r fastest, then g, then b — the 8 corners of the colour cube.
+  const d = new Uint8Array([
+    0, 0, 0, 255, 0, 0, 0, 255, 0, 255, 255, 0, 0, 0, 255, 255, 0, 255, 0, 255, 255, 255, 255, 255,
+  ]);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB8, 2, 2, 2, 0, gl.RGB, gl.UNSIGNED_BYTE, d);
+  return tex;
 }
 
 function buildProgram(gl: WebGL2RenderingContext): WebGLProgram {

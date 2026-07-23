@@ -8,6 +8,32 @@ export interface Project {
   fps: number;
   tracks: Track[];
   markers: Marker[];
+  /**
+   * Colour lookup tables imported into this project (`.cube` files), reusable
+   * across every clip. Project-scoped rather than clip-scoped so one imported
+   * LUT can grade a whole shoot, and so it travels inside the project: the
+   * export worker receives it with `req.project` and a saved `.selfcut` carries
+   * it verbatim. Optional because projects saved before LUTs existed have none.
+   */
+  luts?: Lut[];
+}
+
+/**
+ * A colour lookup table parsed from a `.cube` file. 1D `.cube` LUTs are expanded
+ * to the 3D form on import, so every LUT here is a full 3D table and the renderer
+ * has a single sampling path.
+ */
+export interface Lut {
+  id: string;
+  /** Display name — the source filename with its extension stripped. */
+  name: string;
+  /** Cube edge length N: the table holds N×N×N entries. Typically 17, 32, 33 or 64. */
+  size: number;
+  /**
+   * Flat RGB triplets, N³×3 floats in 0..1, red varying fastest (the `.cube`
+   * convention): the entry for grid point (r, g, b) starts at (r + g*N + b*N*N)*3.
+   */
+  data: number[];
 }
 
 /** A named point on the timeline (cue). */
@@ -300,6 +326,14 @@ export interface ClipColor {
   vignette?: Channel;
   /** Gaussian blur, 0..1 (fraction of the output height), applied when compositing. */
   blur?: Channel;
+  /**
+   * A colour lookup table applied BEFORE the numeric adjustments above — the
+   * technical LOG→Rec.709 conversion or a creative grade goes first, then the
+   * sliders tune the result. `id` references an entry in `Project.luts`;
+   * `intensity` (0..1) mixes the LUT against the ungraded frame (1 = full LUT).
+   * A missing `id` (LUT since removed) renders as no LUT. Not keyframable.
+   */
+  lut?: { id: string; intensity: number };
 }
 
 /**
