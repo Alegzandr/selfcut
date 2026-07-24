@@ -9,7 +9,7 @@ import { FULL_FRAME_BOUNDS, type HandleBounds } from './transformSnap';
  * wheel-scale it). `hand` and `zoom` drive the *camera* instead - they move and
  * scale the view of the frame without touching a single clip.
  */
-export type PreviewTool = 'select' | 'hand' | 'zoom' | 'shape';
+export type PreviewTool = 'select' | 'hand' | 'zoom' | 'shape' | 'pen';
 
 /** Default look of a freshly drawn shape. */
 export const DEFAULT_SHAPE_FILL = PREVIEW_COLORS.shapeFill;

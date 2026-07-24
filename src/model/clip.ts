@@ -3,6 +3,7 @@ import {
   AudioTrackInfo,
   Clip,
   ClipAnimation,
+  ClipMask,
   ClipTransform,
   MediaAsset,
   ShapeClip,
@@ -11,6 +12,7 @@ import {
   isTrackPlayable,
 } from '../types';
 import { sampleChannel } from './animation';
+import { buildCurveTexture, curvesAreIdentity } from './curves';
 
 /**
  * Clip-level model math: durations, source<->timeline mapping, fade/zoom
@@ -179,6 +181,30 @@ export function resolveBlur(clip: Clip, timelineMs: number): number {
   return Math.max(0, sampleChannel(b, timelineMs - clip.timelineStartMs));
 }
 
+/** A mask's animated transform sampled to plain numbers at a clip-local time. */
+export interface ResolvedMaskMotion {
+  tx: number;
+  ty: number;
+  scale: number;
+  rotation: number;
+}
+
+/**
+ * The mask's motion transform at a clip-local time: each channel sampled, or its
+ * identity default (0 offset, scale 1, no rotation) when the mask does not
+ * animate that axis. Shared by preview and export so a tracked mask lands in the
+ * same place wherever it is drawn.
+ */
+export function resolveMaskMotion(mask: ClipMask, localMs: number): ResolvedMaskMotion {
+  const m = mask.motion;
+  return {
+    tx: m?.tx !== undefined ? sampleChannel(m.tx, localMs) : 0,
+    ty: m?.ty !== undefined ? sampleChannel(m.ty, localMs) : 0,
+    scale: m?.scale !== undefined ? sampleChannel(m.scale, localMs) : 1,
+    rotation: m?.rotation !== undefined ? sampleChannel(m.rotation, localMs) : 0,
+  };
+}
+
 /** Colour grading resolved to plain numbers at a timeline time. */
 export interface ResolvedColor {
   brightness: number;
@@ -193,6 +219,35 @@ export interface ResolvedColor {
    * (fed from `Project.luts`); a LUT that isn't registered is drawn as no LUT.
    */
   lut?: { id: string; intensity: number };
+  /**
+   * Baked 256×4 RGBA tone-curve texture (see `buildCurveTexture`), present only
+   * when the clip carries non-identity curves. The colour pass uploads it to a
+   * 1D lookup; absent = no curve stage.
+   */
+  curve?: Uint8Array;
+  /**
+   * Chroma key parameters resolved for the shader: the key colour as linear
+   * 0..1 RGB, plus the three matte controls. Present only when the clip keys.
+   */
+  chroma?: {
+    color: [number, number, number];
+    similarity: number;
+    smoothness: number;
+    spill: number;
+  };
+}
+
+/**
+ * Parse a `#rgb`/`#rrggbb` hex colour to an RGB triple in 0..1. Falls back to
+ * pure green (the green-screen default) for anything it can't read, so the
+ * shader always gets a usable key colour.
+ */
+export function hexToRgb01(hex: string): [number, number, number] {
+  let h = hex.trim().replace(/^#/, '');
+  if (h.length === 3) h = h[0]! + h[0]! + h[1]! + h[1]! + h[2]! + h[2]!;
+  if (h.length !== 6 || /[^0-9a-fA-F]/.test(h)) return [0, 1, 0];
+  const n = parseInt(h, 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
 /**
@@ -214,6 +269,15 @@ export function resolveColor(clip: Clip, timelineMs: number): ResolvedColor | nu
   };
   // A LUT at intensity 0 is a no-op the WebGL pass shouldn't spin up for.
   const lut = c.lut && c.lut.intensity > 0 ? { id: c.lut.id, intensity: Math.min(1, c.lut.intensity) } : undefined;
+  const curves = c.curves && !curvesAreIdentity(c.curves) ? c.curves : undefined;
+  const key = c.chromaKey
+    ? {
+        color: hexToRgb01(c.chromaKey.color),
+        similarity: c.chromaKey.similarity,
+        smoothness: c.chromaKey.smoothness,
+        spill: c.chromaKey.spill,
+      }
+    : undefined;
   if (
     r.brightness === 0 &&
     r.contrast === 0 &&
@@ -221,11 +285,15 @@ export function resolveColor(clip: Clip, timelineMs: number): ResolvedColor | nu
     r.temperature === 0 &&
     r.tint === 0 &&
     r.vignette === 0 &&
-    !lut
+    !lut &&
+    !curves &&
+    !key
   ) {
     return null;
   }
   if (lut) r.lut = lut;
+  if (curves) r.curve = buildCurveTexture(curves);
+  if (key) r.chroma = key;
   return r;
 }
 

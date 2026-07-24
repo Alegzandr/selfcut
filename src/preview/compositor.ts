@@ -1,4 +1,4 @@
-import { Clip, ClipShape, ClipText, ShapeClip, SolidClip, TextClip, Track, TransitionType } from '../types';
+import { BezierPoint, Clip, ClipMask, ClipShape, ClipText, ShapeClip, SolidClip, TextClip, Track, TransitionType } from '../types';
 import {
   DEFAULT_TEXT_WIDTH_FRAC,
   DEFAULT_TRANSFORM,
@@ -8,6 +8,7 @@ import {
   isTextClip,
   resolveBlur,
   resolveColor,
+  resolveMaskMotion,
   resolveOpacity,
   resolveTransform,
   trackCrossfades,
@@ -480,12 +481,153 @@ export function visibleVideoClips(track: Track, tMs: number): VisibleClip[] {
   return visible.map((clip) => ({ clip, xfadeInMs: xfades.get(clip.id)?.inMs ?? 0 }));
 }
 
+/** Pixel geometry of a mask on an `outW × outH` frame: top-left box and centre. */
+export function maskBoundsPx(
+  mask: ClipMask,
+  outW: number,
+  outH: number,
+): { left: number; top: number; w: number; h: number; cx: number; cy: number } {
+  const w = mask.w * outW;
+  const h = mask.h * outH;
+  const cx = mask.x * outW;
+  const cy = mask.y * outH;
+  return { left: cx - w / 2, top: cy - h / 2, w, h, cx, cy };
+}
+
+/**
+ * A reusable full-frame scratch canvas for masked clips: the clip is drawn here,
+ * the mask multiplied into its alpha, then the result composited onto the frame.
+ * One per thread (preview main-thread, export worker), grown to the output size.
+ */
+let maskScratch: { canvas: OffscreenCanvas; ctx: OffscreenCanvasRenderingContext2D } | null = null;
+
+function getMaskScratch(w: number, h: number): typeof maskScratch {
+  if (typeof OffscreenCanvas === 'undefined') return null;
+  if (!maskScratch) {
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    maskScratch = { canvas, ctx };
+  }
+  if (maskScratch.canvas.width !== w || maskScratch.canvas.height !== h) {
+    maskScratch.canvas.width = w;
+    maskScratch.canvas.height = h;
+  }
+  return maskScratch;
+}
+
+/** Bounding-box centre (px) of a pen path — the pivot its motion turns around. */
+export function maskPathCenterPx(path: BezierPoint[], outW: number, outH: number): { cx: number; cy: number } {
+  let minx = Infinity;
+  let miny = Infinity;
+  let maxx = -Infinity;
+  let maxy = -Infinity;
+  for (const p of path) {
+    const x = p.x * outW;
+    const y = p.y * outH;
+    if (x < minx) minx = x;
+    if (x > maxx) maxx = x;
+    if (y < miny) miny = y;
+    if (y > maxy) maxy = y;
+  }
+  return { cx: (minx + maxx) / 2, cy: (miny + maxy) / 2 };
+}
+
+/** Trace a closed bezier path (pen mask) onto the current sub-path, in px. */
+function traceMaskPath(ctx: OffscreenCanvasRenderingContext2D, path: BezierPoint[], outW: number, outH: number): void {
+  const n = path.length;
+  ctx.moveTo(path[0]!.x * outW, path[0]!.y * outH);
+  for (let i = 0; i < n; i++) {
+    const cur = path[i]!;
+    const next = path[(i + 1) % n]!;
+    // A missing handle collapses the control point onto its anchor — a straight
+    // segment — so corners and curves mix on one path.
+    const c1 = cur.out ?? { x: cur.x, y: cur.y };
+    const c2 = next.in ?? { x: next.x, y: next.y };
+    ctx.bezierCurveTo(c1.x * outW, c1.y * outH, c2.x * outW, c2.y * outH, next.x * outW, next.y * outH);
+  }
+  ctx.closePath();
+}
+
+/**
+ * Multiply a mask into the scratch's alpha: keep inside the shape, or outside.
+ * The animated `motion` (tracking or keyframes) translates, scales and rotates
+ * the shape around its own centre before it is stamped, so a tracked mask
+ * follows the subject.
+ */
+function applyMask(
+  ctx: OffscreenCanvasRenderingContext2D,
+  mask: ClipMask,
+  outW: number,
+  outH: number,
+  motion: { tx: number; ty: number; scale: number; rotation: number },
+): void {
+  const path = mask.shape === 'path' ? mask.path : undefined;
+  const { left, top, w, h, cx: boxCx, cy: boxCy } = maskBoundsPx(mask, outW, outH);
+  if (path) {
+    if (path.length < 2) return;
+  } else if (w <= 0 || h <= 0) {
+    return;
+  }
+  // A pen path turns around its own bounding-box centre; a box shape around its box.
+  const { cx, cy } = path ? maskPathCenterPx(path, outW, outH) : { cx: boxCx, cy: boxCy };
+  ctx.save();
+  // destination-in keeps the destination only where the shape is opaque; the
+  // inverse keeps it only where the shape is NOT. A blurred fill gives the
+  // feathered edge (its partial alpha becomes the soft matte).
+  ctx.globalCompositeOperation = mask.invert ? 'destination-out' : 'destination-in';
+  if (mask.feather > 0) ctx.filter = `blur(${Math.max(0.5, mask.feather * outH * 0.5)}px)`;
+  // Motion: translate by the frame-fraction offset, then scale/rotate about the
+  // shape's centre so the drawn geometry below can stay in its authored place.
+  ctx.translate(motion.tx * outW, motion.ty * outH);
+  ctx.translate(cx, cy);
+  ctx.rotate((motion.rotation * Math.PI) / 180);
+  ctx.scale(motion.scale, motion.scale);
+  ctx.translate(-cx, -cy);
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  if (path) traceMaskPath(ctx, path, outW, outH);
+  else if (mask.shape === 'ellipse') ctx.ellipse(boxCx, boxCy, w / 2, h / 2, 0, 0, Math.PI * 2);
+  else ctx.rect(left, top, w, h);
+  ctx.fill();
+  ctx.restore();
+}
+
 /**
  * Draw a single clip onto the frame, dispatching by kind - the one place clip-
  * kind rendering is decided, shared by preview and export. Media clips need a
  * decoded `sample` (null skips them); text and solid clips are self-contained.
+ *
+ * A clip carrying a `mask` is rendered to a scratch frame first, the mask
+ * multiplied into its alpha, then composited in one draw — so masking works the
+ * same for footage, text, solids and shapes, and feathered edges blend over the
+ * lower tracks.
  */
 function dispatchClipDraw(
+  ctx: Ctx2D,
+  clip: Clip,
+  outW: number,
+  outH: number,
+  timelineMs: number,
+  alphaMul: number,
+  xfadeInMs: number,
+  sample: DrawableFrame | null,
+): void {
+  const scratch = clip.mask ? getMaskScratch(outW, outH) : null;
+  if (clip.mask && scratch) {
+    scratch.ctx.clearRect(0, 0, outW, outH);
+    dispatchClipDrawRaw(scratch.ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs, sample);
+    const motion = resolveMaskMotion(clip.mask, timelineMs - clip.timelineStartMs);
+    applyMask(scratch.ctx, clip.mask, outW, outH, motion);
+    // Composited under the current ctx transform, so an in-flight transition
+    // (slide/zoom) still carries the masked clip with it.
+    ctx.drawImage(scratch.canvas, 0, 0);
+    return;
+  }
+  dispatchClipDrawRaw(ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs, sample);
+}
+
+function dispatchClipDrawRaw(
   ctx: Ctx2D,
   clip: Clip,
   outW: number,

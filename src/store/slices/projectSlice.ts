@@ -26,6 +26,10 @@ export function createProjectSlice(
       set({
         // Projects saved before markers existed restore without the field.
         project: { ...project, markers: project.markers ?? [] },
+        // The invariant everything relies on: the active id always equals the
+        // open project's id. Set here, atomically, so the persistence layer sees
+        // a switch (and adopts the new library instead of diff-deleting the old).
+        currentProjectId: project.id,
         assets: map,
         past: [],
         future: [],
@@ -48,8 +52,10 @@ export function createProjectSlice(
       // fails to clear is only wasted space the startup sweep will collect.
       void clearTranscodedAudio();
       void clearSubtitleCues();
+      const fresh = createEmptyProject();
       set({
-        project: createEmptyProject(),
+        project: fresh,
+        currentProjectId: fresh.id,
         assets: {},
         past: [],
         future: [],

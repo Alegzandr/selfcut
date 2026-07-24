@@ -32,9 +32,11 @@ import {
   PREVIEW_RESOLUTION_KEY,
   PREVIEW_VOLUME_KEY,
   PREVIEW_MUTED_KEY,
+  SCOPES_MODE_KEY,
 } from './constants';
 import type { EditorState } from './editorState';
 import { PREVIEW_VIEW_RESET } from '../preview/view';
+import { SCOPE_MODES, type ScopeMode } from '../preview/scopes';
 import { createProjectSlice } from './slices/projectSlice';
 import { createAssetsSlice } from './slices/assetsSlice';
 import { createSelectionSlice } from './slices/selectionSlice';
@@ -88,6 +90,16 @@ function loadPreviewResolution(): PreviewResolutionMode {
     /* private mode / no storage - fall through to the default */
   }
   return DEFAULT_PREVIEW_RESOLUTION;
+}
+
+function loadScopesMode(): ScopeMode {
+  try {
+    const v = localStorage.getItem(SCOPES_MODE_KEY);
+    if (v === 'off' || (v && SCOPE_MODES.includes(v as ScopeMode))) return v as ScopeMode;
+  } catch {
+    /* private mode / no storage - fall through to the default */
+  }
+  return 'off';
 }
 
 function loadPreviewVolume(): number {
@@ -169,8 +181,13 @@ export const useStore = create<EditorState>((set, get) => {
 
   const helpers = { withHistory, pruneSelection };
 
+  const initialProject = createEmptyProject();
+
   return {
-    project: createEmptyProject(),
+    project: initialProject,
+    currentProjectId: initialProject.id,
+    projects: [],
+    projectLibraryOpen: false,
     assets: {},
     selectedClipId: null,
     selectedClipIds: [],
@@ -219,6 +236,7 @@ export const useStore = create<EditorState>((set, get) => {
     ),
     timeFormat: loadTimeFormat(),
     previewResolution: loadPreviewResolution(),
+    scopesMode: loadScopesMode(),
     previewVolume: loadPreviewVolume(),
     previewMuted: loadPreviewMuted(),
     clipboard: null,

@@ -13,6 +13,12 @@ export const INSPECTOR_WIDTH_KEY = 'selfcut.inspectorWidth';
 /** localStorage key for the persisted preview resolution preference. */
 export const PREVIEW_RESOLUTION_KEY = 'selfcut.previewResolution';
 
+/** localStorage key for the persisted video-scopes mode (waveform / parade …). */
+export const SCOPES_MODE_KEY = 'selfcut.scopesMode';
+
+/** localStorage key for the id of the project to reopen on the next startup. */
+export const CURRENT_PROJECT_KEY = 'selfcut.currentProjectId';
+
 /** localStorage key for the persisted master preview volume (monitoring only). */
 export const PREVIEW_VOLUME_KEY = 'selfcut.previewVolume';
 

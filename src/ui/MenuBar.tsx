@@ -20,6 +20,7 @@ const MENUS: readonly Menu[] = [
     items: [
       'file.new',
       'file.open',
+      'file.projects',
       '---',
       'file.save',
       'file.saveAs',

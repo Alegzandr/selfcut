@@ -35,6 +35,7 @@ import {
   snapRotation,
   snapScale,
 } from './transformSnap';
+import { MaskPenOverlay } from './MaskPenOverlay';
 import {
   DEFAULT_SHAPE_FILL,
   MIN_DRAWN_SHAPE,
@@ -1086,6 +1087,7 @@ export function PreviewCanvas() {
           viewportRef={viewportRef}
           onGuides={publishGuides}
         />
+        {!croppingClip && <MaskPenOverlay outW={outW} outH={outH} />}
       </div>
 
       {/* Magnifier marquee. Outside the stage, so it is not itself zoomed. */}

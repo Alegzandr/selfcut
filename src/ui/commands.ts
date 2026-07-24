@@ -46,12 +46,14 @@ import {
   Wand2,
   Sparkles,
   Upload,
+  Library,
 } from 'lucide-react';
 import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
 import type { LibraryTab } from '../store/editorState';
 import { useImport } from './useImport';
 import { openMediaPicker, openSubtitlePicker } from './mediaPicker';
-import { confirmDiscardProject, openProject, saveProject } from './projectActions';
+import { openProject, saveProject } from './projectActions';
+import { createNewProject, refreshProjects } from './projectLibraryActions';
 import { unbindProjectFile } from '../lib/projectFile';
 import { applyPresetToClips, exportClipPreset, importPreset } from './presetActions';
 import { clipDisplayName } from './clipName';
@@ -142,19 +144,23 @@ export function useEditorCommands(): Record<string, Command> {
       id: 'file.new',
       labelKey: 'menu.file.new',
       icon: File,
-      danger: true,
-      // Destroys the whole project AND its saved state: never without a confirm.
+      // Multi-project: a new project no longer throws the old one away — it opens
+      // a fresh untitled project alongside it, and the old one stays in the
+      // browser. The new project is not tied to any `.selfcut` file yet.
       onClick: () => {
-        void confirmDiscardProject().then((ok) => {
-          if (!ok) return;
-          st().resetProject();
-          // The new project is not the file the old one came from: a later save
-          // must ask where to go instead of overwriting it.
-          unbindProjectFile();
-        });
+        void createNewProject().then(() => unbindProjectFile());
       },
     },
     { id: 'file.open', labelKey: 'menu.file.open', icon: FolderOpen, shortcut: 'Ctrl+O', onClick: () => openProject() },
+    {
+      id: 'file.projects',
+      labelKey: 'menu.file.projects',
+      icon: Library,
+      onClick: () => {
+        st().setProjectLibraryOpen(true);
+        void refreshProjects();
+      },
+    },
     { id: 'file.save', labelKey: 'menu.file.save', icon: Save, shortcut: 'Ctrl+S', onClick: () => saveProject(false) },
     { id: 'file.saveAs', labelKey: 'menu.file.saveAs', icon: SaveAll, shortcut: 'Ctrl+Shift+S', onClick: () => saveProject(true) },
     { id: 'file.import', labelKey: 'menu.file.import', icon: FilePlus, onClick: () => openMediaPicker(importFiles) },

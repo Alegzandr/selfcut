@@ -36,10 +36,30 @@ in vec2 uv;
 out vec4 outColor;
 uniform sampler2D tex;
 uniform sampler3D uLut;
-uniform float uBright, uContrast, uSat, uTemp, uTint, uVignette, uLutAmount, uLutSize;
+uniform sampler2D uCurve;
+uniform float uBright, uContrast, uSat, uTemp, uTint, uVignette, uLutAmount, uLutSize, uCurveOn;
+uniform float uKeyOn, uKeySim, uKeySmooth, uKeySpill;
+uniform vec3 uKeyColor;
 void main() {
   vec4 c = texture(tex, uv);
   vec3 rgb = c.rgb;
+  float alpha = c.a;
+  // Chroma key first, on the raw frame: keyed pixels drop to alpha 0 so lower
+  // tracks show through. Matched in the Cb/Cr chroma plane (luma removed), so
+  // shadows and highlights on the green screen key as one hue. Green spill on the
+  // subject is pulled toward the red/blue max, the standard suppression.
+  if (uKeyOn > 0.5) {
+    float ky = dot(uKeyColor, vec3(0.299, 0.587, 0.114));
+    vec2 kcc = vec2((uKeyColor.b - ky) / 1.772, (uKeyColor.r - ky) / 1.402);
+    float py = dot(rgb, vec3(0.299, 0.587, 0.114));
+    vec2 pcc = vec2((rgb.b - py) / 1.772, (rgb.r - py) / 1.402);
+    float dist = distance(pcc, kcc);
+    alpha *= smoothstep(uKeySim, uKeySim + uKeySmooth + 0.001, dist);
+    if (uKeySpill > 0.0) {
+      float m = max(rgb.r, rgb.b);
+      rgb.g = mix(rgb.g, min(rgb.g, m), uKeySpill);
+    }
+  }
   // LUT first: the technical LOG->Rec.709 transform (or a creative grade) maps
   // the raw frame, then the sliders tune the mapped result. The half-texel
   // scale keeps the trilinear fetch centred on the LUT's grid points, so the
@@ -56,12 +76,24 @@ void main() {
   rgb = (rgb - 0.5) * (1.0 + uContrast) + 0.5;  // contrast around mid grey
   float luma = dot(rgb, vec3(0.299, 0.587, 0.114));
   rgb = mix(vec3(luma), rgb, 1.0 + uSat);       // saturation
+  // Tone curves: a 256-wide 1D LUT holding the per-channel curves in RGB and the
+  // master curve in A. Per-channel first, then the master over the result — the
+  // Lightroom point-curve order. LINEAR filtering smooths the 256 steps.
+  if (uCurveOn > 0.5) {
+    rgb = clamp(rgb, 0.0, 1.0);
+    rgb.r = texture(uCurve, vec2(rgb.r, 0.5)).r;
+    rgb.g = texture(uCurve, vec2(rgb.g, 0.5)).g;
+    rgb.b = texture(uCurve, vec2(rgb.b, 0.5)).b;
+    rgb.r = texture(uCurve, vec2(rgb.r, 0.5)).a;
+    rgb.g = texture(uCurve, vec2(rgb.g, 0.5)).a;
+    rgb.b = texture(uCurve, vec2(rgb.b, 0.5)).a;
+  }
   if (uVignette > 0.0) {
     float d = distance(uv, vec2(0.5));
     float v = smoothstep(0.75, 0.35, d);        // 1 at centre, 0 at corners
     rgb *= mix(1.0, v, uVignette);
   }
-  outColor = vec4(clamp(rgb, 0.0, 1.0), c.a);
+  outColor = vec4(clamp(rgb, 0.0, 1.0), alpha);
 }`;
 
 interface Uniforms {
@@ -73,6 +105,12 @@ interface Uniforms {
   uVignette: WebGLUniformLocation | null;
   uLutAmount: WebGLUniformLocation | null;
   uLutSize: WebGLUniformLocation | null;
+  uCurveOn: WebGLUniformLocation | null;
+  uKeyOn: WebGLUniformLocation | null;
+  uKeyColor: WebGLUniformLocation | null;
+  uKeySim: WebGLUniformLocation | null;
+  uKeySmooth: WebGLUniformLocation | null;
+  uKeySpill: WebGLUniformLocation | null;
 }
 
 /**
@@ -114,6 +152,10 @@ class ColorGrader {
   private lutTextures = new Map<string, { tex: WebGLTexture; size: number }>();
   /** Bound when no LUT is active, so the `sampler3D` always has a valid texture. */
   private identityLut: WebGLTexture;
+  /** Uploaded tone-curve textures, keyed by their baked bytes (stable per grade). */
+  private curveTextures = new WeakMap<Uint8Array, WebGLTexture>();
+  /** Bound when no curve is active, so the curve `sampler2D` is never left unbound. */
+  private identityCurve: WebGLTexture;
 
   constructor(gl: WebGL2RenderingContext, canvas: AnyCanvas) {
     this.canvas = canvas;
@@ -138,10 +180,13 @@ class ColorGrader {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
-    // Frame on unit 0, LUT on unit 1: two samplers, two permanently-assigned units.
+    // Frame on unit 0, LUT on unit 1, tone curve on unit 2: three samplers, three
+    // permanently-assigned units.
     gl.uniform1i(gl.getUniformLocation(program, 'tex'), 0);
     gl.uniform1i(gl.getUniformLocation(program, 'uLut'), 1);
+    gl.uniform1i(gl.getUniformLocation(program, 'uCurve'), 2);
     this.identityLut = buildIdentityLut(gl);
+    this.identityCurve = buildCurveTextureGl(gl, identityCurveBytes());
 
     this.uniforms = {
       uBright: gl.getUniformLocation(program, 'uBright'),
@@ -152,6 +197,12 @@ class ColorGrader {
       uVignette: gl.getUniformLocation(program, 'uVignette'),
       uLutAmount: gl.getUniformLocation(program, 'uLutAmount'),
       uLutSize: gl.getUniformLocation(program, 'uLutSize'),
+      uCurveOn: gl.getUniformLocation(program, 'uCurveOn'),
+      uKeyOn: gl.getUniformLocation(program, 'uKeyOn'),
+      uKeyColor: gl.getUniformLocation(program, 'uKeyColor'),
+      uKeySim: gl.getUniformLocation(program, 'uKeySim'),
+      uKeySmooth: gl.getUniformLocation(program, 'uKeySmooth'),
+      uKeySpill: gl.getUniformLocation(program, 'uKeySpill'),
     };
 
     this.scratch = new OffscreenCanvas(1, 1);
@@ -192,6 +243,19 @@ class ColorGrader {
     return entry;
   }
 
+  /**
+   * Upload a baked tone-curve texture (256×1 RGBA8) once, or return the cached
+   * one. `LINEAR` filtering interpolates between the 256 code steps, so a gentle
+   * curve stays smooth rather than banding.
+   */
+  private curveTexture(bytes: Uint8Array): WebGLTexture {
+    const cached = this.curveTextures.get(bytes);
+    if (cached) return cached;
+    const tex = buildCurveTextureGl(this.gl, bytes);
+    this.curveTextures.set(bytes, tex);
+    return tex;
+  }
+
   private resize(w: number, h: number): void {
     if (this.w === w && this.h === h) return;
     this.w = w;
@@ -221,6 +285,22 @@ class ColorGrader {
     gl.bindTexture(gl.TEXTURE_3D, lut ? lut.tex : this.identityLut);
     gl.uniform1f(this.uniforms.uLutAmount, lut ? adj.lut!.intensity : 0);
     gl.uniform1f(this.uniforms.uLutSize, lut ? lut.size : 2);
+
+    // Tone curve on unit 2 (or the identity ramp, so the sampler is never
+    // unbound), gated on by uCurveOn only when the clip actually carries curves.
+    const curveTex = adj.curve ? this.curveTexture(adj.curve) : null;
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, curveTex ?? this.identityCurve);
+    gl.uniform1f(this.uniforms.uCurveOn, curveTex ? 1 : 0);
+
+    const key = adj.chroma;
+    gl.uniform1f(this.uniforms.uKeyOn, key ? 1 : 0);
+    if (key) {
+      gl.uniform3f(this.uniforms.uKeyColor, key.color[0], key.color[1], key.color[2]);
+      gl.uniform1f(this.uniforms.uKeySim, key.similarity);
+      gl.uniform1f(this.uniforms.uKeySmooth, key.smoothness);
+      gl.uniform1f(this.uniforms.uKeySpill, key.spill);
+    }
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
@@ -256,6 +336,33 @@ function buildIdentityLut(gl: WebGL2RenderingContext): WebGLTexture {
     0, 0, 0, 255, 0, 0, 0, 255, 0, 255, 255, 0, 0, 0, 255, 255, 0, 255, 0, 255, 255, 255, 255, 255,
   ]);
   gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB8, 2, 2, 2, 0, gl.RGB, gl.UNSIGNED_BYTE, d);
+  return tex;
+}
+
+/** The identity ramp baked to curve bytes (R=G=B=A=i), bound when no curve runs. */
+function identityCurveBytes(): Uint8Array {
+  const b = new Uint8Array(256 * 4);
+  for (let i = 0; i < 256; i++) {
+    b[i * 4] = i;
+    b[i * 4 + 1] = i;
+    b[i * 4 + 2] = i;
+    b[i * 4 + 3] = i;
+  }
+  return b;
+}
+
+/** Upload 256×1 RGBA8 curve bytes to a 1D-style lookup texture on unit 2. */
+function buildCurveTextureGl(gl: WebGL2RenderingContext, bytes: Uint8Array): WebGLTexture {
+  const tex = gl.createTexture()!;
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  // ArrayBufferView uploads ignore UNPACK_FLIP_Y, so the 256 entries map straight
+  // to x = input code with no vertical flip to worry about on a 1px-tall texture.
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
   return tex;
 }
 

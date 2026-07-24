@@ -8,6 +8,7 @@ import {
 } from '../lib/projectFile';
 import { openProjectPicker } from './mediaPicker';
 import { ensureAssetVisuals } from '../media/probe';
+import { saveWholeProject } from '../lib/persistence';
 import { t } from '../i18n';
 
 /**
@@ -88,6 +89,10 @@ export function openProject(): void {
       const s = useStore.getState();
       s.hydrate(loaded.project, loaded.assets);
       bindOpenedProject(file.name);
+      // Hydrate is treated as a project switch by the persistence layer (it
+      // adopts the new library without diffing), so the opened project and its
+      // assets are written once, explicitly, instead of via the diff.
+      void saveWholeProject();
       // Every asset arrives disconnected (the file holds no media), so there is
       // nothing to decode yet - the relink banner takes over from here. Visuals
       // are recomputed per asset as it reconnects.

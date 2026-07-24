@@ -15,12 +15,18 @@ const require = createRequire(import.meta.url);
 // narrow WebAssembly-only permission, and does NOT re-enable eval() for scripts.
 // The core is served from our own origin (copied out of node_modules at build
 // time by copyFFmpegCore), so no CDN needs allowing.
+// Auto-captions (desktop only) run Whisper locally via transformers.js. The audio
+// never leaves the browser; only the open-source model weights (HuggingFace hub,
+// cached after first download) and the onnxruntime wasm (jsdelivr) are fetched —
+// hence the connect-src/script-src hosts. Self-hosting them like the ffmpeg core
+// would remove the hosts entirely; see captionsModel.ts.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval' blob:",
+  "script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' blob: data:",
   "media-src 'self' blob:",
+  "connect-src 'self' https://huggingface.co https://*.huggingface.co https://cdn.jsdelivr.net",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'none'",
@@ -169,7 +175,9 @@ export default defineConfig({
     // ffmpeg.wasm locates its worker with `new URL('./worker.js', import.meta.url)`.
     // Dep pre-bundling flattens the package into a single chunk, so that URL points
     // at a file that no longer exists and the worker 404s (dev only, silently).
-    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+    // transformers.js (captions worker) pulls onnxruntime-web's workers/wasm via
+    // import.meta.url like ffmpeg; pre-bundling breaks those URLs.
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util', '@huggingface/transformers'],
   },
   build: {
     target: 'es2022',

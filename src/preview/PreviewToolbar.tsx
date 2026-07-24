@@ -1,8 +1,10 @@
 import { useTranslation } from 'react-i18next';
+import { PenTool } from 'lucide-react';
 import { useEditorCommands, type Command } from '../ui/commands';
 import { ShapeToolButton } from '../ui/ShapeToolButton';
 import { Tooltip } from '../ui/Tooltip';
 import { useIsCoarsePointer } from '../lib/device';
+import { useStore } from '../store/store';
 
 /**
  * Tools that act on the monitor: the select / hand / zoom modes, the shape tool,
@@ -42,6 +44,31 @@ function ToolButton({ command }: { command: Command | undefined }) {
   );
 }
 
+/**
+ * Pen tool: draws / edits a bezier mask on the selected clip. Its own button
+ * (not a `Command`) because it toggles a preview mode and has no menu entry.
+ * Disabled with nothing selected, since a mask has to belong to a clip.
+ */
+function PenToolButton() {
+  const { t } = useTranslation();
+  const active = useStore((s) => s.previewTool === 'pen');
+  const hasSelection = useStore((s) => s.selectedClipId !== null);
+  return (
+    <Tooltip label={t('preview.tool.pen.name')}>
+      <button
+        className={`touch-hit rounded-md p-1.5 enabled:hover:bg-zinc-800/80 disabled:opacity-30 ${
+          active ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-300'
+        }`}
+        disabled={!hasSelection}
+        aria-pressed={active}
+        onClick={() => useStore.getState().setPreviewTool(active ? 'select' : 'pen')}
+      >
+        <PenTool className="h-4 w-4" />
+      </button>
+    </Tooltip>
+  );
+}
+
 export function PreviewToolbar() {
   const commands = useEditorCommands();
   const coarse = useIsCoarsePointer();
@@ -53,6 +80,7 @@ export function PreviewToolbar() {
         <ToolButton key={id} command={commands[id]} />
       ))}
       <ShapeToolButton />
+      <PenToolButton />
       <div className="mx-0.5 h-5 w-px bg-zinc-700/70" />
       <ToolButton command={commands['preview.resetView']} />
     </div>

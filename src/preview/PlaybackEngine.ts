@@ -14,6 +14,8 @@ import type { DrawableFrame } from '../media/stillImage';
 import { FrameCursor } from './FrameCursor';
 import { drawClip, visibleVideoClips } from './compositor';
 import { syncLuts } from './colorPass';
+import { SCOPE_SAMPLE_WIDTH } from './scopes';
+import { hasScopeListeners, publishScopeFrame } from './scopeBus';
 import { ScheduledSource, sameAudioMix, scheduleProjectAudio, stopScheduled } from './audioMix';
 import { TrackLevels, hasLevelListeners, publishLevels } from './meterBus';
 
@@ -74,6 +76,15 @@ export class PlaybackEngine {
 
   /** Render scale the last painted frame used - a rung change alone forces a repaint. */
   private lastRenderScale = 0;
+
+  /**
+   * Small offscreen the composited frame is downscaled into for the scopes, plus
+   * whether a scope was mounted last tick. Lazily created on first use, so a
+   * session that never opens the scopes panel never allocates it.
+   */
+  private scopeCanvas: OffscreenCanvas | null = null;
+  private scopeCtx: OffscreenCanvasRenderingContext2D | null = null;
+  private scopeActive = false;
   /** performance.now() of the last frame-time change (drives the paused-still refine). */
   private lastFrameChangeAt = 0;
 
@@ -282,6 +293,15 @@ export class PlaybackEngine {
     // clock), so the picture never changes sharpness mid-playback. The paused
     // still refines to full resolution once the playhead settles (draft while
     // scrubbing, sharp when it stops) - the Premiere "Paused Resolution = Full".
+    // The scopes panel just opened (or was hidden): a paused preview draws once
+    // and then idles, so force one repaint on the transition so the scope
+    // populates immediately from the current still instead of staying empty.
+    const scopeActive = hasScopeListeners();
+    if (scopeActive !== this.scopeActive) {
+      this.scopeActive = scopeActive;
+      if (scopeActive) this.videoDirty = true;
+    }
+
     const rung = PREVIEW_RESOLUTION_SCALE[state.previewResolution];
     const now = performance.now();
     const renderScale =
@@ -369,6 +389,33 @@ export class PlaybackEngine {
         drawClip(this.ctx, clip, w, h, tMs, alphaMul, xfadeInMs, sample);
       }
     }
+
+    if (hasScopeListeners()) this.publishScope(w, h);
+  }
+
+  /**
+   * Downscale the freshly composited frame to a small RGBA buffer and hand it to
+   * the scopes panel. Reading back the full preview canvas (up to 1920×1080)
+   * every frame would be far too costly, so the frame is drawn once into a
+   * fixed-width scratch (≈256px) and only those pixels are read. Guarded by
+   * `hasScopeListeners`, so nothing here runs while the panel is closed.
+   */
+  private publishScope(w: number, h: number): void {
+    const sw = Math.min(SCOPE_SAMPLE_WIDTH, w);
+    const sh = Math.max(1, Math.round((sw * h) / w));
+    if (!this.scopeCanvas) {
+      this.scopeCanvas = new OffscreenCanvas(sw, sh);
+      this.scopeCtx = this.scopeCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    const ctx = this.scopeCtx;
+    if (!ctx) return;
+    if (this.scopeCanvas.width !== sw || this.scopeCanvas.height !== sh) {
+      this.scopeCanvas.width = sw;
+      this.scopeCanvas.height = sh;
+    }
+    ctx.drawImage(this.canvas, 0, 0, w, h, 0, 0, sw, sh);
+    const img = ctx.getImageData(0, 0, sw, sh);
+    publishScopeFrame({ data: img.data, width: sw, height: sh });
   }
 
   /** Feed the track header meters (peak per track) while audio is playing. */

@@ -14,6 +14,8 @@ import { UnsupportedScreen, isSupported } from './ui/UnsupportedScreen';
 import { PreviewCanvas } from './preview/PreviewCanvas';
 import { PreviewQualityMenu } from './preview/PreviewQualityMenu';
 import { PreviewToolbar } from './preview/PreviewToolbar';
+import { Scopes } from './preview/ScopesPanel';
+import { ScopesMenu } from './preview/ScopesMenu';
 import { Timeline } from './timeline/Timeline';
 import { Inspector } from './inspector/Inspector';
 import { ExportSheet } from './export/ExportSheet';
@@ -24,6 +26,7 @@ import { ShortcutsHelp } from './ui/ShortcutsHelp';
 import { Preferences } from './ui/Preferences';
 import { About } from './ui/About';
 import { ConfirmDialog } from './ui/ConfirmDialog';
+import { ProjectLibrary } from './ui/ProjectLibrary';
 import { confirmDiscardProject } from './ui/projectActions';
 import { ContextMenu } from './ui/menu/ContextMenu';
 import { A11yAnnouncer } from './ui/A11yAnnouncer';
@@ -127,6 +130,8 @@ export default function App() {
           <PreviewCanvas />
           <PreviewToolbar />
           <ImportingBadge />
+          <Scopes />
+          <ScopesMenu />
           <PreviewQualityMenu />
         </div>
         {!coarse && <Inspector />}
@@ -141,6 +146,7 @@ export default function App() {
       <ShortcutsHelp />
       <Preferences />
       <About />
+      <ProjectLibrary />
       <ConfirmDialog />
       {!coarse && <ContextMenu />}
       <Toast />

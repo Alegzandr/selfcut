@@ -3,7 +3,11 @@ import type { EditorState } from '../editorState';
 import {
   Clip,
   ClipAnimation,
+  ClipColor,
+  ClipCurves,
   ClipTransform,
+  MaskMotion,
+  MaskMotionProp,
   MediaClip,
   Project,
   Track,
@@ -15,6 +19,7 @@ import {
   clipDurationMs,
   clipEndMs,
   cloneClip,
+  curvesAreIdentity,
   delegatedLinkIds,
   keyframesOf,
   outputDimensions,
@@ -116,6 +121,11 @@ export function createClipsSlice(
   | 'updateClipCommitted'
   | 'updateClipTransformLive'
   | 'updateClipColorLive'
+  | 'setClipCurves'
+  | 'setClipChromaKey'
+  | 'setClipMask'
+  | 'setClipMaskMotionLive'
+  | 'toggleClipMaskMotionKeyframe'
   | 'toggleClipKeyframe'
   | 'moveClipKeyframes'
   | 'setClipKeyframesEase'
@@ -472,6 +482,98 @@ export function createClipsSlice(
             ],
           ]),
         ),
+      }),
+
+    setClipCurves: (clipId, curves) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([
+            [
+              clipId,
+              (c: Clip): Clip => {
+                const color: ClipColor = { ...(c.color ?? {}) };
+                if (!curves || curvesAreIdentity(curves)) delete color.curves;
+                else color.curves = curves as ClipCurves;
+                const nextColor = Object.keys(color).length ? color : undefined;
+                return { ...c, color: nextColor } as Clip;
+              },
+            ],
+          ]),
+        ),
+      }),
+
+    setClipChromaKey: (clipId, key) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([
+            [
+              clipId,
+              (c: Clip): Clip => {
+                const color: ClipColor = { ...(c.color ?? {}) };
+                if (!key) delete color.chromaKey;
+                else color.chromaKey = key;
+                const nextColor = Object.keys(color).length ? color : undefined;
+                return { ...c, color: nextColor } as Clip;
+              },
+            ],
+          ]),
+        ),
+      }),
+
+    setClipMask: (clipId, mask) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([[clipId, (c: Clip): Clip => ({ ...c, mask: mask ?? undefined }) as Clip]]),
+        ),
+      }),
+
+    setClipMaskMotionLive: (clipId, prop, value, timelineMs) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([
+            [
+              clipId,
+              (c: Clip): Clip => {
+                const mask = c.mask;
+                if (!mask) return c;
+                const local = timelineMs - c.timelineStartMs;
+                const motion: MaskMotion = { ...(mask.motion ?? {}) };
+                const ch = motion[prop];
+                // Same rule as the colour/transform sliders: once the axis is
+                // animated, a drag writes the key under the playhead instead of a
+                // constant that would wipe the animation.
+                motion[prop] =
+                  Array.isArray(ch) && ch.length ? setKeyframe(ch, local, value) : value;
+                return { ...c, mask: { ...mask, motion } } as Clip;
+              },
+            ],
+          ]),
+        ),
+      }),
+
+    toggleClipMaskMotionKeyframe: (clipId, prop, timelineMs) =>
+      withHistory((p) => {
+        const clip = findClip(p, clipId)?.clip;
+        const mask = clip?.mask;
+        if (!clip || !mask) return;
+        const local = timelineMs - clip.timelineStartMs;
+        const motion: MaskMotion = { ...(mask.motion ?? {}) };
+        const ch = motion[prop];
+        const identity: Record<MaskMotionProp, number> = { tx: 0, ty: 0, scale: 1, rotation: 0 };
+        if (Array.isArray(ch) && ch.length) {
+          const onKey = ch.some((k) => Math.abs(k.t - local) < 1);
+          // A key on the playhead is removed; otherwise one is added holding the
+          // current sampled value, so toggling never makes the mask jump.
+          motion[prop] = onKey ? removeKeyframe(ch, local) : setKeyframe(ch, local, sampleChannel(ch, local));
+        } else {
+          const cur = typeof ch === 'number' ? ch : identity[prop];
+          motion[prop] = setKeyframe([], local, cur);
+        }
+        clip.mask = { ...mask, motion };
       }),
 
     toggleClipKeyframe: (clipId, prop, timelineMs) =>

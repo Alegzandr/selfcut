@@ -1,5 +1,6 @@
-import { AudioTrackInfo, MediaAsset, Project, isTrackPlayable } from '../types';
+import { AudioTrackInfo, MediaAsset, Project, ProjectSummary, isTrackPlayable } from '../types';
 import { useStore } from '../store/store';
+import { CURRENT_PROJECT_KEY } from '../store/constants';
 import { ensureAssetVisuals } from '../media/probe';
 import { setTranscodedAudio } from '../media/mediaCache';
 // Static, despite only being needed after a restore: both modules are already
@@ -33,8 +34,11 @@ function reportSaveFailure(err: unknown): void {
  * library changes.
  */
 
-const PROJECT_KEY = 'current';
 const SAVE_DEBOUNCE_MS = 500;
+
+/** A persisted asset carries its owning project's id, so a project can be listed,
+ * loaded and swept independently. Runtime `MediaAsset` never needs the field. */
+type StoredAsset = MediaAsset & { projectId?: string };
 
 /**
  * Ask the browser to stop counting this origin as disposable.
@@ -130,18 +134,23 @@ function migrateAsset(asset: MediaAsset): MediaAsset {
   return { ...rest, audioTracks };
 }
 
-async function loadPersisted(): Promise<{ project: Project; assets: MediaAsset[] } | null> {
+/**
+ * Load one project and only the assets that belong to it (tagged by `projectId`).
+ * Returns null when the id isn't in the database. The disconnected flag is
+ * computed here for the same reason as before: a `.selfcut` placeholder reads
+ * fine but holds no media, and a moved source file no longer reads at all.
+ */
+export async function loadProjectById(
+  id: string,
+): Promise<{ project: Project; assets: MediaAsset[] } | null> {
   const d = await db();
   const tx = d.transaction([PROJECT_STORE, ASSETS_STORE], 'readonly');
-  const project = await requestDone(tx.objectStore(PROJECT_STORE).get(PROJECT_KEY));
+  const project = await requestDone(tx.objectStore(PROJECT_STORE).get(id));
   if (!isValidProject(project)) return null;
   const stored = (await requestDone(tx.objectStore(ASSETS_STORE).getAll()))
     .filter(isValidAsset)
+    .filter((a) => (a as StoredAsset).projectId === id)
     .map(migrateAsset);
-  // Flag every asset whose source file no longer reads (disconnected source).
-  // An asset that came from a `.selfcut` file and has not been relinked yet
-  // carries a placeholder instead of a real File: it reads fine (it is an empty
-  // Blob) but holds no media, so it has to be recognized on its own.
   const assets = await Promise.all(
     stored.map(async (asset) => ({
       ...asset,
@@ -149,6 +158,116 @@ async function loadPersisted(): Promise<{ project: Project; assets: MediaAsset[]
     })),
   );
   return { project, assets };
+}
+
+/** Every project in the database, newest first, as lightweight browser rows. */
+export async function listProjectMetas(): Promise<ProjectSummary[]> {
+  try {
+    const d = await db();
+    const projects = (
+      await requestDone(d.transaction(PROJECT_STORE, 'readonly').objectStore(PROJECT_STORE).getAll())
+    ).filter(isValidProject);
+    return projects
+      .map((p) => ({ id: p.id, name: p.name, updatedAt: p.updatedAt }))
+      .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  } catch (err) {
+    console.warn('[persistence] project list failed:', err);
+    return [];
+  }
+}
+
+/**
+ * One-time migration from the single-project era: the lone project lived under
+ * the fixed key `'current'` and its assets carried no owner. Re-key it by its
+ * own id and stamp every untagged asset with it, so the multi-project code sees
+ * a normal project. A no-op once done, and on a fresh database.
+ */
+async function migrateSingleProject(): Promise<void> {
+  try {
+    const d = await db();
+    const tx = d.transaction([PROJECT_STORE, ASSETS_STORE], 'readwrite');
+    const ps = tx.objectStore(PROJECT_STORE);
+    const keys = await requestDone(ps.getAllKeys());
+    if (!keys.includes('current')) return;
+    const legacy = await requestDone(ps.get('current'));
+    if (isValidProject(legacy)) {
+      ps.put({ ...legacy, updatedAt: legacy.updatedAt ?? Date.now() }, legacy.id);
+      const as = tx.objectStore(ASSETS_STORE);
+      const all = await requestDone(as.getAll());
+      for (const a of all) {
+        if (isValidAsset(a) && (a as StoredAsset).projectId === undefined) {
+          as.put({ ...a, projectId: legacy.id });
+        }
+      }
+    }
+    ps.delete('current');
+    await txDone(tx);
+  } catch (err) {
+    console.warn('[persistence] single-project migration failed:', err);
+  }
+}
+
+/** Delete a project record and every asset owned by it (media caches sweep later). */
+export async function deleteProjectFromDb(id: string): Promise<void> {
+  const d = await db();
+  const tx = d.transaction([PROJECT_STORE, ASSETS_STORE], 'readwrite');
+  tx.objectStore(PROJECT_STORE).delete(id);
+  const store = tx.objectStore(ASSETS_STORE);
+  const all = await requestDone(store.getAll());
+  for (const a of all) if (isValidAsset(a) && (a as StoredAsset).projectId === id) store.delete(a.id);
+  await txDone(tx);
+}
+
+/** Rename a project that is NOT the open one (the open one is renamed via the store). */
+export async function renameProjectInDb(id: string, name: string): Promise<void> {
+  const d = await db();
+  const tx = d.transaction(PROJECT_STORE, 'readwrite');
+  const store = tx.objectStore(PROJECT_STORE);
+  const project = await requestDone(store.get(id));
+  if (isValidProject(project)) store.put({ ...project, name, updatedAt: Date.now() }, id);
+  await txDone(tx);
+}
+
+/**
+ * Delete every asset whose owning project no longer exists (or that carries no
+ * owner at all). The user's rule: losing unreferenced media is fine, but it must
+ * not sit in storage forever. Runs once at startup, after migration.
+ */
+async function sweepOrphanAssets(validProjectIds: Set<string>): Promise<void> {
+  try {
+    const d = await db();
+    const tx = d.transaction(ASSETS_STORE, 'readwrite');
+    const store = tx.objectStore(ASSETS_STORE);
+    const all = await requestDone(store.getAll());
+    for (const a of all) {
+      if (!isValidAsset(a)) continue;
+      const pid = (a as StoredAsset).projectId;
+      if (pid === undefined || !validProjectIds.has(pid)) store.delete(a.id);
+    }
+    await txDone(tx);
+  } catch (err) {
+    console.warn('[persistence] orphan-asset sweep failed:', err);
+  }
+}
+
+/**
+ * Persist the OPEN project and its whole library in one shot, tagged with the
+ * active project id. Used right after creating or opening a project, where the
+ * incremental subscription is deliberately bypassed (a project switch adopts the
+ * new library without diffing, so it never writes it on its own).
+ */
+export async function saveWholeProject(): Promise<void> {
+  const { project, assets, currentProjectId } = useStore.getState();
+  try {
+    const d = await db();
+    const tx = d.transaction([PROJECT_STORE, ASSETS_STORE], 'readwrite');
+    tx.objectStore(PROJECT_STORE).put({ ...project, updatedAt: Date.now() }, project.id);
+    const store = tx.objectStore(ASSETS_STORE);
+    for (const a of Object.values(assets)) store.put({ ...a, projectId: currentProjectId });
+    await txDone(tx);
+  } catch (err) {
+    reportSaveFailure(err);
+  }
 }
 
 /**
@@ -159,7 +278,7 @@ async function loadPersisted(): Promise<{ project: Project; assets: MediaAsset[]
  * editor must not wait on it to appear. Tracks light up as they land, in the
  * same way a background thumbnail pass fills the strip.
  */
-async function restoreTranscodedTracks(assets: MediaAsset[]): Promise<void> {
+export async function restoreTranscodedTracks(assets: MediaAsset[]): Promise<void> {
   await Promise.all(
     assets.flatMap((asset) =>
       // Only an undecodable track can have been transcoded; an asset whose file
@@ -208,11 +327,37 @@ function scheduleProjectSave(project: Project): void {
   }, SAVE_DEBOUNCE_MS);
 }
 
+/**
+ * Write the pending debounced project save right now. Called before switching
+ * projects, so the outgoing project's last edits land before its library is
+ * replaced. A no-op when nothing is pending.
+ */
+export function flushProjectSave(): void {
+  if (saveTimer === null) return;
+  window.clearTimeout(saveTimer);
+  saveTimer = null;
+  void writeProject(useStore.getState().project);
+}
+
+/** The project to reopen: the remembered one if it still exists, else the newest. */
+function pickCurrentProjectId(metas: ProjectSummary[]): string | null {
+  if (metas.length === 0) return null;
+  try {
+    const saved = localStorage.getItem(CURRENT_PROJECT_KEY);
+    if (saved && metas.some((m) => m.id === saved)) return saved;
+  } catch {
+    /* no storage - fall through to the most recent */
+  }
+  return metas[0]!.id;
+}
+
 async function writeProject(project: Project): Promise<void> {
   try {
     const d = await db();
     const tx = d.transaction(PROJECT_STORE, 'readwrite');
-    tx.objectStore(PROJECT_STORE).put(project, PROJECT_KEY);
+    // Keyed by the project's own id (out-of-line), and stamped now so the browser
+    // can order by "most recently edited". The editor never touches `updatedAt`.
+    tx.objectStore(PROJECT_STORE).put({ ...project, updatedAt: Date.now() }, project.id);
     await txDone(tx);
   } catch (err) {
     reportSaveFailure(err);
@@ -222,13 +367,14 @@ async function writeProject(project: Project): Promise<void> {
 async function syncAssets(
   next: Record<string, MediaAsset>,
   prev: Record<string, MediaAsset>,
+  projectId: string,
 ): Promise<void> {
   try {
     const d = await db();
     const tx = d.transaction(ASSETS_STORE, 'readwrite');
     const store = tx.objectStore(ASSETS_STORE);
     for (const [id, asset] of Object.entries(next)) {
-      if (prev[id] !== asset) store.put(asset);
+      if (prev[id] !== asset) store.put({ ...asset, projectId });
     }
     // The asset itself goes now - the state is the library, and leaving its
     // blob behind would resurrect the card on the next hydrate. Its transcoded
@@ -291,34 +437,62 @@ export async function initPersistence(): Promise<void> {
   started = true;
 
   try {
-    const saved = await loadPersisted();
+    await migrateSingleProject();
+    const metas = await listProjectMetas();
+    const chosen = pickCurrentProjectId(metas);
     const s = useStore.getState();
     const pristine =
       s.project.tracks.length === 0 && Object.keys(s.assets).length === 0 && s.past.length === 0;
-    if (saved && pristine && (saved.project.tracks.length > 0 || saved.assets.length > 0)) {
-      s.hydrate(saved.project, saved.assets);
-      // Recompute anything saved before it finished (peaks, thumbnail strip).
-      // Skip disconnected assets: their file cannot be read, so decoding would
-      // only throw - they wait for the user to reconnect the source.
-      for (const asset of saved.assets) if (!asset.disconnected) ensureAssetVisuals(asset, s);
-      // Not awaited: the editor is usable now, and transcoded tracks light up
-      // as their cached audio decodes.
-      void restoreTranscodedTracks(saved.assets);
+    if (chosen && pristine) {
+      const saved = await loadProjectById(chosen);
+      if (saved && (saved.project.tracks.length > 0 || saved.assets.length > 0)) {
+        s.hydrate(saved.project, saved.assets); // also sets currentProjectId
+        // Recompute anything saved before it finished (peaks, thumbnail strip).
+        // Skip disconnected assets: their file cannot be read, so decoding would
+        // only throw - they wait for the user to reconnect the source.
+        for (const asset of saved.assets) if (!asset.disconnected) ensureAssetVisuals(asset, s);
+        // Not awaited: the editor is usable now, and transcoded tracks light up
+        // as their cached audio decodes.
+        void restoreTranscodedTracks(saved.assets);
+      }
     }
   } catch (err) {
     console.warn('[persistence] restore failed:', err);
   }
 
-  // Before the subscription, so the sweep reads a library no store write can be
-  // racing it for. Cheap: key and metadata scans only, no blob is read.
+  // Sweep assets whose project is gone, then the media caches. The valid set is
+  // every project on disk plus the open one (a brand-new project may not be
+  // persisted yet). Both run before the subscription, so no store write races.
+  const validIds = new Set((await listProjectMetas()).map((m) => m.id));
+  validIds.add(useStore.getState().currentProjectId);
+  await sweepOrphanAssets(validIds);
   await pruneMediaCaches();
   // Not awaited: it can prompt in some browsers, and nothing below depends on
   // the answer.
   void requestPersistentStorage();
 
+  let lastProjectId = useStore.getState().currentProjectId;
+  try {
+    localStorage.setItem(CURRENT_PROJECT_KEY, lastProjectId);
+  } catch {
+    /* no storage - the reopened project just won't be remembered */
+  }
   useStore.subscribe((s, prev) => {
+    // A project switch changes project, assets AND the id in one store update.
+    // The target was loaded from disk (or explicitly saved by the orchestration),
+    // so adopt it without diffing - a diff would read the old library as "removed"
+    // and delete its assets out from under the project that still owns them.
+    if (s.currentProjectId !== lastProjectId) {
+      lastProjectId = s.currentProjectId;
+      try {
+        localStorage.setItem(CURRENT_PROJECT_KEY, s.currentProjectId);
+      } catch {
+        /* no storage */
+      }
+      return;
+    }
     if (s.project !== prev.project) scheduleProjectSave(s.project);
-    if (s.assets !== prev.assets) void syncAssets(s.assets, prev.assets);
+    if (s.assets !== prev.assets) void syncAssets(s.assets, prev.assets, s.currentProjectId);
   });
 
   // Flush the pending debounced save when the page goes away.

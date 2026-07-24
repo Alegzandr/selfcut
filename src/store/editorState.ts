@@ -1,7 +1,12 @@
 import {
   Clip,
+  ClipColor,
+  ClipCurves,
+  ClipMask,
   ClipShape,
   ColorProp,
+  MaskMotionProp,
+  ProjectSummary,
   EaseId,
   KeyframeProp,
   KeyframeRef,
@@ -15,6 +20,7 @@ import {
 import type { TimeFormat } from '../lib/time';
 import type { PreviewResolutionMode } from '../app/config';
 import type { PreviewTool, PreviewView } from '../preview/view';
+import type { ScopeMode } from '../preview/scopes';
 import type { SubtitleCue } from '../lib/subtitles';
 import type { FFmpegProgress } from '../media/ffmpeg';
 import type { PresetLook } from '../effects/presetFile';
@@ -188,6 +194,8 @@ export interface EditorState {
   timeFormat: TimeFormat;
   /** Preview playback resolution the user picked (persisted). */
   previewResolution: PreviewResolutionMode;
+  /** Which video scope the monitor overlays, or 'off' (persisted). Desktop only. */
+  scopesMode: ScopeMode;
   /**
    * Master monitoring volume of the preview, linear gain in 0..1 (persisted).
    * Purely a listening level: it scales the preview's master bus and never
@@ -196,6 +204,16 @@ export interface EditorState {
   previewVolume: number;
   /** Master monitoring mute of the preview (persisted). Export is unaffected. */
   previewMuted: boolean;
+  /**
+   * Id of the project currently open and being autosaved. Every persisted asset
+   * is tagged with it, so switching projects loads the right library and a
+   * deleted project's media can be swept. Always equals `project.id`.
+   */
+  currentProjectId: string;
+  /** Project browser rows (id, name, updatedAt), loaded when the browser opens. */
+  projects: ProjectSummary[];
+  /** Whether the project browser modal is open. */
+  projectLibraryOpen: boolean;
   clipboard: ClipboardEntry | null;
   exportOpen: boolean;
   importing: boolean;
@@ -439,6 +457,35 @@ export interface EditorState {
     timelineMs: number,
   ) => void;
   /**
+   * Live (uncommitted) tone-curve edit: replace a clip's curves, or clear them
+   * with `undefined`. History is committed by the curve editor's gesture
+   * (`beginGesture`/`endGesture`), exactly like the transform and colour sliders.
+   */
+  setClipCurves: (clipId: string, curves: ClipCurves | undefined) => void;
+  /**
+   * Live (uncommitted) chroma-key edit: set or clear a clip's key. Committed to
+   * history by the control's gesture, like the colour sliders.
+   */
+  setClipChromaKey: (clipId: string, key: ClipColor['chromaKey'] | undefined) => void;
+  /**
+   * Live (uncommitted) shape-mask edit: set or clear a clip's mask. Committed by
+   * the mask control's gesture, like the colour and chroma controls.
+   */
+  setClipMask: (clipId: string, mask: ClipMask | undefined) => void;
+  /**
+   * Live (uncommitted) edit of a mask-motion channel: writes the keyframe under
+   * the playhead when the axis animates, else a constant. Committed by the
+   * slider gesture, like the colour and transform sliders.
+   */
+  setClipMaskMotionLive: (
+    clipId: string,
+    prop: MaskMotionProp,
+    value: number,
+    timelineMs: number,
+  ) => void;
+  /** Add or remove a mask-motion keyframe for `prop` at the playhead (one undo step). */
+  toggleClipMaskMotionKeyframe: (clipId: string, prop: MaskMotionProp, timelineMs: number) => void;
+  /**
    * Import a parsed `.cube` LUT into the project (one undo step) and return its
    * new id, so the caller can immediately apply it to the selection.
    */
@@ -557,6 +604,16 @@ export interface EditorState {
   resetPreviewView: () => void;
   /** Pick the preview resolution rung; persisted. */
   setPreviewResolution: (mode: PreviewResolutionMode) => void;
+  /** Pick the video scope to show (or 'off'); persisted. */
+  setScopesMode: (mode: ScopeMode) => void;
+  /** Set the active project id (the one the persistence layer autosaves). */
+  setCurrentProjectId: (id: string) => void;
+  /** Replace the project browser's rows. */
+  setProjects: (projects: ProjectSummary[]) => void;
+  /** Open or close the project browser modal. */
+  setProjectLibraryOpen: (open: boolean) => void;
+  /** Rename the OPEN project (writes `project.name`, one undo-free save). */
+  renameCurrentProject: (name: string) => void;
   /** Set the master monitoring gain (0..1); persisted. */
   setPreviewVolume: (gain: number) => void;
   togglePreviewMuted: () => void;

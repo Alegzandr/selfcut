@@ -23,6 +23,7 @@ import {
   PREVIEW_RESOLUTION_KEY,
   PREVIEW_VOLUME_KEY,
   PREVIEW_MUTED_KEY,
+  SCOPES_MODE_KEY,
 } from '../constants';
 
 /** How many imported presets the session shelf holds before dropping the oldest. */
@@ -91,6 +92,11 @@ export function createUiSlice(
   | 'setPreviewView'
   | 'resetPreviewView'
   | 'setPreviewResolution'
+  | 'setScopesMode'
+  | 'setCurrentProjectId'
+  | 'setProjects'
+  | 'setProjectLibraryOpen'
+  | 'renameCurrentProject'
   | 'setPreviewVolume'
   | 'togglePreviewMuted'
   | 'setExportOpen'
@@ -229,6 +235,23 @@ export function createUiSlice(
       }
       set({ previewResolution: mode });
     },
+
+    setScopesMode: (mode) => {
+      if (get().scopesMode === mode) return;
+      try {
+        localStorage.setItem(SCOPES_MODE_KEY, mode);
+      } catch {
+        /* private mode / no storage - the choice just won't persist */
+      }
+      set({ scopesMode: mode });
+    },
+
+    setCurrentProjectId: (id) => set({ currentProjectId: id }),
+    setProjects: (projects) => set({ projects }),
+    setProjectLibraryOpen: (open) => set({ projectLibraryOpen: open }),
+    // Metadata edit, not a timeline edit: a plain set (no history) that changes
+    // the project reference, so the autosave persists the new name.
+    renameCurrentProject: (name) => set({ project: { ...get().project, name } }),
 
     setPreviewVolume: (gain) => {
       const v = clamp(gain, 0, 1);

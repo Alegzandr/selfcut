@@ -4,6 +4,18 @@ export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:5';
 
 export interface Project {
   id: string;
+  /**
+   * User-facing project name shown in the project browser. Optional: projects
+   * saved before multi-project support have none, and the UI falls back to
+   * "Untitled" then.
+   */
+  name?: string;
+  /**
+   * Epoch ms of the last save, stamped by the persistence layer (never by the
+   * editor). Drives the project browser's "most recent first" order. Optional
+   * for the same back-compat reason as `name`.
+   */
+  updatedAt?: number;
   aspectRatio: AspectRatio;
   fps: number;
   tracks: Track[];
@@ -34,6 +46,13 @@ export interface Lut {
    * convention): the entry for grid point (r, g, b) starts at (r + g*N + b*N*N)*3.
    */
   data: number[];
+}
+
+/** A row in the project browser: enough to list a project without loading it. */
+export interface ProjectSummary {
+  id: string;
+  name?: string;
+  updatedAt?: number;
 }
 
 /** A named point on the timeline (cue). */
@@ -327,6 +346,25 @@ export interface ClipColor {
   /** Gaussian blur, 0..1 (fraction of the output height), applied when compositing. */
   blur?: Channel;
   /**
+   * Per-channel tone curves, applied in the WebGL pass AFTER the numeric
+   * adjustments above. Absent/identity = the frame passes through. Not
+   * keyframable in v1 (like `lut`), so it is a plain value, not a `Channel`.
+   */
+  curves?: ClipCurves;
+  /**
+   * Chroma key (green screen): the WebGL pass turns pixels close to `color`
+   * transparent, so lower tracks show through. `similarity` widens the keyed
+   * hue range, `smoothness` softens the matte edge, `spill` suppresses the green
+   * fringe left on the subject. Absent = no keying. Not keyframable in v1.
+   */
+  chromaKey?: {
+    /** The colour to key out, as a hex string (green screens default to #00ff00). */
+    color: string;
+    similarity: number;
+    smoothness: number;
+    spill: number;
+  };
+  /**
    * A colour lookup table applied BEFORE the numeric adjustments above — the
    * technical LOG→Rec.709 conversion or a creative grade goes first, then the
    * sliders tune the result. `id` references an entry in `Project.luts`;
@@ -334,6 +372,89 @@ export interface ClipColor {
    * A missing `id` (LUT since removed) renders as no LUT. Not keyframable.
    */
   lut?: { id: string; intensity: number };
+}
+
+/**
+ * A shape mask on a clip: only the pixels inside the shape are kept (or outside,
+ * when `invert`). Defined in OUTPUT-frame coordinates — a fixed window on the
+ * composition, not on the source — which is what split-screen and reveal masks
+ * want. Centre and size are fractions of the frame; `feather` softens the edge.
+ */
+export interface ClipMask {
+  /** `rect`/`ellipse` use the box below; `path` uses the bezier `path` instead. */
+  shape: 'rect' | 'ellipse' | 'path';
+  /** Centre of the mask, as a fraction of the output frame (0.5 = centred). */
+  x: number;
+  y: number;
+  /** Size of the mask, as a fraction of the output frame. */
+  w: number;
+  h: number;
+  /**
+   * The pen-tool shape: closed bezier path, points in draw order, coordinates as
+   * fractions of the output frame. Present only when `shape === 'path'`. A point
+   * with no handles is a corner; handles curve the segments around it.
+   */
+  path?: BezierPoint[];
+  /** Edge softness as a fraction of the output height (0 = hard edge). */
+  feather: number;
+  /** Keep the OUTSIDE of the shape instead of the inside. */
+  invert?: boolean;
+  /**
+   * Keyframable transform applied to the whole mask over clip-local time — the
+   * output of motion tracking, or of manual keyframing. It moves the drawn shape
+   * without redrawing it: `tx`/`ty` translate (fraction of the frame), `scale`
+   * multiplies and `rotation` (degrees) turns it around the shape's centre.
+   * Absent / identity = a still mask. Separate from the base geometry so a
+   * tracker can write motion without touching the shape the user drew.
+   */
+  motion?: MaskMotion;
+}
+
+/**
+ * A bezier anchor on a pen-tool mask path. `x`/`y` is the anchor; `in`/`out` are
+ * the incoming/outgoing tangent control points (absolute, same 0..1 frame space).
+ * A missing handle means that side of the anchor is a straight corner.
+ */
+export interface BezierPoint {
+  x: number;
+  y: number;
+  in?: { x: number; y: number };
+  out?: { x: number; y: number };
+}
+
+/** Keyframable channels of a mask's animated transform. See `ClipMask.motion`. */
+export interface MaskMotion {
+  /** Horizontal offset, as a fraction of the output width. Default 0. */
+  tx?: Channel;
+  /** Vertical offset, as a fraction of the output height. Default 0. */
+  ty?: Channel;
+  /** Uniform scale around the shape centre. Default 1. */
+  scale?: Channel;
+  /** Rotation around the shape centre, in degrees. Default 0. */
+  rotation?: Channel;
+}
+
+/** A property of a mask's animated motion — the keyframable transform channels. */
+export type MaskMotionProp = 'tx' | 'ty' | 'scale' | 'rotation';
+
+/** A control point of a tone curve, normalized 0..1 (x = input, y = output). */
+export interface CurvePoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Per-channel tone curves. Each channel is a list of control points (sorted by
+ * x) mapping input to output in 0..1; absent — or a plain [(0,0),(1,1)] ramp —
+ * is the identity. `master` maps all three channels, `r`/`g`/`b` one each; the
+ * pass applies the per-channel curves first, then the master. The maths and the
+ * GPU texture live in `src/model/curves.ts`.
+ */
+export interface ClipCurves {
+  master?: CurvePoint[];
+  r?: CurvePoint[];
+  g?: CurvePoint[];
+  b?: CurvePoint[];
 }
 
 /**
@@ -460,6 +581,12 @@ interface BaseClip {
   transform?: ClipTransform;
   /** Colour grading (WebGL pass). Undefined/identity = the clip is drawn as-is. */
   color?: ClipColor;
+  /**
+   * Shape mask (rect/ellipse) applied when compositing: keeps only the pixels
+   * inside the shape (or outside, when inverted), with an optional soft edge.
+   * Undefined = the whole clip shows.
+   */
+  mask?: ClipMask;
   /**
    * How this clip enters over its overlap with the previous clip. Undefined =
    * `dissolve` (the historical cross-dissolve). Only takes effect where an
