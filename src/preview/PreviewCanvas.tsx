@@ -23,6 +23,7 @@ import {
   unrotatePoint,
 } from './compositor';
 import { clamp } from '../lib/time';
+import { pct } from '../inspector/format';
 import { PREVIEW_COLORS } from '../lib/palette';
 import { hapticOnSnap, type SnapHapticState } from '../lib/haptics';
 import { PREVIEW_SNAP_THRESHOLD_PX } from '../app/config';
@@ -338,8 +339,10 @@ function findClip(project: Project, clipId: string): Clip | null {
  */
 function stretchLabel(scaleX: number, scaleY: number, axes: ('x' | 'y')[]): string {
   const parts: string[] = [];
-  if (axes.includes('x')) parts.push(`${Math.round(scaleX * 100)}%`);
-  if (axes.includes('y')) parts.push(`${Math.round(scaleY * 100)}%`);
+  // Same one-decimal rule as the inspector read-out, so the badge left behind by
+  // the gesture and the panel that then shows it agree on the value.
+  if (axes.includes('x')) parts.push(pct(scaleX));
+  if (axes.includes('y')) parts.push(pct(scaleY));
   return parts.join(' × ');
 }
 

@@ -3,6 +3,7 @@ import type { MouseEvent } from 'react';
 import { Diamond } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/store';
+import { decimalsForStep, seedDecimals } from './entryDecimals';
 
 /**
  * Keyframe control for a slider row: the diamond that turns the property into an
@@ -31,7 +32,10 @@ export interface NumericEntry {
   toInput?: (v: number) => number;
   /** Typed number → stored value. The row clamps the result to [min, max]. */
   fromInput?: (n: number) => number;
-  /** Decimals kept when seeding; defaults to what one `step` needs to show. */
+  /**
+   * Decimals kept when seeding, fixed. Omit to let the row work them out: one
+   * `step` worth, widened until the seeded text round-trips the stored value.
+   */
   decimals?: number;
   /**
    * Where a typed value goes when the row's own `onChange` would coarsen it —
@@ -58,20 +62,6 @@ export const PERCENT_ENTRY = scaledEntry(100);
 export const SECONDS_ENTRY = scaledEntry(1 / 1000);
 
 const IDENTITY = (n: number) => n;
-
-/**
- * Decimals a typed value needs to be as fine as the slider itself: one step
- * expressed in the entry's own unit. A 0.01 step read as a percentage is a whole
- * point (0 decimals); a 100 ms step read as seconds is a tenth (1 decimal).
- */
-function decimalsForStep(toInput: (v: number) => number, value: number, step: number): number {
-  // Slack on the thresholds: a 0.01 step scaled by 100 lands on 0.99999999 as
-  // often as on 1, and that must not seed a whole percentage as "70.0".
-  const stepIn = Math.abs(toInput(value + step) - toInput(value));
-  if (!isFinite(stepIn) || stepIn > 0.999) return 0;
-  if (stepIn > 0.0999) return 1;
-  return 2;
-}
 
 export function SliderRow({
   label,
@@ -114,7 +104,10 @@ export function SliderRow({
 
   const toInput = entry?.toInput ?? IDENTITY;
   const fromInput = entry?.fromInput ?? IDENTITY;
-  const decimals = entry?.decimals ?? decimalsForStep(toInput, value, step);
+  // A row that declares its own precision keeps it (dB reads as one decimal,
+  // period). Everywhere else the step is only a floor: see `seedDecimals`.
+  const decimals =
+    entry?.decimals ?? seedDecimals(toInput(value), decimalsForStep(toInput, value, step));
 
   const commit = () => {
     // Comma is the decimal separator on most of the locales we ship.

@@ -2,8 +2,14 @@ import i18n from '../i18n';
 
 // Slider read-outs are numbers, so they follow the locale, not the dictionary:
 // "50 %" in French, "1,5 s" instead of "1.5s".
+//
+// One decimal, and only when the value has one: a stretch or a crop set by
+// dragging in the preview is no round percentage, and printing two different
+// values as the same "124 %" is what makes a clip that fits and a clip that
+// still shows black bars look identical in the panel. Whole values keep reading
+// as "50 %" — the digit appears when there is something to say.
 export const pct = (v: number) =>
-  new Intl.NumberFormat(i18n.language, { style: 'percent' }).format(v);
+  new Intl.NumberFormat(i18n.language, { style: 'percent', maximumFractionDigits: 1 }).format(v);
 /**
  * Linear gain (1 = unity) as a signed dB read-out, the unit audio people
  * actually reason in: 0.5 -> "-6.0 dB", 2 -> "+6.0 dB", silence -> "-inf dB".
