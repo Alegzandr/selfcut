@@ -17,6 +17,7 @@ const TW = {
   emerald300: '#6ee7b7',
   emerald400: '#34d399',
   red400: '#f87171',
+  zinc700: '#3f3f46',
   zinc900: '#18181b',
   zinc950: '#09090b',
 } as const;
@@ -61,4 +62,29 @@ export const PREVIEW_COLORS = {
   cursorOutline: TW.zinc900,
   /** Scrim dimming everything outside the crop rectangle. */
   cropScrim: alpha(TW.zinc950, 0.6),
+} as const;
+
+/**
+ * Colour filling the preview panel around the output frame - the letterbox.
+ *
+ * Deliberately *not* black. The engine paints the frame itself `#000`, so a near
+ * black surround makes a clip's own letterbox bars indistinguishable from the
+ * panel behind them: a 2.39:1 source in a 16:9 project would look full-frame.
+ * Zinc-700 is far enough off black to read the frame edge at a glance while
+ * staying dark enough not to skew how the footage itself looks.
+ */
+export const DEFAULT_PREVIEW_BACKGROUND = TW.zinc700;
+
+/** Named surrounds offered in Preferences, alongside a free colour picker. */
+export const PREVIEW_BACKGROUNDS = {
+  /** True black: matches the frame fill, for judging blacks without a reference. */
+  black: '#000000',
+  /** The app chassis' own shade, for a preview that melts into the layout. */
+  charcoal: TW.zinc950,
+  /** The default: clearly off black, still dark. */
+  grey: DEFAULT_PREVIEW_BACKGROUND,
+  /** Neutral mid grey, the reference surround for judging exposure. */
+  neutral: '#808080',
+  /** Maximum contrast against dark footage, for spotting frame edges. */
+  white: '#ffffff',
 } as const;

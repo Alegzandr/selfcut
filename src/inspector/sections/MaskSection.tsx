@@ -6,7 +6,7 @@ import { useStore } from '../../store/store';
 import { Clip, ClipMask, MaskMotionProp } from '../../types';
 import { sampleChannel } from '../../model';
 import { trackMaskMotion } from '../../media/trackMotion';
-import { SliderRow, type KeyframeControl } from '../SliderRow';
+import { PERCENT_ENTRY, SliderRow, type KeyframeControl, type NumericEntry } from '../SliderRow';
 
 /**
  * Shape mask: switch it on, choose a rectangle or ellipse, place and size it,
@@ -26,11 +26,12 @@ const DEFAULT_MASK: ClipMask = {
   invert: false,
 };
 
-/** Identity of each motion axis, and its slider range. */
-const MOTION_AXES: { prop: MaskMotionProp; labelKey: ParseKeys; def: number; min: number; max: number; step: number; fmt: (v: number) => string }[] = [
-  { prop: 'tx', labelKey: 'inspector.mask.offsetX', def: 0, min: -0.5, max: 0.5, step: 0.005, fmt: (v) => `${Math.round(v * 100)}%` },
-  { prop: 'ty', labelKey: 'inspector.mask.offsetY', def: 0, min: -0.5, max: 0.5, step: 0.005, fmt: (v) => `${Math.round(v * 100)}%` },
-  { prop: 'scale', labelKey: 'inspector.mask.scale', def: 1, min: 0.2, max: 3, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%` },
+/** Identity of each motion axis, its slider range, and the unit it is typed in. */
+const MOTION_AXES: { prop: MaskMotionProp; labelKey: ParseKeys; def: number; min: number; max: number; step: number; fmt: (v: number) => string; entry?: NumericEntry }[] = [
+  { prop: 'tx', labelKey: 'inspector.mask.offsetX', def: 0, min: -0.5, max: 0.5, step: 0.005, fmt: (v) => `${Math.round(v * 100)}%`, entry: PERCENT_ENTRY },
+  { prop: 'ty', labelKey: 'inspector.mask.offsetY', def: 0, min: -0.5, max: 0.5, step: 0.005, fmt: (v) => `${Math.round(v * 100)}%`, entry: PERCENT_ENTRY },
+  { prop: 'scale', labelKey: 'inspector.mask.scale', def: 1, min: 0.2, max: 3, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%`, entry: PERCENT_ENTRY },
+  // Rotation is stored in the degrees it reads in, so it needs no mapping.
   { prop: 'rotation', labelKey: 'inspector.mask.rotation', def: 0, min: -180, max: 180, step: 1, fmt: (v) => `${Math.round(v)}°` },
 ];
 
@@ -182,6 +183,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 max={1}
                 step={0.005}
                 format={(v) => `${Math.round(v * 100)}%`}
+                entry={PERCENT_ENTRY}
                 onChange={(v) => set({ x: v })}
               />
               <SliderRow
@@ -191,6 +193,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 max={1}
                 step={0.005}
                 format={(v) => `${Math.round(v * 100)}%`}
+                entry={PERCENT_ENTRY}
                 onChange={(v) => set({ y: v })}
               />
               <SliderRow
@@ -200,6 +203,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 max={1}
                 step={0.005}
                 format={(v) => `${Math.round(v * 100)}%`}
+                entry={PERCENT_ENTRY}
                 onChange={(v) => set({ w: v })}
               />
               <SliderRow
@@ -209,6 +213,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 max={1}
                 step={0.005}
                 format={(v) => `${Math.round(v * 100)}%`}
+                entry={PERCENT_ENTRY}
                 onChange={(v) => set({ h: v })}
               />
             </>
@@ -220,6 +225,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
             max={0.3}
             step={0.005}
             format={(v) => `${Math.round(v * 100)}%`}
+            entry={PERCENT_ENTRY}
             onChange={(v) => set({ feather: v })}
           />
           <label className="flex items-center justify-between text-xs text-zinc-400">
@@ -250,6 +256,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                   max={axis.max}
                   step={axis.step}
                   format={axis.fmt}
+                  entry={axis.entry}
                   onChange={(v) =>
                     useStore.getState().setClipMaskMotionLive(clip.id, axis.prop, v, currentTimeMs)
                   }

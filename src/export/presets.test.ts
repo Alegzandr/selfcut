@@ -2,13 +2,17 @@ import { describe, it, expect } from 'vitest';
 import {
   PRESETS,
   presetsForAspect,
+  presetSectionsForAspect,
   exportFileName,
   normalizeExportFps,
   videoBitrateForFps,
   projectExportFps,
+  resolveMp4Preset,
 } from './presets';
 import type { Mp4Preset } from './presets';
-import type { Clip, MediaAsset, Project } from '../types';
+import type { AspectRatio, Clip, MediaAsset, Project } from '../types';
+
+const ASPECTS: AspectRatio[] = ['16:9', '9:16', '1:1', '4:5'];
 
 describe('presetsForAspect', () => {
   it('returns the matching video presets plus the aspect-agnostic audio ones', () => {
@@ -31,6 +35,45 @@ describe('presetsForAspect', () => {
       expect(p.labelKey).toBeTruthy();
       expect(p.descriptionKey).toBeTruthy();
       expect(p.kind === 'mp4' || p.kind === 'mp3').toBe(true);
+    }
+  });
+
+  it('gives every preset a unique id (the id names the exported file)', () => {
+    const ids = PRESETS.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('offers the same custom presets for every aspect ratio', () => {
+    const customLabels = (aspect: AspectRatio) =>
+      presetsForAspect(aspect)
+        .filter((p) => p.group === 'custom')
+        .map((p) => p.labelKey);
+    expect(customLabels('16:9').length).toBeGreaterThan(0);
+    for (const aspect of ASPECTS) expect(customLabels(aspect)).toEqual(customLabels('16:9'));
+  });
+
+  it('every custom preset says what it is for; the social ones need no hint', () => {
+    for (const p of PRESETS) {
+      if (p.group === 'custom') expect(p.hintKey).toBeTruthy();
+      else expect(p.hintKey).toBeUndefined();
+    }
+  });
+});
+
+describe('presetSectionsForAspect', () => {
+  it('lists social, then custom, then audio, with no empty section', () => {
+    const sections = presetSectionsForAspect('9:16');
+    expect(sections.map((s) => s.group)).toEqual(['social', 'custom', 'audio']);
+    for (const section of sections) {
+      expect(section.titleKey).toBeTruthy();
+      expect(section.presets.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('flattens back to the flat order, so the default pick is the first row shown', () => {
+    for (const aspect of ASPECTS) {
+      const flat = presetSectionsForAspect(aspect).flatMap((s) => s.presets);
+      expect(flat).toEqual(presetsForAspect(aspect));
     }
   });
 });
@@ -58,6 +101,23 @@ describe('bitrates meet the platforms’ upload recommendations', () => {
     for (const p of PRESETS) {
       if (p.kind === 'mp4') expect(p.audioBitrate).toBeGreaterThanOrEqual(384_000);
     }
+  });
+
+  // The custom presets only earn their place by sitting outside what a platform
+  // upload asks for - above it for a master, below it for a file to email.
+  it('4K Ultra outruns the platform 4K figure', () => {
+    expect(mp4('ultra4k-16x9').videoBitrate).toBeGreaterThan(mp4('youtube-4k').videoBitrate);
+  });
+
+  it('the 1080p master outruns the platform 1080p figure', () => {
+    expect(mp4('master1080-16x9').videoBitrate).toBeGreaterThan(mp4('youtube-1080').videoBitrate);
+  });
+
+  it('the light 1080p preset undercuts it, at the same geometry', () => {
+    const light = mp4('light1080-16x9');
+    const upload = mp4('youtube-1080');
+    expect(light.videoBitrate).toBeLessThan(upload.videoBitrate);
+    expect([light.width, light.height]).toEqual([upload.width, upload.height]);
   });
 });
 
@@ -114,6 +174,32 @@ describe('adaptive export frame rate', () => {
     const project = projectOf(mediaClip('a'));
     expect(projectExportFps(project, { a: asset('a', undefined) })).toBe(60);
     expect(projectExportFps(project, {})).toBe(60);
+  });
+
+  const mp4 = (id: string) => PRESETS.find((p) => p.id === id) as Mp4Preset;
+
+  it('a source-rate preset follows the footage', () => {
+    const master = mp4('master1080-16x9');
+    expect(master.fpsMode).toBe('source');
+    const resolved = resolveMp4Preset(master, projectOf(mediaClip('a')), { a: asset('a', 25) });
+    expect(resolved.fps).toBe(25);
+  });
+
+  it('a fixed-rate preset keeps its own rate whatever the footage', () => {
+    const project = projectOf(mediaClip('a'));
+    const assets = { a: asset('a', 30) };
+
+    const smooth = mp4('smooth120-16x9');
+    expect(smooth.fpsMode).toBe('fixed');
+    // Above the ladder on purpose: 120 fps is what the user picked the preset for.
+    expect(resolveMp4Preset(smooth, project, assets).fps).toBe(120);
+
+    const cinema = mp4('cinema24-16x9');
+    const resolved = resolveMp4Preset(cinema, project, assets);
+    expect(resolved.fps).toBe(24);
+    // videoBitrate keeps one meaning everywhere: the HFR figure, scaled down at
+    // standard rates - a pinned rate is no exception.
+    expect(resolved.videoBitrate).toBe(Math.round((cinema.videoBitrate * 2) / 3));
   });
 });
 

@@ -3,8 +3,9 @@ import { RotateCcw } from 'lucide-react';
 import { useStore } from '../../store/store';
 import { Channel, Clip, ColorProp, EaseId } from '../../types';
 import { COLOR_PROPS, EASE_IDS, keyframesOf, sampleChannel } from '../../model';
-import { SliderRow, type KeyframeControl } from '../SliderRow';
+import { PERCENT_ENTRY, SliderRow, type KeyframeControl } from '../SliderRow';
 import { importLutFromDisk } from '../../ui/lutActions';
+import { editTargets } from '../../store/editTargets';
 
 /** Two keyframe times within this many ms count as sitting on the same playhead. */
 const ON_KEY_EPSILON_MS = 1;
@@ -36,6 +37,13 @@ function LutRow({ clip }: { clip: Clip }) {
   const luts = useStore((s) => s.project.luts) ?? [];
   const { setClipsLut, setClipLutIntensity, clearClipLut } = useStore.getState();
   const active = clip.color?.lut;
+  // `setClipsLut` names its targets outright (the effect library hands it a
+  // filtered list), so the picker resolves the selection itself - the two other
+  // LUT actions take a single clip and spread over the selection in the store.
+  const targets = () => {
+    const st = useStore.getState();
+    return editTargets(st.project, st.selectedClipIds, clip.id);
+  };
 
   return (
     <div className="space-y-2">
@@ -44,7 +52,7 @@ function LutRow({ clip }: { clip: Clip }) {
         <select
           value={active?.id ?? ''}
           onChange={(e) =>
-            e.target.value ? setClipsLut([clip.id], e.target.value) : clearClipLut(clip.id)
+            e.target.value ? setClipsLut(targets(), e.target.value) : clearClipLut(clip.id)
           }
           className="min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-sky-500"
         >
@@ -58,7 +66,7 @@ function LutRow({ clip }: { clip: Clip }) {
         <button
           type="button"
           className="touch-hit flex-none rounded-md border border-zinc-700 px-2 py-1 text-2xs text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
-          onClick={() => importLutFromDisk((id) => setClipsLut([clip.id], id))}
+          onClick={() => importLutFromDisk((id) => setClipsLut(targets(), id))}
           title={t('inspector.lut.import')}
         >
           {t('inspector.lut.import')}
@@ -72,6 +80,7 @@ function LutRow({ clip }: { clip: Clip }) {
           max={1}
           step={0.01}
           format={(v) => `${Math.round(v * 100)}%`}
+          entry={PERCENT_ENTRY}
           onChange={(v) => setClipLutIntensity(clip.id, v)}
         />
       )}
@@ -153,6 +162,7 @@ export function ColorSection({ clip }: { clip: Clip }) {
             format={(v) =>
               min < 0 ? `${v > 0 ? '+' : ''}${Math.round(v * 100)}` : `${Math.round(v * 100)}%`
             }
+            entry={PERCENT_ENTRY}
             onChange={(v) => updateClipColorLive(clip.id, key, v, currentTimeMs)}
             keyframe={kf(key, label)}
           />

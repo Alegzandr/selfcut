@@ -26,6 +26,18 @@ import type { FFmpegProgress } from '../media/ffmpeg';
 import type { PresetLook } from '../effects/presetFile';
 import type { ParsedCube } from '../effects/lut';
 
+/**
+ * What a clip edit changes: the fields to merge as they are, or a function
+ * returning them for the clip they are about to land on.
+ *
+ * The function form is what a multi-selection needs whenever the new value
+ * builds on the clip's OWN state (its text, its crop rectangle, its effect
+ * list): a fixed object would copy the primary clip's whole sub-object onto
+ * every other selected clip, so changing a caption's size would overwrite the
+ * other captions' words.
+ */
+export type ClipPatch = Partial<Clip> | ((clip: Clip) => Partial<Clip>);
+
 /** An imported `.sfx` preset, held for the session so it can be re-applied by drag. */
 export interface LoadedPreset {
   /** Stable id: the drag payload and the React key. */
@@ -105,6 +117,28 @@ export interface HistoryEntry {
   assets: Record<string, MediaAsset>;
 }
 
+/**
+ * Where a drag hovering the timeline would land, drawn as a ghost clip - the
+ * footprint every NLE shows before you let go. Lives in the store rather than
+ * in the drop hook's state so only the ghost re-renders as the pointer moves,
+ * and so the app-level import overlay can step aside while the timeline owns
+ * the drag.
+ */
+export interface DropPreview {
+  /** Start of the ghost (ms), snapping already applied. */
+  startMs: number;
+  /**
+   * Its length (ms), or null when the source has not been read yet: a file
+   * dragged in from the desktop has no duration until it is probed, so the
+   * ghost degrades to an insertion line rather than inventing a width.
+   */
+  durationMs: number | null;
+  /** Track it would land on, or null when the drop would create a fresh one. */
+  trackId: string | null;
+  /** Label drawn inside the ghost (asset name, or a file count). */
+  label: string;
+}
+
 export interface EditorState {
   project: Project;
   assets: Record<string, MediaAsset>;
@@ -167,6 +201,8 @@ export interface EditorState {
    * so it survives the remount when a drag crosses onto another track.
    */
   dragBadge: { clipId: string; text: string } | null;
+  /** Footprint of the drag currently hovering the timeline, or null when none is. */
+  dropPreview: DropPreview | null;
   /** Mobile only: the inspector opens on demand (Adjust button), not on every selection. */
   inspectorOpen: boolean;
   /**
@@ -180,7 +216,7 @@ export interface EditorState {
   /** Which catalogue the media library column shows. */
   libraryTab: LibraryTab;
   shortcutsOpen: boolean;
-  /** Preferences dialog (language, time format). */
+  /** Preferences dialog (language, time format, preview surround). */
   preferencesOpen: boolean;
   /** About dialog (app name, version). */
   aboutOpen: boolean;
@@ -196,6 +232,12 @@ export interface EditorState {
   previewResolution: PreviewResolutionMode;
   /** Which video scope the monitor overlays, or 'off' (persisted). Desktop only. */
   scopesMode: ScopeMode;
+  /**
+   * `#rrggbb` filling the preview panel around the output frame (persisted).
+   * A monitoring choice only: it is never composited, so the export is identical
+   * whatever it is set to.
+   */
+  previewBackground: string;
   /**
    * Master monitoring volume of the preview, linear gain in 0..1 (persisted).
    * Purely a listening level: it scales the preview's master bus and never
@@ -319,8 +361,15 @@ export interface EditorState {
    * (primary selection) and the target - rows between them, anchor→target time span.
    */
   selectClipRange: (anchorId: string, targetId: string) => void;
-  updateClip: (clipId: string, patch: Partial<Clip>) => void;
-  updateClipCommitted: (clipId: string, patch: Partial<Clip>) => void;
+  /**
+   * Live (uncommitted) field edit. `clipId` names the clip the control is
+   * showing; with several clips selected the change reaches every one of them
+   * (see `editTargets`), so pass the function form whenever the new value
+   * builds on the clip's own state.
+   */
+  updateClip: (clipId: string, patch: ClipPatch) => void;
+  /** Same targeting as `updateClip`, committed as one history entry. */
+  updateClipCommitted: (clipId: string, patch: ClipPatch) => void;
   /**
    * Keyframe-aware live transform edit — the one path the inspector transform
    * sliders and the preview move/scale/rotate gestures both use. For each
@@ -546,6 +595,8 @@ export interface EditorState {
   setSnapGuide: (ms: number | null) => void;
   /** Publish/clear the floating drag readout for a clip. */
   setDragBadge: (badge: { clipId: string; text: string } | null) => void;
+  /** Publish/clear the ghost showing where a hovering drag would drop. */
+  setDropPreview: (preview: DropPreview | null) => void;
 
   seek: (ms: number) => void;
   setCurrentTimeFromEngine: (ms: number) => void;
@@ -606,6 +657,8 @@ export interface EditorState {
   setPreviewResolution: (mode: PreviewResolutionMode) => void;
   /** Pick the video scope to show (or 'off'); persisted. */
   setScopesMode: (mode: ScopeMode) => void;
+  /** Pick the colour behind the preview frame, as `#rrggbb`; persisted. */
+  setPreviewBackground: (hex: string) => void;
   /** Set the active project id (the one the persistence layer autosaves). */
   setCurrentProjectId: (id: string) => void;
   /** Replace the project browser's rows. */

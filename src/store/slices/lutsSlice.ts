@@ -18,7 +18,7 @@ import { uid } from '../../lib/id';
 export function createLutsSlice(
   set: StoreSet,
   get: StoreGet,
-  { withHistory }: SliceHelpers,
+  { withHistory, targetsOf }: SliceHelpers,
 ): Pick<EditorState, 'importLut' | 'removeLut' | 'setClipsLut' | 'setClipLutIntensity' | 'clearClipLut'> {
   /** Merge a new `lut` field into a clip's colour without dropping its other grades. */
   const withLut = (lut: { id: string; intensity: number } | undefined) => (c: Clip): Clip => {
@@ -62,30 +62,31 @@ export function createLutsSlice(
         }
       }),
 
-    setClipLutIntensity: (clipId, intensity) =>
+    setClipLutIntensity: (clipId, intensity) => {
+      // Every clip the selection makes this edit reach, each keeping its own
+      // table - only the strength is shared.
+      const edit = (c: Clip): Clip => {
+        const existing = c.color?.lut;
+        if (!existing) return c;
+        return withLut({ id: existing.id, intensity })(c);
+      };
       set({
         project: patchClips(
           get().project,
-          new Map([
-            [
-              clipId,
-              (c: Clip): Clip => {
-                const existing = c.color?.lut;
-                if (!existing) return c;
-                return withLut({ id: existing.id, intensity })(c);
-              },
-            ],
-          ]),
+          new Map(targetsOf(clipId).map((id) => [id, edit] as const)),
         ),
-      }),
+      });
+    },
 
-    clearClipLut: (clipId) =>
+    clearClipLut: (clipId) => {
+      const ids = new Set(targetsOf(clipId));
       withHistory((p) => {
         for (const track of p.tracks) {
           for (const clip of track.clips) {
-            if (clip.id === clipId && clip.color?.lut) delete clip.color.lut;
+            if (ids.has(clip.id) && clip.color?.lut) delete clip.color.lut;
           }
         }
-      }),
+      });
+    },
   };
 }

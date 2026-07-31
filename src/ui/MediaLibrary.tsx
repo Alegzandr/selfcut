@@ -29,6 +29,7 @@ import { JobProgress } from './JobProgress';
 import { TrackPickerDialog, type PickerTrack } from './TrackPickerDialog';
 import { useImport } from './useImport';
 import { EffectsPane, TransitionsPane } from './EffectLibrary';
+import { setDraggedAssetId } from '../timeline/dragSource';
 import type { LibraryTab } from '../store/editorState';
 
 /**
@@ -543,7 +544,11 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
         // Desktop: drag the asset straight onto a timeline position.
         e.dataTransfer.setData(ASSET_DRAG_MIME, asset.id);
         e.dataTransfer.effectAllowed = 'copy';
+        // The payload is write-only until the drop, so the timeline's ghost
+        // reads the dragged asset from here to know how wide to draw itself.
+        setDraggedAssetId(asset.id);
       }}
+      onDragEnd={() => setDraggedAssetId(null)}
       onContextMenu={(e) => {
         if (coarse) return; // Desktop only.
         e.preventDefault();

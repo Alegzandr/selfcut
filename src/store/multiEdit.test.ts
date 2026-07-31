@@ -17,7 +17,7 @@ beforeAll(async () => {
   ({ useStore } = await import('./store'));
 });
 
-function videoAsset(id: string, durationMs = 5000): MediaAsset {
+function videoAsset(id: string, durationMs = 5000, audioTrackCount = 0): MediaAsset {
   return {
     id,
     file: new File([], `${id}.mp4`),
@@ -25,8 +25,8 @@ function videoAsset(id: string, durationMs = 5000): MediaAsset {
     durationMs,
     width: 1920,
     height: 1080,
-    hasAudio: false,
-    audioTracks: [],
+    hasAudio: audioTrackCount > 0,
+    audioTracks: Array.from({ length: audioTrackCount }, (_, i) => ({ index: i, channels: 2 })),
     thumbnails: [],
   };
 }
@@ -80,6 +80,96 @@ describe('clipboard over a multi-selection', () => {
     s().duplicateClips(s().selectedClipIds);
     expect(clips()).toHaveLength(5);
     expect(s().selectedClipIds).toHaveLength(2);
+  });
+});
+
+describe('property edits over a multi-selection', () => {
+  it('commits a field onto every selected clip, and only those', () => {
+    const [first, second, third] = clips();
+    s().setSelectedClips([first!.id, second!.id]);
+    s().updateClipCommitted(first!.id, { volume: 0.25 });
+
+    const after = clips();
+    expect(after.find((c) => c.id === first!.id)!.volume).toBe(0.25);
+    expect(after.find((c) => c.id === second!.id)!.volume).toBe(0.25);
+    expect(after.find((c) => c.id === third!.id)!.volume).toBe(1);
+  });
+
+  it('spreads a live transform edit', () => {
+    const [first, second] = clips();
+    s().setSelectedClips([first!.id, second!.id]);
+    // The playhead has to sit inside a clip for it to take the edit, and the
+    // three clips run back to back: seek into the second one's span.
+    s().updateClipTransformLive(first!.id, { scale: 1.5 }, second!.timelineStartMs + 10);
+
+    for (const id of [first!.id, second!.id]) {
+      expect(clips().find((c) => c.id === id)!.transform?.scale).toBe(1.5);
+    }
+  });
+
+  it('spreads a colour edit', () => {
+    const [first, second] = clips();
+    s().setSelectedClips([first!.id, second!.id]);
+    s().updateClipColorLive(first!.id, 'contrast', 0.4, 0);
+
+    for (const id of [first!.id, second!.id]) {
+      expect(clips().find((c) => c.id === id)!.color?.contrast).toBe(0.4);
+    }
+  });
+
+  it('resolves a function patch against each clip it lands on', () => {
+    const [first, second] = clips();
+    s().setSelectedClips([first!.id, second!.id]);
+    // What the inspector's text/crop/effect controls do: the new value builds
+    // on the clip being edited, never on the one the panel happens to show.
+    s().updateClip(first!.id, (c) => ({ fadeInMs: c.timelineStartMs }));
+
+    expect(clips().find((c) => c.id === first!.id)!.fadeInMs).toBe(first!.timelineStartMs);
+    expect(clips().find((c) => c.id === second!.id)!.fadeInMs).toBe(second!.timelineStartMs);
+  });
+
+  it('animates the whole selection from one keyframe diamond', () => {
+    const [first, second] = clips();
+    s().setSelectedClips([first!.id, second!.id]);
+    // Inside the first clip only: the second has no instant to key here, so it
+    // must keep its animation rather than take a keyframe past its own edges.
+    s().toggleClipKeyframe(first!.id, 'scale', 10);
+    expect(clips().find((c) => c.id === first!.id)!.animation?.scale).toHaveLength(1);
+    expect(clips().find((c) => c.id === second!.id)!.animation?.scale).toBeUndefined();
+
+    // Under both: the diamond then keys the pair.
+    s().toggleClipKeyframe(first!.id, 'scale', second!.timelineStartMs + 10);
+    expect(clips().find((c) => c.id === second!.id)!.animation?.scale).toHaveLength(1);
+  });
+
+  it('leaves a single selection to the clip it names', () => {
+    const [first, second] = clips();
+    s().selectClip(first!.id);
+    s().updateClipCommitted(first!.id, { volume: 0.5 });
+    expect(clips().find((c) => c.id === second!.id)!.volume).toBe(1);
+  });
+});
+
+describe('audio edits reaching each clip through its own linked partner', () => {
+  it('spreads a volume change onto every selected clip audio side', () => {
+    s().resetProject();
+    for (const id of ['x', 'y']) {
+      s().addAsset(videoAsset(id, 5000, 1));
+      s().addClipFromAsset(id);
+    }
+    const video = videoTrack().clips;
+    const audio = s().project.tracks.find((t) => t.kind === 'audio')!.clips;
+    expect(video).toHaveLength(2);
+    expect(audio).toHaveLength(2);
+
+    // Both picture clips selected; the inspector's fader edits the audio
+    // partner of the primary, which must carry the pair - not one lane twice.
+    s().setSelectedClips(video.map((c) => c.id));
+    const primaryAudio = audio.find((c) => c.linkId === video[1]!.linkId)!;
+    s().updateClipCommitted(primaryAudio.id, { volume: 0.3 });
+
+    const after = s().project.tracks.find((t) => t.kind === 'audio')!.clips;
+    expect(after.map((c) => c.volume)).toEqual([0.3, 0.3]);
   });
 });
 

@@ -25,6 +25,7 @@ import { useTimelineWheel } from './hooks/useTimelineWheel';
 import { usePinchZoom } from './hooks/usePinchZoom';
 import { useMobileScrubSync } from './hooks/useMobileScrubSync';
 import { useAssetDrop } from './hooks/useAssetDrop';
+import { DropGhost } from './DropGhost';
 import { publishViewport } from './viewport';
 import { trackIndexAtY, trackTops } from './trackHeight';
 import { keyframeKey, keyframesInBox } from './keyframeSelection';
@@ -446,6 +447,9 @@ export function Timeline() {
             {/* Region shading + marker lines: after the tracks, so they paint over the clips. */}
             <TimelineOverlay pxPerMs={pxPerMs} trackCount={project.tracks.length} />
             <SnapGuide />
+            {/* Where the hovering drag would land - painted over the clips it
+                would sit next to, so the fit can be judged before letting go. */}
+            <DropGhost pxPerMs={pxPerMs} />
 
             {/* Opaque + sticky at the scroller's left edge, so the buttons stay
               reachable however far the timeline is scrolled. */}

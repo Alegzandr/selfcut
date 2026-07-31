@@ -3,10 +3,29 @@ import { X } from 'lucide-react';
 import { useStore } from '../../store/store';
 import { ToggleButton } from '../../ui/ToggleButton';
 import { AudioFxType, Clip } from '../../types';
-import { SliderRow } from '../SliderRow';
+import { PERCENT_ENTRY, SliderRow, type NumericEntry } from '../SliderRow';
 import { gainDb } from '../format';
-import { DB_STEP_FADER, faderToGain, faderToGainStepped, gainToFader } from '../../lib/gain';
+import {
+  DB_STEP_FADER,
+  MIN_DB,
+  dbToGain,
+  faderToGain,
+  faderToGainStepped,
+  gainToDb,
+  gainToFader,
+} from '../../lib/gain';
 import { useVolumeEntry } from '../../ui/VolumeEntry';
+
+/**
+ * The volume row stores a fader position, which is meaningless to type: the
+ * field trades in the dB the read-out already shows. Silence seeds as the bottom
+ * of the scale so the field always holds a number.
+ */
+const DB_ENTRY: NumericEntry = {
+  toInput: (pos) => Math.max(MIN_DB, gainToDb(faderToGain(pos))),
+  fromInput: (db) => gainToFader(dbToGain(db)),
+  decimals: 1,
+};
 
 export function AudioSection({ clip }: { clip: Clip }) {
   const { t } = useTranslation();
@@ -17,14 +36,20 @@ export function AudioSection({ clip }: { clip: Clip }) {
   });
 
   const fxList = clip.audioFx ?? [];
-  const removeFx = (type: AudioFxType) => {
-    const next = fxList.filter((f) => f.type !== type);
-    updateClipCommitted(clip.id, { audioFx: next.length ? next : undefined });
-  };
+  // Both edits rebuild the list from EACH edited clip's own effects: with
+  // several clips selected, a fixed list would replace their chains with this
+  // one's rather than change the one effect the user reached for.
+  const removeFx = (type: AudioFxType) =>
+    updateClipCommitted(clip.id, (c) => {
+      const next = (c.audioFx ?? []).filter((f) => f.type !== type);
+      return { audioFx: next.length ? next : undefined };
+    });
   // Live (one undo per drag via SliderRow's begin/endGesture); the sameAudioMix
   // gate now watches audioFx, so the preview follows the change as it moves.
   const setFxAmount = (type: AudioFxType, amount: number) =>
-    updateClip(clip.id, { audioFx: fxList.map((f) => (f.type === type ? { ...f, amount } : f)) });
+    updateClip(clip.id, (c) => ({
+      audioFx: (c.audioFx ?? []).map((f) => (f.type === type ? { ...f, amount } : f)),
+    }));
 
   // Pan read-out: the letter is the localised initial of Center/Left/Right.
   const pan = (v: number) => {
@@ -45,10 +70,18 @@ export function AudioSection({ clip }: { clip: Clip }) {
         max={1}
         step={DB_STEP_FADER}
         format={(p) => gainDb(faderToGain(p))}
+        entry={{
+          ...DB_ENTRY,
+          // Straight to the 0.1 dB scale: the whole-dB detents belong to the
+          // drag, not to a value that was spelled out.
+          onCommit: (pos) => updateClip(clip.id, { volume: faderToGain(pos) }),
+        }}
         onChange={(p) => updateClip(clip.id, { volume: faderToGainStepped(p) })}
         onContextMenu={volumeEntry.onContextMenu}
       />
       {volumeEntry.entry}
+      {/* Balance is typed as a signed percentage - negative is left - since the
+          read-out's L/R letter is not something a field can take. */}
       <SliderRow
         label={t('inspector.balance')}
         value={clip.pan ?? 0}
@@ -56,6 +89,7 @@ export function AudioSection({ clip }: { clip: Clip }) {
         max={1}
         step={0.01}
         format={pan}
+        entry={PERCENT_ENTRY}
         onChange={(v) => updateClip(clip.id, { pan: v })}
       />
       <div className="flex items-center gap-3 text-xs text-zinc-400">
@@ -94,6 +128,7 @@ export function AudioSection({ clip }: { clip: Clip }) {
                   max={1}
                   step={0.01}
                   format={(v) => `${Math.round(v * 100)}%`}
+                  entry={PERCENT_ENTRY}
                   onChange={(v) => setFxAmount(fx.type, v)}
                 />
               </div>

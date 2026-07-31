@@ -1,5 +1,5 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
-import type { EditorState } from '../editorState';
+import type { ClipPatch, EditorState } from '../editorState';
 import {
   Clip,
   ClipAnimation,
@@ -106,10 +106,15 @@ function shiftEdits(clipIds: string[], delta: number): Map<string, (c: Clip) => 
   return edits;
 }
 
+/** Resolve a patch against the clip it is about to land on. */
+function resolvePatch(patch: ClipPatch, clip: Clip): Partial<Clip> {
+  return typeof patch === 'function' ? patch(clip) : patch;
+}
+
 export function createClipsSlice(
   set: StoreSet,
   get: StoreGet,
-  { withHistory, pruneSelection }: SliceHelpers,
+  { withHistory, pruneSelection, targetsOf }: SliceHelpers,
 ): Pick<
   EditorState,
   | 'addClipFromAsset'
@@ -146,6 +151,26 @@ export function createClipsSlice(
   | 'setCropEditing'
   | 'attachAudioTrack'
 > {
+  /**
+   * The same copy-on-write edit, aimed at every clip this edit reaches: the
+   * control names the primary clip, but a multi-selection takes the change as
+   * a whole. The edit runs per clip, so it must read the clip it is given
+   * rather than close over the primary's values.
+   */
+  const spread = (clipId: string, edit: (c: Clip) => Clip) =>
+    new Map(targetsOf(clipId).map((id) => [id, edit] as const));
+
+  /**
+   * Whether the playhead falls inside `clip`. A keyframe is written at a
+   * clip-local time, so a selected clip the playhead has already passed has no
+   * instant to write at: it keeps its animation instead of taking a key beyond
+   * its own edges.
+   */
+  const spansPlayhead = (clip: Clip, timelineMs: number) => {
+    const local = timelineMs - clip.timelineStartMs;
+    return local >= 0 && local <= clipDurationMs(clip);
+  };
+
   return {
     addClipFromAsset: (assetId) => {
       const asset = get().assets[assetId];
@@ -409,53 +434,56 @@ export function createClipsSlice(
         // the patched object is still a valid Clip (a Partial<Clip> spread widens).
         project: patchClips(
           get().project,
-          new Map([[clipId, (c: Clip): Clip => ({ ...c, ...patch }) as Clip]]),
+          spread(clipId, (c: Clip): Clip => ({ ...c, ...resolvePatch(patch, c) }) as Clip),
         ),
       }),
 
-    updateClipCommitted: (clipId, patch) =>
+    updateClipCommitted: (clipId, patch) => {
+      const ids = targetsOf(clipId);
       withHistory((p) => {
-        const found = findClip(p, clipId);
-        if (!found) return;
-        Object.assign(found.clip, patch);
-        // Speed changes a clip's timeline duration; linked partners must take
-        // the same speed or picture and sound drift apart immediately.
-        if (patch.speed !== undefined) {
-          for (const pid of linkedPartnerIds(p, clipId)) {
-            const partner = findClip(p, pid);
-            if (partner) partner.clip.speed = patch.speed;
+        for (const id of ids) {
+          const found = findClip(p, id);
+          if (!found) continue;
+          const fields = resolvePatch(patch, found.clip);
+          Object.assign(found.clip, fields);
+          // Speed changes a clip's timeline duration; linked partners must take
+          // the same speed or picture and sound drift apart immediately.
+          if (fields.speed !== undefined) {
+            for (const pid of linkedPartnerIds(p, id)) {
+              const partner = findClip(p, pid);
+              if (partner) partner.clip.speed = fields.speed;
+            }
           }
         }
-      }),
+      });
+    },
 
     updateClipTransformLive: (clipId, patch, timelineMs) =>
       set({
         project: patchClips(
           get().project,
-          new Map([
-            [
-              clipId,
-              (c: Clip): Clip => {
-                const local = timelineMs - c.timelineStartMs;
-                let animation: ClipAnimation | undefined = c.animation;
-                let transform = c.transform ?? DEFAULT_TRANSFORM;
-                let transformChanged = false;
-                for (const [key, value] of Object.entries(patch)) {
-                  if (value === undefined) continue;
-                  const prop = key as 'x' | 'y' | 'scale' | 'scaleX' | 'scaleY' | 'rotation';
-                  const existing = animation?.[prop];
-                  if (existing && existing.length) {
-                    // Already animated: write/update the keyframe at the playhead.
-                    animation = { ...animation, [prop]: setKeyframe(existing, local, value) };
-                  } else {
-                    transform = { ...transform, [prop]: value };
-                    transformChanged = true;
-                  }
+          spread(clipId, (c: Clip): Clip => {
+            const local = timelineMs - c.timelineStartMs;
+            const canKey = spansPlayhead(c, timelineMs);
+            let animation: ClipAnimation | undefined = c.animation;
+            let transform = c.transform ?? DEFAULT_TRANSFORM;
+            let transformChanged = false;
+            for (const [key, value] of Object.entries(patch)) {
+              if (value === undefined) continue;
+              const prop = key as 'x' | 'y' | 'scale' | 'scaleX' | 'scaleY' | 'rotation';
+              const existing = animation?.[prop];
+              if (existing && existing.length) {
+                // Already animated: write/update the keyframe at the playhead.
+                if (canKey) {
+                  animation = { ...animation, [prop]: setKeyframe(existing, local, value) };
                 }
-                return { ...c, transform: transformChanged ? transform : c.transform, animation } as Clip;
-              },
-            ],
-          ]),
+              } else {
+                transform = { ...transform, [prop]: value };
+                transformChanged = true;
+              }
+            }
+            return { ...c, transform: transformChanged ? transform : c.transform, animation } as Clip;
+          }),
         ),
       }),
 
@@ -463,24 +491,20 @@ export function createClipsSlice(
       set({
         project: patchClips(
           get().project,
-          new Map([
-            [
-              clipId,
-              (c: Clip): Clip => {
-                const next = { ...c } as Clip;
-                const existing = keyframesOf(next, prop);
-                // Same rule as the transform sliders: once a parameter animates,
-                // dragging it writes the key under the playhead rather than a
-                // constant that would silently wipe the animation.
-                writeChannel(
-                  next,
-                  prop,
-                  existing ? setKeyframe(existing, timelineMs - c.timelineStartMs, value) : value,
-                );
-                return next;
-              },
-            ],
-          ]),
+          spread(clipId, (c: Clip): Clip => {
+            const next = { ...c } as Clip;
+            const existing = keyframesOf(next, prop);
+            // Same rule as the transform sliders: once a parameter animates,
+            // dragging it writes the key under the playhead rather than a
+            // constant that would silently wipe the animation.
+            if (existing && !spansPlayhead(c, timelineMs)) return c;
+            writeChannel(
+              next,
+              prop,
+              existing ? setKeyframe(existing, timelineMs - c.timelineStartMs, value) : value,
+            );
+            return next;
+          }),
         ),
       }),
 
@@ -488,18 +512,13 @@ export function createClipsSlice(
       set({
         project: patchClips(
           get().project,
-          new Map([
-            [
-              clipId,
-              (c: Clip): Clip => {
-                const color: ClipColor = { ...(c.color ?? {}) };
-                if (!curves || curvesAreIdentity(curves)) delete color.curves;
-                else color.curves = curves as ClipCurves;
-                const nextColor = Object.keys(color).length ? color : undefined;
-                return { ...c, color: nextColor } as Clip;
-              },
-            ],
-          ]),
+          spread(clipId, (c: Clip): Clip => {
+            const color: ClipColor = { ...(c.color ?? {}) };
+            if (!curves || curvesAreIdentity(curves)) delete color.curves;
+            else color.curves = curves as ClipCurves;
+            const nextColor = Object.keys(color).length ? color : undefined;
+            return { ...c, color: nextColor } as Clip;
+          }),
         ),
       }),
 
@@ -507,18 +526,13 @@ export function createClipsSlice(
       set({
         project: patchClips(
           get().project,
-          new Map([
-            [
-              clipId,
-              (c: Clip): Clip => {
-                const color: ClipColor = { ...(c.color ?? {}) };
-                if (!key) delete color.chromaKey;
-                else color.chromaKey = key;
-                const nextColor = Object.keys(color).length ? color : undefined;
-                return { ...c, color: nextColor } as Clip;
-              },
-            ],
-          ]),
+          spread(clipId, (c: Clip): Clip => {
+            const color: ClipColor = { ...(c.color ?? {}) };
+            if (!key) delete color.chromaKey;
+            else color.chromaKey = key;
+            const nextColor = Object.keys(color).length ? color : undefined;
+            return { ...c, color: nextColor } as Clip;
+          }),
         ),
       }),
 
@@ -526,7 +540,7 @@ export function createClipsSlice(
       set({
         project: patchClips(
           get().project,
-          new Map([[clipId, (c: Clip): Clip => ({ ...c, mask: mask ?? undefined }) as Clip]]),
+          spread(clipId, (c: Clip): Clip => ({ ...c, mask: mask ?? undefined }) as Clip),
         ),
       }),
 
@@ -534,73 +548,99 @@ export function createClipsSlice(
       set({
         project: patchClips(
           get().project,
-          new Map([
-            [
-              clipId,
-              (c: Clip): Clip => {
-                const mask = c.mask;
-                if (!mask) return c;
-                const local = timelineMs - c.timelineStartMs;
-                const motion: MaskMotion = { ...(mask.motion ?? {}) };
-                const ch = motion[prop];
-                // Same rule as the colour/transform sliders: once the axis is
-                // animated, a drag writes the key under the playhead instead of a
-                // constant that would wipe the animation.
-                motion[prop] =
-                  Array.isArray(ch) && ch.length ? setKeyframe(ch, local, value) : value;
-                return { ...c, mask: { ...mask, motion } } as Clip;
-              },
-            ],
-          ]),
+          spread(clipId, (c: Clip): Clip => {
+            const mask = c.mask;
+            if (!mask) return c;
+            const local = timelineMs - c.timelineStartMs;
+            const motion: MaskMotion = { ...(mask.motion ?? {}) };
+            const ch = motion[prop];
+            // Same rule as the colour/transform sliders: once the axis is
+            // animated, a drag writes the key under the playhead instead of a
+            // constant that would wipe the animation.
+            if (Array.isArray(ch) && ch.length) {
+              if (!spansPlayhead(c, timelineMs)) return c;
+              motion[prop] = setKeyframe(ch, local, value);
+            } else {
+              motion[prop] = value;
+            }
+            return { ...c, mask: { ...mask, motion } } as Clip;
+          }),
         ),
       }),
 
-    toggleClipMaskMotionKeyframe: (clipId, prop, timelineMs) =>
+    toggleClipMaskMotionKeyframe: (clipId, prop, timelineMs) => {
+      const ids = targetsOf(clipId);
       withHistory((p) => {
-        const clip = findClip(p, clipId)?.clip;
-        const mask = clip?.mask;
-        if (!clip || !mask) return;
-        const local = timelineMs - clip.timelineStartMs;
-        const motion: MaskMotion = { ...(mask.motion ?? {}) };
-        const ch = motion[prop];
+        // The diamond reads the addressed clip, so its outcome - animate or
+        // de-animate - is the one the whole selection follows. Toggling each
+        // clip against its own state would leave a mixed selection flipping
+        // back and forth forever.
+        const lead = findClip(p, clipId)?.clip;
+        const leadCh = lead?.mask?.motion?.[prop];
+        if (!lead) return;
+        const removing =
+          Array.isArray(leadCh) &&
+          leadCh.some((k) => Math.abs(k.t - (timelineMs - lead.timelineStartMs)) < 1);
         const identity: Record<MaskMotionProp, number> = { tx: 0, ty: 0, scale: 1, rotation: 0 };
-        if (Array.isArray(ch) && ch.length) {
-          const onKey = ch.some((k) => Math.abs(k.t - local) < 1);
-          // A key on the playhead is removed; otherwise one is added holding the
-          // current sampled value, so toggling never makes the mask jump.
-          motion[prop] = onKey ? removeKeyframe(ch, local) : setKeyframe(ch, local, sampleChannel(ch, local));
-        } else {
-          const cur = typeof ch === 'number' ? ch : identity[prop];
-          motion[prop] = setKeyframe([], local, cur);
+        for (const id of ids) {
+          const clip = findClip(p, id)?.clip;
+          const mask = clip?.mask;
+          if (!clip || !mask || !spansPlayhead(clip, timelineMs)) continue;
+          const local = timelineMs - clip.timelineStartMs;
+          const motion: MaskMotion = { ...(mask.motion ?? {}) };
+          const ch = motion[prop];
+          if (Array.isArray(ch) && ch.length) {
+            // A key on the playhead is removed; otherwise one is added holding
+            // the current sampled value, so toggling never makes the mask jump.
+            motion[prop] = removing
+              ? removeKeyframe(ch, local)
+              : setKeyframe(ch, local, sampleChannel(ch, local));
+          } else {
+            if (removing) continue;
+            const cur = typeof ch === 'number' ? ch : identity[prop];
+            motion[prop] = setKeyframe([], local, cur);
+          }
+          clip.mask = { ...mask, motion };
         }
-        clip.mask = { ...mask, motion };
-      }),
+      });
+    },
 
-    toggleClipKeyframe: (clipId, prop, timelineMs) =>
+    toggleClipKeyframe: (clipId, prop, timelineMs) => {
+      const ids = targetsOf(clipId);
       withHistory((p) => {
-        const found = findClip(p, clipId);
-        if (!found) return;
-        const clip = found.clip;
-        const local = timelineMs - clip.timelineStartMs;
-        const existing = keyframesOf(clip, prop);
-        if (existing) {
-          const onKey = existing.some((k) => Math.abs(k.t - local) < 1);
-          // A key on the playhead is removed; otherwise one is added at the value
-          // the property currently shows, so toggling never makes the clip jump.
-          // Collapsing back to a constant on the last removal - and where that
-          // constant has to be stored - is `writeChannel`'s business.
-          writeChannel(
-            clip,
-            prop,
-            onKey
-              ? removeKeyframe(existing, local)
-              : setKeyframe(existing, local, sampleChannel(existing, local)),
-          );
-        } else {
-          // Not animated yet: enable it, seeding one keyframe at the current value.
-          writeChannel(clip, prop, [{ t: local, value: staticValueOf(clip, prop) }]);
+        // Same rule as the mask diamond: the addressed clip decides, and the
+        // rest of the selection follows that outcome.
+        const lead = findClip(p, clipId)?.clip;
+        if (!lead) return;
+        const leadKeys = keyframesOf(lead, prop);
+        const removing = !!leadKeys?.some(
+          (k) => Math.abs(k.t - (timelineMs - lead.timelineStartMs)) < 1,
+        );
+        for (const id of ids) {
+          const clip = findClip(p, id)?.clip;
+          if (!clip || !spansPlayhead(clip, timelineMs)) continue;
+          const local = timelineMs - clip.timelineStartMs;
+          const existing = keyframesOf(clip, prop);
+          if (existing) {
+            // A key on the playhead is removed; otherwise one is added at the
+            // value the property currently shows, so toggling never makes the
+            // clip jump. Collapsing back to a constant on the last removal -
+            // and where that constant has to be stored - is `writeChannel`'s
+            // business.
+            writeChannel(
+              clip,
+              prop,
+              removing
+                ? removeKeyframe(existing, local)
+                : setKeyframe(existing, local, sampleChannel(existing, local)),
+            );
+          } else if (!removing) {
+            // Not animated yet: enable it, seeding one keyframe at the current value.
+            writeChannel(clip, prop, [{ t: local, value: staticValueOf(clip, prop) }]);
+          }
         }
-      }),
+      });
+    },
 
     moveClipKeyframes: (clipId, fromT, toT) =>
       set({
@@ -635,17 +675,28 @@ export function createClipsSlice(
         ),
       }),
 
-    setClipKeyframesEase: (clipId, atT, ease) =>
+    setClipKeyframesEase: (clipId, atT, ease) => {
+      const ids = targetsOf(clipId);
       withHistory((p) => {
-        const clip = findClip(p, clipId)?.clip;
-        if (!clip) return;
-        // Both families: a column under the playhead can hold a scale key and a
-        // contrast key, and the picker re-eases the column, not one of them.
-        for (const { keys } of animatedProps(clip)) {
-          const k = keys.find((kk) => Math.abs(kk.t - atT) < 1);
-          if (k) k.ease = ease;
+        const lead = findClip(p, clipId)?.clip;
+        if (!lead) return;
+        // `atT` is local to the addressed clip: re-read it as a timeline instant
+        // so the other selected clips re-ease the column under the SAME
+        // playhead rather than at their own offset into the same number.
+        const timelineMs = lead.timelineStartMs + atT;
+        for (const id of ids) {
+          const clip = findClip(p, id)?.clip;
+          if (!clip) continue;
+          const local = timelineMs - clip.timelineStartMs;
+          // Both families: a column under the playhead can hold a scale key and a
+          // contrast key, and the picker re-eases the column, not one of them.
+          for (const { keys } of animatedProps(clip)) {
+            const k = keys.find((kk) => Math.abs(kk.t - local) < 1);
+            if (k) k.ease = ease;
+          }
         }
-      }),
+      });
+    },
 
     moveClip: (clipId, timelineStartMs, targetTrackId) => {
       const p = get().project;
@@ -994,14 +1045,27 @@ export function createClipsSlice(
         }
       }
       if (!targetId) return;
+      // Punching in is a property change like any other: with several clips
+      // selected they all step to the same rung of the ladder, which the
+      // primary clip's current scale picks.
+      const ids = targetsOf(targetId);
       withHistory((p) => {
-        const found = findClip(p, targetId!);
-        if (!found) return;
-        const tf = found.clip.transform ?? structuredClone(DEFAULT_TRANSFORM);
-        const next = tf.scale < 1.1 ? 1.2 : tf.scale < 1.3 ? 1.4 : 1;
-        found.clip.transform = { ...tf, scale: next };
+        const lead = findClip(p, targetId!)?.clip;
+        if (!lead) return;
+        const leadScale = (lead.transform ?? DEFAULT_TRANSFORM).scale;
+        const next = leadScale < 1.1 ? 1.2 : leadScale < 1.3 ? 1.4 : 1;
+        for (const id of ids) {
+          const found = findClip(p, id);
+          if (!found) continue;
+          const tf = found.clip.transform ?? structuredClone(DEFAULT_TRANSFORM);
+          found.clip.transform = { ...tf, scale: next };
+        }
       }, targetId);
-      set({ selectedClipId: targetId, selectedClipIds: [targetId] });
+      // The fallback path selects what it acted on; an existing selection stays
+      // whole rather than collapsing onto its primary.
+      if (get().selectedClipIds.length === 0) {
+        set({ selectedClipId: targetId, selectedClipIds: [targetId] });
+      }
     },
 
     addSubtitleClips: (cues, anchorAssetId) => {

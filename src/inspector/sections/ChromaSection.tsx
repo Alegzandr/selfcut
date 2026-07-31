@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/store';
 import { Clip, ClipColor } from '../../types';
-import { SliderRow } from '../SliderRow';
+import { PERCENT_ENTRY, SliderRow } from '../SliderRow';
 
 /**
  * Chroma key (green screen): switch it on, pick the colour to remove, and dial
@@ -76,6 +76,7 @@ export function ChromaSection({ clip }: { clip: Clip }) {
             max={1}
             step={0.01}
             format={(v) => `${Math.round(v * 100)}%`}
+            entry={PERCENT_ENTRY}
             onChange={(v) => set({ similarity: v })}
           />
           <SliderRow
@@ -85,6 +86,7 @@ export function ChromaSection({ clip }: { clip: Clip }) {
             max={1}
             step={0.01}
             format={(v) => `${Math.round(v * 100)}%`}
+            entry={PERCENT_ENTRY}
             onChange={(v) => set({ smoothness: v })}
           />
           <SliderRow
@@ -94,6 +96,7 @@ export function ChromaSection({ clip }: { clip: Clip }) {
             max={1}
             step={0.01}
             format={(v) => `${Math.round(v * 100)}%`}
+            entry={PERCENT_ENTRY}
             onChange={(v) => set({ spill: v })}
           />
         </>

@@ -24,6 +24,7 @@ import {
   PREVIEW_VOLUME_KEY,
   PREVIEW_MUTED_KEY,
   SCOPES_MODE_KEY,
+  PREVIEW_BACKGROUND_KEY,
 } from '../constants';
 
 /** How many imported presets the session shelf holds before dropping the oldest. */
@@ -68,6 +69,7 @@ export function createUiSlice(
   | 'toggleSnap'
   | 'setSnapGuide'
   | 'setDragBadge'
+  | 'setDropPreview'
   | 'setPxPerSec'
   | 'setTrackHeightPx'
   | 'setTrackHeaderWidthPx'
@@ -93,6 +95,7 @@ export function createUiSlice(
   | 'resetPreviewView'
   | 'setPreviewResolution'
   | 'setScopesMode'
+  | 'setPreviewBackground'
   | 'setCurrentProjectId'
   | 'setProjects'
   | 'setProjectLibraryOpen'
@@ -126,6 +129,24 @@ export function createUiSlice(
       const cur = get().dragBadge;
       if (cur?.clipId === badge?.clipId && cur?.text === badge?.text) return;
       set({ dragBadge: badge });
+    },
+
+    // Fires on every `dragover`, most of which land on the same rounded pixel:
+    // skip the commit when nothing about the footprint actually moved.
+    setDropPreview: (preview) => {
+      const cur = get().dropPreview;
+      if (cur === preview) return;
+      if (
+        cur &&
+        preview &&
+        cur.startMs === preview.startMs &&
+        cur.durationMs === preview.durationMs &&
+        cur.trackId === preview.trackId &&
+        cur.label === preview.label
+      ) {
+        return;
+      }
+      set({ dropPreview: preview });
     },
 
     setPxPerSec: (v) => set({ pxPerSec: clamp(v, MIN_PX_PER_SEC, MAX_PX_PER_SEC) }),
@@ -225,6 +246,18 @@ export function createUiSlice(
 
     resetPreviewView: () => {
       if (!isViewReset(get().previewView)) set({ previewView: PREVIEW_VIEW_RESET });
+    },
+
+    // Fires on every pointermove of a drag inside the native colour picker, so
+    // it skips the no-op the same way the pane-width setters do.
+    setPreviewBackground: (hex) => {
+      if (get().previewBackground === hex) return;
+      try {
+        localStorage.setItem(PREVIEW_BACKGROUND_KEY, hex);
+      } catch {
+        /* private mode / no storage - the choice just won't persist */
+      }
+      set({ previewBackground: hex });
     },
 
     setPreviewResolution: (mode) => {

@@ -2,21 +2,25 @@ import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/store';
 import { Tooltip } from '../../ui/Tooltip';
 import { ToggleButton } from '../../ui/ToggleButton';
-import { ClipSolid, SolidClip } from '../../types';
+import { Clip, ClipSolid, SolidClip } from '../../types';
 
 export function SolidSection({ clip }: { clip: SolidClip }) {
   const { t } = useTranslation();
-  const { updateClip, beginGesture, endGesture } = useStore.getState();
+  const { updateClip, updateClipCommitted, beginGesture, endGesture } = useStore.getState();
   const solid = clip.solid;
-  const setSolid = (patch: Partial<ClipSolid>) =>
-    updateClip(clip.id, { solid: { ...solid, ...patch } });
+  /** Merged per clip, so a multi-selection keeps each fill's own other fields. */
+  const solidPatch = (patch: Partial<ClipSolid>) => (c: Clip) =>
+    c.kind === 'solid' ? { solid: { ...c.solid, ...patch } } : {};
+  const setSolid = (patch: Partial<ClipSolid>) => updateClip(clip.id, solidPatch(patch));
+  const commitSolid = (patch: Partial<ClipSolid>) =>
+    updateClipCommitted(clip.id, solidPatch(patch));
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 text-xs text-zinc-400">
         <span className="w-16 flex-none">{t('inspector.fill')}</span>
         {(['color', 'gradient'] as const).map((kind) => (
-          <ToggleButton key={kind} active={solid.kind === kind} onClick={() => useStore.getState().updateClipCommitted(clip.id, { solid: { ...solid, kind } })}>
+          <ToggleButton key={kind} active={solid.kind === kind} onClick={() => commitSolid({ kind })}>
             {t(`inspector.solid.${kind}`)}
           </ToggleButton>
         ))}
@@ -35,7 +39,7 @@ export function SolidSection({ clip }: { clip: SolidClip }) {
       {solid.kind === 'gradient' && (
         <div className="flex items-center gap-2 text-xs text-zinc-400">
           <span className="w-16 flex-none">{t('inspector.direction')}</span>
-          {[0, 45, 90, 135].map((angle) => <ToggleButton key={angle} active={solid.angle === angle} onClick={() => useStore.getState().updateClipCommitted(clip.id, { solid: { ...solid, angle } })}>{angle}°</ToggleButton>)}
+          {[0, 45, 90, 135].map((angle) => <ToggleButton key={angle} active={solid.angle === angle} onClick={() => commitSolid({ angle })}>{angle}°</ToggleButton>)}
         </div>
       )}
     </div>

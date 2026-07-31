@@ -113,18 +113,28 @@ export function patchClips(p: Project, edits: Map<string, (c: Clip) => Clip>): P
  */
 export const NEW_TRACK_TARGET = '__new-track__';
 
-/** Find (or create) the track a clip of the given kind should land on. Mutates `p`. */
-export function ensureTrack(p: Project, kind: Track['kind'], preferredTrackId?: string): Track {
-  if (preferredTrackId === NEW_TRACK_TARGET) {
-    const track: Track = { id: uid('track'), kind, clips: [] };
-    insertTrack(p, track);
-    return track;
-  }
+/**
+ * The EXISTING track a clip of the given kind would land on, or null when it
+ * would take a fresh one. Pure, unlike {@link ensureTrack}: the drop preview
+ * asks the same question the drop itself answers, so the ghost can never
+ * promise a row the drop then refuses.
+ */
+export function resolveTargetTrack(
+  p: Project,
+  kind: Track['kind'],
+  preferredTrackId?: string,
+): Track | null {
+  if (preferredTrackId === NEW_TRACK_TARGET) return null;
   const preferred = preferredTrackId ? p.tracks.find((t) => t.id === preferredTrackId) : undefined;
   if (preferred && preferred.kind === kind && !preferred.locked) return preferred;
   // A locked track accepts no new clips: fall through to the next free one, or
   // to a fresh track, rather than dropping content onto a track the user froze.
-  const existing = p.tracks.find((t) => t.kind === kind && !t.locked);
+  return p.tracks.find((t) => t.kind === kind && !t.locked) ?? null;
+}
+
+/** Find (or create) the track a clip of the given kind should land on. Mutates `p`. */
+export function ensureTrack(p: Project, kind: Track['kind'], preferredTrackId?: string): Track {
+  const existing = resolveTargetTrack(p, kind, preferredTrackId);
   if (existing) return existing;
   const track: Track = { id: uid('track'), kind, clips: [] };
   insertTrack(p, track);

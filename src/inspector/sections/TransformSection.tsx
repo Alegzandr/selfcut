@@ -4,7 +4,7 @@ import { useStore } from '../../store/store';
 import { Tooltip } from '../../ui/Tooltip';
 import { AnimatableProp, Clip, EaseId } from '../../types';
 import { EASE_IDS, keyframesOf, resolveTransform } from '../../model';
-import { SliderRow, type KeyframeControl } from '../SliderRow';
+import { PERCENT_ENTRY, SliderRow, type KeyframeControl } from '../SliderRow';
 import { pct } from '../format';
 import { CropSection } from './CropSection';
 
@@ -124,18 +124,18 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
         </div>
       )}
       {/* 16:9 vers 9:16 en "cover" demande 3,16x : le max doit laisser de la marge au-dela. */}
-      <SliderRow label={scaleLabel} value={rt.scale} min={0.1} max={4} step={0.01} format={pct} onChange={(v) => setProp('scale', v)} keyframe={kf('scale', scaleLabel)} />
+      <SliderRow label={scaleLabel} value={rt.scale} min={0.1} max={4} step={0.01} format={pct} entry={PERCENT_ENTRY} onChange={(v) => setProp('scale', v)} keyframe={kf('scale', scaleLabel)} />
       {/* Per-axis stretch, media only: it is what changes a clip's on-screen
           ratio (4:3 filling a 16:9 frame). A shape carries its own width and
           height and text is sized by its font, so neither reads these. */}
       {isVideo && (
         <>
-          <SliderRow label={stretchXLabel} value={rt.scaleX} min={0.1} max={4} step={0.01} format={pct} onChange={(v) => setProp('scaleX', v)} keyframe={kf('scaleX', stretchXLabel)} />
-          <SliderRow label={stretchYLabel} value={rt.scaleY} min={0.1} max={4} step={0.01} format={pct} onChange={(v) => setProp('scaleY', v)} keyframe={kf('scaleY', stretchYLabel)} />
+          <SliderRow label={stretchXLabel} value={rt.scaleX} min={0.1} max={4} step={0.01} format={pct} entry={PERCENT_ENTRY} onChange={(v) => setProp('scaleX', v)} keyframe={kf('scaleX', stretchXLabel)} />
+          <SliderRow label={stretchYLabel} value={rt.scaleY} min={0.1} max={4} step={0.01} format={pct} entry={PERCENT_ENTRY} onChange={(v) => setProp('scaleY', v)} keyframe={kf('scaleY', stretchYLabel)} />
         </>
       )}
-      <SliderRow label={xLabel} value={rt.x} min={0} max={1} step={0.01} format={pct} onChange={(v) => setProp('x', v)} keyframe={kf('x', xLabel)} />
-      <SliderRow label={yLabel} value={rt.y} min={0} max={1} step={0.01} format={pct} onChange={(v) => setProp('y', v)} keyframe={kf('y', yLabel)} />
+      <SliderRow label={xLabel} value={rt.x} min={0} max={1} step={0.01} format={pct} entry={PERCENT_ENTRY} onChange={(v) => setProp('x', v)} keyframe={kf('x', xLabel)} />
+      <SliderRow label={yLabel} value={rt.y} min={0} max={1} step={0.01} format={pct} entry={PERCENT_ENTRY} onChange={(v) => setProp('y', v)} keyframe={kf('y', yLabel)} />
       {/* A full turn each way: tilting counter-clockwise is as common as clockwise. */}
       <SliderRow
         label={rotationLabel}

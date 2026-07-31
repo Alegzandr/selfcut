@@ -3,10 +3,10 @@ import { AlignCenter, AlignLeft, AlignRight } from 'lucide-react';
 import { useStore } from '../../store/store';
 import { Tooltip } from '../../ui/Tooltip';
 import { ToggleButton } from '../../ui/ToggleButton';
-import { ClipText, TextAlign, TextClip } from '../../types';
+import { Clip, ClipText, TextAlign, TextClip } from '../../types';
 import { DEFAULT_TEXT_WIDTH_FRAC } from '../../model';
 import { DEFAULT_FONT_ID, FONTS, fontStack, loadFonts } from '../../lib/fonts';
-import { SliderRow } from '../SliderRow';
+import { PERCENT_ENTRY, SliderRow } from '../SliderRow';
 import { pct } from '../format';
 
 const ALIGNMENTS: { value: TextAlign; icon: typeof AlignLeft }[] = [
@@ -19,11 +19,17 @@ export function TextSection({ clip }: { clip: TextClip }) {
   const { t } = useTranslation();
   const { updateClip, updateClipCommitted, beginGesture, endGesture } = useStore.getState();
   const text = clip.text;
-  const setText = (patch: Partial<ClipText>) =>
-    updateClip(clip.id, { text: { ...text, ...patch } });
+  /**
+   * Merged into EACH edited clip's own text, not into the one on screen: with
+   * several clips selected the change reaches all of them, and a fixed object
+   * would copy this clip's whole text - its words included - over the others.
+   */
+  const textPatch = (patch: Partial<ClipText>) => (c: Clip) =>
+    c.kind === 'text' ? { text: { ...c.text, ...patch } } : {};
+  const setText = (patch: Partial<ClipText>) => updateClip(clip.id, textPatch(patch));
   /** Discrete choices commit straight away - there is no drag to coalesce. */
   const commitText = (patch: Partial<ClipText>) =>
-    updateClipCommitted(clip.id, { text: { ...text, ...patch } });
+    updateClipCommitted(clip.id, textPatch(patch));
   const align = text.align ?? 'center';
 
   return (
@@ -118,6 +124,7 @@ export function TextSection({ clip }: { clip: TextClip }) {
         max={0.3}
         step={0.005}
         format={pct}
+        entry={PERCENT_ENTRY}
         onChange={(v) => setText({ sizeFrac: v })}
       />
       <SliderRow
@@ -128,6 +135,7 @@ export function TextSection({ clip }: { clip: TextClip }) {
         max={1}
         step={0.05}
         format={pct}
+        entry={PERCENT_ENTRY}
         onChange={(v) => setText({ widthFrac: v })}
       />
     </div>

@@ -7,10 +7,20 @@ import i18n, { LOCALES, type Locale } from '../i18n';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
 import type { TimeFormat } from '../lib/time';
+import { PREVIEW_BACKGROUNDS } from '../lib/palette';
 
 const TIME_FORMATS: readonly { value: TimeFormat; labelKey: ParseKeys }[] = [
   { value: 'timecode', labelKey: 'preferences.timeFormat.timecode' },
   { value: 'decimal', labelKey: 'preferences.timeFormat.decimal' },
+];
+
+/** The one-click surrounds, darkest to lightest. Any other colour goes through the picker. */
+const BACKGROUNDS: readonly { value: string; labelKey: ParseKeys }[] = [
+  { value: PREVIEW_BACKGROUNDS.black, labelKey: 'preferences.previewBackground.black' },
+  { value: PREVIEW_BACKGROUNDS.charcoal, labelKey: 'preferences.previewBackground.charcoal' },
+  { value: PREVIEW_BACKGROUNDS.grey, labelKey: 'preferences.previewBackground.grey' },
+  { value: PREVIEW_BACKGROUNDS.neutral, labelKey: 'preferences.previewBackground.neutral' },
+  { value: PREVIEW_BACKGROUNDS.white, labelKey: 'preferences.previewBackground.white' },
 ];
 
 const SELECT_CLASS =
@@ -29,13 +39,15 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 /**
  * Preferences dialog, opened from the desktop menu bar. Holds the settings that
  * are meaningful for A/V editing and safe to expose without an "advanced" gate:
- * the interface language and how the transport spells time out.
+ * the interface language, how the transport spells time out, and the colour the
+ * preview sits on.
  */
 export function Preferences() {
   const { t } = useTranslation();
   const open = useStore((s) => s.preferencesOpen);
   const timeFormat = useStore((s) => s.timeFormat);
-  const { setPreferencesOpen, setTimeFormat } = useStore.getState();
+  const previewBackground = useStore((s) => s.previewBackground);
+  const { setPreferencesOpen, setTimeFormat, setPreviewBackground } = useStore.getState();
   const currentLang = (i18n.resolvedLanguage ?? 'en') as Locale;
 
   // Escape closes the dialog (the tooltip advertises it); capture phase so the
@@ -113,6 +125,37 @@ export function Preferences() {
                     </option>
                   ))}
                 </select>
+              </Row>
+
+              <Row label={t('preferences.previewBackground')}>
+                <div className="flex min-w-44 items-center justify-end gap-1.5">
+                  {BACKGROUNDS.map(({ value, labelKey }) => (
+                    <Tooltip key={value} label={t(labelKey)}>
+                      <button
+                        aria-label={t(labelKey)}
+                        aria-pressed={previewBackground === value}
+                        onClick={() => setPreviewBackground(value)}
+                        className={`h-6 w-6 rounded-md border ${
+                          previewBackground === value
+                            ? 'border-sky-500 ring-1 ring-sky-500'
+                            : 'border-zinc-700 hover:border-zinc-500'
+                        }`}
+                        style={{ backgroundColor: value }}
+                      />
+                    </Tooltip>
+                  ))}
+                  {/* Anything the swatches do not cover - a match for the room, a
+                      client's brand colour behind a mock-up. */}
+                  <Tooltip label={t('preferences.previewBackground.custom')}>
+                    <input
+                      type="color"
+                      aria-label={t('a11y.preferences.previewBackground')}
+                      className="h-6 w-8 cursor-pointer rounded-md border border-zinc-700 bg-zinc-800"
+                      value={previewBackground}
+                      onChange={(e) => setPreviewBackground(e.target.value)}
+                    />
+                  </Tooltip>
+                </div>
               </Row>
             </div>
           </motion.div>

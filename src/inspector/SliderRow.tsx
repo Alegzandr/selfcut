@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import { Diamond } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/store';
 
 /**
@@ -16,6 +18,61 @@ export interface KeyframeControl {
   label: string;
 }
 
+/**
+ * How the read-out turns into a typed number when it is clicked. The number the
+ * user reads is rarely the number the row stores — a 0..1 fraction reads as a
+ * percentage, a millisecond duration reads as seconds, an audio fader position
+ * reads as dB — so each row declares that mapping here. Both halves default to
+ * the identity, which is right for a row whose read-out is already the raw
+ * value (degrees, a polygon's side count).
+ */
+export interface NumericEntry {
+  /** Stored value → the number the field is seeded with. */
+  toInput?: (v: number) => number;
+  /** Typed number → stored value. The row clamps the result to [min, max]. */
+  fromInput?: (n: number) => number;
+  /** Decimals kept when seeding; defaults to what one `step` needs to show. */
+  decimals?: number;
+  /**
+   * Where a typed value goes when the row's own `onChange` would coarsen it —
+   * the volume fader snaps a drag to whole dB, which is precisely what typing is
+   * there to escape. Defaults to `onChange`.
+   */
+  onCommit?: (v: number) => void;
+}
+
+/**
+ * Entry for a row whose read-out is the stored value times a constant: 100 for a
+ * fraction shown as a percentage, 1/1000 for milliseconds shown as seconds.
+ */
+export const scaledEntry = (factor: number, decimals?: number): NumericEntry => ({
+  toInput: (v) => v * factor,
+  fromInput: (n) => n / factor,
+  decimals,
+});
+
+/** The common case: a 0..1 fraction typed as a whole percentage. */
+export const PERCENT_ENTRY = scaledEntry(100);
+
+/** Milliseconds typed as seconds. */
+export const SECONDS_ENTRY = scaledEntry(1 / 1000);
+
+const IDENTITY = (n: number) => n;
+
+/**
+ * Decimals a typed value needs to be as fine as the slider itself: one step
+ * expressed in the entry's own unit. A 0.01 step read as a percentage is a whole
+ * point (0 decimals); a 100 ms step read as seconds is a tenth (1 decimal).
+ */
+function decimalsForStep(toInput: (v: number) => number, value: number, step: number): number {
+  // Slack on the thresholds: a 0.01 step scaled by 100 lands on 0.99999999 as
+  // often as on 1, and that must not seed a whole percentage as "70.0".
+  const stepIn = Math.abs(toInput(value + step) - toInput(value));
+  if (!isFinite(stepIn) || stepIn > 0.999) return 0;
+  if (stepIn > 0.0999) return 1;
+  return 2;
+}
+
 export function SliderRow({
   label,
   value,
@@ -27,6 +84,7 @@ export function SliderRow({
   onChange,
   onContextMenu,
   keyframe,
+  entry,
 }: {
   label: string;
   value: number;
@@ -41,8 +99,35 @@ export function SliderRow({
   onContextMenu?: (e: MouseEvent) => void;
   /** Keyframe affordance; omit for a plain, non-animatable slider. */
   keyframe?: KeyframeControl;
+  /**
+   * Unit the read-out is typed in when clicked. Omit only when the stored value
+   * is what the read-out already shows — never to opt out, since every row is
+   * meant to accept an exact value instead of a hunted drag.
+   */
+  entry?: NumericEntry;
 }) {
+  const { t } = useTranslation();
   const { beginGesture, endGesture } = useStore.getState();
+  // Non-null while the read-out is being typed into. Held as text, not a number,
+  // so a half-typed "-" or "1." survives the keystroke that produced it.
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const toInput = entry?.toInput ?? IDENTITY;
+  const fromInput = entry?.fromInput ?? IDENTITY;
+  const decimals = entry?.decimals ?? decimalsForStep(toInput, value, step);
+
+  const commit = () => {
+    // Comma is the decimal separator on most of the locales we ship.
+    const typed = parseFloat((draft ?? '').replace(',', '.'));
+    setDraft(null);
+    if (!isFinite(typed)) return;
+    // One undo entry, exactly like a drag: the handler behind `onChange` may
+    // touch several fields (a keyframe plus its channel) for a single edit.
+    beginGesture();
+    (entry?.onCommit ?? onChange)(Math.min(max, Math.max(min, fromInput(typed))));
+    endGesture();
+  };
+
   return (
     <div className="flex items-center gap-2">
       {keyframe && (
@@ -83,10 +168,40 @@ export function SliderRow({
           onContextMenu={onContextMenu}
           onChange={(e) => onChange(Number(e.target.value))}
         />
-        <span className="w-16 flex-none text-right font-mono tabular-nums text-zinc-300">
-          {format(value)}
-        </span>
       </label>
+      {/* The read-out sits outside the label on purpose: as a second control it
+          would otherwise compete with the slider for the label's click, and a
+          field nested in another control's label reads wrong to a screen reader.
+          `ml-1` makes up the 12px the label's own gap used to provide. */}
+      {draft === null ? (
+        <button
+          type="button"
+          onClick={() => setDraft(toInput(value).toFixed(decimals))}
+          title={t('inspector.entry.hint')}
+          className="touch-hit ml-1 w-16 flex-none rounded text-right font-mono text-xs tabular-nums text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+        >
+          {format(value)}
+        </button>
+      ) : (
+        <input
+          type="text"
+          inputMode="decimal"
+          autoFocus
+          value={draft}
+          aria-label={t('inspector.entry.label', { label })}
+          onChange={(e) => setDraft(e.target.value)}
+          onFocus={(e) => e.target.select()}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            else if (e.key === 'Escape') setDraft(null);
+            // The editor's shortcuts listen on the window: J, K, S and friends
+            // are keystrokes here, not transport commands.
+            e.stopPropagation();
+          }}
+          className="ml-1 w-16 flex-none rounded border border-sky-500 bg-zinc-800 px-1 text-right font-mono text-xs tabular-nums text-zinc-100 outline-none"
+        />
+      )}
     </div>
   );
 }

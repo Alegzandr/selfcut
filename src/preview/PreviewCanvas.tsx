@@ -128,7 +128,11 @@ function CropOverlay({ clip, asset }: { clip: Clip; asset: MediaAsset }) {
       const h = top ? bottom - y : Math.max(MIN, nyC - o.y);
       next = { x, y, w: Math.min(w, 1 - x), h: Math.min(h, 1 - y) };
     }
-    useStore.getState().updateClip(clip.id, { transform: { ...tf, crop: next } });
+    // Merged into each edited clip's own transform: the rectangle is shared
+    // across a multi-selection, the position and scale it sits in are not.
+    useStore.getState().updateClip(clip.id, (c) => ({
+      transform: { ...(c.transform ?? tf), crop: next },
+    }));
   };
 
   const onUp = () => {
@@ -860,6 +864,7 @@ export function PreviewCanvas() {
   const previewTool = useStore((s) => s.previewTool);
   const previewView = useStore((s) => s.previewView);
   const previewShapeKind = useStore((s) => s.previewShapeKind);
+  const previewBackground = useStore((s) => s.previewBackground);
 
   const { width: outW, height: outH } = outputDimensions(project.aspectRatio);
 
@@ -1213,8 +1218,10 @@ export function PreviewCanvas() {
   return (
     <div
       ref={viewportRef}
-      className={`relative flex h-full w-full items-center justify-center overflow-hidden bg-zinc-950 p-1 ${cameraCursor}`}
-      style={{ containerType: 'size' }}
+      className={`relative flex h-full w-full items-center justify-center overflow-hidden p-1 ${cameraCursor}`}
+      // The letterbox. User-chosen rather than fixed: the engine fills the frame
+      // itself with black, so a black surround hides a clip's own bars.
+      style={{ containerType: 'size', backgroundColor: previewBackground }}
       onPointerDown={onViewportPointerDown}
       onPointerMove={onViewportPointerMove}
       onPointerUp={onViewportPointerUp}

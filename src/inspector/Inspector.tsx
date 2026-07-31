@@ -10,7 +10,7 @@ import { Clip } from '../types';
 import { useIsCoarsePointer } from '../lib/device';
 import { ResizeHandle } from '../ui/ResizeHandle';
 import { INSPECTOR_WIDTH_PX } from '../app/config';
-import { SliderRow } from './SliderRow';
+import { PERCENT_ENTRY, SliderRow } from './SliderRow';
 import { TextSection } from './sections/TextSection';
 import { SolidSection } from './sections/SolidSection';
 import { ShapeSection } from './sections/ShapeSection';
@@ -213,6 +213,7 @@ function InspectorBody({
           max={2}
           step={0.05}
           format={(v) => (v === 1 ? t('inspector.zoomAnim.off') : `→${Math.round(v * 100)}%`)}
+          entry={PERCENT_ENTRY}
           onChange={(v) => updateClip(clip.id, { zoomEnd: v })}
         />
       )}

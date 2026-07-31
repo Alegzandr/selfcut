@@ -68,6 +68,9 @@ export default function App() {
   const [supported] = useState(isSupported);
   const importFiles = useImport();
   const [dragging, setDragging] = useState(false);
+  // While the timeline is showing where the files would land, the full-screen
+  // overlay would only bury that preview under a wash of blue.
+  const droppingOnTimeline = useStore((s) => s.dropPreview !== null);
   const coarse = useIsCoarsePointer();
   const [previewFrac, setPreviewFrac] = useState(() => {
     const stored = Number(localStorage.getItem(PREVIEW_FRAC_KEY));
@@ -112,8 +115,12 @@ export default function App() {
         if (e.currentTarget === e.target) setDragging(false);
       }}
       onDrop={(e) => {
-        e.preventDefault();
         setDragging(false);
+        // The timeline claims the file drops that land on it - it places them
+        // at the exact spot they were let go. A prevented default is how it
+        // says so; the event still reaches here, so the overlay closes anyway.
+        if (e.isDefaultPrevented()) return;
+        e.preventDefault();
         if (e.dataTransfer.files.length) void importFiles(e.dataTransfer.files);
       }}
     >
@@ -153,7 +160,7 @@ export default function App() {
       <A11yAnnouncer />
 
       <AnimatePresence>
-        {dragging && (
+        {dragging && !droppingOnTimeline && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

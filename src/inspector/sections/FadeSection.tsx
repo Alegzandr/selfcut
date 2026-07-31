@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/store';
 import { Clip } from '../../types';
-import { SliderRow } from '../SliderRow';
+import { SECONDS_ENTRY, SliderRow } from '../SliderRow';
 import { seconds } from '../format';
 
 export function FadeSection({ clip }: { clip: Clip }) {
@@ -16,6 +16,7 @@ export function FadeSection({ clip }: { clip: Clip }) {
         max={5000}
         step={100}
         format={seconds}
+        entry={SECONDS_ENTRY}
         onChange={(v) => updateClip(clip.id, { fadeInMs: v })}
       />
       <SliderRow
@@ -25,6 +26,7 @@ export function FadeSection({ clip }: { clip: Clip }) {
         max={5000}
         step={100}
         format={seconds}
+        entry={SECONDS_ENTRY}
         onChange={(v) => updateClip(clip.id, { fadeOutMs: v })}
       />
     </>

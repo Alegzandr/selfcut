@@ -2,8 +2,8 @@ import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/store';
 import { Tooltip } from '../../ui/Tooltip';
 import { ToggleButton } from '../../ui/ToggleButton';
-import { SliderRow } from '../SliderRow';
-import { ClipShape, ShapeClip } from '../../types';
+import { PERCENT_ENTRY, SliderRow, scaledEntry } from '../SliderRow';
+import { Clip, ClipShape, ShapeClip } from '../../types';
 
 const KINDS = ['rect', 'ellipse', 'polygon'] as const;
 /** Stroke width is a fraction of the output height; this caps it at 5%. */
@@ -14,12 +14,19 @@ export function ShapeSection({ clip }: { clip: ShapeClip }) {
   const { updateClip, updateClipCommitted, beginGesture, endGesture } = useStore.getState();
   const shape = clip.shape;
 
+  /**
+   * Merged per clip, so changing the fill of a multi-selection does not also
+   * turn every selected shape into this one's kind.
+   */
+  type ShapePatch = Partial<ClipShape> | ((s: ClipShape) => Partial<ClipShape>);
+  const shapePatch = (patch: ShapePatch) => (c: Clip) =>
+    c.kind === 'shape'
+      ? { shape: { ...c.shape, ...(typeof patch === 'function' ? patch(c.shape) : patch) } }
+      : {};
   /** Live edit (dragging a slider): one undo step, closed by endGesture. */
-  const setShape = (patch: Partial<ClipShape>) =>
-    updateClip(clip.id, { shape: { ...shape, ...patch } });
+  const setShape = (patch: ShapePatch) => updateClip(clip.id, shapePatch(patch));
   /** One-shot edit (a button): its own undo step. */
-  const commitShape = (patch: Partial<ClipShape>) =>
-    updateClipCommitted(clip.id, { shape: { ...shape, ...patch } });
+  const commitShape = (patch: ShapePatch) => updateClipCommitted(clip.id, shapePatch(patch));
 
   return (
     <div className="space-y-3">
@@ -54,11 +61,11 @@ export function ShapeSection({ clip }: { clip: ShapeClip }) {
             onFocus={beginGesture}
             onBlur={endGesture}
             onChange={(e) =>
-              setShape({
+              setShape((s) => ({
                 stroke: e.target.value,
                 // Picking a stroke colour with no width would do nothing visible.
-                strokeWidth: shape.strokeWidth > 0 ? shape.strokeWidth : 0.006,
-              })
+                strokeWidth: s.strokeWidth > 0 ? s.strokeWidth : 0.006,
+              }))
             }
           />
         </Tooltip>
@@ -71,9 +78,12 @@ export function ShapeSection({ clip }: { clip: ShapeClip }) {
         max={MAX_STROKE}
         step={0.001}
         format={(v) => (v <= 0 ? t('inspector.shape.noStroke') : `${(v * 100).toFixed(1)} %`)}
-        onChange={(v) => setShape({ strokeWidth: v, stroke: shape.stroke ?? shape.fill })}
+        entry={PERCENT_ENTRY}
+        onChange={(v) => setShape((s) => ({ strokeWidth: v, stroke: s.stroke ?? s.fill }))}
       />
 
+      {/* The radius read-out is a share of the 0.5 maximum, not of the side:
+          100 % is a fully rounded corner, which is half a side. */}
       {shape.kind === 'rect' && (
         <SliderRow
           label={t('inspector.shape.radius')}
@@ -82,6 +92,7 @@ export function ShapeSection({ clip }: { clip: ShapeClip }) {
           max={0.5}
           step={0.01}
           format={(v) => `${Math.round((v / 0.5) * 100)} %`}
+          entry={scaledEntry(200)}
           onChange={(v) => setShape({ radius: v })}
         />
       )}

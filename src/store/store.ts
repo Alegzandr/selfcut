@@ -3,6 +3,7 @@ import { produce, setAutoFreeze } from 'immer';
 import { Clip, LoopRegion, Marker, Project } from '../types';
 import { clipDurationMs, clipEndMs, projectDurationMs, sortedMarkers } from '../model';
 import { createEmptyProject, linkableSelection, resolveOverlaps } from './projectOps';
+import { editTargets } from './editTargets';
 import { type TimeFormat } from '../lib/time';
 import {
   DEFAULT_PX_PER_SEC,
@@ -33,7 +34,9 @@ import {
   PREVIEW_VOLUME_KEY,
   PREVIEW_MUTED_KEY,
   SCOPES_MODE_KEY,
+  PREVIEW_BACKGROUND_KEY,
 } from './constants';
+import { DEFAULT_PREVIEW_BACKGROUND } from '../lib/palette';
 import type { EditorState } from './editorState';
 import { PREVIEW_VIEW_RESET } from '../preview/view';
 import { SCOPE_MODES, type ScopeMode } from '../preview/scopes';
@@ -115,6 +118,18 @@ function loadPreviewVolume(): number {
   return 1;
 }
 
+function loadPreviewBackground(): string {
+  try {
+    const v = localStorage.getItem(PREVIEW_BACKGROUND_KEY);
+    // Any `#rrggbb` is allowed (the picker is free-form), but it goes straight
+    // into a style attribute, so anything else is dropped rather than trusted.
+    if (v && /^#[0-9a-f]{6}$/i.test(v)) return v;
+  } catch {
+    /* private mode / no storage - fall through to the default */
+  }
+  return DEFAULT_PREVIEW_BACKGROUND;
+}
+
 function loadPreviewMuted(): boolean {
   try {
     return localStorage.getItem(PREVIEW_MUTED_KEY) === '1';
@@ -179,7 +194,14 @@ export const useStore = create<EditorState>((set, get) => {
     }
   };
 
-  const helpers = { withHistory, pruneSelection };
+  /**
+   * The clips an edit aimed at `clipId` reaches. Every property action routes
+   * through it, so one control changed with several clips selected lands on
+   * all of them instead of on the primary alone.
+   */
+  const targetsOf = (clipId: string) => editTargets(get().project, get().selectedClipIds, clipId);
+
+  const helpers = { withHistory, pruneSelection, targetsOf };
 
   const initialProject = createEmptyProject();
 
@@ -203,6 +225,7 @@ export const useStore = create<EditorState>((set, get) => {
     snapEnabled: true,
     snapGuideMs: null,
     dragBadge: null,
+    dropPreview: null,
     inspectorOpen: false,
     inspectorTab: 'clip',
     libraryOpen: false,
@@ -237,6 +260,7 @@ export const useStore = create<EditorState>((set, get) => {
     timeFormat: loadTimeFormat(),
     previewResolution: loadPreviewResolution(),
     scopesMode: loadScopesMode(),
+    previewBackground: loadPreviewBackground(),
     previewVolume: loadPreviewVolume(),
     previewMuted: loadPreviewMuted(),
     clipboard: null,
