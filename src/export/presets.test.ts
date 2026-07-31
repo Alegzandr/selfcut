@@ -179,9 +179,9 @@ describe('adaptive export frame rate', () => {
   const mp4 = (id: string) => PRESETS.find((p) => p.id === id) as Mp4Preset;
 
   it('a source-rate preset follows the footage', () => {
-    const master = mp4('master1080-16x9');
-    expect(master.fpsMode).toBe('source');
-    const resolved = resolveMp4Preset(master, projectOf(mediaClip('a')), { a: asset('a', 25) });
+    const light = mp4('light1080-16x9');
+    expect(light.fpsMode).toBe('source');
+    const resolved = resolveMp4Preset(light, projectOf(mediaClip('a')), { a: asset('a', 25) });
     expect(resolved.fps).toBe(25);
   });
 
@@ -200,6 +200,19 @@ describe('adaptive export frame rate', () => {
     // videoBitrate keeps one meaning everywhere: the HFR figure, scaled down at
     // standard rates - a pinned rate is no exception.
     expect(resolved.videoBitrate).toBe(Math.round((cinema.videoBitrate * 2) / 3));
+  });
+
+  it('the masters export at 60 fps even from slower footage', () => {
+    const project = projectOf(mediaClip('a'));
+    const assets = { a: asset('a', 24) };
+    for (const id of ['ultra4k-16x9', 'master1080-16x9']) {
+      const master = mp4(id);
+      expect(master.fpsMode).toBe('fixed');
+      const resolved = resolveMp4Preset(master, project, assets);
+      expect(resolved.fps).toBe(60);
+      // 60 fps is high-frame-rate, so a master always carries its full bitrate.
+      expect(resolved.videoBitrate).toBe(master.videoBitrate);
+    }
   });
 });
 

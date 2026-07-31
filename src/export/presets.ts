@@ -152,23 +152,27 @@ interface CustomFormat {
 const CUSTOM_FORMATS: readonly CustomFormat[] = [
   {
     // ~1.35x YouTube's top 4K figure: past the point a platform asks for, which
-    // is exactly what a master meant for re-grading or archiving wants.
+    // is exactly what a master meant for re-grading or archiving wants. Pinned
+    // at the full project rate for the same reason: a master is the copy every
+    // later export is cut from, so it holds the highest cadence the timeline
+    // can carry rather than the one this particular set of rushes implies.
     id: 'ultra4k',
     labelKey: 'export.preset.ultra4k.label',
     hintKey: 'export.preset.ultra4k.hint',
     tier: '4k',
     bitrateScale: 1.35,
-    fps: null,
+    fps: PROJECT_FPS,
   },
   {
     // 3x an upload's 1080p bitrate: generational loss stops being visible, so
     // the file can be re-cut or re-encoded later without stacking artefacts.
+    // Same pinned rate as the 4K master, for the same reason.
     id: 'master1080',
     labelKey: 'export.preset.master1080.label',
     hintKey: 'export.preset.master1080.hint',
     tier: '1080',
     bitrateScale: 3,
-    fps: null,
+    fps: PROJECT_FPS,
   },
   {
     // Above the export ladder on purpose: source frames only exist at 120 fps
@@ -326,8 +330,8 @@ export function presetSectionsForAspect(aspect: AspectRatio): PresetSection[] {
  * Frame rates an adaptive export is snapped to. Capped at the project rate (60):
  * following the footage never synthesizes frames the timeline doesn't have.
  * NTSC rates (23.976, 29.97, 59.94) land on their integer neighbour. A
- * `fixed`-rate preset deliberately bypasses the ladder - asking for 120 fps or
- * for 24p is asking to resample.
+ * `fixed`-rate preset deliberately bypasses the ladder - asking for 120 fps,
+ * for 24p, or for a 60 fps master is asking to resample.
  */
 const EXPORT_FPS_LADDER = [24, 25, 30, 50, 60] as const;
 
