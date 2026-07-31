@@ -125,6 +125,8 @@
   "inspector.streamLayout": "Stream-Layout",
   "inspector.streamLayout.hint": "Facecam-Band oben, Gameplay unten - dann beide Zuschnitte anpassen",
   "inspector.scale": "Maßstab",
+  "inspector.stretchX": "Dehnung X",
+  "inspector.stretchY": "Dehnung Y",
   "inspector.size": "Größe",
   "inspector.speed": "Geschwindigkeit",
   "inspector.stereo": "Stereo",

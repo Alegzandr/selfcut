@@ -125,6 +125,8 @@
   "inspector.streamLayout": "Layout de stream",
   "inspector.streamLayout.hint": "Faixa de facecam em cima, gameplay embaixo - depois ajuste os dois cortes",
   "inspector.scale": "Escala",
+  "inspector.stretchX": "Alongamento X",
+  "inspector.stretchY": "Alongamento Y",
   "inspector.size": "Tamanho",
   "inspector.speed": "Velocidade",
   "inspector.stereo": "Estéreo",

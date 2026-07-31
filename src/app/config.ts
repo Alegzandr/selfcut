@@ -7,8 +7,16 @@ export const APP_VERSION = '0.1.0';
 /** Fixed frame rate for the project and export. */
 export const PROJECT_FPS = 60 as const;
 
-/** Minimum clip duration on the timeline (ms). */
-export const MIN_CLIP_DURATION_MS = 100;
+/** Duration of one frame at the project rate (ms) - the timeline's finest grain. */
+export const FRAME_MS = 1000 / PROJECT_FPS;
+
+/**
+ * Minimum clip duration on the timeline (ms): one frame, like every NLE. A
+ * coarser floor would silently forbid the edits an editor expects to make -
+ * razoring a few frames off a head, trimming a single-frame flash - and the
+ * razor in particular would refuse to cut anywhere near a clip's edges.
+ */
+export const MIN_CLIP_DURATION_MS = FRAME_MS;
 
 /** Default timeline duration of a still-image clip (a still has no intrinsic length). */
 export const IMAGE_CLIP_DEFAULT_MS = 5000;

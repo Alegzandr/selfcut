@@ -122,6 +122,62 @@ export function snapScale(
   return { scale: best.scale, guides };
 }
 
+/**
+ * Geometry a per-axis stretch gesture needs, on ONE axis, in output pixels.
+ * `unit` is the size the clip draws at stretch 1 — the uniform scale is already
+ * baked into it, so the targets below stay right at any zoom level.
+ */
+export interface StretchSnapContext {
+  unit: number;
+  out: number;
+}
+
+/**
+ * The stretches one axis snaps to:
+ *
+ * - **1**: the source ratio, undeformed. The detent that matters most, because
+ *   an accidental stretch is otherwise impossible to undo by hand.
+ * - **fill**: the stretch where this axis exactly spans the frame — the whole
+ *   point of the feature (4:3 footage made to fill a 16:9 frame without
+ *   cropping), and a value nobody can hit by eye.
+ */
+export function stretchSnapTargets(ctx: StretchSnapContext): number[] {
+  const { unit, out } = ctx;
+  const targets = [1];
+  const fill = out / unit;
+  // Dropped when the axis already fills the frame: it would sit on top of 1 and
+  // give the gesture two competing detents at the same place.
+  if (unit > 0 && Number.isFinite(fill) && fill > 0 && Math.abs(fill - 1) >= SAME_SCALE) {
+    targets.push(fill);
+  }
+  return targets;
+}
+
+/**
+ * Snap a stretch to the nearest target within `threshold`, and report where to
+ * draw the guides — at the clip's own two edges on that axis, in normalized
+ * stage coords, on the same reasoning as `snapScale`.
+ */
+export function snapStretch(
+  raw: number,
+  targets: number[],
+  threshold: number,
+  clip: { center: number; unit: number; out: number },
+): { stretch: number; guides: number[] } {
+  let best: number | null = null;
+  let bestDist = threshold;
+  for (const target of targets) {
+    const dist = Math.abs(raw - target);
+    if (dist <= bestDist) {
+      best = target;
+      bestDist = dist;
+    }
+  }
+  if (best === null) return { stretch: raw, guides: [] };
+  const half = (clip.unit * best) / clip.out / 2;
+  return { stretch: best, guides: [clip.center - half, clip.center + half] };
+}
+
 /** Wrap an angle into [-180, 180) so 359° and -1° compare as neighbours. */
 export function normalizeAngle(deg: number): number {
   const wrapped = ((deg + 180) % 360 + 360) % 360 - 180;
@@ -186,27 +242,93 @@ export function handlePlacements(
   outH: number,
   bounds: HandleBounds = FULL_FRAME_BOUNDS,
 ): HandlePlacement[] {
+  return (['nw', 'ne', 'sw', 'se'] as const).map((corner) => ({
+    corner,
+    ...placeOffset(
+      rect,
+      (corner[1] === 'w' ? rect.dx : rect.dx + rect.dw) - (rect.dx + rect.dw / 2),
+      (corner[0] === 'n' ? rect.dy : rect.dy + rect.dh) - (rect.dy + rect.dh / 2),
+      rotationDeg,
+      outW,
+      outH,
+      bounds,
+    ),
+  }));
+}
+
+/** Which pair of edges an edge handle sits on, and so which axis it stretches. */
+export type Edge = 'n' | 'e' | 's' | 'w';
+
+/** An edge handle's placement, same shape and same clamping as the corners'. */
+export interface EdgePlacement extends Omit<HandlePlacement, 'corner'> {
+  edge: Edge;
+  /** The axis this handle stretches: 'x' for the left/right pair. */
+  axis: 'x' | 'y';
+}
+
+/**
+ * Where the four edge handles go: the midpoint of each side, rotated and
+ * clamped exactly like the corners.
+ *
+ * They are the non-uniform counterpart of the corner handles - dragging one
+ * stretches a single axis, which is what turns 4:3 footage into a 16:9 frame
+ * without cropping it. Kept as their own handles rather than as a modifier on
+ * the corners because Shift is already spoken for here (it inverts the snap
+ * toggle in every preview gesture) and because a side handle is where every
+ * editor puts this.
+ */
+export function edgeHandlePlacements(
+  rect: DestRect,
+  rotationDeg: number,
+  outW: number,
+  outH: number,
+  bounds: HandleBounds = FULL_FRAME_BOUNDS,
+): EdgePlacement[] {
+  const halfW = rect.dw / 2;
+  const halfH = rect.dh / 2;
+  const offsets: Record<Edge, [number, number]> = {
+    n: [0, -halfH],
+    e: [halfW, 0],
+    s: [0, halfH],
+    w: [-halfW, 0],
+  };
+  return (['n', 'e', 's', 'w'] as const).map((edge) => ({
+    edge,
+    axis: edge === 'e' || edge === 'w' ? ('x' as const) : ('y' as const),
+    ...placeOffset(rect, offsets[edge][0], offsets[edge][1], rotationDeg, outW, outH, bounds),
+  }));
+}
+
+/**
+ * Rotate an offset from the clip's centre, convert it to normalized stage
+ * coords and pull it back into `bounds`. Shared by both handle families so a
+ * corner and the edge next to it are clamped by the same rule.
+ */
+function placeOffset(
+  rect: DestRect,
+  ox: number,
+  oy: number,
+  rotationDeg: number,
+  outW: number,
+  outH: number,
+  bounds: HandleBounds,
+): { x: number; y: number; dirX: number; dirY: number; clamped: boolean } {
   const cx = rect.dx + rect.dw / 2;
   const cy = rect.dy + rect.dh / 2;
   const a = (rotationDeg * Math.PI) / 180;
   const cos = Math.cos(a);
   const sin = Math.sin(a);
+  // Output-pixel space, which maps to the screen by a uniform scale - so a
+  // direction computed here is already the direction seen on screen.
+  const rx = ox * cos - oy * sin;
+  const ry = ox * sin + oy * cos;
+  const len = Math.hypot(rx, ry) || 1;
 
-  return (['nw', 'ne', 'sw', 'se'] as const).map((corner) => {
-    const ox = (corner[1] === 'w' ? rect.dx : rect.dx + rect.dw) - cx;
-    const oy = (corner[0] === 'n' ? rect.dy : rect.dy + rect.dh) - cy;
-    // Output-pixel space, which maps to the screen by a uniform scale - so a
-    // direction computed here is already the direction seen on screen.
-    const rx = ox * cos - oy * sin;
-    const ry = ox * sin + oy * cos;
-    const len = Math.hypot(rx, ry) || 1;
-
-    const nx = (cx + rx) / outW;
-    const ny = (cy + ry) / outH;
-    const x = clamp(nx, bounds.minX, bounds.maxX);
-    const y = clamp(ny, bounds.minY, bounds.maxY);
-    return { corner, x, y, dirX: rx / len, dirY: ry / len, clamped: x !== nx || y !== ny };
-  });
+  const nx = (cx + rx) / outW;
+  const ny = (cy + ry) / outH;
+  const x = clamp(nx, bounds.minX, bounds.maxX);
+  const y = clamp(ny, bounds.minY, bounds.maxY);
+  return { x, y, dirX: rx / len, dirY: ry / len, clamped: x !== nx || y !== ny };
 }
 
 /**

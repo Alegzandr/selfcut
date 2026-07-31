@@ -125,6 +125,8 @@
   "inspector.streamLayout": "Disposición stream",
   "inspector.streamLayout.hint": "Banda de facecam arriba, gameplay abajo - luego ajusta ambos recortes",
   "inspector.scale": "Escala",
+  "inspector.stretchX": "Estiramiento X",
+  "inspector.stretchY": "Estiramiento Y",
   "inspector.size": "Tamaño",
   "inspector.speed": "Velocidad",
   "inspector.stereo": "estéreo",

@@ -43,19 +43,31 @@ export const TRANSFORM_LANE_PROPS: AnimatableProp[] = [
   'opacity',
 ];
 
+/** Earned lanes: shown once some clip on the track actually keyframes them. */
+const STRETCH_LANE_PROPS = ['scaleX', 'scaleY'] as const satisfies readonly AnimatableProp[];
+
 /**
  * The lanes a track shows when expanded: the fixed transform set, then every
  * colour param that any clip on the track actually keyframes, in inspector
  * order.
  */
 export function trackLanes(track: Track): KeyframeProp[] {
-  const colored: KeyframeProp[] = [];
+  const earned: KeyframeProp[] = [];
+  // The two stretch axes follow the colour rule, not the transform one: they are
+  // reached for far less often than scale, and two more permanently empty strips
+  // on every expanded row would cost 28px to advertise something the inspector
+  // and the preview's edge handles already offer. They can only appear from an
+  // inspector diamond or a keyframe toggle, never from a timeline drag, so the
+  // row-jump objection does not apply here either.
+  for (const prop of STRETCH_LANE_PROPS) {
+    if (track.clips.some((c) => c.animation?.[prop]?.length)) earned.push(prop);
+  }
   for (const prop of COLOR_PROPS) {
     if (track.clips.some((c) => Array.isArray(c.color?.[prop]) && c.color[prop].length)) {
-      colored.push(prop);
+      earned.push(prop);
     }
   }
-  return colored.length ? [...TRANSFORM_LANE_PROPS, ...colored] : TRANSFORM_LANE_PROPS;
+  return earned.length ? [...TRANSFORM_LANE_PROPS, ...earned] : TRANSFORM_LANE_PROPS;
 }
 
 /** Px the lane stack takes for a given number of lanes. */

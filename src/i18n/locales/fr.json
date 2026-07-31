@@ -125,6 +125,8 @@
   "inspector.streamLayout": "Disposition stream",
   "inspector.streamLayout.hint": "Bandeau facecam en haut, gameplay en bas - puis ajustez les deux recadrages",
   "inspector.scale": "Échelle",
+  "inspector.stretchX": "Étirement X",
+  "inspector.stretchY": "Étirement Y",
   "inspector.size": "Taille",
   "inspector.speed": "Vitesse",
   "inspector.stereo": "Stéréo",

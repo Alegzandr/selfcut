@@ -442,7 +442,7 @@ export function createClipsSlice(
                 let transformChanged = false;
                 for (const [key, value] of Object.entries(patch)) {
                   if (value === undefined) continue;
-                  const prop = key as 'x' | 'y' | 'scale' | 'rotation';
+                  const prop = key as 'x' | 'y' | 'scale' | 'scaleX' | 'scaleY' | 'rotation';
                   const existing = animation?.[prop];
                   if (existing && existing.length) {
                     // Already animated: write/update the keyframe at the playhead.
@@ -784,12 +784,14 @@ export function createClipsSlice(
 
     splitAtPlayhead: () => {
       const { currentTimeMs, selectedClipId, project } = get();
-      // Keep the playhead at least a minimum clip length away from both edges:
-      // splitting closer would leave a sliver half under MIN_CLIP_DURATION_MS
-      // that resolveOverlaps then shoves around (gap + content jump).
+      // Keep the playhead a frame away from both edges - the razor can cut on
+      // any frame but the first and the last, which would produce an empty half.
+      // The tolerance absorbs float drift: a frame boundary is 16.666…ms, so an
+      // exactly-one-frame-in playhead must not miss the comparison by an ulp.
+      const eps = MIN_CLIP_DURATION_MS / 1000;
       const crosses = (clip: Clip) =>
-        currentTimeMs >= clip.timelineStartMs + MIN_CLIP_DURATION_MS &&
-        currentTimeMs <= clipEndMs(clip) - MIN_CLIP_DURATION_MS;
+        currentTimeMs >= clip.timelineStartMs + MIN_CLIP_DURATION_MS - eps &&
+        currentTimeMs <= clipEndMs(clip) - MIN_CLIP_DURATION_MS + eps;
       // Target: the selected clip if the playhead is inside it, otherwise every clip under it.
       const collect = (onlySelected: boolean): string[] => {
         const out: string[] = [];

@@ -60,7 +60,12 @@ export function staticValueOf(clip: Clip, prop: KeyframeProp): number {
   }
   if (prop === 'opacity') return 1;
   const tf = clip.transform ?? DEFAULT_TRANSFORM;
-  return prop === 'rotation' ? (tf.rotation ?? 0) : tf[prop];
+  // The optional fields default to their identity rather than to `undefined`:
+  // a clip saved before stretch (or rotation) existed carries neither key, and
+  // seeding a first keyframe from `undefined` would write NaN into the channel.
+  if (prop === 'rotation') return tf.rotation ?? 0;
+  if (prop === 'scaleX' || prop === 'scaleY') return tf[prop] ?? 1;
+  return tf[prop];
 }
 
 /**

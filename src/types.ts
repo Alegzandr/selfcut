@@ -227,6 +227,21 @@ export interface ClipTransform {
   /** Scale multiplier applied after the "contain" fit. */
   scale: number;
   /**
+   * Non-uniform stretch, applied per axis ON TOP of `scale` — the only way to
+   * change a clip's on-screen aspect ratio, e.g. filling a 16:9 frame with 4:3
+   * footage without cropping it. 1 = the source ratio is preserved.
+   *
+   * Kept apart from `scale` rather than replacing it with an (sx, sy) pair: the
+   * uniform scale is the one users reach for constantly, it carries all the snap
+   * magnetism (fit / cover / 1:1), and folding the two together would make every
+   * uniform resize write two coupled values that then drift apart under
+   * keyframing. Optional for the same reason as `rotation`: projects saved
+   * before stretch existed have no such field, so readers must treat
+   * `undefined` as 1.
+   */
+  scaleX?: number;
+  scaleY?: number;
+  /**
    * Clockwise rotation in degrees around the clip's center. Optional: projects
    * saved before rotation existed have no such field, so every reader must
    * treat `undefined` as 0 rather than assume the key is there.
@@ -263,7 +278,7 @@ export interface Keyframe {
 export type Channel = number | Keyframe[];
 
 /** A clip property that can be keyframed. Extended as effects gain channels. */
-export type AnimatableProp = 'x' | 'y' | 'scale' | 'rotation' | 'opacity';
+export type AnimatableProp = 'x' | 'y' | 'scale' | 'scaleX' | 'scaleY' | 'rotation' | 'opacity';
 
 /** A colour grading parameter. Every one of them is a keyframable `Channel`. */
 export type ColorProp =

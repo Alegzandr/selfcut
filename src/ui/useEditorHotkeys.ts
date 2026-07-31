@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useStore, getSelectedClip, projectDurationMs, clipEndMs, sortedMarkers } from '../store/store';
 import { zoomAtPlayhead } from '../timeline/zoom';
+import { focusIsKeyboardDriven } from '../lib/focusModality';
 import { openProject, saveProject } from './projectActions';
 
 /**
@@ -97,18 +98,13 @@ function nudgeSelected(frames: number) {
  * left over from a *click* does not count: the pointer user has moved on and
  * expects Space to still drive playback.
  *
- * `:focus-visible` is the browser's own answer to "should this focus be shown",
- * which is exactly the distinction we need - guarded because an engine that
- * does not know the selector throws on `matches` rather than returning false.
+ * Asked of the focus modality rather than of `:focus-visible`, which the
+ * browser has already flipped to true by the time a keydown handler runs - see
+ * `focusModality`.
  */
 function keyboardFocusedButton(el: HTMLElement): boolean {
-  const btn = el.closest?.('button');
-  if (!btn) return false;
-  try {
-    return btn.matches(':focus-visible');
-  } catch {
-    return true; // Unknown selector: keep the old, accessibility-safe behavior.
-  }
+  if (!el.closest?.('button')) return false;
+  return focusIsKeyboardDriven();
 }
 
 export function useEditorHotkeys() {

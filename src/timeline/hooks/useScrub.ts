@@ -17,9 +17,8 @@ import { useStore } from '../../store/store';
 import { msFromContentX, timelineContentEl } from '../coords';
 import { collectSnapPoints, snapTime } from '../snapping';
 import { hapticOnSnap, type SnapHapticState } from '../../lib/haptics';
-import { PROJECT_FPS, SNAP_THRESHOLD_PX } from '../../app/config';
+import { FRAME_MS, SNAP_THRESHOLD_PX } from '../../app/config';
 
-const FRAME_MS = 1000 / PROJECT_FPS;
 /** Distance from the scroller edge where autoscroll kicks in, and its per-frame cap. */
 const EDGE_PX = 40;
 const MAX_SCROLL_STEP_PX = 24;

@@ -10,6 +10,7 @@ import {
   linkableSelection,
 } from './projectOps';
 import type { MediaClip, Project, Track } from '../types';
+import { MIN_CLIP_DURATION_MS } from '../app/config';
 
 function clip(over: Partial<MediaClip> & { id: string }): MediaClip {
   return {
@@ -42,11 +43,18 @@ describe('resolveOverlaps', () => {
 
   it('pushes a clip that starts within the minimum gap of its predecessor', () => {
     const a = clip({ id: 'a', timelineStartMs: 0, sourceOutMs: 1000 });
-    const b = clip({ id: 'b', timelineStartMs: 50, sourceOutMs: 1000 });
+    const b = clip({ id: 'b', timelineStartMs: 5, sourceOutMs: 1000 });
     const p = project([{ id: 't1', kind: 'video', clips: [a, b] }]);
     const out = resolveOverlaps(p);
     const bStart = out.tracks[0]!.clips.find((c) => c.id === 'b')!.timelineStartMs;
-    expect(bStart).toBe(100); // MIN_CLIP_DURATION_MS
+    expect(bStart).toBeCloseTo(MIN_CLIP_DURATION_MS, 6);
+  });
+
+  it('leaves a clip laid down exactly one frame after its predecessor alone', () => {
+    const a = clip({ id: 'a', timelineStartMs: 0, sourceOutMs: 1000 });
+    const b = clip({ id: 'b', timelineStartMs: MIN_CLIP_DURATION_MS, sourceOutMs: 1000 });
+    const p = project([{ id: 't1', kind: 'video', clips: [a, b] }]);
+    expect(resolveOverlaps(p)).toBe(p);
   });
 
   it('returns the same reference when nothing moves', () => {

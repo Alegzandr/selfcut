@@ -331,7 +331,7 @@ export interface EditorState {
    */
   updateClipTransformLive: (
     clipId: string,
-    patch: Partial<Record<'x' | 'y' | 'scale' | 'rotation', number>>,
+    patch: Partial<Record<'x' | 'y' | 'scale' | 'scaleX' | 'scaleY' | 'rotation', number>>,
     timelineMs: number,
   ) => void;
   /**

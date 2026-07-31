@@ -46,6 +46,27 @@ describe('resolveTransform', () => {
     expect(resolveTransform(c, 2000).x).toBeCloseTo(1, 6); // clip-local 1000ms
   });
 
+  it('reads a missing per-axis stretch as undeformed', () => {
+    // Every project saved before stretch existed has neither key.
+    const c = clip({ transform: { crop: { x: 0, y: 0, w: 1, h: 1 }, x: 0.5, y: 0.5, scale: 2 } });
+    expect(resolveTransform(c, 1500)).toMatchObject({ scaleX: 1, scaleY: 1 });
+    expect(resolveTransform(clip(), 1500)).toMatchObject({ scaleX: 1, scaleY: 1 });
+  });
+
+  it('samples an animated stretch like any other transform channel', () => {
+    const c = clip({
+      animation: {
+        scaleX: [
+          { t: 0, value: 1, ease: 'linear' },
+          { t: 1000, value: 2, ease: 'linear' },
+        ],
+      },
+    });
+    expect(resolveTransform(c, 1500).scaleX).toBeCloseTo(1.5, 6);
+    // The other axis is not dragged along by its neighbour.
+    expect(resolveTransform(c, 1500).scaleY).toBe(1);
+  });
+
   it('lets an animated property override its static counterpart', () => {
     const c = clip({
       transform: { crop: { x: 0, y: 0, w: 1, h: 1 }, x: 0.9, y: 0.5, scale: 1, rotation: 0 },

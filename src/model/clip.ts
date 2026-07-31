@@ -25,6 +25,8 @@ export const DEFAULT_TRANSFORM: ClipTransform = {
   x: 0.5,
   y: 0.5,
   scale: 1,
+  scaleX: 1,
+  scaleY: 1,
   rotation: 0,
 };
 
@@ -118,6 +120,9 @@ export interface ResolvedTransform {
   x: number;
   y: number;
   scale: number;
+  /** Per-axis stretch on top of `scale`; 1 when the source ratio is untouched. */
+  scaleX: number;
+  scaleY: number;
   rotation: number;
 }
 
@@ -148,6 +153,8 @@ export function resolveTransform(clip: Clip, timelineMs: number): ResolvedTransf
     x: animatedValue(a, 'x', t.x, local),
     y: animatedValue(a, 'y', t.y, local),
     scale: animatedValue(a, 'scale', t.scale, local),
+    scaleX: animatedValue(a, 'scaleX', t.scaleX ?? 1, local),
+    scaleY: animatedValue(a, 'scaleY', t.scaleY ?? 1, local),
     rotation: animatedValue(a, 'rotation', t.rotation ?? 0, local),
   };
 }

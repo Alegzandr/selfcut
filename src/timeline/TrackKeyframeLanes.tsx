@@ -173,6 +173,10 @@ function propLabelKey(prop: KeyframeProp): ParseKeys {
       return 'inspector.positionY';
     case 'scale':
       return 'inspector.scale';
+    case 'scaleX':
+      return 'inspector.stretchX';
+    case 'scaleY':
+      return 'inspector.stretchY';
     case 'rotation':
       return 'inspector.rotation';
     case 'opacity':

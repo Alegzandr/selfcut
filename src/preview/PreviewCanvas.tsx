@@ -29,11 +29,14 @@ import { PREVIEW_SNAP_THRESHOLD_PX } from '../app/config';
 import {
   FULL_FRAME_BOUNDS,
   type SnapGuides,
+  edgeHandlePlacements,
   handlePlacements,
   resizeCursor,
   scaleSnapTargets,
   snapRotation,
   snapScale,
+  snapStretch,
+  stretchSnapTargets,
 } from './transformSnap';
 import { MaskPenOverlay } from './MaskPenOverlay';
 import {
@@ -222,6 +225,37 @@ interface PreviewResize {
   rect: DOMRect;
 }
 
+/**
+ * A non-uniform stretch in flight: an edge handle drags one axis, Alt on a
+ * corner drags both at once. Everything is kept in OUTPUT pixels and in the
+ * clip's own (unrotated) frame, so a tilted clip stretches along its own sides
+ * rather than along the screen's.
+ */
+interface PreviewStretch {
+  clipId: string;
+  /** The axes this gesture drives - one for an edge, both for Alt+corner. */
+  axes: ('x' | 'y')[];
+  origScaleX: number;
+  origScaleY: number;
+  centerNx: number;
+  centerNy: number;
+  rotationDeg: number;
+  /**
+   * Distance from the centre to the pointer at pointerdown, per axis, in the
+   * clip's own frame. The gesture is a ratio against these rather than an
+   * absolute size, so grabbing a handle slightly off its exact position does
+   * not make the clip jump on the first move.
+   */
+  startHalfX: number;
+  startHalfY: number;
+  /** Drawn size per axis at stretch 1, in output px - the snap basis. */
+  unitX: number;
+  unitY: number;
+  haptics: { x: SnapHapticState; y: SnapHapticState };
+  /** Stage rect captured at pointerdown - see `normPointIn`. */
+  rect: DOMRect;
+}
+
 interface PreviewRotate {
   clipId: string;
   origRotation: number;
@@ -293,6 +327,18 @@ function findClip(project: Project, clipId: string): Clip | null {
   return null;
 }
 
+/**
+ * Live readout of a stretch gesture. Only the axes being dragged are shown: on
+ * an edge handle the other one is not moving, and printing it would suggest the
+ * gesture touches it.
+ */
+function stretchLabel(scaleX: number, scaleY: number, axes: ('x' | 'y')[]): string {
+  const parts: string[] = [];
+  if (axes.includes('x')) parts.push(`${Math.round(scaleX * 100)}%`);
+  if (axes.includes('y')) parts.push(`${Math.round(scaleY * 100)}%`);
+  return parts.join(' × ');
+}
+
 /** Guide lines are recomputed on every pointermove but rarely actually change. */
 function sameLines(a: number[], b: number[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
@@ -348,9 +394,12 @@ function PreviewOverlays({
   const currentTimeMs = useStore((s) => s.currentTimeMs);
   const previewView = useStore((s) => s.previewView);
   const resize = useRef<PreviewResize | null>(null);
+  const stretch = useRef<PreviewStretch | null>(null);
   const rotate = useRef<PreviewRotate | null>(null);
   /** Live angle readout while rotating - null when no rotation is in flight. */
   const [angleBadge, setAngleBadge] = useState<number | null>(null);
+  /** Live stretch readout, same idea, while an edge or an Alt+corner is dragged. */
+  const [stretchBadge, setStretchBadge] = useState<string | null>(null);
 
   // How far outside the frame a handle may be painted. Remeasured when the panel
   // resizes or the camera moves - the two things that change the answer - rather
@@ -405,11 +454,113 @@ function PreviewOverlays({
       ? clipRectAt(selectedClip, assets, outW, outH, currentTimeMs)
       : null;
 
-  /** Corner handle drag: rescale the clip around its center. */
+  /**
+   * Start a non-uniform stretch. Shared by the edge handles (one axis) and by
+   * Alt on a corner (both at once); the axis set is the only thing that differs.
+   */
+  const beginStretch = (e: React.PointerEvent, rect: DestRect, clip: Clip, axes: ('x' | 'y')[]) => {
+    const state = useStore.getState();
+    state.beginGesture();
+    const stageRect = stageRef.current!.getBoundingClientRect();
+    const { nx, ny } = normPointIn(stageRect, e);
+    const centerNx = (rect.dx + rect.dw / 2) / outW;
+    const centerNy = (rect.dy + rect.dh / 2) / outH;
+    const rt = resolveTransform(clip, state.currentTimeMs);
+    const rotationDeg = clipRotationAt(clip, state.currentTimeMs);
+    // Into the clip's own frame: for a tilted clip, "wider" means along its
+    // sides, and the screen-space offset says nothing about that on its own.
+    const local = unrotatePoint((nx - centerNx) * outW, (ny - centerNy) * outH, rotationDeg, 0, 0);
+    stretch.current = {
+      clipId: clip.id,
+      axes,
+      origScaleX: rt.scaleX,
+      origScaleY: rt.scaleY,
+      centerNx,
+      centerNy,
+      rotationDeg,
+      // Floored so a handle grabbed exactly on the centre line (a degenerate
+      // clip, or a mis-aimed press) cannot divide the ratio by zero.
+      startHalfX: Math.max(1, Math.abs(local.x)),
+      startHalfY: Math.max(1, Math.abs(local.y)),
+      unitX: rect.dw / Math.max(rt.scaleX, 0.001),
+      unitY: rect.dh / Math.max(rt.scaleY, 0.001),
+      haptics: { x: { lastSnap: null }, y: { lastSnap: null } },
+      rect: stageRect,
+    };
+    setStretchBadge(stretchLabel(rt.scaleX, rt.scaleY, axes));
+  };
+
+  /** Edge handle drag: stretch the single axis that handle sits on. */
+  const onEdgeDown = (e: React.PointerEvent, rect: DestRect, clip: Clip, axis: 'x' | 'y') => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    beginStretch(e, rect, clip, [axis]);
+  };
+
+  const onStretchMove = (e: React.PointerEvent) => {
+    const s = stretch.current;
+    if (!s) return;
+    const { nx, ny } = normPointIn(s.rect, e);
+    const local = unrotatePoint((nx - s.centerNx) * outW, (ny - s.centerNy) * outH, s.rotationDeg, 0, 0);
+    const state = useStore.getState();
+    const clip = findClip(state.project, s.clipId);
+    if (!clip) return;
+    const rt = resolveTransform(clip, state.currentTimeMs);
+    const snapping = state.snapEnabled !== e.shiftKey;
+    // Screen-pixel pull converted into output pixels, which is the space the
+    // per-axis math below works in.
+    const thresholdPx = PREVIEW_SNAP_THRESHOLD_PX * (outW / s.rect.width);
+
+    const patch: { scaleX?: number; scaleY?: number } = {};
+    const vLines: number[] = [];
+    const hLines: number[] = [];
+    for (const axis of s.axes) {
+      const x = axis === 'x';
+      const startHalf = x ? s.startHalfX : s.startHalfY;
+      const orig = x ? s.origScaleX : s.origScaleY;
+      const unit = x ? s.unitX : s.unitY;
+      const raw = clamp((orig * Math.abs(x ? local.x : local.y)) / startHalf, 0.05, 8);
+      let value = raw;
+      if (snapping) {
+        const out = x ? outW : outH;
+        const snapped = snapStretch(raw, stretchSnapTargets({ unit, out }), (orig / startHalf) * thresholdPx, {
+          center: x ? rt.x : rt.y,
+          unit,
+          out,
+        });
+        value = hapticOnSnap(raw, snapped.stretch, x ? s.haptics.x : s.haptics.y);
+        (x ? vLines : hLines).push(...snapped.guides);
+      }
+      patch[x ? 'scaleX' : 'scaleY'] = value;
+    }
+    onGuides({ v: vLines, h: hLines });
+    setStretchBadge(stretchLabel(patch.scaleX ?? rt.scaleX, patch.scaleY ?? rt.scaleY, s.axes));
+    state.updateClipTransformLive(s.clipId, patch, state.currentTimeMs);
+  };
+
+  const onStretchUp = () => {
+    if (!stretch.current) return;
+    useStore.getState().endGesture();
+    stretch.current = null;
+    setStretchBadge(null);
+    onGuides({ v: [], h: [] });
+  };
+
+  /**
+   * Corner handle drag: rescale the clip around its center - uniformly, or on
+   * both axes independently while Alt is held. The modifier is read once, at
+   * pointerdown: letting it switch mid-drag would swap which value the gesture
+   * writes and make the clip jump.
+   */
   const onHandleDown = (e: React.PointerEvent, rect: DestRect, clip: Clip) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    if (e.altKey && !isGeneratedClip(clip)) {
+      beginStretch(e, rect, clip, ['x', 'y']);
+      return;
+    }
     const state = useStore.getState();
     state.beginGesture();
     const stageRect = stageRef.current!.getBoundingClientRect();
@@ -438,6 +589,12 @@ function PreviewOverlays({
   };
 
   const onHandleMove = (e: React.PointerEvent) => {
+    // Alt+corner captured the pointer on this same element, so the stretch it
+    // started is driven from here.
+    if (stretch.current) {
+      onStretchMove(e);
+      return;
+    }
     const r = resize.current;
     if (!r) return;
     const { nx, ny } = normPointIn(r.rect, e);
@@ -475,6 +632,10 @@ function PreviewOverlays({
   };
 
   const onHandleUp = () => {
+    if (stretch.current) {
+      onStretchUp();
+      return;
+    }
     if (!resize.current) return;
     useStore.getState().endGesture();
     resize.current = null;
@@ -581,6 +742,47 @@ function PreviewOverlays({
               />
             </div>
           ))}
+          {/* Edge handles: one axis each, so the clip's ratio can be changed
+              (4:3 footage stretched to fill a 16:9 frame). Media only - a shape
+              already carries its own width and height, and text is laid out
+              from its font size, so neither reads the stretch. Round, where the
+              uniform corner handles are square: the two do different things and
+              a drag is committed before any tooltip could say so. */}
+          {!isGeneratedClip(selectedClip!) &&
+            edgeHandlePlacements(
+              selectedRect,
+              clipRotationAt(selectedClip!, currentTimeMs),
+              outW,
+              outH,
+              handleBounds,
+            ).map((h) => (
+              <div
+                key={h.edge}
+                className="pointer-events-auto absolute h-3 w-3 touch-none rounded-full border border-zinc-900 bg-sky-400 shadow"
+                style={{
+                  left: `${h.x * 100}%`,
+                  top: `${h.y * 100}%`,
+                  cursor: resizeCursor(h.dirX, h.dirY),
+                  transform: 'translate(-50%, -50%)',
+                }}
+                onPointerDown={(e) => onEdgeDown(e, selectedRect, selectedClip!, h.axis)}
+                onPointerMove={onStretchMove}
+                onPointerUp={onStretchUp}
+                onPointerCancel={onStretchUp}
+              />
+            ))}
+          {stretchBadge !== null && (
+            <span
+              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-2xs font-medium tabular-nums text-sky-200"
+              style={{
+                left: `${((selectedRect.dx + selectedRect.dw / 2) / outW) * 100}%`,
+                top: `${((selectedRect.dy + selectedRect.dh / 2) / outH) * 100}%`,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              {stretchBadge}
+            </span>
+          )}
           {angleBadge !== null && (
             <span
               className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-2xs font-medium tabular-nums text-sky-200"

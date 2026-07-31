@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  edgeHandlePlacements,
   handlePlacements,
   normalizeAngle,
   resizeCursor,
   scaleSnapTargets,
   snapRotation,
   snapScale,
+  snapStretch,
+  stretchSnapTargets,
 } from './transformSnap';
 
 /**
@@ -95,6 +98,100 @@ describe('snapScale', () => {
     // Same height, shifted up: the lines report where the edges really are.
     expect(guides.h[0]!).toBeCloseTo(-0.1, 10);
     expect(guides.h[1]!).toBeCloseTo(0.9, 10);
+  });
+});
+
+/**
+ * The stretch case: 4:3 footage (1440x1080) in a 16:9 frame. The "contain" fit
+ * draws it 1440 wide, so it sits between two 240px black bars until the width
+ * is stretched by 1920/1440.
+ */
+const FOUR_THREE_IN_SIXTEEN_NINE = { unit: 1440, out: 1920 };
+const FILL_X = 1920 / 1440;
+
+describe('stretchSnapTargets', () => {
+  it('offers the source ratio and the stretch that fills the axis', () => {
+    const targets = stretchSnapTargets(FOUR_THREE_IN_SIXTEEN_NINE);
+    expect(targets).toContain(1);
+    expect(targets.some((s) => Math.abs(s - FILL_X) < 1e-9)).toBe(true);
+  });
+
+  it('offers only the source ratio when the axis already fills the frame', () => {
+    // Fill would be 1, sitting on top of the undeformed detent.
+    expect(stretchSnapTargets({ unit: 1080, out: 1080 })).toEqual([1]);
+  });
+
+  it('offers only the source ratio for a degenerate clip', () => {
+    expect(stretchSnapTargets({ unit: 0, out: 1920 })).toEqual([1]);
+  });
+});
+
+describe('snapStretch', () => {
+  const targets = stretchSnapTargets(FOUR_THREE_IN_SIXTEEN_NINE);
+  const clip = { center: 0.5, unit: 1440, out: 1920 };
+
+  it('pulls a near-fill stretch onto fill', () => {
+    expect(snapStretch(FILL_X - 0.02, targets, 0.1, clip).stretch).toBeCloseTo(FILL_X, 10);
+  });
+
+  it('pulls a near-neutral stretch back to the undeformed ratio', () => {
+    // The detent that matters most: an accidental stretch is otherwise
+    // impossible to undo by hand.
+    expect(snapStretch(1.03, targets, 0.1, clip).stretch).toBe(1);
+  });
+
+  it('leaves a deliberate stretch alone when no detent is close', () => {
+    expect(snapStretch(1.18, targets, 0.05, clip).stretch).toBe(1.18);
+  });
+
+  it('draws the guides on the clip edges the snap lands on', () => {
+    const { guides } = snapStretch(FILL_X, targets, 0.1, clip);
+    expect(guides).toHaveLength(2);
+    expect(guides[0]!).toBeCloseTo(0, 10);
+    expect(guides[1]!).toBeCloseTo(1, 10);
+  });
+
+  it('reports no guide when nothing snapped', () => {
+    expect(snapStretch(1.18, targets, 0.05, clip).guides).toEqual([]);
+  });
+});
+
+describe('edgeHandlePlacements', () => {
+  // The same 4:3 clip, letterboxed in a 1920x1080 frame.
+  const rect = { dx: 240, dy: 0, dw: 1440, dh: 1080 };
+
+  it('puts one handle at the midpoint of each side', () => {
+    const edges = edgeHandlePlacements(rect, 0, 1920, 1080);
+    const by = (e: 'n' | 'e' | 's' | 'w') => edges.find((p) => p.edge === e)!;
+
+    expect(by('e').x).toBeCloseTo((240 + 1440) / 1920, 10);
+    expect(by('e').y).toBeCloseTo(0.5, 10);
+    expect(by('n').x).toBeCloseTo(0.5, 10);
+    expect(by('n').y).toBeCloseTo(0, 10);
+  });
+
+  it('maps each handle to the axis it stretches', () => {
+    const edges = edgeHandlePlacements(rect, 0, 1920, 1080);
+    expect(edges.filter((p) => p.axis === 'x').map((p) => p.edge).sort()).toEqual(['e', 'w']);
+    expect(edges.filter((p) => p.axis === 'y').map((p) => p.edge).sort()).toEqual(['n', 's']);
+  });
+
+  it('turns the handle directions with the clip', () => {
+    // Rotated a quarter turn, the clip's right edge points DOWN the screen - so
+    // the cursor over it has to be a vertical one.
+    const east = edgeHandlePlacements(rect, 90, 1920, 1080).find((p) => p.edge === 'e')!;
+    expect(east.dirX).toBeCloseTo(0, 10);
+    expect(east.dirY).toBeCloseTo(1, 10);
+    expect(resizeCursor(east.dirX, east.dirY)).toBe('ns-resize');
+  });
+
+  it('pulls a handle that left the panel back into bounds', () => {
+    const bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1 };
+    // Stretched well past the frame: the east handle is off-panel.
+    const wide = { dx: -500, dy: 0, dw: 2920, dh: 1080 };
+    const east = edgeHandlePlacements(wide, 0, 1920, 1080, bounds).find((p) => p.edge === 'e')!;
+    expect(east.clamped).toBe(true);
+    expect(east.x).toBe(1);
   });
 });
 

@@ -44,6 +44,9 @@ export interface PresetTransform {
   x: number;
   y: number;
   scale: number;
+  /** Per-axis stretch. Optional like `rotation`: absent reads as 1. */
+  scaleX?: number;
+  scaleY?: number;
   rotation?: number;
 }
 
@@ -58,7 +61,7 @@ export interface PresetLook {
   color?: ClipColor;
   /** Static placement, crop excluded. */
   transform?: PresetTransform;
-  /** Keyframed transform properties (x/y/scale/rotation/opacity). */
+  /** Keyframed transform properties (x/y/scale/scaleX/scaleY/rotation/opacity). */
   animation?: ClipAnimation;
   /** The audio chain, in order: the order is the authored intent. */
   audioFx?: AudioFx[];
@@ -95,7 +98,7 @@ const COLOR_PROPS = [
 ] as const satisfies readonly (keyof ClipColor)[];
 
 /** The keyframable transform properties, likewise. */
-const ANIMATION_PROPS = ['x', 'y', 'scale', 'rotation', 'opacity'] as const;
+const ANIMATION_PROPS = ['x', 'y', 'scale', 'scaleX', 'scaleY', 'rotation', 'opacity'] as const;
 
 const EASE_SET = new Set<string>(EASE_IDS);
 const AUDIO_FX_SET = new Set<string>(AUDIO_FX_TYPES);
@@ -128,8 +131,15 @@ export function extractPreset(clip: Clip, name: string, sourceDurationMs: number
   }
 
   if (clip.transform) {
-    const { x, y, scale, rotation } = clip.transform;
-    look.transform = { x, y, scale, ...(rotation !== undefined ? { rotation } : {}) };
+    const { x, y, scale, scaleX, scaleY, rotation } = clip.transform;
+    look.transform = {
+      x,
+      y,
+      scale,
+      ...(scaleX !== undefined ? { scaleX } : {}),
+      ...(scaleY !== undefined ? { scaleY } : {}),
+      ...(rotation !== undefined ? { rotation } : {}),
+    };
   }
 
   if (clip.animation) {
@@ -241,9 +251,16 @@ export function sanitizeLook(v: unknown): PresetLook {
   }
 
   if (typeof raw.transform === 'object' && raw.transform !== null) {
-    const { x, y, scale, rotation } = raw.transform;
+    const { x, y, scale, scaleX, scaleY, rotation } = raw.transform;
     if (isFinite_(x) && isFinite_(y) && isFinite_(scale)) {
-      look.transform = { x, y, scale, ...(isFinite_(rotation) ? { rotation } : {}) };
+      look.transform = {
+        x,
+        y,
+        scale,
+        ...(isFinite_(scaleX) ? { scaleX } : {}),
+        ...(isFinite_(scaleY) ? { scaleY } : {}),
+        ...(isFinite_(rotation) ? { rotation } : {}),
+      };
     }
   }
 

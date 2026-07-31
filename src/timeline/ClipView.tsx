@@ -16,6 +16,7 @@ import { gainDb } from '../inspector/format';
 import { UNITY_FADER, gainToFader } from '../lib/gain';
 import { useVolumeEntry } from '../ui/VolumeEntry';
 import { useIsCoarsePointer } from '../lib/device';
+import { focusIsKeyboardDriven } from '../lib/focusModality';
 import { CLIP_COLORS } from '../lib/palette';
 import { Waveform } from './Waveform';
 import { Filmstrip } from './Filmstrip';
@@ -132,15 +133,7 @@ export const ClipView = memo(function ClipView({
         if (e.key !== 'Enter' && e.key !== ' ') return;
         // Space only when the focus is keyboard-driven, mirroring the global
         // hotkeys guard: focus a click left behind keeps Space on play/pause.
-        if (e.key === ' ') {
-          let visible = true;
-          try {
-            visible = e.currentTarget.matches(':focus-visible');
-          } catch {
-            // Unknown selector: keep the accessibility-safe behavior.
-          }
-          if (!visible) return;
-        }
+        if (e.key === ' ' && !focusIsKeyboardDriven()) return;
         e.preventDefault();
         e.stopPropagation();
         useStore.getState().selectClip(clip.id);

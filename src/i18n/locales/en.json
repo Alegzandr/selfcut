@@ -125,6 +125,8 @@
   "inspector.streamLayout": "Stream layout",
   "inspector.streamLayout.hint": "Facecam band on top, gameplay below - then adjust both crops",
   "inspector.scale": "Scale",
+  "inspector.stretchX": "Stretch X",
+  "inspector.stretchY": "Stretch Y",
   "inspector.size": "Size",
   "inspector.speed": "Speed",
   "inspector.stereo": "Stereo",

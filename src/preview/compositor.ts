@@ -81,7 +81,8 @@ export function unrotatePoint(
 
 /**
  * Destination rectangle of a clip in the output, from the source dimensions
- * and the clip transform (crop → "contain" fit → user scale, centered on x/y).
+ * and the clip transform (crop → "contain" fit → user scale → per-axis
+ * stretch, centered on x/y).
  * Shared by drawing, preview hit-testing and the selection overlay.
  * `timelineMs` applies the animated zoom (Ken Burns); omit for the static rect.
  */
@@ -98,8 +99,12 @@ export function clipDestRect(
   const cropW = Math.max(1, rt.crop.w * srcW);
   const cropH = Math.max(1, rt.crop.h * srcH);
   const fit = Math.min(outW / cropW, outH / cropH) * rt.scale * zoom;
-  const dw = cropW * fit;
-  const dh = cropH * fit;
+  // The per-axis stretch multiplies the fitted size, so it is the last thing
+  // applied and the only thing that can make the drawn rect differ in ratio
+  // from the source. At 1/1 (the default, and every project saved before this
+  // existed) the expression is exactly the uniform fit it used to be.
+  const dw = cropW * fit * rt.scaleX;
+  const dh = cropH * fit * rt.scaleY;
   return { dx: rt.x * outW - dw / 2, dy: rt.y * outH - dh / 2, dw, dh };
 }
 

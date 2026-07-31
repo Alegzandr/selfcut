@@ -127,8 +127,8 @@ export function presetPatch(
     }
 
     // The animation is folded first: a property whose keys all fall past the end
-    // collapses to a constant, and for x/y/scale/rotation that constant has to
-    // land in the transform this patch is about to write.
+    // collapses to a constant, and for every property but opacity that constant
+    // has to land in the transform this patch is about to write.
     const animation: ClipAnimation = {};
     const collapsed: Partial<Record<Exclude<AnimatableProp, 'opacity'>, number>> = {};
     if (look.animation) {

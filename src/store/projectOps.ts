@@ -62,7 +62,11 @@ export function resolveOverlaps(p: Project, priorityClipId?: string | null): Pro
     for (const c of sorted) {
       const minStart = prev ? Math.max(prevPrevEnd, prev.start + MIN_CLIP_DURATION_MS) : 0;
       const start = Math.max(c.timelineStartMs, minStart);
-      if (start !== c.timelineStartMs) movedTo.set(c.id, start);
+      // Sub-frame slack: the minimum head is 16.666…ms, so a clip laid down
+      // exactly one frame after its predecessor (a razor cut on frame 1) can
+      // read as an ulp short. Nudging it there would be a no-op move that still
+      // breaks copy-on-write identity for the whole track.
+      if (start - c.timelineStartMs > MIN_CLIP_DURATION_MS / 1000) movedTo.set(c.id, start);
       prevPrevEnd = prev ? prev.end : 0;
       prev = { start, end: start + clipDurationMs(c) };
     }
