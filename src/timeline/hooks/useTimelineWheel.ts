@@ -3,7 +3,7 @@ import { useStore } from '../../store/store';
 
 /**
  * Wheel. Desktop (Vegas-style): plain wheel pans horizontally, Ctrl/Cmd+wheel zooms
- * at the cursor (also covers trackpad pinch), Alt+wheel keeps native vertical scroll.
+ * on the playhead (also covers trackpad pinch), Alt+wheel keeps native vertical scroll.
  */
 export function useTimelineWheel(
   scrollerRef: RefObject<HTMLDivElement | null>,
@@ -17,22 +17,25 @@ export function useTimelineWheel(
     // A trackpad pinch/wheel fires ~100+ events/sec; committing pxPerSec (and
     // thus re-rendering the whole timeline) on every one is the dominant zoom
     // jank. Coalesce into one store write per animation frame: accumulate the
-    // net zoom factor and the latest cursor x, flush once in rAF, keeping the
-    // point under the cursor pinned using the scrollLeft live at flush time.
+    // net zoom factor, flush once in rAF, keeping the playhead pinned to the
+    // viewport offset it holds at flush time so repeated zooms stay centred on
+    // it without the pointer having to chase the frame.
     let pendingFactor = 1;
-    let anchorClientX = 0;
     let raf = 0;
     const flush = () => {
       raf = 0;
       const state = useStore.getState();
-      const rect = scroller.getBoundingClientRect();
       const pad = state.timelinePadLeft;
-      const contentX = scroller.scrollLeft + anchorClientX - rect.left;
-      const anchorMs = (contentX - pad) / (state.pxPerSec / 1000);
+      const anchorMs = state.currentTimeMs;
+      // Where the playhead sits inside the viewport right now; when it is
+      // scrolled out of sight there is nothing to preserve, so pull it to the
+      // middle and zoom around that instead.
+      let viewX = anchorMs * (state.pxPerSec / 1000) + pad - scroller.scrollLeft;
+      if (viewX < 0 || viewX > scroller.clientWidth) viewX = scroller.clientWidth / 2;
       state.setPxPerSec(state.pxPerSec * pendingFactor);
       pendingFactor = 1;
       const newPxPerMs = useStore.getState().pxPerSec / 1000;
-      scroller.scrollLeft = anchorMs * newPxPerMs + pad - (anchorClientX - rect.left);
+      scroller.scrollLeft = anchorMs * newPxPerMs + pad - viewX;
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -40,7 +43,6 @@ export function useTimelineWheel(
       if (e.ctrlKey || e.metaKey || coarse) {
         e.preventDefault();
         pendingFactor *= Math.exp(-e.deltaY * 0.0018);
-        anchorClientX = e.clientX;
         if (raf === 0) raf = requestAnimationFrame(flush);
       } else if (!e.altKey && !e.shiftKey) {
         e.preventDefault();
