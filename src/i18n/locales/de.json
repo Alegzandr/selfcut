@@ -270,7 +270,7 @@
   "export.preset.master1080.label": "1080p Master",
   "export.preset.master1080.hint": "Nahezu verlustfreies 1080p · später problemlos neu schneiden oder codieren",
   "export.preset.smooth120.label": "120 fps",
-  "export.preset.smooth120.hint": "Doppelte Bildrate · lohnt sich bei 120-fps-Material oder verlangsamten Clips",
+  "export.preset.smooth120.hint": "Bildrate und Bitrate für die Weitergabe erhalten · Zeitlupe und Grading danach",
   "export.preset.cinema24.label": "Kino 24p",
   "export.preset.cinema24.hint": "Kino-Bildrate · feste 24 fps, unabhängig vom Material",
   "export.preset.light1080.label": "1080p leicht",

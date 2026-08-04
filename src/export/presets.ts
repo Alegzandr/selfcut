@@ -139,6 +139,12 @@ interface CustomFormat {
   id: string;
   labelKey: ParseKeys;
   hintKey: ParseKeys;
+  /**
+   * Optional resolution shown next to the name, exactly like a social preset's.
+   * A custom preset offered at several rungs (the 120 fps delivery family) needs
+   * it: the label alone names the cadence, not which of the three rows it is.
+   */
+  qualityKey?: ParseKeys;
   tier: VideoTier;
   /**
    * Multiplier on the rung's reference bitrate. 1 is "what a platform upload
@@ -174,15 +180,47 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
     bitrateScale: 3,
     fps: PROJECT_FPS,
   },
+  // The 120 fps family: a hand-off, not a final cut. Above the export ladder on
+  // purpose (source frames only exist at 120 fps for high-rate footage or slowed
+  // clips, but keyframed motion is sampled at output time, so it does get
+  // smoother), and offered at three rungs because the file is meant to leave the
+  // app and be re-cut - the editor receiving it picks the resolution, and a
+  // single 1080p row forced everyone through the smallest one.
+  //
+  // The bitrates are twice the platform-upload figure for the rung, on top of
+  // the cadence surcharge videoBitrateForFps adds past 90 fps. That lands each
+  // rung near 0.15 bit per pixel per frame: enough that a re-encode downstream -
+  // a 4x slow motion, a re-grade, a second export - does not stack visible
+  // artefacts, and still small enough to actually upload. Anything more would be
+  // a mezzanine codec's job, not H.264's.
   {
-    // Above the export ladder on purpose: source frames only exist at 120 fps
-    // for high-rate footage or slowed clips, but keyframed motion (transforms,
-    // text, transitions) is sampled at output time, so it does get smoother.
-    id: 'smooth120',
+    id: 'smooth120-1080',
     labelKey: 'export.preset.smooth120.label',
     hintKey: 'export.preset.smooth120.hint',
+    qualityKey: 'export.quality.1080',
     tier: '1080',
     bitrateScale: 2,
+    fps: 120,
+  },
+  {
+    id: 'smooth120-1440',
+    labelKey: 'export.preset.smooth120.label',
+    hintKey: 'export.preset.smooth120.hint',
+    qualityKey: 'export.quality.1440',
+    tier: '1440',
+    // Slightly under the 1080p multiplier, and 1.4 at 4K: a bigger frame codes
+    // more efficiently per pixel, so holding the same bitrate scale at every
+    // rung would overspend at the top exactly where the file is already heaviest.
+    bitrateScale: 1.8,
+    fps: 120,
+  },
+  {
+    id: 'smooth120-4k',
+    labelKey: 'export.preset.smooth120.label',
+    hintKey: 'export.preset.smooth120.hint',
+    qualityKey: 'export.quality.4k',
+    tier: '4k',
+    bitrateScale: 1.4,
     fps: 120,
   },
   {
@@ -231,6 +269,7 @@ export const PRESETS: ExportPreset[] = [
         group: 'custom',
         labelKey: format.labelKey,
         hintKey: format.hintKey,
+        qualityKey: format.qualityKey,
         aspect,
         tier: format.tier,
         bitrateScale: format.bitrateScale,
@@ -338,6 +377,23 @@ const EXPORT_FPS_LADDER = [24, 25, 30, 50, 60] as const;
 /** YouTube's split: at/above 48 fps an upload wants the full "high frame rate" bitrate. */
 const HIGH_FPS_THRESHOLD = 48;
 
+/**
+ * Past this, a cadence is beyond anything the platform figures describe - only
+ * the 120 fps delivery presets get there.
+ */
+const VERY_HIGH_FPS_THRESHOLD = 90;
+
+/**
+ * What doubling the cadence past the 48-60 fps reference costs. Not 2x: at
+ * 120 fps consecutive frames are twice as alike, so inter prediction absorbs
+ * part of the extra ones. ~1.6x is the usual figure, and it is what keeps a
+ * 120 fps file at the same per-FRAME quality as the 60 fps figure it is scaled
+ * from - which is the whole point of a file someone else will slow down. Without
+ * it a 120 fps export spread a 60 fps budget over twice the frames and arrived
+ * visibly softer than the same preset at 60.
+ */
+const VERY_HIGH_FPS_SCALE = 1.6;
+
 /** Snap a measured source frame rate to the nearest rate we export at. */
 export function normalizeExportFps(sourceFps: number): number {
   if (!isFinite(sourceFps) || sourceFps <= 0) return PROJECT_FPS;
@@ -370,10 +426,15 @@ export function projectExportFps(project: Project, assets: Record<string, MediaA
  * Video bitrate for a given export frame rate. Presets carry YouTube's
  * high-frame-rate figure; a standard-rate upload (24-30 fps) wants ~2/3 of it,
  * matching YouTube's own SFR/HFR split (e.g. 1080p 8 vs 12 Mbps) across every
- * resolution.
+ * resolution. Past 90 fps it scales the other way instead, so a 120 fps file
+ * does not spread a 60 fps budget over twice the frames.
  */
 export function videoBitrateForFps(preset: Mp4Preset, fps: number): number {
-  return fps >= HIGH_FPS_THRESHOLD ? preset.videoBitrate : Math.round((preset.videoBitrate * 2) / 3);
+  if (fps >= VERY_HIGH_FPS_THRESHOLD) {
+    return Math.round(preset.videoBitrate * VERY_HIGH_FPS_SCALE);
+  }
+  if (fps >= HIGH_FPS_THRESHOLD) return preset.videoBitrate;
+  return Math.round((preset.videoBitrate * 2) / 3);
 }
 
 /**

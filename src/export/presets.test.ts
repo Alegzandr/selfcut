@@ -113,6 +113,36 @@ describe('bitrates meet the platforms’ upload recommendations', () => {
     expect(mp4('master1080-16x9').videoBitrate).toBeGreaterThan(mp4('youtube-1080').videoBitrate);
   });
 
+  // The 120 fps family is a hand-off to another editor: the bitrate has to
+  // survive being slowed down and re-encoded downstream, at every rung offered.
+  it.each([
+    ['smooth120-1080-16x9', 1920, 1080],
+    ['smooth120-1440-16x9', 2560, 1440],
+    ['smooth120-4k-16x9', 3840, 2160],
+  ])('%s delivers ~0.15 bit per pixel per frame at 120 fps', (id, width, height) => {
+    const preset = mp4(id);
+    expect([preset.width, preset.height]).toEqual([width, height]);
+    expect(preset.fps).toBe(120);
+    const bpp = videoBitrateForFps(preset, 120) / (width * height * 120);
+    // Wide enough that the per-rung efficiency tuning stays free, tight enough
+    // that a rung can't silently fall back to an upload-grade budget.
+    expect(bpp).toBeGreaterThan(0.12);
+    expect(bpp).toBeLessThan(0.2);
+  });
+
+  it('a 120 fps delivery outruns the platform upload at the same rung', () => {
+    const pairs: [delivery: string, upload: string][] = [
+      ['smooth120-1080-16x9', 'youtube-1080'],
+      ['smooth120-1440-16x9', 'youtube-1440'],
+      ['smooth120-4k-16x9', 'youtube-4k'],
+    ];
+    for (const [delivery, upload] of pairs) {
+      expect(videoBitrateForFps(mp4(delivery), 120)).toBeGreaterThan(
+        videoBitrateForFps(mp4(upload), 60) * 1.5,
+      );
+    }
+  });
+
   it('the light 1080p preset undercuts it, at the same geometry', () => {
     const light = mp4('light1080-16x9');
     const upload = mp4('youtube-1080');
@@ -141,6 +171,15 @@ describe('adaptive export frame rate', () => {
     // Standard frame rate gets ~2/3 (YouTube's own 1080p split: 8 vs 12 Mbps).
     expect(videoBitrateForFps(yt, 30)).toBe(Math.round((yt.videoBitrate * 2) / 3));
     expect(videoBitrateForFps(yt, 24)).toBeLessThan(yt.videoBitrate);
+  });
+
+  it('surcharges a cadence past 90 fps, so 120 fps is not a 60 fps budget spread thin', () => {
+    const yt = PRESETS.find((preset) => preset.id === 'youtube-1080') as Mp4Preset;
+    const at120 = videoBitrateForFps(yt, 120);
+    expect(at120).toBeGreaterThan(videoBitrateForFps(yt, 60));
+    // Below 2x: consecutive frames are twice as alike at 120 fps, so inter
+    // prediction absorbs part of the extra ones.
+    expect(at120).toBeLessThan(videoBitrateForFps(yt, 60) * 2);
   });
 
   const mediaClip = (assetId: string): Clip =>
@@ -189,7 +228,7 @@ describe('adaptive export frame rate', () => {
     const project = projectOf(mediaClip('a'));
     const assets = { a: asset('a', 30) };
 
-    const smooth = mp4('smooth120-16x9');
+    const smooth = mp4('smooth120-1080-16x9');
     expect(smooth.fpsMode).toBe('fixed');
     // Above the ladder on purpose: 120 fps is what the user picked the preset for.
     expect(resolveMp4Preset(smooth, project, assets).fps).toBe(120);

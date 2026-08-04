@@ -270,7 +270,7 @@
   "export.preset.master1080.label": "Master 1080p",
   "export.preset.master1080.hint": "1080p quasi sans perte · remontable et réexportable sans dégradation",
   "export.preset.smooth120.label": "120 fps",
-  "export.preset.smooth120.hint": "Cadence doublée · utile avec des rushes 120 fps ou des clips ralentis",
+  "export.preset.smooth120.hint": "Cadence et débit préservés pour un transfert · ralentis et étalonnage en aval",
   "export.preset.cinema24.label": "Cinéma 24p",
   "export.preset.cinema24.hint": "Cadence cinéma · fixée à 24 ips quels que soient les rushes",
   "export.preset.light1080.label": "1080p léger",

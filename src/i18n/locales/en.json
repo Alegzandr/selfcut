@@ -270,7 +270,7 @@
   "export.preset.master1080.label": "1080p Master",
   "export.preset.master1080.hint": "Near-lossless 1080p · safe to re-edit or re-encode later",
   "export.preset.smooth120.label": "120 fps",
-  "export.preset.smooth120.hint": "Double cadence · pays off with 120 fps footage or slowed clips",
+  "export.preset.smooth120.hint": "Cadence and bitrate kept for a hand-off · slow motion and re-grading downstream",
   "export.preset.cinema24.label": "Cinematic 24p",
   "export.preset.cinema24.hint": "Film cadence · locked to 24 fps whatever the footage",
   "export.preset.light1080.label": "1080p Light",
