@@ -44,13 +44,16 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
     () => () => {
       if (drag.current?.winDriven) return;
       sessionCleanup.current?.();
+      // A trim can't outlive its clip's component: don't strand the preview on
+      // a frame the playhead isn't at.
+      if (drag.current) useStore.getState().setPreviewOverride(null);
       if (autoScrollRaf.current != null) cancelAnimationFrame(autoScrollRaf.current);
       if (longPress.current) clearTimeout(longPress.current.timer);
     },
     [],
   );
 
-  /** Tear down the drag session: listeners, autoscroll loop, guide line, badge. */
+  /** Tear down the drag session: listeners, autoscroll loop, guide line, badge, preview. */
   const endDragSession = () => {
     sessionCleanup.current?.();
     sessionCleanup.current = null;
@@ -59,6 +62,9 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
     const state = useStore.getState();
     state.setSnapGuide(null);
     state.setDragBadge(null);
+    // Give the picture back to the playhead - the trim preview only lives for
+    // the length of the gesture.
+    state.setPreviewOverride(null);
     drag.current = null;
   };
 

@@ -288,6 +288,12 @@ export class PlaybackEngine {
       state.setCurrentTimeFromEngine(t);
     }
 
+    // Trim preview: while an edge is being dragged, the picture shows the frame
+    // at that edge instead of the playhead's. Applied after the playback branch
+    // so the transport clock (and `setCurrentTimeFromEngine`) stays untouched -
+    // only what gets composited changes.
+    if (state.previewOverrideMs !== null) t = state.previewOverrideMs;
+
     // Preview resolution: composite at the chosen rung while playing. A rung
     // that still can't keep up is absorbed by frame dropping (audio is the
     // clock), so the picture never changes sharpness mid-playback. The paused

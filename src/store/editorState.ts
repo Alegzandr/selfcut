@@ -203,6 +203,13 @@ export interface EditorState {
   dragBadge: { clipId: string; text: string } | null;
   /** Footprint of the drag currently hovering the timeline, or null when none is. */
   dropPreview: DropPreview | null;
+  /**
+   * Timeline time (ms) the preview shows INSTEAD of the playhead, or null when
+   * it follows the playhead as usual. Set while a trim/roll handle is dragged so
+   * the canvas shows the frame at the edge being cut - the playhead itself never
+   * moves, and it is usually not over the shortened clip anymore (black frame).
+   */
+  previewOverrideMs: number | null;
   /** Mobile only: the inspector opens on demand (Adjust button), not on every selection. */
   inspectorOpen: boolean;
   /**
@@ -597,6 +604,8 @@ export interface EditorState {
   setDragBadge: (badge: { clipId: string; text: string } | null) => void;
   /** Publish/clear the ghost showing where a hovering drag would drop. */
   setDropPreview: (preview: DropPreview | null) => void;
+  /** Point the preview at a time other than the playhead (null = follow the playhead). */
+  setPreviewOverride: (ms: number | null) => void;
 
   seek: (ms: number) => void;
   setCurrentTimeFromEngine: (ms: number) => void;

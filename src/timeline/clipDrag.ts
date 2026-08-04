@@ -291,10 +291,18 @@ export const applyClipDrag = (
         clipId: clip.id,
         text: `${formatTime(d.roll.edge0Ms + delta)} (${signedMs(delta)})`,
       });
+      // Preview the side the grabbed handle belongs to: the outgoing last frame
+      // for a right handle, the incoming first frame for a left one.
+      const rolledCut = d.roll.edge0Ms + delta;
+      state.setPreviewOverride(d.mode === 'trim-right' ? Math.max(0, rolledCut - 1) : rolledCut);
       return;
     }
     const tMs = hapticOnSnap(raw, snapTime(raw, d.points, snapThresholdMs), d);
     state.setSnapGuide(tMs !== raw ? tMs : null);
+    // Badge + preview frame, both read from the post-trim clip. The preview
+    // shows the edge under the pointer: the new first frame when trimming from
+    // the left, the new last one from the right (`clipsAt` is half-open at the
+    // end, so the end itself would already be past the clip).
     const trimBadge = () => {
       const trimmed = findLive(clip.id);
       if (!trimmed) return;
@@ -303,6 +311,11 @@ export const applyClipDrag = (
         clipId: clip.id,
         text: `${formatTime(dur)} (${signedMs(dur - d.durMs)})`,
       });
+      state.setPreviewOverride(
+        d.mode === 'trim-left'
+          ? trimmed.timelineStartMs
+          : Math.max(trimmed.timelineStartMs, clipEndMs(trimmed) - 1),
+      );
     };
     if (!d.ripple) {
       state.trimClip(clip.id, d.mode === 'trim-left' ? 'left' : 'right', tMs);

@@ -226,6 +226,7 @@ export const useStore = create<EditorState>((set, get) => {
     snapGuideMs: null,
     dragBadge: null,
     dropPreview: null,
+    previewOverrideMs: null,
     inspectorOpen: false,
     inspectorTab: 'clip',
     libraryOpen: false,

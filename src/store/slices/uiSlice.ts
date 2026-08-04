@@ -70,6 +70,7 @@ export function createUiSlice(
   | 'setSnapGuide'
   | 'setDragBadge'
   | 'setDropPreview'
+  | 'setPreviewOverride'
   | 'setPxPerSec'
   | 'setTrackHeightPx'
   | 'setTrackHeaderWidthPx'
@@ -147,6 +148,12 @@ export function createUiSlice(
         return;
       }
       set({ dropPreview: preview });
+    },
+
+    // Fires on every pointermove of a trim, most of which resolve to the same
+    // rounded millisecond: skip the commit when the target frame didn't move.
+    setPreviewOverride: (ms) => {
+      if (get().previewOverrideMs !== ms) set({ previewOverrideMs: ms });
     },
 
     setPxPerSec: (v) => set({ pxPerSec: clamp(v, MIN_PX_PER_SEC, MAX_PX_PER_SEC) }),
