@@ -5,6 +5,7 @@ import {
   VideoSample,
   VideoSampleSink,
 } from 'mediabunny';
+import { advancesToNextFrame } from '../media/frameMatch';
 import type { PreviewWorkerRequest, PreviewWorkerResponse } from './frameProtocol';
 
 /**
@@ -166,7 +167,10 @@ class WorkerCursor {
       this.iterator = sink.samples(sourceSec);
       this.iteratorDone = false;
     }
-    // Advance until the next frame starts after sourceSec; the last one reached is shown.
+    // Advance while the next frame is the nearer one to sourceSec; the last one
+    // reached is shown. Same rule as the export reader, from the same module:
+    // the preview is where the cadence of a render gets judged, so both paths
+    // have to land on the same frame.
     while (!this.iteratorDone) {
       if (!this.lookahead) {
         const { value, done } = await this.iterator.next();
@@ -181,7 +185,9 @@ class WorkerCursor {
         this.lookahead = value.clone();
         value.close();
       }
-      if (this.current && this.lookahead.timestamp > sourceSec) break;
+      if (this.current && !advancesToNextFrame(this.current.timestamp, this.lookahead.timestamp, sourceSec)) {
+        break;
+      }
       this.current?.close();
       this.current = this.lookahead;
       this.lookahead = null;

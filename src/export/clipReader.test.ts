@@ -18,8 +18,12 @@ function fakeSample(index: number, timestamp: number): VideoSample {
 
 /**
  * A sink whose frames sit on an exact `pts / timescale` grid, the way a real
- * demuxer reports them - the floating-point shape that matters here. `samples()`
- * starts at the frame covering the requested instant, like mediabunny's.
+ * demuxer reports them. The timescale is the point of this helper: a container
+ * rounds every frame to one of its own ticks, and at 1 ms - what Matroska
+ * commonly uses, including the OBS captures this bug was reported on - a
+ * 120 fps source reports 0, 8, 17, 25, 33 ms rather than the exact eighths of
+ * a frame it really holds. `samples()` starts at the frame covering the
+ * requested instant, like mediabunny's.
  */
 function fakeSink(fps: number, timescale: number, count: number): VideoSampleSink {
   const step = timescale / fps;
@@ -64,13 +68,16 @@ async function renderIndices(clip: Clip, sink: VideoSampleSink, outFps: number, 
 
 describe('ClipReader.frameAt', () => {
   /**
-   * The regression: exporting 120 fps footage at 120 fps used to repeat frames
-   * and skip their neighbours, because an output instant computed in ms can
-   * land a few ulps below the source timestamp it should match. The result was
-   * a true 120 fps file that looked less fluid than the source.
+   * The regression: exporting 120 fps footage at 120 fps used to repeat one
+   * output frame in three and never show one source frame in three, because
+   * the container rounds its timestamps to a tick the rate does not divide.
+   * The result was a true 120 fps file that stuttered against the source.
+   *
+   * 1 ms is the timescale that reproduced it (Matroska); the coarser tick, the
+   * larger the rounding, so it is the tightest case in this list.
    */
   it('advances one source frame per output frame at a matching rate', async () => {
-    for (const timescale of [12_000, 120_000, 90_000, 1_000_000]) {
+    for (const timescale of [1_000, 12_000, 120_000, 90_000, 1_000_000]) {
       const sink = fakeSink(120, timescale, 400);
       const picked = await renderIndices(mediaClip(0), sink, 120, 240);
       expect(picked, `timescale ${timescale}`).toEqual(
@@ -82,14 +89,16 @@ describe('ClipReader.frameAt', () => {
   /** Same, from a trimmed clip: the cut shifts the phase but must not drop frames. */
   it('advances one source frame per output frame from a trimmed clip', async () => {
     const frameMs = 1000 / 60;
-    for (let cut = 0; cut < 8; cut++) {
-      const sourceInMs = cut * frameMs;
-      const sink = fakeSink(120, 120_000, 800);
-      const picked = await renderIndices(mediaClip(sourceInMs), sink, 120, 240);
-      const first = picked[0]!;
-      expect(picked, `cut at frame ${cut}`).toEqual(
-        Array.from({ length: 240 }, (_, i) => first + i),
-      );
+    for (const timescale of [1_000, 120_000]) {
+      for (let cut = 0; cut < 8; cut++) {
+        const sourceInMs = cut * frameMs;
+        const sink = fakeSink(120, timescale, 800);
+        const picked = await renderIndices(mediaClip(sourceInMs), sink, 120, 240);
+        const first = picked[0]!;
+        expect(picked, `timescale ${timescale}, cut at frame ${cut}`).toEqual(
+          Array.from({ length: 240 }, (_, i) => first + i),
+        );
+      }
     }
   });
 

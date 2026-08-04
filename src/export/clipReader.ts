@@ -1,24 +1,6 @@
 import type { VideoSampleSink, VideoSample } from 'mediabunny';
 import { Clip } from '../types';
-
-/**
- * Slack on the "does this source frame start at or before the target instant?"
- * comparison, in seconds.
- *
- * Output time is built in milliseconds (`startMs + i * 1000 / fps`), shifted by
- * the clip's `sourceInMs` and divided back to seconds, while a source timestamp
- * comes from an exact integer ratio (pts / timescale). The two land on the same
- * instant mathematically but not always in binary: at a matching rate - 120 fps
- * footage exported at 120 - a target can fall a few ulps *below* the frame it
- * should select, so that frame is skipped, the previous one repeats, and the
- * render loses roughly one frame in eight. The file is a true 120 fps file and
- * still looks less fluid than the source, which is exactly the complaint.
- *
- * 1 microsecond is the granularity WebCodecs itself stores timestamps at, so
- * two instants closer than this are the same instant by definition - and it is
- * four orders of magnitude below the shortest frame we ever export.
- */
-export const FRAME_MATCH_EPSILON_SEC = 1e-6;
+import { advancesToNextFrame } from '../media/frameMatch';
 
 /**
  * Sequential frame reader for one clip.
@@ -64,8 +46,9 @@ export class ClipReader {
       this.exhausted = false;
     }
 
-    // Advance while the next frame still starts at or before the target; the
-    // last one reached is the frame on screen at that instant.
+    // Advance while the next frame is the nearer one to the target; the last
+    // frame reached is the one to paint at that instant. See `frameMatch` for
+    // why nearest and not "the last frame starting at or before the target".
     while (!this.exhausted) {
       if (!this.lookahead) {
         const { value, done } = await this.iterator.next();
@@ -79,7 +62,9 @@ export class ClipReader {
         this.lookahead = value.clone();
         value.close();
       }
-      if (this.current && this.lookahead.timestamp > target + FRAME_MATCH_EPSILON_SEC) break;
+      if (this.current && !advancesToNextFrame(this.current.timestamp, this.lookahead.timestamp, target)) {
+        break;
+      }
       this.current?.close();
       this.current = this.lookahead;
       this.lookahead = null;
