@@ -22,6 +22,7 @@
     "vitest.config.ts",
     "playwright.config.ts",
     "playwright.prod.config.ts",
+    "playwright.swiftshader.config.ts",
     "integrations",
     "e2e"
   ]

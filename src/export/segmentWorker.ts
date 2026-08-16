@@ -69,12 +69,15 @@ async function render(req: SegmentRequest): Promise<void> {
     // A key frame every 2 s, as in the serial path. The segment's own first
     // frame is a key frame regardless, which is what makes it splice cleanly.
     keyFrameInterval: 2,
-    // The same preferences as the serial path: the slices have to be encoded
-    // the way one encoder would have encoded the whole thing. See
-    // ENCODER_PREFERENCES in exportWorker for why `prefer-hardware` is not here.
-    contentHint: 'detail',
+    // Nothing else: the slices have to be encoded the way one encoder would
+    // have encoded the whole thing, and the serial path sets nothing else
+    // either. `canDeclareFrameRate` in exportWorker carries the measurements
+    // for why neither `prefer-hardware` nor `contentHint` appears in either.
   });
-  output.addVideoTrack(source);
+  // The cadence, when the lead's probe found the browser will take it. Same
+  // reasoning as the serial path, and the lead's answer rather than this
+  // worker's so that every slice agrees.
+  output.addVideoTrack(source, req.declareFrameRate ? { frameRate: req.fps } : undefined);
   await output.start();
 
   const frameDur = 1 / req.fps;

@@ -2,6 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appModuleUrl } from './appModule';
+import { renderPath } from './renderPath';
 
 /**
  * What the preview loop actually costs, measured in a real browser.
@@ -248,6 +249,7 @@ test('three graded, masked, blurred layers at full resolution still hold', async
     state.setPreviewResolution('full');
   }, url);
 
+  const gpu = await renderPath(page);
   await setProbe(page, true);
   await playFor(page, 3000);
 
@@ -260,16 +262,6 @@ test('three graded, masked, blurred layers at full resolution still hold', async
   // The blur really is on: it has its own timing channel precisely because its
   // cost belongs to the browser's filter implementation and not to this code.
   expect(timing(snap, 'blur')).toBeDefined();
-  // Still inside a 60 fps budget, with everything on. This is the claim the
-  // whole "compositing has to leave the main thread" argument rested on.
-  //
-  // Read `draw` for what it is: CPU time spent issuing the composite. The GPU
-  // work a `drawImage` schedules is not in it, and no web API exposes that
-  // without a timer query. `tickGap` below is the honest end-to-end number -
-  // it includes React, garbage collection and the browser's own compositing,
-  // because it is simply how long the browser took to call us back.
-  expect(timing(snap, 'draw')!.p95).toBeLessThan(16.6);
-  expect(counter(snap, 'droppedFrames')?.mean ?? 0).toBeLessThan(2);
 
   // Long blocks on the main thread - React reconciliation, a garbage
   // collection, a synchronous readback - land here whatever their source.
@@ -278,8 +270,31 @@ test('three graded, masked, blurred layers at full resolution still hold', async
   // so the mean gap is far below 16.7 ms and says nothing about smoothness. The
   // p95 bound is what matters, and it is what catches a stall.
   const gap = timing(snap, 'tickGap')!;
-  expect(gap.mean).toBeLessThan(20);
-  expect(gap.p95).toBeLessThan(34);
+
+  if (gpu.hardware) {
+    // Still inside a 60 fps budget, with everything on. This is the claim the
+    // whole "compositing has to leave the main thread" argument rested on, and
+    // it is a claim about a GPU: three full-resolution layers through a
+    // software rasterizer cost two orders of magnitude more and always will.
+    //
+    // Read `draw` for what it is: CPU time spent issuing the composite. The GPU
+    // work a `drawImage` schedules is not in it, and no web API exposes that
+    // without a timer query. `tickGap` is the honest end-to-end number - it
+    // includes React, garbage collection and the browser's own compositing,
+    // because it is simply how long the browser took to call us back.
+    expect(timing(snap, 'draw')!.p95).toBeLessThan(16.6);
+    expect(counter(snap, 'droppedFrames')?.mean ?? 0).toBeLessThan(2);
+    expect(gap.mean).toBeLessThan(20);
+    expect(gap.p95).toBeLessThan(34);
+  } else {
+    // No GPU, so 60 fps is off the table and asserting it would only measure
+    // the runner. What is still worth catching is a collapse: a CI runner on
+    // SwiftShader measured `draw` p95 at 186-230 ms and `tickGap` p95 at
+    // 196-247 ms across three runs, so these bounds sit at roughly three times
+    // the worst of those. They fail on an order of magnitude, not on drift.
+    expect(timing(snap, 'draw')!.p95).toBeLessThan(750);
+    expect(gap.p95).toBeLessThan(800);
+  }
 });
 
 test('the visible-clip lookup stays free on a heavily cut timeline', async ({ page }) => {
@@ -328,6 +343,7 @@ test('the scopes readback stays off the frame budget', async ({ page }) => {
     return snapshot(page);
   };
 
+  const gpu = await renderPath(page);
   const without = await measure(false);
   const withScopes = await measure(true);
   report('preview, scopes off', without);
@@ -346,7 +362,11 @@ test('the scopes readback stays off the frame budget', async ({ page }) => {
   const on = timing(withScopes, 'frame')!;
   const off = timing(without, 'frame')!;
   expect(on.mean).toBeLessThan(off.mean * 3 + 0.2);
-  expect(on.p95).toBeLessThan(16.6);
+  // The absolute half of that claim only holds where the composite it is added
+  // to is a GPU composite. A CI runner measured 11.3 ms here against the same
+  // 16.6 ms bound, which is a flake waiting for a busy runner rather than a
+  // budget; the relative bound above is what the test is really asserting.
+  expect(on.p95).toBeLessThan(gpu.hardware ? 16.6 : 50);
 });
 
 test('an open inspector does not cost the render loop its budget', async ({ page }) => {
@@ -378,6 +398,7 @@ test('an open inspector does not cost the render loop its budget', async ({ page
     return snapshot(page);
   };
 
+  const gpu = await renderPath(page);
   const closed = await withInspector(false);
   const open = await withInspector(true);
   report('preview, inspector closed', closed);
@@ -394,8 +415,16 @@ test('an open inspector does not cost the render loop its budget', async ({ page
 
   // The frame's own work is unchanged: the inspector draws nothing.
   expect(timing(open, 'draw')!.mean).toBeLessThan(timing(closed, 'draw')!.mean * 2 + 0.1);
-  // And the loop still gets called back inside a frame.
-  expect(gapOpen.p95).toBeLessThan(34);
+
+  // What the test is actually named after: opening the inspector must not cost
+  // the loop anything the loop was not already paying. Stated against the same
+  // machine's closed-inspector run rather than against a constant, because the
+  // interval between two rAF callbacks is a property of the host - a CI runner
+  // idles at a 30-50 ms p95 with nothing open at all, so a fixed bound there
+  // fails on the runner's own cadence and says nothing about the inspector.
+  expect(gapOpen.p95).toBeLessThan(gapClosed.p95 * 1.5 + 8);
+  // And with a GPU, that interval is inside a frame in absolute terms too.
+  if (gpu.hardware) expect(gapOpen.p95).toBeLessThan(34);
 });
 
 test('a heavily cut timeline stays responsive to edits', async ({ page }) => {

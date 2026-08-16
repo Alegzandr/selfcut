@@ -73,6 +73,20 @@ test('exports the 120 fps 4K preset without running out of memory', async ({ pag
   expect(download.suggestedFilename()).toMatch(/smooth120-4k.*\.mp4$/);
   const { size } = await stat(await download.path());
   expect(size).toBeGreaterThan(50_000);
+  // And an upper bound, which is the part that guards a silent regression.
+  //
+  // The export declares the timeline's cadence on the video track, because that
+  // is the only route by which `framerate` reaches the encoder, and an encoder
+  // that does not know the cadence rate-controls as though every frame were the
+  // only frame that second. The whole mechanism sits behind a capability probe,
+  // so if that probe ever starts answering "no" - a canvas built wrong, a codec
+  // the browser stops accepting a cadence for - nothing throws and nothing logs.
+  // The only visible symptom is that every high-fps export silently goes back to
+  // being several times too big.
+  //
+  // This fixture measures 3.8 MB with the cadence declared and 16.9 MB without,
+  // so the bound below sits in open space between the two.
+  expect(size).toBeLessThan(8_000_000);
 
   await expect(sheet.getByText('Saved as', { exact: false })).toBeVisible();
   // "Array buffer allocation failed" surfaced here, as a worker crash relayed

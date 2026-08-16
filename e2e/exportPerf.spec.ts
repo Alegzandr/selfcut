@@ -2,6 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appModuleUrl } from './appModule';
+import { renderPath } from './renderPath';
 
 /**
  * Where an export's time actually goes.
@@ -46,6 +47,10 @@ test('an export spends its time where the instrumentation says it does', async (
   await page.goto('/app/');
   await page.setInputFiles('input[type="file"]', FIXTURE_MP4);
   await expect(page.locator('[data-clip-id]')).toHaveCount(1);
+
+  // Asked before the render, because it decides which of the assertions at the
+  // bottom is the one that means anything on this machine.
+  const gpu = await renderPath(page);
 
   // Repeat the clip until the render is long enough that the fixed costs -
   // booting the worker, configuring the encoder, finalizing the container - are
@@ -145,15 +150,31 @@ test('an export spends its time where the instrumentation says it does', async (
   }
   console.log(lines.join('\n'));
 
-  // Compositing must not be the dominant cost of an export. If it ever became
-  // so, the answer would be a GPU compositor, and this is the number that would
-  // say so.
-  expect(composite!.mean).toBeLessThan(frame.mean * 0.7);
-
   // Both of the other two exist and are measured, so the breakdown printed
   // above is complete rather than a single bar labelled "frame".
   expect(decode).toBeDefined();
   expect(encodeWait).toBeDefined();
+
+  // Compositing must not be the dominant cost of an export. If it ever became
+  // so, the answer would be a GPU compositor, and this is the number that would
+  // say so.
+  //
+  // Only where there is a GPU to composite on, though. The breakdown inverts
+  // completely without one: measured on a discrete GPU, `composite` is 5% of a
+  // frame and `encodeWait` 85%, which is the starved-render-loop result this
+  // suite exists to establish. On a CI runner falling back to SwiftShader the
+  // same export reports `composite` at 93-95% and `encodeWait` at 0% - not
+  // because compositing regressed, but because a software rasterizer is slow
+  // enough that the encoder is never given the chance to be the bottleneck.
+  if (gpu.hardware) {
+    expect(composite!.mean).toBeLessThan(frame.mean * 0.7);
+  } else {
+    // What still holds: the cost is the rasterizer's blit, not anything this
+    // code does around it. If per-clip work outside the blit ever grew into a
+    // real share of the composite, that shows up here on any machine.
+    const blit = of('blit')!;
+    expect(blit.mean).toBeGreaterThan(composite!.mean * 0.8);
+  }
 });
 
 /** Report helper kept out of the assertion path so a failure prints the numbers. */

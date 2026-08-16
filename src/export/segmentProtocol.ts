@@ -29,6 +29,14 @@ export interface SegmentRequest {
   videoBitrate: number;
   /** Already resolved by the lead: the codec this browser can actually encode. */
   codec: ExportVideoCodec;
+  /**
+   * Whether to declare the cadence on the segment's own video track. Resolved
+   * once by the lead and passed down rather than probed per worker: the
+   * segments are spliced packet for packet, so they have to be encoded the same
+   * way, and a worker that disagreed with its neighbours would corrupt the
+   * stream rather than merely produce a bigger file.
+   */
+  declareFrameRate: boolean;
   /** First timeline ms of the whole render (a region's in point, else 0). */
   startMs: number;
   /** First output frame of this segment, counted from the start of the render. */

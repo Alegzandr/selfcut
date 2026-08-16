@@ -60,31 +60,125 @@ import {
  */
 const ENCODE_QUEUE_DEPTH = 4;
 
-/**
- * Encoder preferences shared by every path that encodes.
+/*
+ * Two encoder options this file deliberately does NOT set. Neither has a
+ * declaration to hang off - that is the point of the note.
  *
- * Deliberately WITHOUT `hardwareAcceleration: 'prefer-hardware'`.
- *
- * Asking for it looks free - it is documented as a hint, and a browser with no
- * hardware encoder is supposed to fall back to software silently. It is not
- * free: with `prefer-hardware` set, the "120 fps · 4K" preset stops producing a
- * file at all. The hardware encoder accepts the configuration, cannot sustain
- * 4K at 120 fps, and stalls rather than failing, so the render hangs instead of
- * degrading. Measured, reproduced, and the reason this constant does not carry
- * the line that an audit would expect it to.
- *
+ * `hardwareAcceleration: 'prefer-hardware'`. Asking for it looks free - it is
+ * documented as a hint, and a browser with no hardware encoder is supposed to
+ * fall back to software silently. It is not free: with `prefer-hardware` set,
+ * the "120 fps · 4K" preset stops producing a file at all. The hardware encoder
+ * accepts the configuration, cannot sustain 4K at 120 fps, and stalls rather
+ * than failing, so the render hangs instead of degrading. Measured, reproduced.
  * The browser's own default already picks hardware where hardware is the right
- * answer. What was actually missing was not the preference but the OBSERVATION:
- * see `reportEncoderConfig`, which sends back the configuration the browser
- * settled on.
+ * answer; what was missing was not the preference but the OBSERVATION, which is
+ * what `reportEncoderConfig` below provides.
  *
- * `contentHint: 'detail'` stays: it tells the encoder this is an edit, not a
- * video call, so it spends bits on sharpness rather than on smooth motion,
- * which is what a cut with text and graphics in it needs.
+ * `contentHint: 'detail'`. It reads like the obviously correct hint for an edit
+ * rather than a video call, and it was set here for exactly that reason. Every
+ * geometry was then measured with it and without it, and it never once produced
+ * a smaller or a better file:
+ *
+ *   1080p 60 and 1080p 120   same bitrate to the decimal, same time
+ *   1440p 60                 +37% bitrate, 4.5x the encode time
+ *   4K 120                   +41% bitrate, 6x the encode time
+ *
+ * At 4K 120 that last row is 18x realtime, which is the difference between an
+ * export that finishes and one the user gives up on. The hint is dropped.
  */
-export const ENCODER_PREFERENCES = {
-  contentHint: 'detail',
-} as const;
+
+/**
+ * Whether this browser will encode `codec` at this geometry with the cadence
+ * declared on the track.
+ *
+ * Declaring the frame rate is worth a great deal (see `videoTrackMetadata`),
+ * but it is also the one thing that can make an otherwise supported
+ * configuration be refused outright: HEVC at 4K 120 is accepted with no cadence
+ * and rejected with one, because the cadence is what pushes the required level
+ * past what the encoder implements.
+ *
+ * `canEncodeVideo` cannot answer this - it hardcodes `framerate: undefined`
+ * when it builds the configuration to probe, so it is blind to the very field
+ * in question. So the probe is a real one: build the real output, encode a
+ * single frame, throw it away. One frame costs milliseconds against an export
+ * measured in minutes, and unlike a guess at the codec string it tests the
+ * exact configuration the render is about to use.
+ */
+async function canDeclareFrameRate(
+  codec: ExportVideoCodec,
+  width: number,
+  height: number,
+  bitrate: number,
+  fps: number,
+): Promise<boolean> {
+  const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+  const canvas = new OffscreenCanvas(width, height);
+  // A canvas that has never been given a context is not a usable image source,
+  // and the frame constructor rejects it - which would fail the probe for a
+  // reason that has nothing to do with the cadence, and silently give up the
+  // gain everywhere. Asking for the context is what makes the canvas real.
+  if (!canvas.getContext('2d')) return false;
+  const source = new CanvasSource(canvas, {
+    codec,
+    bitrate,
+    latencyMode: 'quality',
+    keyFrameInterval: 2,
+  });
+  output.addVideoTrack(source, { frameRate: fps });
+  try {
+    await output.start();
+    await source.add(0, 1 / fps);
+    source.close();
+    await output.finalize();
+    return true;
+  } catch {
+    try {
+      await output.cancel();
+    } catch {
+      /* already torn down */
+    }
+    return false;
+  }
+}
+
+/**
+ * The track metadata for the video track, carrying the cadence when the browser
+ * will take it.
+ *
+ * The frame rate is not decoration. It is the only route by which `framerate`
+ * reaches the `VideoEncoderConfig` - mediabunny reads it off the track metadata
+ * and nowhere else - and without it the encoder rate-controls as if it were
+ * being fed some default cadence, so it spends a full frame's bit budget on
+ * every frame of a 120 fps render. The export sheet's size estimate is not
+ * approximately wrong in that state, it is wrong by a multiple:
+ *
+ *   1080p 120   asked 30.7 Mbps, produced 128 Mbps   -> 34.3 Mbps declared
+ *   1080p 60    asked 19.2 Mbps, produced 53.4 Mbps  -> 24.7 Mbps declared
+ *   1440p 120   asked 61.4 Mbps, produced 254 Mbps   -> 162 Mbps declared
+ *   4K 120      asked 134 Mbps,  produced 559 Mbps   -> 355 Mbps declared
+ *
+ * At 1080p, where most exports live, declaring it costs no measurable time and
+ * brings the file back onto the promised figure. Above 1080p it costs encode
+ * time - roughly double at 4K - because the encoder starts doing the rate
+ * control it was skipping. That is the right trade: the alternative is a file
+ * several times the size the user was shown.
+ *
+ * The 4K 120 row is still 2.6x its target, and no bitrate makes it otherwise:
+ * asking for 20 Mbps there produces the same 355 Mbps as asking for 134. The
+ * browser's encoder simply has a floor at that macroblock rate, in every codec
+ * offered. That is a limit to be reported, not a bug to be fixed here.
+ */
+function videoTrackMetadata(
+  fps: number,
+  declareFrameRate: boolean,
+  maximumPacketCount: number | null,
+): { frameRate?: number; maximumPacketCount?: number } | undefined {
+  const metadata = {
+    ...(declareFrameRate ? { frameRate: fps } : {}),
+    ...(maximumPacketCount !== null ? { maximumPacketCount } : {}),
+  };
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
 
 /**
  * Report the encoder configuration the browser actually settled on, once.
@@ -209,6 +303,15 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   // no preference is worth refusing to export over.
   const codec = await pickCodec(preset.codec ?? 'avc', width, height, preset.videoBitrate);
   if (!codec) throw new ExportError('videoEncoderUnsupported');
+  // Settled once, here, because every segment worker has to encode the same way
+  // the lead does for their packets to splice into one stream.
+  const declareFrameRate = await canDeclareFrameRate(
+    codec,
+    width,
+    height,
+    preset.videoBitrate,
+    preset.fps,
+  );
   // Probe the exact configuration we are about to use, not just the codec: the
   // native AAC encoder advertises support for 'aac' in general while rejecting
   // specific parameter sets. Chrome tops out at 192 kbps for stereo 48 kHz,
@@ -281,14 +384,13 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
         // A key frame every 2 s matches YouTube's closed-GOP recommendation and keeps
         // seeking/scrubbing responsive on the platforms without bloating the file.
         keyFrameInterval: 2,
-        ...ENCODER_PREFERENCES,
         onEncoderConfig: reportEncoderConfig,
       })
     : null;
   const packetSource = parallel ? new EncodedVideoPacketSource(codec) : null;
   output.addVideoTrack(
     (canvasSource ?? packetSource)!,
-    writable ? { maximumPacketCount: videoPackets } : undefined,
+    videoTrackMetadata(preset.fps, declareFrameRate, writable ? videoPackets : null),
   );
 
   let audioSource: AudioSampleSource | null = null;
@@ -305,8 +407,15 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   let segmentPerf: PerfSnapshot[] = [];
   try {
     if (packetSource) {
-      segmentPerf = await renderParallel(req, preset, codec, plan, packetSource, totalFrames, (done) =>
-        postProgress((done / totalFrames) * videoWeight),
+      segmentPerf = await renderParallel(
+        req,
+        preset,
+        codec,
+        declareFrameRate,
+        plan,
+        packetSource,
+        totalFrames,
+        (done) => postProgress((done / totalFrames) * videoWeight),
       );
     } else {
       await renderSerial(renderer!, canvasSource!, preset, totalFrames, (done) =>
@@ -406,6 +515,7 @@ async function renderParallel(
   req: ExportRequest,
   preset: Mp4Preset,
   codec: ExportVideoCodec,
+  declareFrameRate: boolean,
   plan: SegmentPlan,
   packetSource: EncodedVideoPacketSource,
   totalFrames: number,
@@ -479,6 +589,7 @@ async function renderParallel(
       fps: preset.fps,
       videoBitrate: preset.videoBitrate,
       codec,
+      declareFrameRate,
       startMs: req.startMs,
       firstFrame: segment.firstFrame,
       frameCount: segment.frameCount,

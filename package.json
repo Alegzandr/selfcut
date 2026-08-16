@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "test:e2e:prod": "playwright test -c playwright.prod.config.ts",
     "bench": "vitest run -c vitest.bench.config.ts",
-    "test:e2e:perf": "playwright test e2e/perf.spec.ts"
+    "test:e2e:perf": "playwright test e2e/perf.spec.ts",
+    "test:e2e:swiftshader": "playwright test -c playwright.swiftshader.config.ts e2e/perf.spec.ts e2e/exportPerf.spec.ts"
   },
   "dependencies": {
     "@ffmpeg/core": "^0.12.10",

@@ -119,9 +119,6 @@ interface AudioEntry {
 
 const audioEntries = new Map<string, AudioEntry>();
 
-/** Decodes started since load, so re-decoding the same track is visible. */
-let audioDecodeCount = 0;
-
 /**
  * A counter rather than a clock: two decodes resolving inside the same
  * millisecond must still order, and tests must not depend on wall time.
@@ -175,31 +172,6 @@ export function cachedAudioBytes(): number {
   let total = 0;
   for (const entry of audioEntries.values()) total += entry.bytes;
   return total;
-}
-
-/**
- * Shape of the audio cache, for diagnostics.
- *
- * `bytes` alone cannot tell "nothing is cached" apart from "everything in it is
- * still decoding", and those mean opposite things: the first is an idle cache,
- * the second is a cache whose entries were dropped and immediately asked for
- * again. `decodes` counts how many decodes have been started since load, so a
- * cache that keeps re-fetching the same tracks shows up as a rising count
- * against a flat entry set.
- */
-export function audioCacheStats(): {
-  entries: number;
-  inFlight: number;
-  bytes: number;
-  decodes: number;
-} {
-  let inFlight = 0;
-  let bytes = 0;
-  for (const entry of audioEntries.values()) {
-    if (entry.bytes === 0) inFlight++;
-    bytes += entry.bytes;
-  }
-  return { entries: audioEntries.size, inFlight, bytes, decodes: audioDecodeCount };
 }
 
 /**
@@ -268,7 +240,6 @@ export function getAudioBuffer(
     existing.lastUsedAt = ++useStamp;
     return existing.promise;
   }
-  audioDecodeCount++;
   const entry: AudioEntry = {
     promise: decodeFullAudio(asset, audioTrackIndex).catch(() => null),
     bytes: 0,
