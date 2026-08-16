@@ -8,6 +8,7 @@ import { scheduleProjectAudio } from '../preview/audioMix';
 import { openExportScratch, readExportScratch } from '../lib/opfs';
 import { flushProjectSave } from '../lib/persistence';
 import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
+import { clearRenderPreview, publishRenderFrame } from './renderPreviewBus';
 import { perfEnabled, type PerfSnapshot } from '../perf/probe';
 import {
   type AudioMixInfo,
@@ -163,6 +164,12 @@ export function startExport(
   // onmessage/onerror, so without this the inner promise (and the whole `run`
   // closure it retains: project, files, audio buffers) would leak on every cancel.
   let rejectWorkerReply: ((e: Error) => void) | null = null;
+  /**
+   * Set once the export has settled, so a `previewFrame` already queued when
+   * the worker was terminated cannot leave the monitor frozen on a render that
+   * is over. Its bitmap is closed instead of published.
+   */
+  let settled = false;
 
   const run = (async () => {
     // Get the timeline on disk before the heaviest thing the app does starts.
@@ -305,6 +312,13 @@ export function startExport(
           if (msg.type === 'progress') onProgress(0.1 + msg.value * 0.9);
           else if (msg.type === 'perf') lastPerf = msg.snapshot;
           else if (msg.type === 'needAudio') void serveAudio(msg.offset, msg.frames);
+          // The frame the render is on, onto the preview monitor: for the whole
+          // length of an export the picture is otherwise whatever still the
+          // playhead was parked on, which says nothing about what is happening.
+          else if (msg.type === 'previewFrame') {
+            if (settled) msg.bitmap.close();
+            else publishRenderFrame(msg.bitmap, msg.timeMs);
+          }
           else if (msg.type === 'encoder') lastEncoder = msg;
           else if (msg.type === 'done') resolve({ buffer: msg.buffer, mime: msg.mime });
           else if (msg.type === 'error') reject(new ExportWorkerError(msg.code));
@@ -368,6 +382,9 @@ export function startExport(
   })();
 
   const promise = Promise.race([run, cancelation]).finally(() => {
+    settled = true;
+    // Done, failed or canceled alike: hand the monitor back to the playhead.
+    clearRenderPreview();
     worker?.terminate();
     worker = null;
   });

@@ -165,7 +165,10 @@ export function ExportSheet() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/60"
+            // Lighter while rendering: the preview behind it is showing the
+            // frame being encoded, and a scrim built to push a picker forward
+            // is the wrong amount of black in front of the thing being watched.
+            className={`fixed inset-0 z-40 ${phase.kind === 'rendering' ? 'bg-black/25' : 'bg-black/60'}`}
             // Mid-render, a stray tap outside the sheet must not silently kill
             // an export: cancel stays an explicit button press.
             onClick={() => {

@@ -115,6 +115,13 @@ export type WorkerReply =
    * ahead of what the encoder can absorb.
    */
   | { type: 'needAudio'; offset: number; frames: number }
+  /**
+   * A snapshot of the frame the render is on, for the preview monitor. Sent a
+   * few times a second and transferred, never copied: it is a picture of
+   * progress, not a playback stream. The main thread owns the bitmap from here
+   * and is what closes it.
+   */
+  | { type: 'previewFrame'; bitmap: ImageBitmap; timeMs: number }
   /** `buffer` is null when the output went straight to the user's file. */
   | { type: 'done'; buffer: ArrayBuffer | null; mime: string }
   | { type: 'error'; code: ExportErrorCode }

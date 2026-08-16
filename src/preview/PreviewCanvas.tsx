@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { PlugZap } from 'lucide-react';
 import { PlaybackEngine } from './PlaybackEngine';
@@ -22,7 +30,12 @@ import {
   textClipRect,
   unrotatePoint,
 } from './compositor';
-import { clamp } from '../lib/time';
+import { clamp, formatTime } from '../lib/time';
+import {
+  isRenderPreviewLive,
+  renderPreviewFrame,
+  subscribeRenderPreview,
+} from '../export/renderPreviewBus';
 import { pct } from '../inspector/format';
 import { PREVIEW_COLORS } from '../lib/palette';
 import { hapticOnSnap, type SnapHapticState } from '../lib/haptics';
@@ -197,6 +210,30 @@ function CropOverlay({ clip, asset }: { clip: Clip; asset: MediaAsset }) {
           {t('inspector.crop.hint')}
         </span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Says the monitor is showing an export rather than the playhead, and where in
+ * the timeline that frame sits.
+ *
+ * Its own component because it is the one thing here that re-renders at the
+ * rate the snapshots arrive: the stage subscribes to the on/off state instead,
+ * which changes twice per export.
+ */
+function RenderPreviewBadge() {
+  const { t } = useTranslation();
+  const frame = useSyncExternalStore(subscribeRenderPreview, renderPreviewFrame);
+  if (!frame) return null;
+  return (
+    <div
+      data-render-badge
+      className="pointer-events-none absolute left-2 top-2 z-30 flex items-center gap-1.5 rounded-full bg-zinc-950/85 px-2.5 py-1 text-2xs font-medium text-sky-200 ring-1 ring-sky-400/30"
+    >
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400" />
+      {t('preview.rendering')}
+      <span className="tabular-nums text-zinc-400">{formatTime(frame.timeMs)}</span>
     </div>
   );
 }
@@ -872,6 +909,11 @@ export function PreviewCanvas() {
   const previewView = useStore((s) => s.previewView);
   const previewShapeKind = useStore((s) => s.previewShapeKind);
   const previewBackground = useStore((s) => s.previewBackground);
+  // An export owns the canvas while it runs: the selection outline, the handles
+  // and the pen overlay all describe the playhead's frame, and leaving them
+  // over a frame from somewhere else in the cut reads as the picture having
+  // jumped rather than as a render being watched.
+  const rendering = useSyncExternalStore(subscribeRenderPreview, isRenderPreviewLive);
 
   const { width: outW, height: outH } = outputDimensions(project.aspectRatio);
 
@@ -1298,18 +1340,21 @@ export function PreviewCanvas() {
             }}
           />
         )}
-        <PreviewOverlays
-          project={project}
-          assets={assets}
-          selectedClip={selectedClip}
-          cropping={croppingClip !== null}
-          outW={outW}
-          outH={outH}
-          stageRef={stageRef}
-          viewportRef={viewportRef}
-          onGuides={publishGuides}
-        />
-        {!croppingClip && <MaskPenOverlay outW={outW} outH={outH} />}
+        {!rendering && (
+          <PreviewOverlays
+            project={project}
+            assets={assets}
+            selectedClip={selectedClip}
+            cropping={croppingClip !== null}
+            outW={outW}
+            outH={outH}
+            stageRef={stageRef}
+            viewportRef={viewportRef}
+            onGuides={publishGuides}
+          />
+        )}
+        {!croppingClip && !rendering && <MaskPenOverlay outW={outW} outH={outH} />}
+        <RenderPreviewBadge />
       </div>
 
       {/* Magnifier marquee. Outside the stage, so it is not itself zoomed. */}

@@ -217,6 +217,7 @@
   "library.import": "Importer des fichiers",
   "library.remove": "Retirer des médias",
   "preview.disconnected": "Source déconnectée : reconnectez le fichier pour l’afficher",
+  "preview.rendering": "Rendu",
   "preview.quality.title": "Résolution de la preview",
   "preview.quality.hint": "Réduisez-la pour une lecture plus fluide sur les machines modestes",
   "preview.quality.full": "Pleine",

@@ -217,6 +217,7 @@
   "library.import": "Dateien importieren",
   "library.remove": "Aus der Bibliothek entfernen",
   "preview.disconnected": "Quelle getrennt – Datei neu verbinden, um sie anzuzeigen",
+  "preview.rendering": "Rendern",
   "preview.quality.title": "Vorschau-Auflösung",
   "preview.quality.hint": "Für flüssigere Wiedergabe auf schwächeren Geräten verringern",
   "preview.quality.full": "Voll",

@@ -18,6 +18,7 @@ import {
 import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
 import { FrameRenderer } from './frameRenderer';
+import { RenderPreviewTap } from './renderPreview';
 import { planSegments, type SegmentPlan } from './segmentPlan';
 import type { SegmentReply, SegmentRequest } from './segmentProtocol';
 import type { ExportVideoCodec, Mp4Preset } from './presets';
@@ -418,7 +419,7 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
         (done) => postProgress((done / totalFrames) * videoWeight),
       );
     } else {
-      await renderSerial(renderer!, canvasSource!, preset, totalFrames, (done) =>
+      await renderSerial(renderer!, canvasSource!, preset, startMs, totalFrames, (done) =>
         postProgress((done / totalFrames) * videoWeight),
       );
     }
@@ -459,6 +460,7 @@ async function renderSerial(
   renderer: FrameRenderer,
   videoSource: CanvasSource,
   preset: Mp4Preset,
+  startMs: number,
   totalFrames: number,
   onProgress: (done: number) => void,
 ): Promise<void> {
@@ -468,6 +470,9 @@ async function renderSerial(
   const drainTo = async (depth: number): Promise<void> => {
     while (inFlight.length > depth) await inFlight.shift()!;
   };
+  const preview = new RenderPreviewTap(renderer.canvas, startMs, preset.fps, (bitmap, timeMs) => {
+    worker.postMessage({ type: 'previewFrame', bitmap, timeMs }, { transfer: [bitmap] });
+  });
 
   try {
     for (let i = 0; i < totalFrames; i++) {
@@ -479,6 +484,8 @@ async function renderSerial(
       endSpan('encodeWait', encodeStarted);
 
       inFlight.push(videoSource.add(i * frameDur, frameDur));
+      // Once the encoder has its copy, so the monitor never makes it wait.
+      preview.capture(i);
       // After the capture, never before: the layers hold frames these readers
       // own, and `add` is what copies them out of the canvas.
       await renderer.releaseFinishedReaders();
@@ -607,6 +614,23 @@ async function renderParallel(
         if (msg.type === 'segmentProgress') {
           progress.set(msg.index, msg.frames);
           reportProgress();
+          return;
+        }
+        if (msg.type === 'segmentPreview') {
+          // Only the slice the muxer is waiting on drives the monitor. The
+          // other workers are rendering further down the timeline, and cutting
+          // between them would show the picture jumping about instead of
+          // advancing - while this one slice tracks the same front the progress
+          // bar reports. The rest are closed here: an ImageBitmap left to the
+          // collector is GPU memory held for no reason.
+          if (msg.index === next) {
+            worker.postMessage(
+              { type: 'previewFrame', bitmap: msg.bitmap, timeMs: msg.timeMs },
+              { transfer: [msg.bitmap] },
+            );
+          } else {
+            msg.bitmap.close();
+          }
           return;
         }
         if (msg.type === 'segmentFailed') {

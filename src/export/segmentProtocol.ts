@@ -59,4 +59,10 @@ export type SegmentReply =
     }
   /** Frames finished so far, so the lead can report a smooth overall progress. */
   | { type: 'segmentProgress'; index: number; frames: number }
+  /**
+   * A snapshot of the frame this slice is on, for the preview monitor. Every
+   * slice offers one; the lead forwards only the slice it is waiting to mux and
+   * closes the rest (see `renderParallel`).
+   */
+  | { type: 'segmentPreview'; index: number; bitmap: ImageBitmap; timeMs: number }
   | { type: 'segmentFailed'; index: number; detail: string };

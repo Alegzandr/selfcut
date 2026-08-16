@@ -23,6 +23,7 @@ import { count, endFrame, endSpan, perfEnabled, record, span } from '../perf/pro
 import { syncLuts } from './colorPass';
 import { SCOPE_SAMPLE_WIDTH } from './scopes';
 import { hasScopeListeners, publishScopeFrame } from './scopeBus';
+import { renderPreviewFrame, subscribeRenderPreview } from '../export/renderPreviewBus';
 import { ScheduledSource, sameAudioMix, scheduleProjectAudio, stopScheduled } from './audioMix';
 import { TrackLevels, hasLevelListeners, publishLevels } from './meterBus';
 
@@ -118,6 +119,7 @@ export class PlaybackEngine {
   private raf = 0;
   private disposed = false;
   private unsubscribeFonts?: () => void;
+  private unsubscribeRenderPreview?: () => void;
 
   /** Render scale the last painted frame used - a rung change alone forces a repaint. */
   private lastRenderScale = 0;
@@ -175,12 +177,20 @@ export class PlaybackEngine {
     this.unsubscribeFonts = onFontLoaded(() => {
       this.videoDirty = true;
     });
+    // A render owns the monitor while it runs (see `draw`). Nothing about the
+    // project or the playhead changes as it advances, so a fresh snapshot is
+    // the only thing that can ask for the repaint that shows it - and the same
+    // signal is what repaints the real frame once the render lets go.
+    this.unsubscribeRenderPreview = subscribeRenderPreview(() => {
+      this.videoDirty = true;
+    });
     this.raf = requestAnimationFrame(this.tick);
   }
 
   dispose(): void {
     this.disposed = true;
     this.unsubscribeFonts?.();
+    this.unsubscribeRenderPreview?.();
     cancelAnimationFrame(this.raf);
     stopScheduled(this.scheduled);
     this.scheduled = [];
@@ -413,6 +423,16 @@ export class PlaybackEngine {
   };
 
   private draw(state: EditorState, tMs: number, scale: number): void {
+    // A render in flight owns the picture. Showing the frame being encoded is
+    // the only thing on screen that says what an export is actually doing, and
+    // compositing the playhead's own frame underneath it would be work nobody
+    // ever sees - so this returns before any decoding is asked for.
+    const rendering = renderPreviewFrame();
+    if (rendering) {
+      this.drawRenderPreview(rendering.bitmap);
+      return;
+    }
+
     // Hand the colour pass the project's current LUT set before any clip grades.
     // Reference-equal when nothing changed, so this is a cheap per-frame guard.
     syncLuts(state.project.luts);
@@ -492,6 +512,26 @@ export class PlaybackEngine {
       this.publishScope(w, h);
       endSpan('scopes', started);
     }
+  }
+
+  /**
+   * Paint the snapshot the export worker sent.
+   *
+   * The bitmap was downscaled from the output frame, so it already carries the
+   * project's aspect ratio: the backing store simply takes its size and the
+   * browser scales it to the monitor, exactly as it does for the reduced rungs
+   * a playing preview composites at.
+   */
+  private drawRenderPreview(bitmap: ImageBitmap): void {
+    const w = bitmap.width;
+    const h = bitmap.height;
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+      // Resizing the backing store resets context state, resampling included.
+      invalidateResampling(this.ctx);
+    }
+    this.ctx.drawImage(bitmap, 0, 0, w, h);
   }
 
   /**

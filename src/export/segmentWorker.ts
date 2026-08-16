@@ -1,5 +1,6 @@
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output } from 'mediabunny';
 import { FrameRenderer } from './frameRenderer';
+import { RenderPreviewTap } from './renderPreview';
 import { endFrame, endSpan, perfReset, setPerfEnabled, snapshot, span } from '../perf/probe';
 import type { SegmentReply, SegmentRequest } from './segmentProtocol';
 
@@ -86,6 +87,17 @@ async function render(req: SegmentRequest): Promise<void> {
     while (inFlight.length > depth) await inFlight.shift()!;
   };
 
+  // Every slice offers snapshots even though the lead only forwards one of
+  // them: a slice does not know which one that is (the lead switches as it muxes
+  // its way down the timeline), and a downscale to 480px eight times a second is
+  // far below the noise of encoding, so asking would cost more than sampling.
+  const preview = new RenderPreviewTap(renderer.canvas, req.startMs, req.fps, (bitmap, timeMs) => {
+    worker.postMessage(
+      { type: 'segmentPreview', index: req.index, bitmap, timeMs },
+      { transfer: [bitmap] },
+    );
+  });
+
   try {
     for (let i = 0; i < req.frameCount; i++) {
       const frameStarted = span();
@@ -96,6 +108,8 @@ async function render(req: SegmentRequest): Promise<void> {
       // Local timestamps: the segment is a self-contained file starting at 0.
       // The lead shifts them onto the timeline when it re-muxes.
       inFlight.push(source.add(i * frameDur, frameDur));
+      // After the capture, so the encoder never waits on the monitor.
+      preview.capture(req.firstFrame + i);
       await renderer.releaseFinishedReaders();
       if (i % PROGRESS_EVERY === 0) {
         worker.postMessage({ type: 'segmentProgress', index: req.index, frames: i });
