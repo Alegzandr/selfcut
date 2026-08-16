@@ -52,13 +52,28 @@ function linearClipsAt(clips: Clip[], tMs: number): Clip[] {
   return out.sort((a, b) => a.timelineStartMs - b.timelineStartMs);
 }
 
-function time(fn: () => void): number {
+/**
+ * The fastest of several measured passes.
+ *
+ * Interference on a shared runner - a GC pause, a scheduler slice, a noisy
+ * neighbour - only ever ADDS time to a pass, so the minimum of several is the
+ * closest available estimate of what the code itself costs. It matters here
+ * because the passes are short: one pass of the indexed lookup takes about a
+ * tenth of a millisecond, small enough that a single stall inflated it
+ * twenty-fold and failed a ratio that holds by 15x when it is measured
+ * cleanly.
+ */
+function time(fn: () => void, reps = 7): number {
   // One warm pass so the comparison is between two optimized functions, not
   // between an optimized one and one the JIT has never seen.
   fn();
-  const t0 = performance.now();
-  fn();
-  return performance.now() - t0;
+  let best = Infinity;
+  for (let i = 0; i < reps; i++) {
+    const t0 = performance.now();
+    fn();
+    best = Math.min(best, performance.now() - t0);
+  }
+  return best;
 }
 
 describe('visible-clip lookup', () => {
