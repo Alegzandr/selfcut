@@ -1,7 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { Download, FileX2, FolderOpen } from 'lucide-react';
 import { APP_NAME } from '../app/config';
-import logoUrl from '../assets/logo.png';
+// ?url keeps this a plain URL string: Astro otherwise resolves an image
+// import in src/ to an ImageMetadata object, which renders as [object Object].
+import logoUrl from '../assets/logo.png?url';
 import { useStore } from '../store/store';
 import { unbindProjectFile } from '../lib/projectFile';
 import { confirmDiscardProject } from './projectActions';

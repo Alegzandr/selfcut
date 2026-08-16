@@ -1,0 +1,44 @@
+---
+import type { LandingStrings } from '../../landing/strings';
+
+interface Props {
+  strings: LandingStrings;
+  /** The current language's own landing page: the wordmark links home. */
+  home: string;
+}
+
+const { strings, home } = Astro.props;
+---
+
+<header>
+  <a class="wordmark" href={home}
+    ><img src="/icon-192.png" alt="" width="192" height="192" />SelfCut</a
+  >
+  <a class="btn btn-primary" href="/app/">{strings['header.cta']}</a>
+</header>
+
+<style>
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-block: 1rem;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    font-weight: 800;
+    font-stretch: 118%;
+    font-size: 1.25rem;
+    letter-spacing: 0.01em;
+  }
+  .wordmark img {
+    width: 1.6rem;
+    height: 1.6rem;
+  }
+</style>

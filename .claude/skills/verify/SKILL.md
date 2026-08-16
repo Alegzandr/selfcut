@@ -12,10 +12,10 @@ driving the timeline with a real pointer.
 ## Launch
 
 ```bash
-npm run dev        # background it - Vite prints the URL and stays up
+npm run dev        # background it - Astro prints the URL and stays up
 ```
 
-**Check the printed URL.** `vite.config.ts` sets `base`, and the editor
+**Check the printed URL.** `astro.config.ts` sets `base`, and the editor
 is a separate entry from the landing page - it has lived at both
 `/selfcut/` and `/app/`. Read the dev server's output rather than
 assuming; a stale URL 404s into an empty page with zero `<input>`

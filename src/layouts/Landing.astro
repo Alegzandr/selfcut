@@ -1,0 +1,105 @@
+---
+import Closing from '../components/landing/Closing.astro';
+import Exports from '../components/landing/Exports.astro';
+import Faq from '../components/landing/Faq.astro';
+import Features from '../components/landing/Features.astro';
+import Footer from '../components/landing/Footer.astro';
+import Header from '../components/landing/Header.astro';
+import Hero from '../components/landing/Hero.astro';
+import Privacy from '../components/landing/Privacy.astro';
+import Scene from '../components/landing/Scene.astro';
+import { ALTERNATES, DEFAULT_LANG, LANGS, ORIGIN, langByCode, urlOf } from '../landing/langs';
+import { faqPage, softwareApplication } from '../landing/schema';
+import { stringsFor } from '../landing/strings';
+import type { LangCode } from '../landing/langs';
+
+import '../styles/landing.css';
+
+interface Props {
+  code: LangCode;
+}
+
+const { code } = Astro.props;
+const lang = langByCode(code);
+const strings = stringsFor(code);
+const url = urlOf(lang);
+const isDefault = lang === DEFAULT_LANG;
+---
+
+<!doctype html>
+<html lang={lang.code} data-default={isDefault ? '' : undefined}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0d10" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link
+      rel="preload"
+      href="/fonts/archivo-var-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
+    <title>{strings['meta.title']}</title>
+    <meta name="description" content={strings['meta.description']} />
+    <link rel="canonical" href={url} />
+    {
+      ALTERNATES.map((alternate) => (
+        <link rel="alternate" hreflang={alternate.hreflang} href={alternate.href} />
+      ))
+    }
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SelfCut" />
+    <meta property="og:title" content={strings['og.title']} />
+    <meta property="og:description" content={strings['og.description']} />
+    <meta property="og:url" content={url} />
+    <meta property="og:image" content={`${ORIGIN}/og-image.jpg`} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={strings['og.imageAlt']} />
+    <meta property="og:locale" content={lang.ogLocale} />
+    {
+      LANGS.filter((other) => other !== lang).map((other) => (
+        <meta property="og:locale:alternate" content={other.ogLocale} />
+      ))
+    }
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={strings['og.title']} />
+    <meta name="twitter:description" content={strings['twitter.description']} />
+    <meta name="twitter:image" content={`${ORIGIN}/og-image.jpg`} />
+    <meta name="twitter:image:alt" content={strings['og.imageAlt']} />
+
+    <script type="application/ld+json" set:html={JSON.stringify(softwareApplication(strings))} />
+    <script type="application/ld+json" set:html={JSON.stringify(faqPage(strings))} />
+
+    <script>
+      import '../landing/lang';
+    </script>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">{strings['skip']}</a>
+
+    <div class="frame">
+      <Header strings={strings} home={`/${lang.path}`} />
+
+      <main id="main">
+        <Hero strings={strings} />
+        <Scene />
+        <Privacy strings={strings} />
+        <Features strings={strings} />
+        <Exports strings={strings} />
+        <Faq strings={strings} />
+        <Closing strings={strings} />
+      </main>
+
+      <Footer strings={strings} current={lang.code} />
+    </div>
+  </body>
+</html>

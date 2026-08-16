@@ -51,18 +51,29 @@ the project.
 
 ```bash
 npm i
-npm run dev      # Vite dev server
+npm run dev      # Astro dev server (port 5173)
 npm run test     # vitest
 npm run typecheck
 npm run lint     # oxlint
-npm run build    # tsc + vite build + SPA fallback
+npm run build    # tsc + astro build
 ```
 
 ## Two pages, one build
 
-The site is an MPA: a static SEO landing at `/` (`index.html`) and the editor
-SPA at `/app/` (`app/index.html`). Both are declared as Rollup inputs in
-`vite.config.ts`.
+The site is an Astro static build. The SEO landing ships one page per language
+(`src/pages/index.astro` for French at `/`, `src/pages/[lang]/index.astro` for
+`/en/`, `/es/`, `/de/`, `/pt-BR/`), assembled from `src/layouts/Landing.astro`
+and the sections in `src/components/landing/`. Copy lives in
+`src/landing/locales/*.json`, checked against the English key set at typecheck
+time; `src/pages/404.astro` renders the same page for unknown paths.
+
+The editor is `src/pages/app/index.astro`: a bare shell whose only script
+imports `src/main.tsx`. Deliberately not an Astro island - the app mounts its
+own React root - which is why that page installs Vite's React Fast Refresh
+preamble by hand in dev.
+
+Astro's own build steps live in `integrations/`: the ffmpeg core copy, the
+COOP/COEP dev headers, and the sitemap.
 
 ## Two strictly separate pipelines
 
@@ -175,11 +186,13 @@ to `main` and publishes `dist/` to GitHub Pages, served at
 - Pages serves over HTTPS, which satisfies WebCodecs' secure-context
   requirement.
 - No COOP/COEP headers needed: SelfCut uses WebCodecs, not ffmpeg.wasm.
-- The CSP ships as a build-time meta tag (`injectCsp` in `vite.config.ts`),
-  since Pages allows no custom headers.
-- `scripts/spa-fallback.mjs` copies the landing to `404.html`, so unknown paths
-  show the landing instead of the default Pages 404 (still served with a 404
-  status, so stray URLs are not indexed).
+- The CSP ships as a meta tag, since Pages allows no custom headers. Astro
+  composes it from `security.csp` in `astro.config.ts`, hashing every script it
+  inlines - which is how the landing's language script stays allowed without
+  opening `script-src` to `'unsafe-inline'`.
+- `src/pages/404.astro` renders the landing, so unknown paths show it instead of
+  the default Pages 404 (still served with a 404 status, so stray URLs are not
+  indexed).
 - `base` is `/` for the custom domain; set `VITE_BASE` to build for a
   subpath.
 

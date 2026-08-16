@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { appModuleUrl } from './appModule';
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const FIXTURE_MP4 = path.join(FIXTURES, 'clip.mp4');
@@ -33,7 +34,18 @@ test('a transcoded track survives a reload without re-transcoding', async ({ pag
   // Encode the cache payload the same way a transcode would, then register an
   // asset whose track claims to be undecodable - which is what makes the
   // restore consider it.
-  const seeded = await page.evaluate(async (id) => {
+  // Resolved against the modules the page has actually loaded: a bare
+  // '/src/…' specifier can pull a SECOND copy of the module (see appModule.ts),
+  // and the store it seeds would then be one the app never reads.
+  const mods = {
+    transcode: await appModuleUrl(page, '/src/media/transcodeAudio.ts'),
+    // The cache lives in its own module; persistence.ts only consumes it.
+    audioCache: await appModuleUrl(page, '/src/lib/audioCache.ts'),
+    store: await appModuleUrl(page, '/src/store/store.ts'),
+    mediaCache: await appModuleUrl(page, '/src/media/mediaCache.ts'),
+  };
+
+  const seeded = await page.evaluate(async ({ id, m }) => {
     const SR = 48000;
     const n = SR; // one second
     const buf = new ArrayBuffer(44 + n * 2);
@@ -51,14 +63,9 @@ test('a transcoded track survives a reload without re-transcoding', async ({ pag
     }
     const file = new File([buf], 'tone.wav', { type: 'audio/wav' });
 
-    // Server URLs Vite resolves in the page, kept out of literals so tsc does
-    // not try to resolve them from the spec.
-    const transcodePath = '/src/media/transcodeAudio.ts';
-    const persistencePath = '/src/lib/persistence.ts';
-    const storePath = '/src/store/store.ts';
-    const { transcodeAudioTrack } = await import(transcodePath);
-    const { saveTranscodedAudio } = await import(persistencePath);
-    const { useStore } = await import(storePath);
+    const { transcodeAudioTrack } = await import(m.transcode);
+    const { saveTranscodedAudio } = await import(m.audioCache);
+    const { useStore } = await import(m.store);
 
     const { compressed } = await transcodeAudioTrack(
       { id, file, kind: 'audio', durationMs: 1000, hasAudio: true, audioTracks: [], thumbnails: [] },
@@ -75,9 +82,9 @@ test('a transcoded track survives a reload without re-transcoding', async ({ pag
       audioTracks: [{ index: 0, channels: 2, undecodable: true, codec: 'eac3' }],
       thumbnails: [],
     });
-    await saveTranscodedAudio(id, 0, compressed);
+    await saveTranscodedAudio(file, 0, compressed);
     return { cachedBytes: compressed.byteLength };
-  }, assetId);
+  }, { id: assetId, m: mods });
 
   expect(seeded.cachedBytes).toBeGreaterThan(0);
 
@@ -87,11 +94,15 @@ test('a transcoded track survives a reload without re-transcoding', async ({ pag
 
   // The restore decodes in the background, so the flag arrives asynchronously -
   // exactly as the user sees the track light up a moment after the project opens.
-  const restored = await page.evaluate(async (id) => {
-    const storePath = '/src/store/store.ts';
-    const cachePath = '/src/media/mediaCache.ts';
-    const { useStore } = await import(storePath);
-    const { getAudioBuffer } = await import(cachePath);
+  // Re-resolved after the reload: the page's module graph is a fresh one.
+  const afterReload = {
+    store: await appModuleUrl(page, '/src/store/store.ts'),
+    mediaCache: await appModuleUrl(page, '/src/media/mediaCache.ts'),
+  };
+
+  const restored = await page.evaluate(async ({ id, m }) => {
+    const { useStore } = await import(m.store);
+    const { getAudioBuffer } = await import(m.mediaCache);
 
     const deadline = Date.now() + 30_000;
     for (;;) {
@@ -113,7 +124,7 @@ test('a transcoded track survives a reload without re-transcoding', async ({ pag
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-  }, assetId);
+  }, { id: assetId, m: afterReload });
 
   // The track is audible again, and nothing re-ran the converter to get there.
   expect(restored.transcoded).toBe(true);

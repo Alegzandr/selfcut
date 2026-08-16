@@ -1,0 +1,17 @@
+---
+// One directory per non-default language: /en/, /es/, /de/, /pt-BR/.
+// The default language has no prefix and is served by ../index.astro.
+import { DEFAULT_LANG, LANGS } from '../../landing/langs';
+import Landing from '../../layouts/Landing.astro';
+
+export function getStaticPaths() {
+  return LANGS.filter((lang) => lang !== DEFAULT_LANG).map((lang) => ({
+    params: { lang: lang.code },
+    props: { code: lang.code },
+  }));
+}
+
+const { code } = Astro.props;
+---
+
+<Landing code={code} />

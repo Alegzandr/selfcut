@@ -292,6 +292,7 @@
   "errors.export.noAudibleAudio": "Nothing to export as MP3: no audible audio in the project.",
   "errors.export.workerCrashed": "The export worker crashed.",
   "errors.export.workerCrashedDetail": "The export worker crashed: {{detail}}",
+  "errors.export.tooLargeForMemory": "This export is too large for this browser to build in memory. Use Chrome or Edge, which save straight to a file, or pick a lighter preset or a shorter region.",
   "errors.media.importFailed": "Could not import {{name}}",
   "errors.media.invalidDuration": "Invalid duration: {{name}}",
   "errors.media.noCues": "No usable cues in {{name}}",

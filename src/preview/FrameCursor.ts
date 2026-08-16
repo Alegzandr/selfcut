@@ -14,6 +14,18 @@ let worker: Worker | null = null;
 /** Live proxies by cursor id, to route incoming frames. */
 const proxies = new Map<string, FrameCursor>();
 
+/**
+ * How many decode cursors are alive right now.
+ *
+ * Exists for the end-to-end test that this number stays bounded while the
+ * playhead crosses a long timeline: the count is the whole point of the pool
+ * (see cursorPool.ts), each cursor being a configured decoder in the worker,
+ * and nothing else about the preview makes it observable from outside.
+ */
+export function liveCursorCount(): number {
+  return proxies.size;
+}
+
 function ensureWorker(): Worker {
   if (!worker) {
     worker = new Worker(new URL('./frameWorker.ts', import.meta.url), { type: 'module' });

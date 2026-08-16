@@ -1,0 +1,10 @@
+---
+// GitHub Pages serves this for any unknown path, with a 404 status - so search
+// engines do not index stray URLs. Showing the landing rather than the host's
+// default 404 page gives the visitor somewhere to go; it is the same content
+// as the root page, redirect to the visitor's language included.
+import { DEFAULT_LANG } from '../landing/langs';
+import Landing from '../layouts/Landing.astro';
+---
+
+<Landing code={DEFAULT_LANG.code} />

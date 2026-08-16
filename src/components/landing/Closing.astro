@@ -1,0 +1,26 @@
+---
+import type { LandingStrings } from '../../landing/strings';
+
+interface Props {
+  strings: LandingStrings;
+}
+
+const { strings } = Astro.props;
+---
+
+<section class="closing" aria-labelledby="closing-title">
+  <h2 id="closing-title">{strings['closing.title']}</h2>
+  <p class="section-intro">{strings['closing.intro']}</p>
+  <a class="btn btn-primary" href="/app/">{strings['closing.cta']}</a>
+</section>
+
+<style>
+  .closing {
+    padding-bottom: clamp(3.5rem, 8vw, 6rem);
+  }
+  .closing .btn-primary {
+    margin-top: 2rem;
+    padding: 0.95rem 1.8rem;
+    font-size: 1.15rem;
+  }
+</style>

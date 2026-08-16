@@ -1,0 +1,187 @@
+---
+import { LANGS, type LangCode } from '../../landing/langs';
+import type { LandingStrings } from '../../landing/strings';
+
+interface Props {
+  strings: LandingStrings;
+  current: LangCode;
+}
+
+const { strings, current } = Astro.props;
+const currentName = LANGS.find((lang) => lang.code === current)?.name;
+---
+
+<footer>
+  <span>{strings['footer.tagline']}</span>
+  <nav aria-label={strings['footer.navLabel']}>
+    <a href="/app/">{strings['footer.editor']}</a>
+    <a href="#features">{strings['footer.features']}</a>
+    <a href="#faq">{strings['footer.faq']}</a>
+    <a href="https://github.com/Alegzandr/selfcut" rel="noopener">GitHub</a>
+  </nav>
+  <button
+    class="lang-btn"
+    type="button"
+    data-lang-open
+    aria-haspopup="dialog"
+    aria-label={strings['footer.langLabel']}
+  >
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10"></circle>
+      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+      <path d="M2 12h20"></path>
+    </svg>
+    {currentName}
+  </button>
+</footer>
+
+<dialog class="lang-dialog" aria-labelledby="lang-title">
+  <div class="lang-dialog-body">
+    <div class="lang-dialog-head">
+      <h2 id="lang-title">{strings['footer.langLabel']}</h2>
+      <button class="lang-close" type="button" data-lang-close aria-label={strings['footer.langClose']}
+        >×</button
+      >
+    </div>
+    <nav>
+      {
+        LANGS.map((lang) => (
+          <a
+            href={`/${lang.path}`}
+            lang={lang.code}
+            hreflang={lang.code}
+            data-lang={lang.code}
+            aria-current={lang.code === current ? 'page' : undefined}
+          >
+            {lang.name}
+          </a>
+        ))
+      }
+    </nav>
+  </div>
+</dialog>
+
+<style>
+  footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 2rem;
+    padding-block: 1.5rem 2rem;
+    color: var(--faint);
+    font-size: 0.92rem;
+  }
+  footer nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+  }
+  footer a {
+    text-decoration: none;
+    /* Vertical padding on inline links widens the tap target without
+       changing the line box. */
+    padding-block: 0.75rem;
+  }
+  footer a:hover {
+    color: var(--muted);
+  }
+  .lang-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0;
+    min-height: 44px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .lang-btn:hover {
+    color: var(--muted);
+  }
+  .lang-btn svg {
+    width: 1.15em;
+    height: 1.15em;
+  }
+
+  .lang-dialog {
+    width: min(20rem, calc(100vw - 2rem));
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .lang-dialog::backdrop {
+    background: oklch(0.1 0.005 250 / 0.6);
+  }
+  .lang-dialog-body {
+    padding: 1.1rem 1.1rem 1.25rem;
+  }
+  .lang-dialog-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .lang-dialog-head h2 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    font-stretch: 110%;
+  }
+  .lang-close {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    /* Pull the enlarged hit area back so the × stays visually in the
+       corner of the dialog. */
+    margin: -0.7rem -0.7rem -0.7rem 0;
+    border: 0;
+    background: none;
+    color: var(--faint);
+    font: inherit;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    border-radius: 4px;
+  }
+  .lang-close:hover {
+    color: var(--text);
+  }
+  .lang-dialog nav {
+    display: grid;
+    margin-top: 0.9rem;
+  }
+  .lang-dialog nav a {
+    padding: 0.55rem 0.65rem;
+    border-radius: 4px;
+    text-decoration: none;
+    color: var(--muted);
+  }
+  .lang-dialog nav a:hover {
+    background: var(--line-soft);
+    color: var(--text);
+  }
+  .lang-dialog nav a[aria-current] {
+    color: var(--text);
+    font-weight: 650;
+  }
+  .lang-dialog nav a[aria-current]::after {
+    content: '✓';
+    margin-left: 0.5rem;
+    color: var(--accent);
+  }
+</style>

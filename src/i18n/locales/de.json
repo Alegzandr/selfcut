@@ -292,6 +292,7 @@
   "errors.export.noAudibleAudio": "Nichts zum Exportieren als MP3: kein hörbares Audio im Projekt.",
   "errors.export.workerCrashed": "Der Exportarbeiter stürzte ab.",
   "errors.export.workerCrashedDetail": "Der Exportarbeiter ist abgestürzt: {{detail}}",
+  "errors.export.tooLargeForMemory": "Dieser Export ist zu groß, als dass dieser Browser ihn im Arbeitsspeicher aufbauen könnte. Verwenden Sie Chrome oder Edge, die direkt in eine Datei speichern, oder wählen Sie eine leichtere Voreinstellung oder einen kürzeren Bereich.",
   "errors.media.importFailed": "{{name}} konnte nicht importiert werden",
   "errors.media.invalidDuration": "Ungültige Dauer: {{name}}",
   "errors.media.noCues": "Keine verwendbaren Hinweise in {{name}}",

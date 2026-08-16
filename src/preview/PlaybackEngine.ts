@@ -12,6 +12,7 @@ import { PREVIEW_RESOLUTION_SCALE } from '../app/config';
 import { audioKey, getAudioBuffer, getStillFrame } from '../media/mediaCache';
 import type { DrawableFrame } from '../media/stillImage';
 import { FrameCursor } from './FrameCursor';
+import { MAX_LIVE_CURSORS, selectCursorEvictions } from './cursorPool';
 import { drawClip, visibleVideoClips } from './compositor';
 import { syncLuts } from './colorPass';
 import { SCOPE_SAMPLE_WIDTH } from './scopes';
@@ -57,6 +58,11 @@ export class PlaybackEngine {
   private lastMasterGain = NaN;
   private trackBuses = new Map<string, TrackBus>();
   private metersLive = false;
+  /**
+   * Live decode cursors by clip id, in least-recently-drawn order: a cursor is
+   * re-inserted on every use, so the Map's own iteration order IS the LRU
+   * ranking `trimCursors` ranks by. See cursorPool.ts for why it is bounded.
+   */
   private cursors = new Map<string, FrameCursor>();
   /**
    * Rasterized stills per image asset. `frame: null` marks a decode in flight
@@ -355,6 +361,9 @@ export class PlaybackEngine {
     // last, over the others. Within a track, an overlapping pair draws
     // earliest-first - the incoming clip composites over the outgoing one with
     // rising alpha (crossfade).
+    // Clips that hold a cursor this frame: they are never eviction candidates,
+    // however long ago the last one was created (see trimCursors).
+    const drawnClipIds = new Set<string>();
     const tracks = state.project.tracks;
     for (let t = tracks.length - 1; t >= 0; t--) {
       const track = tracks[t]!;
@@ -386,8 +395,13 @@ export class PlaybackEngine {
               cursor = new FrameCursor(asset, () => {
                 this.videoDirty = true;
               });
-              this.cursors.set(clip.id, cursor);
+            } else {
+              // Delete before re-inserting: a Map keeps insertion order, so
+              // this is what moves the clip to the young end of the ranking.
+              this.cursors.delete(clip.id);
             }
+            this.cursors.set(clip.id, cursor);
+            drawnClipIds.add(clip.id);
             cursor.request(timelineToSourceMs(clip, tMs) / 1000, this.wasPlaying);
             sample = cursor.sample;
           }
@@ -396,7 +410,25 @@ export class PlaybackEngine {
       }
     }
 
+    this.trimCursors(drawnClipIds);
+
     if (hasScopeListeners()) this.publishScope(w, h);
+  }
+
+  /**
+   * Release the decoders of clips the playhead has moved away from.
+   *
+   * Run per frame rather than on project change: the cursors that pile up are
+   * the ones behind a playhead that keeps moving, and nothing about the project
+   * changes as it does. A released clip decodes again from its next visit,
+   * which is a seek the preview already performs on every scrub.
+   */
+  private trimCursors(visible: ReadonlySet<string>): void {
+    if (this.cursors.size <= MAX_LIVE_CURSORS) return;
+    for (const clipId of selectCursorEvictions(this.cursors.keys(), visible)) {
+      this.cursors.get(clipId)?.dispose();
+      this.cursors.delete(clipId);
+    }
   }
 
   /**

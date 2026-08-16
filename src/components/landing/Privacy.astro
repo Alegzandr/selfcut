@@ -1,0 +1,58 @@
+---
+import type { LandingStrings } from '../../landing/strings';
+
+interface Props {
+  strings: LandingStrings;
+}
+
+const { strings } = Astro.props;
+
+const PILLARS = [
+  { title: strings['privacy.p1.title'], body: strings['privacy.p1.body'] },
+  { title: strings['privacy.p2.title'], body: strings['privacy.p2.body'] },
+  { title: strings['privacy.p3.title'], body: strings['privacy.p3.body'] },
+];
+---
+
+<section id="privacy" aria-labelledby="privacy-title">
+  <h2 id="privacy-title">{strings['privacy.title']}</h2>
+  <p class="section-intro">{strings['privacy.intro']}</p>
+  <div class="pillars">
+    {
+      PILLARS.map((pillar) => (
+        <div>
+          <h3>{pillar.title}</h3>
+          <p>{pillar.body}</p>
+        </div>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  .pillars {
+    margin-top: 2.75rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  }
+  .pillars > div {
+    padding: 1.4rem 1.5rem 1.4rem 0;
+    border-top: 1px solid var(--line);
+  }
+  @media (min-width: 48rem) {
+    .pillars > div + div {
+      border-left: 1px solid var(--line-soft);
+      padding-left: 1.5rem;
+    }
+  }
+  .pillars h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    font-stretch: 110%;
+  }
+  .pillars p {
+    margin-top: 0.5rem;
+    color: var(--muted);
+    font-size: 0.98rem;
+  }
+</style>

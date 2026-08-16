@@ -1,0 +1,8 @@
+---
+// The canonical root page. It serves the default language's content and is the
+// only page that redirects a first-time visitor to their own (see lang.ts).
+import { DEFAULT_LANG } from '../landing/langs';
+import Landing from '../layouts/Landing.astro';
+---
+
+<Landing code={DEFAULT_LANG.code} />

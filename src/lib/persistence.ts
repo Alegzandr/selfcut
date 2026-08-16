@@ -9,6 +9,8 @@ import { setTranscodedAudio } from '../media/mediaCache';
 // the ffmpeg runtime imports it dynamically, on first job.
 import { decodeCachedAudio } from '../media/transcodeAudio';
 import { isMissingSource } from './missingSource';
+import { sweepExportScratch } from './opfs';
+import { nextSaveDelay } from './saveSchedule';
 import { ASSETS_STORE, PROJECT_STORE, db, requestDone, txDone } from './idb';
 import { loadTranscodedAudio, pruneTranscodedAudio } from './audioCache';
 import { pruneSubtitleCues } from './subtitleCache';
@@ -32,9 +34,9 @@ function reportSaveFailure(err: unknown): void {
  * refresh or a closed tab never loses work. Saves are incremental: the
  * project JSON is debounced, assets are written/deleted one by one as the
  * library changes.
+ *
+ * When the project JSON is actually written is decided by `saveSchedule.ts`.
  */
-
-const SAVE_DEBOUNCE_MS = 500;
 
 /** A persisted asset carries its owning project's id, so a project can be listed,
  * loaded and swept independently. Runtime `MediaAsset` never needs the field. */
@@ -318,19 +320,24 @@ export async function restoreTranscodedTracks(assets: MediaAsset[]): Promise<voi
 }
 
 let saveTimer: number | null = null;
+/** When the oldest change waiting to be written was made (see nextSaveDelay). */
+let oldestPendingAt = 0;
 
 function scheduleProjectSave(project: Project): void {
+  const now = Date.now();
   if (saveTimer !== null) window.clearTimeout(saveTimer);
+  else oldestPendingAt = now;
   saveTimer = window.setTimeout(() => {
     saveTimer = null;
     void writeProject(project);
-  }, SAVE_DEBOUNCE_MS);
+  }, nextSaveDelay(now, oldestPendingAt));
 }
 
 /**
  * Write the pending debounced project save right now. Called before switching
- * projects, so the outgoing project's last edits land before its library is
- * replaced. A no-op when nothing is pending.
+ * projects (so the outgoing project's last edits land before its library is
+ * replaced), when the tab is backgrounded, and before an export. A no-op when
+ * nothing is pending.
  */
 export function flushProjectSave(): void {
   if (saveTimer === null) return;
@@ -467,6 +474,10 @@ export async function initPersistence(): Promise<void> {
   validIds.add(useStore.getState().currentProjectId);
   await sweepOrphanAssets(validIds);
   await pruneMediaCaches();
+  // An export that streamed into private scratch storage leaves its file behind
+  // on purpose: the download reads from it long after the render is done (see
+  // lib/opfs.ts). Startup is where it is finally safe to reclaim.
+  void sweepExportScratch();
   // Not awaited: it can prompt in some browsers, and nothing below depends on
   // the answer.
   void requestPersistentStorage();
@@ -496,11 +507,13 @@ export async function initPersistence(): Promise<void> {
   });
 
   // Flush the pending debounced save when the page goes away.
-  window.addEventListener('pagehide', () => {
-    if (saveTimer !== null) {
-      window.clearTimeout(saveTimer);
-      saveTimer = null;
-      void writeProject(useStore.getState().project);
-    }
+  window.addEventListener('pagehide', flushProjectSave);
+  // And as soon as the tab is merely hidden, which is the last moment the
+  // browser reliably gives us: `pagehide` does not fire when the renderer is
+  // killed under memory pressure or the process crashes, and by then the
+  // transaction has no chance to commit either. Backgrounding is also when a
+  // user alt-tabs away from a long export, so it is a natural save point.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushProjectSave();
   });
 }

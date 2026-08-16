@@ -12,5 +12,12 @@
     "strict": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "playwright.config.ts", "scripts", "e2e"]
+  "include": [
+    "astro.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "playwright.prod.config.ts",
+    "integrations",
+    "e2e"
+  ]
 }

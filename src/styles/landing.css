@@ -1,0 +1,143 @@
+/* Landing base: design tokens, element defaults, and the few rules that cross
+   component boundaries (the page gutter, the button, the section rhythm).
+   Everything that belongs to one section lives in that section's component. */
+
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('/fonts/archivo-var-latin.woff2') format('woff2');
+}
+
+:root {
+  --bg: oklch(0.16 0.006 250);
+  --bg-deep: oklch(0.13 0.005 250);
+  --surface: oklch(0.2 0.007 250);
+  --line: oklch(0.31 0.009 250);
+  --line-soft: oklch(0.25 0.008 250);
+  --text: oklch(0.94 0.004 250);
+  --muted: oklch(0.72 0.012 250);
+  --faint: oklch(0.6 0.012 250);
+  --accent: oklch(0.7 0.135 237);
+  --accent-ink: oklch(0.2 0.05 240);
+  --accent-dim: oklch(0.45 0.09 237);
+  --playhead: oklch(0.63 0.21 27);
+  --pad: clamp(1.25rem, 4vw, 4rem);
+  --measure: 68ch;
+}
+
+* {
+  margin: 0;
+  box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Archivo', system-ui, sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--pad);
+  top: 0.75rem;
+  translate: 0 -6rem;
+  z-index: 10;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: translate 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.skip-link:focus {
+  translate: 0 0;
+}
+
+/* Sections span the full viewport; hairlines run edge to edge and the
+   content sits in a centered 72rem column via the inline padding. Global
+   because the elements it lines up live in a different component each. */
+header,
+section,
+footer,
+.hero {
+  padding-inline: max(var(--pad), calc((100% - 72rem) / 2));
+}
+
+section {
+  padding-block: clamp(3rem, 7vw, 5.5rem);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+h2 {
+  font-size: clamp(1.7rem, 3.4vw, 2.6rem);
+  line-height: 1.15;
+  font-weight: 750;
+  font-stretch: 112%;
+  letter-spacing: -0.01em;
+  max-width: 26ch;
+  text-wrap: balance;
+}
+
+.section-intro {
+  margin-top: 1.1rem;
+  max-width: var(--measure);
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+/* Used by the header, the hero and the closing section. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.3rem;
+  min-height: 44px;
+  font: inherit;
+  font-weight: 650;
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  transition:
+    background-color 0.15s ease-out,
+    border-color 0.15s ease-out,
+    translate 0.1s ease-out;
+}
+.btn:active {
+  translate: 0 1px;
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.btn-primary:hover {
+  background: oklch(0.76 0.125 237);
+  border-color: oklch(0.76 0.125 237);
+}

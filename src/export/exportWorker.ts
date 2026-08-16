@@ -202,7 +202,18 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
     return null;
   };
 
-  // One reader per clip, created on first use and kept for the whole render.
+  // One reader per clip, created on first use and released as soon as the clip
+  // is behind the render head.
+  //
+  // Keeping them all for the whole render is what a first pass does, and it
+  // scales with the length of the cut rather than with how much of it is on
+  // screen: each reader owns a configured VideoDecoder and holds one or two
+  // decoded samples (~12 MB apiece at 4K), so a fifty-clip 4K timeline had
+  // fifty decoders and hundreds of megabytes of frames live at the last frame
+  // of the render, competing for the handful of decoders a browser will run in
+  // parallel. The render walks output time strictly forward and no clip is
+  // visible twice, so a reader missing from the current frame's layers can
+  // only be one whose clip has ended: dropping it is exact, not a heuristic.
   const readers = new Map<string, ClipReader>();
   const getReader = (clip: Clip): ClipReader => {
     let reader = readers.get(clip.id);
@@ -211,6 +222,17 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
       readers.set(clip.id, reader);
     }
     return reader;
+  };
+  const releaseFinishedReaders = async (visible: ReadonlySet<string>): Promise<void> => {
+    for (const [clipId, reader] of [...readers]) {
+      if (visible.has(clipId)) continue;
+      readers.delete(clipId);
+      try {
+        await reader.close();
+      } catch {
+        /* already released */
+      }
+    }
   };
 
   const frameDur = 1 / preset.fps;
@@ -270,6 +292,9 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
       }
 
       pendingEncode = videoSource.add(i * frameDur, frameDur);
+      // After the capture, never before: the layers hold frames these readers
+      // own, and `add` is what copies them out of the canvas.
+      await releaseFinishedReaders(new Set(layers.map((layer) => layer.clip.id)));
       // Post every 5th frame, but always on the last one, so a very short
       // (<5-frame) region still advances the bar past the video phase instead
       // of jumping straight from 0 to finalize.

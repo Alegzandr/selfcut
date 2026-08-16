@@ -1,0 +1,198 @@
+---
+import type { LandingStrings } from '../../landing/strings';
+
+interface Props {
+  strings: LandingStrings;
+}
+
+const { strings } = Astro.props;
+---
+
+<section id="exports" aria-labelledby="exports-title">
+  <h2 id="exports-title">{strings['exports.title']}</h2>
+  <p class="section-intro">{strings['exports.intro']}</p>
+  <svg class="icon-defs" aria-hidden="true">
+    <defs>
+      <symbol id="ic-youtube" viewBox="0 0 24 24" fill="currentColor"
+        ><path
+          d="M23.5 6.9a3 3 0 0 0-2.1-2.1C19.5 4.3 12 4.3 12 4.3s-7.5 0-9.4.5A3 3 0 0 0 .5 6.9C0 8.8 0 12 0 12s0 3.2.5 5.1a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.1.5-5.1s0-3.2-.5-5.1M9.6 15.6V8.4l6.2 3.6z"
+        ></path></symbol
+      >
+      <symbol id="ic-tiktok" viewBox="0 0 24 24" fill="currentColor"
+        ><path
+          d="M16.6 5.8a4.8 4.8 0 0 1-1.1-3.1h-3.4v13.5a2.9 2.9 0 1 1-2-2.8V10a6.3 6.3 0 1 0 5.4 6.2V9.1a8.2 8.2 0 0 0 4.8 1.5V7.2a4.8 4.8 0 0 1-3.7-1.4"
+        ></path></symbol
+      >
+      <symbol
+        id="ic-instagram"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        ><rect x="2.5" y="2.5" width="19" height="19" rx="5.5"></rect><circle
+          cx="12"
+          cy="12"
+          r="4.2"></circle><circle cx="17.6" cy="6.4" r="1.2" fill="currentColor" stroke="none"
+        ></circle></symbol
+      >
+      <symbol
+        id="ic-music"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        ><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle
+          cx="18"
+          cy="16"
+          r="3"></circle></symbol
+      >
+    </defs>
+  </svg>
+  <div class="formats">
+    <figure class="format">
+      <div class="shape landscape">16:9</div>
+      <figcaption>
+        <span class="net">
+          <svg viewBox="0 0 24 24"><use href="#ic-youtube"></use></svg>
+        </span>
+        <strong>YouTube</strong>{strings['exports.youtube']}
+      </figcaption>
+    </figure>
+    <figure class="format">
+      <div class="shape portrait">9:16</div>
+      <figcaption>
+        <span class="net">
+          <svg viewBox="0 0 24 24"><use href="#ic-tiktok"></use></svg>
+          <svg viewBox="0 0 24 24"><use href="#ic-instagram"></use></svg>
+          <svg viewBox="0 0 24 24"><use href="#ic-youtube"></use></svg>
+        </span>
+        <strong>TikTok · Reels · Shorts</strong>{strings['exports.vertical']}
+      </figcaption>
+    </figure>
+    <figure class="format">
+      <div class="shape audio">
+        {/* #wave is the waveform path declared in Scene.astro. */}
+        <svg viewBox="0 0 400 32" preserveAspectRatio="none" fill="currentColor" aria-hidden="true">
+          <use href="#wave"></use>
+        </svg>
+      </div>
+      <figcaption>
+        <span class="net">
+          <svg viewBox="0 0 24 24"><use href="#ic-music"></use></svg>
+        </span>
+        <strong>MP3</strong>{strings['exports.mp3']}
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<style>
+  .icon-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+  }
+  .formats {
+    margin-top: 2.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: clamp(1.5rem, 4vw, 3rem);
+  }
+  .format {
+    display: grid;
+    gap: 0.7rem;
+  }
+  .format .shape {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: linear-gradient(160deg, oklch(0.24 0.01 250), oklch(0.18 0.008 250));
+    display: grid;
+    place-items: center;
+    color: var(--faint);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    height: 7.5rem;
+  }
+  .format .shape.landscape {
+    aspect-ratio: 16 / 9;
+  }
+  .format .shape.portrait {
+    aspect-ratio: 9 / 16;
+    height: 11rem;
+  }
+  .format .shape.audio {
+    aspect-ratio: 16 / 9;
+    height: 4.5rem;
+  }
+  .format .shape.audio svg {
+    width: 70%;
+    height: 55%;
+    color: var(--accent);
+  }
+  .format .shape::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4%;
+    width: 1.5px;
+    background: var(--playhead);
+    opacity: 0;
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .format:hover .shape:not(.audio)::after {
+      animation: shape-sweep 1.1s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    @keyframes shape-sweep {
+      0% {
+        left: 4%;
+        opacity: 1;
+      }
+      85% {
+        opacity: 1;
+      }
+      100% {
+        left: 95%;
+        opacity: 0;
+      }
+    }
+  }
+
+  .format figcaption {
+    font-size: 0.95rem;
+    color: var(--muted);
+  }
+  .format figcaption strong {
+    display: block;
+    color: var(--text);
+    font-weight: 700;
+  }
+  .format .net {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.35rem;
+    color: var(--faint);
+  }
+  .format .net svg {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: none;
+  }
+  .format:hover .net {
+    color: var(--text);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .format .net {
+      transition: color 0.2s ease;
+    }
+  }
+</style>

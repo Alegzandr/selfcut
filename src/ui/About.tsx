@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
-import logoUrl from '../assets/logo.png';
+// ?url keeps this a plain URL string: Astro otherwise resolves an image
+// import in src/ to an ImageMetadata object, which renders as [object Object].
+import logoUrl from '../assets/logo.png?url';
 import { APP_NAME, APP_VERSION } from '../app/config';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';

@@ -1,0 +1,48 @@
+---
+// The editor shell. Everything else about this page is client-side: the React
+// root, i18n and the COOP service worker all boot from src/main.tsx, which
+// Astro bundles as a plain module script. Deliberately not an Astro island -
+// the editor mounts itself, and a hydration wrapper would only duplicate that.
+
+// The flip side of not being an island: @astrojs/react installs Vite's React
+// Fast Refresh preamble for hydrated components only, and without it every
+// .tsx the dev server transforms throws "$RefreshSig$ is not defined" before
+// the app can mount. Dev only - the build strips refresh entirely.
+const REACT_REFRESH_PREAMBLE = `
+import RefreshRuntime from '/@react-refresh';
+RefreshRuntime.injectIntoGlobalHook(window);
+window.$RefreshReg$ = () => {};
+window.$RefreshSig$ = () => (type) => type;
+window.__vite_plugin_react_preamble_installed__ = true;
+`;
+---
+
+<!doctype html>
+<html lang="fr" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#09090b" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="canonical" href="https://selfcut.alegzandr.com/app/" />
+    <meta
+      name="description"
+      content="L'éditeur SelfCut : montage vidéo 100 % dans le navigateur. Aucun upload, aucun serveur."
+    />
+    <title>SelfCut - Éditeur</title>
+    {import.meta.env.DEV && <script type="module" is:inline set:html={REACT_REFRESH_PREAMBLE} />}
+  </head>
+  <body class="bg-zinc-950 text-zinc-100 overscroll-none">
+    <div id="root"></div>
+    <script>
+      import '../../main';
+    </script>
+  </body>
+</html>

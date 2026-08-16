@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Production-build checks, run against `vite preview` rather than the dev server.
+ * Production-build checks, run against `astro preview` rather than the dev server.
  *
  * Separate from the main config because what is under test here only exists in a
  * built app: the COOP/COEP service worker is skipped in dev (Vite serves those
@@ -25,7 +25,13 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], channel: 'chromium' } }],
   webServer: {
-    command: 'npm run build && npx vite preview --port 4173 --strictPort',
+    command: 'npm run build && npx astro preview --port 4173',
+    // `astro preview` daemonizes itself when it detects it is being driven by
+    // an agent or a tool rather than a terminal, and Playwright then reports
+    // "Process from config.webServer exited early". Setting the variable opts
+    // out of that detection and pins the server to the foreground, which is
+    // the only shape a webServer command can take.
+    env: { ASTRO_PREVIEW_BACKGROUND: '1' },
     url: 'http://localhost:4173/app/',
     reuseExistingServer: false,
     timeout: 180_000,

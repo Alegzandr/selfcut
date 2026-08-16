@@ -5,6 +5,8 @@ import { t } from '../i18n';
 import { audioKey, getAudioBuffer } from '../media/mediaCache';
 import { decodeImageFile } from '../media/stillImage';
 import { scheduleProjectAudio } from '../preview/audioMix';
+import { openExportScratch, readExportScratch } from '../lib/opfs';
+import { flushProjectSave } from '../lib/persistence';
 import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
 import { ExportErrorCode, ExportRequest, WorkerReply } from './protocol';
 
@@ -55,12 +57,32 @@ async function pickExportFile(filename: string, mime: string): Promise<FileSyste
     });
   } catch (err) {
     // Dismissing the picker aborts the export; anything else falls back to the
-    // in-memory path rather than blocking the render outright.
+    // scratch path rather than blocking the render outright.
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw new ExportCanceledError(t('errors.export.canceled'));
     }
+    // Worth a line: this is the difference between streaming to disk and
+    // building the file in memory, and it used to fail silently.
+    console.warn('[export] save picker unavailable, falling back to scratch storage:', err);
     return null;
   }
+}
+
+/**
+ * Ceiling on what the last-resort in-memory render may produce.
+ *
+ * Only reached when the browser offers neither a save picker nor OPFS. The
+ * buffer is one contiguous allocation that doubles as it grows, so the peak is
+ * about twice the figure below - past this the allocation fails and the browser
+ * reports it as a raw "Array buffer allocation failed" with no hint that the
+ * length or the preset was the problem. Refusing up front says so instead.
+ */
+const MAX_IN_MEMORY_EXPORT_BYTES = 1024 * 1024 * 1024;
+
+/** Rough size of the output, from the bitrates the preset is about to encode at. */
+function estimatedOutputBytes(preset: ExportPreset, durationMs: number): number {
+  const videoBitrate = preset.kind === 'mp4' ? preset.videoBitrate : 0;
+  return ((videoBitrate + preset.audioBitrate) / 8) * (durationMs / 1000);
 }
 
 /** The worker speaks in codes; the main thread owns the locale and the wording. */
@@ -106,6 +128,13 @@ export function startExport(
   let rejectWorkerReply: ((e: Error) => void) | null = null;
 
   const run = (async () => {
+    // Get the timeline on disk before the heaviest thing the app does starts.
+    // A render holds decoded frames, an encoder and the whole mix at once, so
+    // it is the likeliest moment for the tab to be killed - and losing the cut
+    // that was being exported is the worst possible way to find that out.
+    // Synchronous, so it does not cost the picker its user activation.
+    flushProjectSave();
+
     const projectMs = projectDurationMs(project);
     if (projectMs <= 0) throw new Error(t('errors.export.emptyProject'));
 
@@ -135,10 +164,28 @@ export function startExport(
     // First await of the run: everything above is synchronous so the picker
     // still runs under the activation of the click that started the export.
     const filename = exportFileName(preset);
-    const fileHandle = await pickExportFile(
+    let fileHandle = await pickExportFile(
       filename,
       preset.kind === 'mp3' ? 'audio/mpeg' : 'video/mp4',
     );
+
+    // No file to write into (Firefox and Safari have no save picker, and the
+    // picker can be refused even where it exists): render into origin-private
+    // scratch storage rather than into memory. The render streams either way,
+    // so only where the bytes land changes - and the user still gets the same
+    // download at the end, just from disk instead of from a 6 GB buffer.
+    let scratch: FileSystemFileHandle | null = null;
+    if (!fileHandle) {
+      const opened = await openExportScratch(filename);
+      if (opened) {
+        scratch = opened.handle;
+        fileHandle = opened.handle;
+      } else if (estimatedOutputBytes(preset, durationMs) > MAX_IN_MEMORY_EXPORT_BYTES) {
+        // Neither a picked file nor scratch space: the only path left builds the
+        // whole file in RAM, and this one would not fit.
+        throw new Error(t('errors.export.tooLargeForMemory'));
+      }
+    }
 
     onProgress(0.02);
     const audio = await renderAudioMix(project, assets, startMs, durationMs);
@@ -220,8 +267,13 @@ export function startExport(
     rejectWorkerReply = null;
 
     onProgress(1);
-    // Streamed renders are already on disk; only the buffered fallback still
-    // has to materialize a Blob for the download anchor.
+    // Three destinations, one return shape. A render into the file the user
+    // picked is already where they wanted it (blob: null, nothing to
+    // download); a scratch render is on disk too, but privately, so it is
+    // handed back as a File the download anchor can point at without ever
+    // loading it into memory; only the in-memory last resort materializes a
+    // Blob from a buffer.
+    if (scratch) return { blob: await readExportScratch(scratch), filename };
     return {
       blob: buffer.buffer ? new Blob([buffer.buffer], { type: buffer.mime }) : null,
       filename,

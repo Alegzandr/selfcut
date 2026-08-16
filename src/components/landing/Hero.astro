@@ -1,0 +1,73 @@
+---
+import type { LandingStrings } from '../../landing/strings';
+
+interface Props {
+  strings: LandingStrings;
+}
+
+const { strings } = Astro.props;
+---
+
+<div class="hero">
+  <p class="kicker">{strings['hero.kicker']}</p>
+  {/* Carries a <br /> and the <em> that accents the last word. */}
+  <h1 set:html={strings['hero.title']} />
+  <p>{strings['hero.lead']}</p>
+  <div class="hero-cta">
+    <a class="btn btn-primary" href="/app/">{strings['hero.cta']}</a>
+    <span class="hero-note">{strings['hero.note']}</span>
+  </div>
+</div>
+
+<style>
+  .hero {
+    padding-block: clamp(3.5rem, 9vw, 7rem) clamp(2.5rem, 6vw, 4.5rem);
+  }
+
+  .kicker {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  h1 {
+    margin-top: 0.9rem;
+    max-width: 24ch;
+    font-size: clamp(2.5rem, 6.5vw, 4.9rem);
+    line-height: 1.04;
+    font-weight: 800;
+    font-stretch: 116%;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+  /* :global because the <em> comes from the translated string, so it is not
+     in this template and never gets the scoping attribute. */
+  h1 :global(em) {
+    font-style: normal;
+    color: var(--accent);
+  }
+
+  .hero p:not(.kicker) {
+    margin-top: 1.5rem;
+    max-width: var(--measure);
+    font-size: clamp(1.1rem, 1.8vw, 1.3rem);
+    color: var(--muted);
+    text-wrap: pretty;
+  }
+
+  .hero-cta {
+    margin-top: 2.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.25rem;
+  }
+  .hero-cta .btn-primary {
+    padding: 0.9rem 1.7rem;
+    font-size: 1.1rem;
+  }
+  .hero-note {
+    color: var(--faint);
+    font-size: 0.95rem;
+  }
+</style>

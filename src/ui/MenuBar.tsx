@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import logoUrl from '../assets/logo.png';
+// ?url keeps this a plain URL string: Astro otherwise resolves an image
+// import in src/ to an ImageMetadata object, which renders as [object Object].
+import logoUrl from '../assets/logo.png?url';
 import { APP_NAME } from '../app/config';
 import { useEditorCommands } from './commands';
 import { MenuList, type MenuEntry } from './menu/MenuList';

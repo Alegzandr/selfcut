@@ -51,7 +51,7 @@ export function disposeAssetResources(assetId: string): void {
   // Buffers/peaks are keyed per audio track (`${assetId}#…`): drop every entry
   // belonging to this asset, whatever its track index.
   const prefix = `${assetId}#`;
-  for (const key of [...audioPromises.keys()]) if (key.startsWith(prefix)) audioPromises.delete(key);
+  for (const key of [...audioEntries.keys()]) if (key.startsWith(prefix)) audioEntries.delete(key);
   for (const key of [...peaksPromises.keys()]) if (key.startsWith(prefix)) peaksPromises.delete(key);
 }
 
@@ -96,24 +96,163 @@ async function resolveAudioTrack(
   return tracks[audioTrackIndex] ?? (await input.getPrimaryAudioTrack());
 }
 
-const audioPromises = new Map<string, Promise<AudioBuffer | null>>();
+/**
+ * One memoized decode of a single audio track, plus what the budget below needs
+ * to rank it. `bytes` is 0 until the decode resolves - an in-flight entry cannot
+ * be sized, and evicting it would not free anything anyway.
+ */
+interface AudioEntry {
+  promise: Promise<AudioBuffer | null>;
+  bytes: number;
+  /** Monotonic use stamp; see `useStamp`. */
+  lastUsedAt: number;
+  /**
+   * Set for PCM published by a transcode: the source track is undecodable, so
+   * dropping it does not cost a decode but a minutes-long ffmpeg conversion.
+   * Ranked last, exactly like the on-disk cache pins timeline footage.
+   */
+  pinned: boolean;
+}
+
+const audioEntries = new Map<string, AudioEntry>();
+
+/**
+ * A counter rather than a clock: two decodes resolving inside the same
+ * millisecond must still order, and tests must not depend on wall time.
+ */
+let useStamp = 0;
+
+/** Bytes an AudioBuffer occupies: one f32 per sample per channel. */
+function audioBufferBytes(buffer: AudioBuffer): number {
+  return buffer.length * buffer.numberOfChannels * 4;
+}
+
+/**
+ * How much decoded PCM may sit in memory at once.
+ *
+ * Decoded audio is by far the heaviest thing the editor holds: 48 kHz stereo
+ * float is ~23 MB per minute, so a batch import of a dozen ten-minute gameplay
+ * captures used to pin ~2.7 GB before the user had touched anything. Nothing
+ * ever released it (the map was a plain memo, keyed forever), and the first
+ * large allocation after that - the export's output buffer, the offline mix -
+ * failed outright with "Array buffer allocation failed".
+ *
+ * The budget is derived from `deviceMemory` for the same reason the on-disk
+ * cache derives its own from the storage quota: the right number is a property
+ * of the machine, not something the app can guess. The floor keeps a browser
+ * that under-reports (the API caps at 8 GB, and Safari/Firefox omit it) from
+ * disabling the cache outright; the ceiling stops a 64 GB workstation from
+ * handing us a budget large enough to be the problem again.
+ *
+ * Every entry is reconstructible by re-decoding the source, so eviction costs
+ * time, never data - the same rule the transcoded-audio cache is built on.
+ */
+export function audioCacheBudgetBytes(deviceMemoryGb?: number): number {
+  const MIN = 192 * 1024 * 1024;
+  const MAX = 1024 * 1024 * 1024;
+  // A fifth of reported RAM: the tab also holds decoded video frames, the
+  // preview canvases and the project itself, and it is not the only tab open.
+  const share = (deviceMemoryGb ?? 4) * 0.2 * 1024 * 1024 * 1024;
+  return Math.round(Math.min(MAX, Math.max(MIN, share)));
+}
+
+let budget: number | null = null;
+function currentBudget(): number {
+  budget ??= audioCacheBudgetBytes(
+    (navigator as Navigator & { deviceMemory?: number }).deviceMemory,
+  );
+  return budget;
+}
+
+/** Bytes currently held by resolved entries. Exported for the memory tests. */
+export function cachedAudioBytes(): number {
+  let total = 0;
+  for (const entry of audioEntries.values()) total += entry.bytes;
+  return total;
+}
+
+/**
+ * Which keys have to go for the cache to fit in `target`, and nothing more.
+ *
+ * Pure and exported for its own sake, exactly like `selectEvictions` in the
+ * on-disk cache: this is where the policy lives, and testing it through real
+ * AudioBuffers would test the browser's decoder rather than the ranking.
+ *
+ * `keep` is the entry the caller has just resolved - evicting it would make the
+ * decode that triggered this pointless, and the very next request would redo it.
+ */
+export function selectAudioEvictions(
+  entries: Iterable<readonly [string, { bytes: number; lastUsedAt: number; pinned: boolean }]>,
+  target: number,
+  keep?: string,
+): string[] {
+  const all = [...entries];
+  let total = 0;
+  for (const [, entry] of all) total += entry.bytes;
+  if (total <= target) return [];
+
+  const candidates = all
+    // An in-flight decode has nothing to free, and dropping the memo would only
+    // start a second decode of the same track alongside the first.
+    .filter(([key, entry]) => key !== keep && entry.bytes > 0)
+    // Least-recently-used within each tier, unpinned tier first: a pinned entry
+    // is simply last in line, and is only reached when dropping every unpinned
+    // one was not enough.
+    .sort(([, a], [, b]) =>
+      a.pinned !== b.pinned ? Number(a.pinned) - Number(b.pinned) : a.lastUsedAt - b.lastUsedAt,
+    );
+
+  const doomed: string[] = [];
+  for (const [key, entry] of candidates) {
+    if (total <= target) break;
+    doomed.push(key);
+    total -= entry.bytes;
+  }
+  return doomed;
+}
+
+function enforceAudioBudget(keep?: string): void {
+  for (const key of selectAudioEvictions(audioEntries, currentBudget(), keep)) {
+    audioEntries.delete(key);
+  }
+}
 
 /**
  * Decode one audio track of an asset into a single AudioBuffer (memoized per
- * track). Good enough for footage of a few minutes; documented as a v1
- * limitation. `audioTrackIndex` selects a track of a multi-track source.
+ * track, under the budget above). `audioTrackIndex` selects a track of a
+ * multi-track source.
+ *
+ * An evicted track simply decodes again on its next request. Callers that are
+ * holding the buffer (the preview's scheduled sources, an export mix being
+ * assembled) keep it alive through their own reference: eviction drops the
+ * cache's claim on it, never the buffer out from under whoever is using it.
  */
 export function getAudioBuffer(
   asset: MediaAsset,
   audioTrackIndex?: number,
 ): Promise<AudioBuffer | null> {
   const key = audioKey(asset.id, audioTrackIndex);
-  let promise = audioPromises.get(key);
-  if (!promise) {
-    promise = decodeFullAudio(asset, audioTrackIndex).catch(() => null);
-    audioPromises.set(key, promise);
+  const existing = audioEntries.get(key);
+  if (existing) {
+    existing.lastUsedAt = ++useStamp;
+    return existing.promise;
   }
-  return promise;
+  const entry: AudioEntry = {
+    promise: decodeFullAudio(asset, audioTrackIndex).catch(() => null),
+    bytes: 0,
+    lastUsedAt: ++useStamp,
+    pinned: false,
+  };
+  audioEntries.set(key, entry);
+  void entry.promise.then((buffer) => {
+    // The entry can have been dropped while decoding (asset removed, or the
+    // budget swept it): sizing a record nobody holds would resurrect it.
+    if (buffer && audioEntries.get(key) === entry) {
+      entry.bytes = audioBufferBytes(buffer);
+      enforceAudioBudget(key);
+    }
+  });
+  return entry.promise;
 }
 
 async function decodeFullAudio(
@@ -144,16 +283,37 @@ async function decodeFullAudio(
   return target;
 }
 
+/**
+ * Warm decodes run one after another, and only while the cache has room.
+ *
+ * Both halves matter for a batch import. Concurrently, a dozen files decoded at
+ * once turned the import into a several-second freeze and allocated every
+ * buffer before a single one could be ranked for eviction. Unconditionally, the
+ * warm pass filled the cache with footage the user may never play, evicting
+ * whatever they were actually working on - a warm is a head start, so it is the
+ * first thing to give up when memory is tight rather than the last.
+ */
+let warmQueue: Promise<unknown> = Promise.resolve();
+
+function queueWarm(asset: MediaAsset, audioTrackIndex?: number): void {
+  warmQueue = warmQueue.then(async () => {
+    // Re-checked here, not when queued: the entries ahead in the queue are what
+    // fills the cache, so the decision is only meaningful at its turn.
+    if (cachedAudioBytes() >= currentBudget()) return;
+    await getAudioBuffer(asset, audioTrackIndex);
+  }, () => {});
+}
+
 /** Kick off background audio decoding (every playable audio track) right after import. */
 export function warmAudio(asset: MediaAsset): void {
   if (asset.audioTracks.length === 0) {
-    if (asset.hasAudio) void getAudioBuffer(asset);
+    if (asset.hasAudio) queueWarm(asset);
     return;
   }
   // Undecodable tracks would only decode to null: they wait for an explicit
   // transcode, which fills the cache through setTranscodedAudio.
   for (const track of asset.audioTracks) {
-    if (isTrackPlayable(track)) void getAudioBuffer(asset, track.index);
+    if (isTrackPlayable(track)) queueWarm(asset, track.index);
   }
 }
 
@@ -181,9 +341,20 @@ export function setTranscodedAudio(
     ? [audioKey(assetId, audioTrackIndex), audioKey(assetId)]
     : [audioKey(assetId, audioTrackIndex)];
   for (const key of keys) {
-    audioPromises.set(key, Promise.resolve(buffer));
+    // Pinned: unlike a decode, this PCM cannot be reconstructed by asking the
+    // browser again - the track is undecodable, and the only way back is the
+    // minutes-long transcode that produced it.
+    audioEntries.set(key, {
+      promise: Promise.resolve(buffer),
+      bytes: audioBufferBytes(buffer),
+      lastUsedAt: ++useStamp,
+      pinned: true,
+    });
     peaksPromises.set(key, Promise.resolve(peaks));
   }
+  // Both keys address the same buffer, so it is counted twice above; the budget
+  // pass runs once, after both are in.
+  enforceAudioBudget(keys[0]);
   return peaks;
 }
 

@@ -292,6 +292,7 @@
   "errors.export.noAudibleAudio": "Nada para exportar como MP3: nenhum áudio audível no projeto.",
   "errors.export.workerCrashed": "O trabalhador de exportação caiu.",
   "errors.export.workerCrashedDetail": "O trabalhador de exportação travou: {{detail}}",
+  "errors.export.tooLargeForMemory": "Esta exportação é grande demais para este navegador montar na memória. Use o Chrome ou o Edge, que salvam direto em um arquivo, ou escolha uma predefinição mais leve ou uma região mais curta.",
   "errors.media.importFailed": "Não foi possível importar {{name}}",
   "errors.media.invalidDuration": "Duração inválida: {{name}}",
   "errors.media.noCues": "Nenhuma sugestão utilizável em {{name}}",
