@@ -15,8 +15,13 @@
  * degrades to a no-op rather than breaking playback.
  */
 import type { DrawableFrame } from '../media/stillImage';
+import { frameColorSpace, frameTexSource, type TransferKind } from '../media/frameSource';
 import type { ResolvedColor } from '../model';
 import type { Lut } from '../types';
+import { count } from '../perf/probe';
+
+/** `uTransfer` values, matching the branch order in the fragment shader. */
+const TRANSFER_CODE: Record<TransferKind, number> = { srgb: 0, pq: 1, hlg: 2, linear: 3 };
 
 type AnyCanvas = OffscreenCanvas;
 type Ctx2D = OffscreenCanvasRenderingContext2D;
@@ -40,6 +45,72 @@ uniform sampler2D uCurve;
 uniform float uBright, uContrast, uSat, uTemp, uTint, uVignette, uLutAmount, uLutSize, uCurveOn;
 uniform float uKeyOn, uKeySim, uKeySmooth, uKeySpill;
 uniform vec3 uKeyColor;
+// Luma coefficients of the SOURCE, not a constant: BT.709 for HD and up,
+// BT.601 for standard definition, BT.2020 for wide gamut. A fixed 601 matrix on
+// HD footage tilts every desaturation toward red and mis-weights the key.
+uniform vec3 uLuma;
+// 0 = sRGB / BT.709-ish, 1 = PQ, 2 = HLG, 3 = already linear.
+uniform int uTransfer;
+// 1 enables the ordered dither on the 8-bit write.
+uniform float uDither;
+
+// --- Transfer functions -----------------------------------------------------
+// Only the operations that are physically multiplicative in light - white
+// balance and the vignette - cross into linear; the tone controls stay in the
+// display-referred space where their sliders are defined and where every
+// grading tool applies them. Linearizing a contrast S-curve would not make it
+// "more exact", it would make it a different control.
+vec3 srgbToLinear(vec3 c) {
+  c = clamp(c, 0.0, 1.0);
+  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+vec3 linearToSrgb(vec3 c) {
+  c = clamp(c, 0.0, 1.0);
+  return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+}
+// SMPTE ST 2084. Normalized so 1.0 in equals 10000 nits, then scaled to the
+// 100-nit SDR reference so a graded PQ frame lands in the same range as the rest.
+vec3 pqToLinear(vec3 c) {
+  const float m1 = 0.1593017578125, m2 = 78.84375, c1 = 0.8359375, c2 = 18.8515625, c3 = 18.6875;
+  vec3 p = pow(clamp(c, 0.0, 1.0), vec3(1.0 / m2));
+  return pow(max(p - c1, 0.0) / (c2 - c3 * p), vec3(1.0 / m1)) * 100.0;
+}
+vec3 linearToPq(vec3 c) {
+  const float m1 = 0.1593017578125, m2 = 78.84375, c1 = 0.8359375, c2 = 18.8515625, c3 = 18.6875;
+  vec3 y = pow(max(c, 0.0) / 100.0, vec3(m1));
+  return pow((c1 + c2 * y) / (1.0 + c3 * y), vec3(m2));
+}
+// ARIB STD-B67 inverse OETF (scene light, 0..12 range).
+vec3 hlgToLinear(vec3 c) {
+  const float a = 0.17883277, b = 0.28466892, cc = 0.55991073;
+  c = clamp(c, 0.0, 1.0);
+  return mix(c * c / 3.0, (exp((c - cc) / a) + b) / 12.0, step(vec3(0.5), c));
+}
+vec3 linearToHlg(vec3 c) {
+  const float a = 0.17883277, b = 0.28466892, cc = 0.55991073;
+  c = max(c, 0.0);
+  return mix(sqrt(3.0 * c), a * log(12.0 * c - b) + cc, step(vec3(1.0 / 12.0), c));
+}
+vec3 toLinear(vec3 c) {
+  if (uTransfer == 1) return pqToLinear(c);
+  if (uTransfer == 2) return hlgToLinear(c);
+  if (uTransfer == 3) return c;
+  return srgbToLinear(c);
+}
+vec3 fromLinear(vec3 c) {
+  if (uTransfer == 1) return linearToPq(c);
+  if (uTransfer == 2) return linearToHlg(c);
+  if (uTransfer == 3) return c;
+  return linearToSrgb(c);
+}
+
+// Interleaved gradient noise: a screen-space ordered dither with no texture and
+// no visible pattern. Scaled to half a code value, it turns the banding a
+// gentle gradient shows at 8 bits into a noise floor below the eye's threshold.
+float ign(vec2 p) {
+  return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+}
+
 void main() {
   vec4 c = texture(tex, uv);
   vec3 rgb = c.rgb;
@@ -49,10 +120,15 @@ void main() {
   // shadows and highlights on the green screen key as one hue. Green spill on the
   // subject is pulled toward the red/blue max, the standard suppression.
   if (uKeyOn > 0.5) {
-    float ky = dot(uKeyColor, vec3(0.299, 0.587, 0.114));
-    vec2 kcc = vec2((uKeyColor.b - ky) / 1.772, (uKeyColor.r - ky) / 1.402);
-    float py = dot(rgb, vec3(0.299, 0.587, 0.114));
-    vec2 pcc = vec2((rgb.b - py) / 1.772, (rgb.r - py) / 1.402);
+    // The Cb/Cr scale factors follow from the luma coefficients themselves
+    // (Cb = (B-Y)/2(1-Kb), Cr = (R-Y)/2(1-Kr)), so the plane the key matches in
+    // is the source's own chroma plane whatever its matrix.
+    float kb = 2.0 * (1.0 - uLuma.b);
+    float kr = 2.0 * (1.0 - uLuma.r);
+    float ky = dot(uKeyColor, uLuma);
+    vec2 kcc = vec2((uKeyColor.b - ky) / kb, (uKeyColor.r - ky) / kr);
+    float py = dot(rgb, uLuma);
+    vec2 pcc = vec2((rgb.b - py) / kb, (rgb.r - py) / kr);
     float dist = distance(pcc, kcc);
     alpha *= smoothstep(uKeySim, uKeySim + uKeySmooth + 0.001, dist);
     if (uKeySpill > 0.0) {
@@ -69,12 +145,31 @@ void main() {
     vec3 graded = texture(uLut, luv).rgb;
     rgb = mix(rgb, graded, uLutAmount);
   }
-  rgb += uBright;                              // exposure
-  rgb.r += uTemp * 0.12;                        // white balance: warm/cool
-  rgb.b -= uTemp * 0.12;
-  rgb.g += uTint * 0.12;                        // green/magenta
+  rgb += uBright;                               // brightness: a display lift
+
+  // --- Linear light -----------------------------------------------------
+  if (uTemp != 0.0 || uTint != 0.0 || uVignette > 0.0) {
+    vec3 lin = toLinear(rgb);
+    if (uTemp != 0.0 || uTint != 0.0) {
+      // White balance is a set of channel GAINS - what a sensor's white point
+      // actually is - not an offset. An offset in the encoded signal lifts the
+      // blacks, which is why a cooled shot used to come back with blue shadows.
+      vec3 gain = vec3(exp2(uTemp * 0.5), exp2(uTint * 0.35), exp2(-uTemp * 0.5));
+      // Renormalized on the source's own luma, so moving the slider changes the
+      // colour of white and not its brightness.
+      lin *= gain / max(dot(uLuma, gain), 1e-4);
+    }
+    if (uVignette > 0.0) {
+      float d = distance(uv, vec2(0.5));
+      float v = smoothstep(0.75, 0.35, d);      // 1 at centre, 0 at corners
+      lin *= mix(1.0, v, uVignette);            // a light falloff, so: in light
+    }
+    rgb = fromLinear(lin);
+  }
+  // --- Back in the display-referred space -------------------------------
+
   rgb = (rgb - 0.5) * (1.0 + uContrast) + 0.5;  // contrast around mid grey
-  float luma = dot(rgb, vec3(0.299, 0.587, 0.114));
+  float luma = dot(rgb, uLuma);
   rgb = mix(vec3(luma), rgb, 1.0 + uSat);       // saturation
   // Tone curves: a 256-wide 1D LUT holding the per-channel curves in RGB and the
   // master curve in A. Per-channel first, then the master over the result — the
@@ -88,11 +183,9 @@ void main() {
     rgb.g = texture(uCurve, vec2(rgb.g, 0.5)).a;
     rgb.b = texture(uCurve, vec2(rgb.b, 0.5)).a;
   }
-  if (uVignette > 0.0) {
-    float d = distance(uv, vec2(0.5));
-    float v = smoothstep(0.75, 0.35, d);        // 1 at centre, 0 at corners
-    rgb *= mix(1.0, v, uVignette);
-  }
+  // The whole pass ran at float precision; this is the one quantization, so it
+  // is the one place worth spending half a code value of noise on.
+  rgb += uDither * (ign(gl_FragCoord.xy) - 0.5) / 255.0;
   outColor = vec4(clamp(rgb, 0.0, 1.0), alpha);
 }`;
 
@@ -111,6 +204,9 @@ interface Uniforms {
   uKeySim: WebGLUniformLocation | null;
   uKeySmooth: WebGLUniformLocation | null;
   uKeySpill: WebGLUniformLocation | null;
+  uLuma: WebGLUniformLocation | null;
+  uTransfer: WebGLUniformLocation | null;
+  uDither: WebGLUniformLocation | null;
 }
 
 /**
@@ -143,11 +239,23 @@ class ColorGrader {
   private gl: WebGL2RenderingContext;
   private uniforms: Uniforms;
   private texture: WebGLTexture;
-  /** Scratch 2D canvas the frame is rasterized into before upload. */
-  private scratch: AnyCanvas;
-  private scratchCtx: Ctx2D;
+  /**
+   * Scratch 2D canvas a frame is rasterized into before upload, for the frames
+   * that cannot be handed to the GPU directly (rotated samples). Null until one
+   * turns up, which on most projects is never.
+   */
+  private scratch: AnyCanvas | null = null;
+  private scratchCtx: Ctx2D | null = null;
   private w = 0;
   private h = 0;
+  /**
+   * False once a half-float upload has been refused by the driver, so a
+   * high-bit-depth source falls back to 8 bits permanently instead of throwing
+   * on every frame.
+   */
+  private halfFloatOk = true;
+  /** Internal format the frame texture currently holds, so a switch re-allocates. */
+  private texIsHalfFloat = false;
   /** Uploaded LUTs, keyed by `Lut.id`. Built on first use, kept for the session. */
   private lutTextures = new Map<string, { tex: WebGLTexture; size: number }>();
   /** Bound when no LUT is active, so the `sampler3D` always has a valid texture. */
@@ -203,10 +311,29 @@ class ColorGrader {
       uKeySim: gl.getUniformLocation(program, 'uKeySim'),
       uKeySmooth: gl.getUniformLocation(program, 'uKeySmooth'),
       uKeySpill: gl.getUniformLocation(program, 'uKeySpill'),
+      uLuma: gl.getUniformLocation(program, 'uLuma'),
+      uTransfer: gl.getUniformLocation(program, 'uTransfer'),
+      uDither: gl.getUniformLocation(program, 'uDither'),
     };
+    gl.uniform1f(this.uniforms.uDither, 1);
+  }
 
-    this.scratch = new OffscreenCanvas(1, 1);
-    this.scratchCtx = this.scratch.getContext('2d')!;
+  /**
+   * The 2D canvas a frame is rasterized into when it cannot be uploaded
+   * directly. Built on first need: a session whose footage all uploads straight
+   * to the GPU - every unrotated video sample and every still - never allocates
+   * a full-frame scratch at all.
+   */
+  private ensureScratch(w: number, h: number): Ctx2D | null {
+    if (!this.scratch) {
+      this.scratch = new OffscreenCanvas(w, h);
+      this.scratchCtx = this.scratch.getContext('2d');
+    }
+    if (this.scratch.width !== w || this.scratch.height !== h) {
+      this.scratch.width = w;
+      this.scratch.height = h;
+    }
+    return this.scratchCtx;
   }
 
   /**
@@ -262,19 +389,61 @@ class ColorGrader {
     this.h = h;
     this.canvas.width = w;
     this.canvas.height = h;
-    this.scratch.width = w;
-    this.scratch.height = h;
     this.gl.viewport(0, 0, w, h);
+  }
+
+  /**
+   * Get the frame onto the GPU.
+   *
+   * The fast path hands WebGL the decoded frame itself - a `VideoFrame` or an
+   * `ImageBitmap` - which the driver uploads (and colour-converts) without the
+   * frame ever being rasterized into a canvas and read back. That removes a
+   * full-frame copy AND a full-frame 8-bit quantization per graded clip per
+   * frame; at 4K it is ~33 MB of traffic per clip per frame that no longer
+   * happens.
+   *
+   * The slow path exists for frames whose rotation metadata only `draw` honours.
+   */
+  private upload(sample: DrawableFrame, w: number, h: number, highDepth: boolean): boolean {
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+
+    const wantHalf = highDepth && this.halfFloatOk;
+    // A format change re-specifies the whole texture, so it must not be done
+    // per frame: it is driven by the source, which is stable for a clip.
+    if (wantHalf !== this.texIsHalfFloat) this.texIsHalfFloat = wantHalf;
+
+    const direct = frameTexSource(sample);
+    const source = direct ?? this.rasterize(sample, w, h);
+    if (!source) return false;
+    count(direct ? 'texUploadDirect' : 'texUploadCopy');
+    if (wantHalf) {
+      try {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, source);
+        return true;
+      } catch {
+        // Some drivers reject a DOM-source upload into a half-float texture.
+        // Note it once and never pay the exception again.
+        this.halfFloatOk = false;
+        this.texIsHalfFloat = false;
+      }
+    }
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    return true;
+  }
+
+  private rasterize(sample: DrawableFrame, w: number, h: number): AnyCanvas | null {
+    const ctx = this.ensureScratch(w, h);
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, w, h);
+    sample.draw(ctx, 0, 0, w, h, 0, 0, w, h);
+    return this.scratch;
   }
 
   grade(sample: DrawableFrame, w: number, h: number, adj: ResolvedColor): AnyCanvas | null {
     if (w <= 0 || h <= 0) return null;
     this.resize(w, h);
-    // Rasterize the frame into the scratch canvas, then upload it as a texture:
-    // DrawableFrame only exposes a 2D draw, so this is the one universal path
-    // that works for video samples and still images alike.
-    this.scratchCtx.clearRect(0, 0, w, h);
-    sample.draw(this.scratchCtx, 0, 0, w, h, 0, 0, w, h);
 
     const gl = this.gl;
 
@@ -302,9 +471,14 @@ class ColorGrader {
       gl.uniform1f(this.uniforms.uKeySpill, key.spill);
     }
 
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.scratch);
+    // The source's own colour description drives the luma matrix and the
+    // transfer function, so a BT.709 clip and a BT.601 clip are not graded with
+    // the same maths just because they happen to be in the same timeline.
+    const cs = frameColorSpace(sample);
+    gl.uniform3f(this.uniforms.uLuma, cs.luma.r, cs.luma.g, cs.luma.b);
+    gl.uniform1i(this.uniforms.uTransfer, TRANSFER_CODE[cs.transfer]);
+
+    if (!this.upload(sample, w, h, cs.highBitDepth)) return null;
     gl.uniform1f(this.uniforms.uBright, adj.brightness);
     gl.uniform1f(this.uniforms.uContrast, adj.contrast);
     gl.uniform1f(this.uniforms.uSat, adj.saturation);
@@ -386,21 +560,76 @@ function buildProgram(gl: WebGL2RenderingContext): WebGLProgram {
   return program;
 }
 
-// null once initialisation has failed (no WebGL2), so we never retry every frame.
+/**
+ * The grader for this thread, and the state machine around building it.
+ *
+ * A GPU context is not a thing you get once. It is lost when the driver resets,
+ * when the tab is backgrounded on some machines, or when another tab exhausts
+ * the GPU process - and it comes back. Latching "we tried once, it failed" would
+ * mean a single driver hiccup silently ungraded every clip for the rest of the
+ * session, with the picture quietly wrong rather than visibly broken.
+ *
+ * So: a lost context tears the grader down and the next frame rebuilds it. A
+ * genuine absence of WebGL2 (`unsupported`) is the only permanent state, and
+ * a build that throws backs off rather than retrying 60 times a second.
+ */
+type GraderState = 'idle' | 'ready' | 'unsupported' | 'backoff';
+
 let grader: ColorGrader | null = null;
-let tried = false;
+let graderState: GraderState = 'idle';
+/** Earliest time a `backoff` state may try again (performance.now()). */
+let retryAfter = 0;
+/** Backoff between rebuild attempts: long enough that a hard failure is not a per-frame cost. */
+const REBUILD_BACKOFF_MS = 2000;
+
+/** Observable for the UI: how many times the context has been lost this session. */
+let contextLosses = 0;
+export function graderContextLosses(): number {
+  return contextLosses;
+}
+
+/** Drop the grader so the next frame rebuilds it. Exported for tests. */
+export function resetGrader(): void {
+  grader = null;
+  graderState = 'idle';
+  retryAfter = 0;
+}
 
 function getGrader(): ColorGrader | null {
-  if (tried) return grader;
-  tried = true;
+  if (graderState === 'ready') return grader;
+  if (graderState === 'unsupported') return null;
+  if (graderState === 'backoff' && performance.now() < retryAfter) return null;
   try {
-    if (typeof OffscreenCanvas === 'undefined') return null;
+    if (typeof OffscreenCanvas === 'undefined') {
+      graderState = 'unsupported';
+      return null;
+    }
     const canvas = new OffscreenCanvas(1, 1);
     const gl = canvas.getContext('webgl2', { premultipliedAlpha: false });
-    if (!gl) return null;
+    if (!gl) {
+      graderState = 'unsupported';
+      return null;
+    }
+    // `webglcontextlost` must be cancelled for the context to ever be restored;
+    // without preventDefault the browser will not fire `webglcontextrestored`.
+    canvas.addEventListener('webglcontextlost', (event) => {
+      event.preventDefault();
+      contextLosses++;
+      grader = null;
+      graderState = 'idle';
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      // The old ColorGrader holds dead texture and program handles; a rebuild
+      // from `idle` on the next frame is the only safe recovery.
+      grader = null;
+      graderState = 'idle';
+    });
     grader = new ColorGrader(gl, canvas);
+    graderState = 'ready';
   } catch {
     grader = null;
+    graderState = 'backoff';
+    retryAfter = performance.now() + REBUILD_BACKOFF_MS;
   }
   return grader;
 }
@@ -422,6 +651,11 @@ export function gradeFrame(
   try {
     return g.grade(sample, w, h, adj);
   } catch {
+    // A throw here is the context dying mid-frame in all but name: drop the
+    // grader so the next frame rebuilds instead of failing forever.
+    grader = null;
+    graderState = 'backoff';
+    retryAfter = performance.now() + REBUILD_BACKOFF_MS;
     return null;
   }
 }

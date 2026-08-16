@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AnimatePresence, motion } from 'framer-motion';
-import { PlugZap, UploadCloud, X, Zap } from 'lucide-react';
+import { AnimatePresence, m } from 'framer-motion';
+import { HardDriveDownload, PlugZap, UploadCloud, X, Zap } from 'lucide-react';
 import { useStore } from './store/store';
 import { initPersistence } from './lib/persistence';
-import { unbindProjectFile } from './lib/projectFile';
+import { saveProjectFile, unbindProjectFile } from './lib/projectFile';
+import { HEALTHY, getSaveHealth, subscribeSaveHealth } from './lib/saveHealth';
 import { openFolderPicker, openMediaPicker } from './ui/mediaPicker';
 import { MenuBar } from './ui/MenuBar';
 import { TopBar } from './ui/TopBar';
@@ -33,6 +34,7 @@ import { A11yAnnouncer } from './ui/A11yAnnouncer';
 import { useEditorHotkeys } from './ui/useEditorHotkeys';
 import { useIsCoarsePointer } from './lib/device';
 import { isSoftwareRendering } from './lib/gpu';
+import { PerfOverlay } from './perf/PerfOverlay';
 
 const PREVIEW_FRAC_KEY = 'selfcut.previewFrac';
 const DEFAULT_PREVIEW_FRAC = 0.42;
@@ -127,6 +129,7 @@ export default function App() {
       {!coarse && <MenuBar />}
       <TopBar />
       <SoftwareRenderingBanner />
+      <SaveFailureBanner />
       <DisconnectedBanner />
       <div
         className="flex flex-none border-b border-zinc-800"
@@ -140,6 +143,7 @@ export default function App() {
           <Scopes />
           <ScopesMenu />
           <PreviewQualityMenu />
+          <PerfOverlay />
         </div>
         {!coarse && <Inspector />}
       </div>
@@ -161,7 +165,7 @@ export default function App() {
 
       <AnimatePresence>
         {dragging && !droppingOnTimeline && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -169,7 +173,7 @@ export default function App() {
           >
             <UploadCloud className="h-12 w-12 text-sky-400" />
             <p className="text-sm font-medium text-sky-200">{t('app.drop.title')}</p>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>
@@ -208,6 +212,41 @@ function SoftwareRenderingBanner() {
         }}
       >
         <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Persistence warning: shown for as long as local saving is failing.
+ *
+ * A toast would be wrong here. Storage that is full or blocked stays full or
+ * blocked, and the consequence - work that is not being saved - lasts as long
+ * as the session does. So the warning lasts too, and it carries the one action
+ * that actually rescues the work: writing the project out to a real file.
+ */
+function SaveFailureBanner() {
+  const { t } = useTranslation();
+  const health = useSyncExternalStore(subscribeSaveHealth, getSaveHealth, () => HEALTHY);
+  if (!health.failing) return null;
+
+  return (
+    <div
+      role="status"
+      className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100"
+    >
+      <HardDriveDownload className="h-4 w-4 flex-none text-rose-300" aria-hidden="true" />
+      <span className="min-w-0 flex-1">{t('save.failing.message')}</span>
+      <button
+        className="flex-none rounded bg-rose-400/20 px-2.5 py-1 font-medium text-rose-100 hover:bg-rose-400/30"
+        onClick={() => {
+          const { project, assets } = useStore.getState();
+          void saveProjectFile(project, assets, true).catch(() => {
+            /* the picker was dismissed, or the write failed: the banner stays */
+          });
+        }}
+      >
+        {t('save.failing.action')}
       </button>
     </div>
   );
@@ -287,7 +326,7 @@ function ImportingBadge() {
   return (
     <AnimatePresence>
       {importing && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
@@ -295,7 +334,7 @@ function ImportingBadge() {
         >
           <span className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
           {importStatus ?? t('app.importing')}
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   );

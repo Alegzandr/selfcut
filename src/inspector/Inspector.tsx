@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Trash2, X } from 'lucide-react';
 import { useStore, getSelectedClip } from '../store/store';
@@ -125,7 +125,7 @@ export function Inspector() {
   return (
     <AnimatePresence>
       {show && (
-        <motion.div
+        <m.div
           key={showSubtitles ? 'subtitles' : clip!.id}
           initial={{ y: '110%' }}
           animate={{ y: 0 }}
@@ -147,7 +147,7 @@ export function Inspector() {
               />
             )
           )}
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   );

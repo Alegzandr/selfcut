@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { m, useReducedMotion } from 'framer-motion';
 
 /**
  * Close a popover on Escape or on a pointer press outside of it. Bound to the
@@ -34,7 +34,7 @@ export function useDismissOnOutside(
 
 /**
  * The chrome of a dropdown panel: border, blurred background, shadow, and the
- * open/close motion. Positioning stays with the caller, since only it knows
+ * open/close m. Positioning stays with the caller, since only it knows
  * which edge the panel has room to grow from.
  *
  * `from` is the side the panel is anchored to, so it slides *out* of its
@@ -52,7 +52,7 @@ export function MenuPanel({
   const reduce = useReducedMotion();
   const offset = from === 'top' ? -4 : 4;
   return (
-    <motion.div
+    <m.div
       role="menu"
       className={`absolute z-40 max-w-[calc(100vw-1rem)] rounded-lg border border-zinc-700 bg-zinc-900/95 p-1 shadow-xl shadow-black/50 backdrop-blur ${className}`}
       initial={reduce ? { opacity: 0 } : { opacity: 0, y: offset }}
@@ -61,6 +61,6 @@ export function MenuPanel({
       transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }

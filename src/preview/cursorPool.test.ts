@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_LIVE_CURSORS, selectCursorEvictions } from './cursorPool';
+import {
+  MAX_LIVE_CURSORS,
+  MIN_LIVE_CURSORS,
+  cursorBudgetBytes,
+  frameBytes,
+  maxLiveCursors,
+  selectCursorEvictions,
+} from './cursorPool';
 
 const keep = (...ids: string[]) => new Set(ids);
 
@@ -37,5 +44,69 @@ describe('selectCursorEvictions', () => {
     // Oldest first: the clips at the head of the timeline go before the ones
     // just behind the playhead.
     expect(doomed[0]).toBe('clip-0');
+  });
+});
+
+describe('cursorBudgetBytes', () => {
+  it('scales with the memory the device reports', () => {
+    expect(cursorBudgetBytes(8)).toBeGreaterThan(cursorBudgetBytes(2));
+  });
+
+  it('assumes a mid-range machine when the browser will not say', () => {
+    // Firefox and Safari do not expose deviceMemory. Assuming the worst would
+    // cripple them; assuming the best would let them run out of memory.
+    expect(cursorBudgetBytes(undefined)).toBe(cursorBudgetBytes(4));
+  });
+
+  it('never goes below a floor a 4K crossfade can still use', () => {
+    expect(cursorBudgetBytes(0.25)).toBeGreaterThanOrEqual(96 * 1024 * 1024);
+  });
+
+  it('never grows past a ceiling, however much RAM is reported', () => {
+    expect(cursorBudgetBytes(1024)).toBeLessThanOrEqual(768 * 1024 * 1024);
+  });
+});
+
+describe('frameBytes', () => {
+  it('sizes a 4K 4:2:0 frame at about 12 MB', () => {
+    expect(frameBytes(3840, 2160) / (1024 * 1024)).toBeCloseTo(11.9, 1);
+  });
+
+  it('sizes a 1080p frame at about 3 MB', () => {
+    expect(frameBytes(1920, 1080) / (1024 * 1024)).toBeCloseTo(3, 1);
+  });
+
+  it('takes a larger per-pixel cost for deeper sources', () => {
+    expect(frameBytes(1920, 1080, 3)).toBe(frameBytes(1920, 1080, 1.5) * 2);
+  });
+});
+
+describe('maxLiveCursors', () => {
+  it('holds fewer 4K cursors than HD ones on the same machine', () => {
+    // The whole point: the old fixed count of 8 meant ~200 MB of 4K frames or
+    // ~25 MB of 720p ones, and called both "eight".
+    const uhd = maxLiveCursors(frameBytes(3840, 2160), 1);
+    const hd = maxLiveCursors(frameBytes(1280, 720), 1);
+    expect(uhd).toBeLessThan(hd);
+  });
+
+  it('holds more on a machine with more memory', () => {
+    expect(maxLiveCursors(frameBytes(3840, 2160), 8)).toBeGreaterThanOrEqual(
+      maxLiveCursors(frameBytes(3840, 2160), 1),
+    );
+  });
+
+  it('never drops below what a crossfade on two stacked tracks needs', () => {
+    // Four clips can be on screen at one instant. Evicting one of them would
+    // dispose a decoder the very next frame asks for.
+    expect(maxLiveCursors(frameBytes(7680, 4320), 0.25)).toBeGreaterThanOrEqual(MIN_LIVE_CURSORS);
+  });
+
+  it('never exceeds what a browser will decode in parallel', () => {
+    expect(maxLiveCursors(frameBytes(320, 240), 8)).toBeLessThanOrEqual(MAX_LIVE_CURSORS);
+  });
+
+  it('survives a nonsense frame size without returning Infinity', () => {
+    expect(maxLiveCursors(0, 4)).toBe(MAX_LIVE_CURSORS);
   });
 });

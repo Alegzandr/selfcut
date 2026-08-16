@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { X } from 'lucide-react';
 // ?url keeps this a plain URL string: Astro otherwise resolves an image
 // import in src/ to an ImageMetadata object, which renders as [object Object].
@@ -35,14 +35,14 @@ export function About() {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={() => setAboutOpen(false)}
         >
-          <motion.div
+          <m.div
             initial={{ scale: 0.96, y: 8 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.96, y: 8 }}
@@ -76,8 +76,8 @@ export function About() {
                 {t('about.tagline')}
               </p>
             </div>
-          </motion.div>
-        </motion.div>
+          </m.div>
+        </m.div>
       )}
     </AnimatePresence>
   );

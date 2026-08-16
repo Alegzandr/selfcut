@@ -1,4 +1,5 @@
-import { CanvasSink, Input } from 'mediabunny';
+import type { CanvasSink, Input } from 'mediabunny';
+import { mediabunny } from './mediabunnyModule';
 import { AudioTrackInfo, MediaAsset, isTrackPlayable } from '../types';
 import { uid } from '../lib/id';
 import { IMAGE_CLIP_DEFAULT_MS } from '../app/config';
@@ -132,7 +133,7 @@ export async function probeFile(
   // the same source is recognized as a duplicate rather than remuxed afresh.
   let originalSource: MediaAsset['originalSource'];
 
-  let input = createInput(file);
+  let input = await createInput(file);
   if (!(await input.canRead())) {
     input.dispose();
     const source = { name: file.name, size: file.size, lastModified: file.lastModified };
@@ -157,7 +158,7 @@ export async function probeFile(
     if (!remuxed) throw new Error(t('errors.media.unsupportedFormat', { name: file.name }));
     file = remuxed;
     originalSource = source;
-    input = createInput(file);
+    input = await createInput(file);
     // A remux that ffmpeg reported as successful but mediabunny still cannot read
     // is not something the pipeline can use: treat it as the unsupported file it
     // effectively is rather than carry a half-broken asset forward.
@@ -324,7 +325,7 @@ export function ensureAssetVisuals(asset: MediaAsset, sink: AssetVisualsSink): v
 
 async function extractAssetThumbnails(asset: MediaAsset): Promise<string[]> {
   try {
-    const track = await getInput(asset).getPrimaryVideoTrack();
+    const track = await (await getInput(asset)).getPrimaryVideoTrack();
     if (!track) return [];
     const count = targetThumbnailCount(asset.durationMs);
     const timestamps = Array.from(
@@ -346,7 +347,8 @@ async function extractThumbnails(
   const aspect = asset.width && asset.height ? asset.width / asset.height : 16 / 9;
   const w = 160;
   const h = Math.max(16, Math.round(w / aspect));
-  const sink = new CanvasSink(videoTrack, { width: w, height: h, fit: 'cover' });
+  const { CanvasSink: CanvasSinkCtor } = await mediabunny();
+  const sink = new CanvasSinkCtor(videoTrack, { width: w, height: h, fit: 'cover' });
 
   const out: string[] = [];
   const scratch = document.createElement('canvas');

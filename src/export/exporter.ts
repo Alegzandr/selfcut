@@ -8,7 +8,28 @@ import { scheduleProjectAudio } from '../preview/audioMix';
 import { openExportScratch, readExportScratch } from '../lib/opfs';
 import { flushProjectSave } from '../lib/persistence';
 import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
-import { ExportErrorCode, ExportRequest, WorkerReply } from './protocol';
+import { perfEnabled, type PerfSnapshot } from '../perf/probe';
+import {
+  type AudioMixInfo,
+  type ExportEncoderInfo,
+  ExportErrorCode,
+  ExportRequest,
+  WorkerReply,
+} from './protocol';
+
+/** Rarely-used knobs on a render. */
+export interface ExportOptions {
+  /**
+   * Render on a single worker instead of fanning out.
+   *
+   * The fanned-out path is the default because it is several times faster on
+   * any machine with cores to spare, but it holds one encoder session and a
+   * slice buffer per worker: forcing it off is the escape hatch for a machine
+   * that cannot afford that, and the control the perf suite uses to compare the
+   * two paths on identical input.
+   */
+  noParallel?: boolean;
+}
 
 export interface ExportHandle {
   /**
@@ -89,7 +110,22 @@ function estimatedOutputBytes(preset: ExportPreset, durationMs: number): number 
 const ERROR_KEYS = {
   noAudibleAudio: 'errors.export.noAudibleAudio',
   videoEncoderUnsupported: 'errors.export.videoEncoderUnsupported',
+  // Handled by retrying serially rather than shown, but a key is still needed:
+  // if the retry itself somehow reports it, the user gets a sentence and not a
+  // blank error.
+  segmentMismatch: 'errors.export.workerCrashed',
 } as const satisfies Record<ExportErrorCode, string>;
+
+/**
+ * A failure the worker classified. Carries the code as well as the message, so
+ * `segmentMismatch` can be acted on instead of merely displayed.
+ */
+class ExportWorkerError extends Error {
+  constructor(readonly code: ExportErrorCode) {
+    super(t(ERROR_KEYS[code]));
+    this.name = 'ExportWorkerError';
+  }
+}
 
 /**
  * A worker crash is not a business failure: the browser hands us an untranslated
@@ -113,6 +149,7 @@ export function startExport(
   preset: ExportPreset,
   onProgress: (value: number) => void,
   region?: LoopRegion | null,
+  options?: ExportOptions,
 ): ExportHandle {
   let worker: Worker | null = null;
   let canceled = false;
@@ -188,10 +225,12 @@ export function startExport(
     }
 
     onProgress(0.02);
-    const audio = await renderAudioMix(project, assets, startMs, durationMs);
+    // Decodes the sources the mix needs and works out its shape; the samples
+    // themselves are rendered slice by slice, as the worker asks for them.
+    const mix = await prepareAudioMix(project, assets, startMs, durationMs);
     if (canceled) throw new Error(t('errors.export.canceled'));
     onProgress(0.1);
-    if (preset.kind === 'mp3' && !audio) {
+    if (preset.kind === 'mp3' && !mix) {
       throw new Error(t(ERROR_KEYS.noAudibleAudio));
     }
 
@@ -235,36 +274,84 @@ export function startExport(
       }
     }
 
-    worker = new Worker(new URL('./exportWorker.ts', import.meta.url), { type: 'module' });
-    const request: ExportRequest = {
-      type: 'export',
-      project,
-      files,
-      stills,
-      preset: resolvedPreset,
-      startMs,
-      durationMs,
-      audio,
-      fileHandle,
+    /**
+     * Run one render in a fresh worker.
+     *
+     * `stills` are CLONED rather than transferred: a transfer detaches the
+     * bitmaps here, and the serial retry below needs to hand them over a second
+     * time. There are at most a handful of them and they are the only thing in
+     * the request that is not already shared, so the copy is cheaper than the
+     * bookkeeping that would avoid it.
+     */
+    const runWorker = (noParallel: boolean): Promise<{ buffer: ArrayBuffer | null; mime: string }> => {
+      worker = new Worker(new URL('./exportWorker.ts', import.meta.url), { type: 'module' });
+      const request: ExportRequest = {
+        type: 'export',
+        project,
+        files,
+        stills,
+        preset: resolvedPreset,
+        startMs,
+        durationMs,
+        audio: mix?.info ?? null,
+        fileHandle,
+        measure: perfEnabled(),
+        ...(noParallel ? { noParallel: true } : {}),
+      };
+      return new Promise((resolve, reject) => {
+        rejectWorkerReply = reject;
+        worker!.onmessage = (e: MessageEvent<WorkerReply>) => {
+          const msg = e.data;
+          if (msg.type === 'progress') onProgress(0.1 + msg.value * 0.9);
+          else if (msg.type === 'perf') lastPerf = msg.snapshot;
+          else if (msg.type === 'needAudio') void serveAudio(msg.offset, msg.frames);
+          else if (msg.type === 'encoder') lastEncoder = msg;
+          else if (msg.type === 'done') resolve({ buffer: msg.buffer, mime: msg.mime });
+          else if (msg.type === 'error') reject(new ExportWorkerError(msg.code));
+          else reject(crashError(msg.detail));
+        };
+        worker!.onerror = (e) => reject(crashError(e.message));
+        // One slice of the mix, rendered now that the encoder is ready for it
+        // and transferred (not copied) into the worker. A failure here truncates
+        // the soundtrack rather than losing the whole render.
+        const serveAudio = async (offset: number, frames: number): Promise<void> => {
+          const target = worker;
+          if (!target || !mix) return;
+          try {
+            const channels = await mix.render(offset, frames);
+            if (worker !== target) return;
+            target.postMessage(
+              { type: 'audioChunk', offset, channels },
+              channels.map((c) => c.buffer as ArrayBuffer),
+            );
+          } catch (err) {
+            console.warn('[export] audio slice failed, truncating the mix:', err);
+            if (worker === target) target.postMessage({ type: 'audioFailed', offset });
+          }
+        };
+        worker!.postMessage(request);
+      });
     };
 
-    const buffer = await new Promise<{ buffer: ArrayBuffer | null; mime: string }>((resolve, reject) => {
-      rejectWorkerReply = reject;
-      worker!.onmessage = (e: MessageEvent<WorkerReply>) => {
-        const msg = e.data;
-        if (msg.type === 'progress') onProgress(0.1 + msg.value * 0.9);
-        else if (msg.type === 'done') resolve({ buffer: msg.buffer, mime: msg.mime });
-        else if (msg.type === 'error') reject(new Error(t(ERROR_KEYS[msg.code])));
-        else reject(crashError(msg.detail));
-      };
-      worker!.onerror = (e) => reject(crashError(e.message));
-      const transfer: Transferable[] = audio
-        ? audio.channels.map((c) => c.buffer as ArrayBuffer)
-        : [];
-      transfer.push(...Object.values(stills));
-      worker!.postMessage(request, transfer);
-    });
+    let buffer: { buffer: ArrayBuffer | null; mime: string };
+    try {
+      buffer = await runWorker(!!options?.noParallel);
+    } catch (err) {
+      // Two identically configured encoders disagreed on their parameter sets,
+      // so their slices cannot be concatenated. Never observed in practice, but
+      // the consequence would be a file that decodes garbage halfway through -
+      // so the render restarts on one worker instead.
+      if (!(err instanceof ExportWorkerError) || err.code !== 'segmentMismatch') throw err;
+      console.warn('[export] segment encoders disagreed, re-rendering serially');
+      // Cast: nothing in this function body assigns `worker`, so control-flow
+      // analysis still believes it is null - `runWorker` sets it from inside a
+      // closure that the analysis cannot follow.
+      (worker as Worker | null)?.terminate();
+      worker = null;
+      buffer = await runWorker(true);
+    }
     rejectWorkerReply = null;
+    for (const bitmap of Object.values(stills)) bitmap.close();
 
     onProgress(1);
     // Three destinations, one return shape. A render into the file the user
@@ -303,13 +390,58 @@ export function startExport(
   };
 }
 
-/** Render the exported span of the project audio mix with an OfflineAudioContext. */
-async function renderAudioMix(
+/**
+ * The audio side of an export, rendered on demand.
+ *
+ * The mix is produced by an `OfflineAudioContext`, which only exists on the
+ * main thread. It does NOT have to exist all at once: rendering the exported
+ * span in slices and handing them over as the encoder asks for them keeps the
+ * peak at one slice instead of the whole timeline. An hour of stereo 48 kHz is
+ * 690 MB as one block, and 1.9 MB a slice at a time.
+ *
+ * Slice boundaries are exact sample counts, so nothing drifts: slice `n` starts
+ * at sample `offset` and the timeline position it renders from is derived from
+ * that sample, not accumulated.
+ */
+class AudioMixRenderer {
+  constructor(
+    private readonly project: Project,
+    private readonly buffers: Map<string, AudioBuffer | null>,
+    private readonly startMs: number,
+    readonly info: AudioMixInfo,
+  ) {}
+
+  async render(offset: number, frames: number): Promise<Float32Array[]> {
+    const ctx = new OfflineAudioContext(
+      this.info.channelCount,
+      Math.max(1, frames),
+      this.info.sampleRate,
+    );
+    // Seeking the mix to this slice is exactly what the preview does on every
+    // scrub, so clip fades, crossfades and envelopes land at the same absolute
+    // timeline positions they would in one continuous render.
+    scheduleProjectAudio(
+      ctx,
+      ctx.destination,
+      this.project,
+      (id, audioTrackIndex) => this.buffers.get(audioKey(id, audioTrackIndex)) ?? null,
+      this.startMs + (offset / this.info.sampleRate) * 1000,
+      0,
+    );
+    const rendered = await ctx.startRendering();
+    const channels: Float32Array[] = [];
+    for (let ch = 0; ch < this.info.channelCount; ch++) channels.push(rendered.getChannelData(ch));
+    return channels;
+  }
+}
+
+/** Prepare the mix: decode every source it needs, and describe its shape. */
+async function prepareAudioMix(
   project: Project,
   assets: Record<string, MediaAsset>,
   startMs: number,
   durationMs: number,
-): Promise<{ channels: Float32Array[]; sampleRate: number } | null> {
+): Promise<AudioMixRenderer | null> {
   const buffers = new Map<string, AudioBuffer | null>();
   const pending: Promise<void>[] = [];
   let hasAudibleClip = false;
@@ -347,22 +479,39 @@ async function renderAudioMix(
   await Promise.all(pending);
   if (![...buffers.values()].some(Boolean)) return null;
 
-  const length = Math.max(1, Math.ceil((durationMs / 1000) * AUDIO_SAMPLE_RATE));
-  const ctx = new OfflineAudioContext(2, length, AUDIO_SAMPLE_RATE);
-  scheduleProjectAudio(
-    ctx,
-    ctx.destination,
-    project,
-    (id, audioTrackIndex) => buffers.get(audioKey(id, audioTrackIndex)) ?? null,
-    startMs,
-    0,
-  );
-  const rendered = await ctx.startRendering();
-
-  return {
-    channels: [rendered.getChannelData(0), rendered.getChannelData(1)],
+  const totalFrames = Math.max(1, Math.ceil((durationMs / 1000) * AUDIO_SAMPLE_RATE));
+  return new AudioMixRenderer(project, buffers, startMs, {
     sampleRate: AUDIO_SAMPLE_RATE,
-  };
+    channelCount: 2,
+    totalFrames,
+  });
+}
+
+/**
+ * Frame breakdown of the last measured render.
+ *
+ * The export runs in a worker with its own copy of the probe, so its numbers
+ * cannot be read from the main thread's. They ride back on the final reply and
+ * are parked here for the HUD and the budget suite.
+ */
+let lastPerf: PerfSnapshot | null = null;
+
+export function lastExportPerf(): PerfSnapshot | null {
+  return lastPerf;
+}
+
+/**
+ * The encoder configuration the last render actually used.
+ *
+ * `hardwareAcceleration` here is what the browser CHOSE, not what was asked
+ * for: it is the difference between an export that takes a minute and one that
+ * takes ten, and until it was reported nothing in the app - or in any bug
+ * report about a slow export - could tell the two apart.
+ */
+let lastEncoder: ExportEncoderInfo | null = null;
+
+export function lastExportEncoder(): ExportEncoderInfo | null {
+  return lastEncoder;
 }
 
 /** Trigger a browser download for the produced file. */

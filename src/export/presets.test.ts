@@ -267,3 +267,47 @@ describe('exportFileName', () => {
     expect(exportFileName(preset).endsWith('.mp3')).toBe(true);
   });
 });
+
+describe('codec presets', () => {
+  const mp4 = PRESETS.filter((p): p is Mp4Preset => p.kind === 'mp4');
+
+  it('leaves every preset that predates the choice on H.264', () => {
+    // `codec` absent means AVC. Anything that started asking for something else
+    // has to say so explicitly, so an old saved preset cannot silently change
+    // format under a user.
+    const legacy = mp4.filter((p) => !p.id.startsWith('hevc') && !p.id.startsWith('av1'));
+    expect(legacy.every((p) => p.codec === undefined)).toBe(true);
+  });
+
+  it('offers the modern codecs for every aspect ratio', () => {
+    for (const codec of ['hevc', 'av1'] as const) {
+      const withCodec = mp4.filter((p) => p.codec === codec);
+      expect(new Set(withCodec.map((p) => p.aspect)).size).toBe(4);
+    }
+  });
+
+  it('asks a lower bitrate of the codecs that need less of it', () => {
+    // The whole point: the same picture for fewer bits. A preset that asked for
+    // the same bitrate as H.264 would just be a bigger file for no reason.
+    const at = (codec: string | undefined, id: string) =>
+      mp4.find((p) => p.aspect === '16:9' && p.codec === codec && p.id.startsWith(id))!;
+    const h264 = at(undefined, 'youtube-1080');
+    const hevc = at('hevc', 'hevc1080');
+    const av1 = at('av1', 'av1_1080');
+    expect(hevc.videoBitrate).toBeLessThan(h264.videoBitrate);
+    expect(av1.videoBitrate).toBeLessThan(hevc.videoBitrate);
+    // ...but not so low that the preset is a worse picture rather than a
+    // smaller file. Half of H.264 is the conservative end of the published
+    // figures for both.
+    expect(av1.videoBitrate).toBeGreaterThan(h264.videoBitrate * 0.3);
+  });
+
+  it('keeps the same geometry as the H.264 preset at the same rung', () => {
+    const h264 = mp4.find((p) => p.aspect === '16:9' && p.id.startsWith('youtube-1080'))!;
+    for (const id of ['hevc1080', 'av1_1080']) {
+      const p = mp4.find((q) => q.aspect === '16:9' && q.id.startsWith(id))!;
+      expect(p.width).toBe(h264.width);
+      expect(p.height).toBe(h264.height);
+    }
+  });
+});

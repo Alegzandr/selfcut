@@ -15,7 +15,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The full check suite gates the deploy: nothing reaches production that has
+  # not typechecked, linted, passed the unit tests and driven the real editor
+  # through Chromium. Reused verbatim by ci.yml on pull requests.
+  check:
+    uses: ./.github/workflows/check.yml
+
   build:
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7

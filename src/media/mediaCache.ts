@@ -1,10 +1,5 @@
-import {
-  Input,
-  ALL_FORMATS,
-  BlobSource,
-  AudioBufferSink,
-  InputAudioTrack,
-} from 'mediabunny';
+import type { Input, InputAudioTrack } from 'mediabunny';
+import { mediabunny } from './mediabunnyModule';
 import { MediaAsset, isTrackPlayable } from '../types';
 import { StillFrame, decodeImageFile } from './stillImage';
 
@@ -25,8 +20,9 @@ export function audioKey(assetId: string, audioTrackIndex?: number): string {
 
 const inputs = new Map<string, Input>();
 
-export function createInput(file: File): Input {
-  return new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
+export async function createInput(file: File): Promise<Input> {
+  const { Input: InputCtor, ALL_FORMATS, BlobSource } = await mediabunny();
+  return new InputCtor({ formats: ALL_FORMATS, source: new BlobSource(file) });
 }
 
 export function registerInput(assetId: string, input: Input): void {
@@ -55,12 +51,19 @@ export function disposeAssetResources(assetId: string): void {
   for (const key of [...peaksPromises.keys()]) if (key.startsWith(prefix)) peaksPromises.delete(key);
 }
 
-export function getInput(asset: MediaAsset): Input {
-  let input = inputs.get(asset.id);
-  if (!input) {
-    input = createInput(asset.file);
-    inputs.set(asset.id, input);
+export async function getInput(asset: MediaAsset): Promise<Input> {
+  const existing = inputs.get(asset.id);
+  if (existing) return existing;
+  const input = await createInput(asset.file);
+  // Two concurrent callers can both miss the map while awaiting the module;
+  // the first one to land wins, and the loser's Input is disposed rather than
+  // leaked - two Inputs on one file would hold two demuxers.
+  const raced = inputs.get(asset.id);
+  if (raced) {
+    input.dispose();
+    return raced;
   }
+  inputs.set(asset.id, input);
   return input;
 }
 
@@ -116,6 +119,9 @@ interface AudioEntry {
 
 const audioEntries = new Map<string, AudioEntry>();
 
+/** Decodes started since load, so re-decoding the same track is visible. */
+let audioDecodeCount = 0;
+
 /**
  * A counter rather than a clock: two decodes resolving inside the same
  * millisecond must still order, and tests must not depend on wall time.
@@ -169,6 +175,31 @@ export function cachedAudioBytes(): number {
   let total = 0;
   for (const entry of audioEntries.values()) total += entry.bytes;
   return total;
+}
+
+/**
+ * Shape of the audio cache, for diagnostics.
+ *
+ * `bytes` alone cannot tell "nothing is cached" apart from "everything in it is
+ * still decoding", and those mean opposite things: the first is an idle cache,
+ * the second is a cache whose entries were dropped and immediately asked for
+ * again. `decodes` counts how many decodes have been started since load, so a
+ * cache that keeps re-fetching the same tracks shows up as a rising count
+ * against a flat entry set.
+ */
+export function audioCacheStats(): {
+  entries: number;
+  inFlight: number;
+  bytes: number;
+  decodes: number;
+} {
+  let inFlight = 0;
+  let bytes = 0;
+  for (const entry of audioEntries.values()) {
+    if (entry.bytes === 0) inFlight++;
+    bytes += entry.bytes;
+  }
+  return { entries: audioEntries.size, inFlight, bytes, decodes: audioDecodeCount };
 }
 
 /**
@@ -237,6 +268,7 @@ export function getAudioBuffer(
     existing.lastUsedAt = ++useStamp;
     return existing.promise;
   }
+  audioDecodeCount++;
   const entry: AudioEntry = {
     promise: decodeFullAudio(asset, audioTrackIndex).catch(() => null),
     bytes: 0,
@@ -260,10 +292,11 @@ async function decodeFullAudio(
   audioTrackIndex?: number,
 ): Promise<AudioBuffer | null> {
   if (!asset.hasAudio) return null;
-  const input = getInput(asset);
+  const input = await getInput(asset);
   const track = await resolveAudioTrack(input, audioTrackIndex);
   if (!track || !(await track.canDecode())) return null;
 
+  const { AudioBufferSink } = await mediabunny();
   const sink = new AudioBufferSink(track);
   const sampleRate = track.sampleRate;
   const numberOfChannels = Math.max(1, track.numberOfChannels);
@@ -430,10 +463,11 @@ async function streamPeaks(
   audioTrackIndex?: number,
 ): Promise<number[] | null> {
   if (!asset.hasAudio) return null;
-  const input = getInput(asset);
+  const input = await getInput(asset);
   const track = await resolveAudioTrack(input, audioTrackIndex);
   if (!track || !(await track.canDecode())) return null;
 
+  const { AudioBufferSink } = await mediabunny();
   const sink = new AudioBufferSink(track);
   const durationSec = asset.durationMs / 1000;
   const bins = expectedPeakBins(asset.durationMs);

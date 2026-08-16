@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import {
   AudioLines,
@@ -166,14 +166,14 @@ export function MediaLibrary() {
     <AnimatePresence>
       {libraryOpen && (
         <>
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-40 bg-black/50"
             onClick={() => useStore.getState().setLibraryOpen(false)}
           />
-          <motion.aside
+          <m.aside
             initial={{ x: '-105%' }}
             animate={{ x: 0 }}
             exit={{ x: '-105%' }}
@@ -184,7 +184,7 @@ export function MediaLibrary() {
             className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-zinc-800 bg-zinc-900 pt-[env(safe-area-inset-top)] shadow-2xl shadow-black"
           >
             {body}
-          </motion.aside>
+          </m.aside>
         </>
       )}
     </AnimatePresence>

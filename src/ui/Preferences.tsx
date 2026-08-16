@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { X } from 'lucide-react';
 import i18n, { LOCALES, type Locale } from '../i18n';
 import { useStore } from '../store/store';
@@ -67,14 +67,14 @@ export function Preferences() {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={() => setPreferencesOpen(false)}
         >
-          <motion.div
+          <m.div
             initial={{ scale: 0.96, y: 8 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.96, y: 8 }}
@@ -158,8 +158,8 @@ export function Preferences() {
                 </div>
               </Row>
             </div>
-          </motion.div>
-        </motion.div>
+          </m.div>
+        </m.div>
       )}
     </AnimatePresence>
   );

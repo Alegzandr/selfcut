@@ -85,9 +85,17 @@ export default defineConfig({
       // transformers.js (captions worker) pulls onnxruntime-web's workers/wasm via
       // import.meta.url like ffmpeg; pre-bundling breaks those URLs.
       exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util', '@huggingface/transformers'],
+      // Both are reached through a dynamic import (the media stack is off the
+      // critical path, the animation engine is behind LazyMotion). The dev
+      // server's dependency scanner only sees them once the page asks for
+      // them, which re-runs the optimizer mid-load and 504s the pre-bundle the
+      // page is already holding. Listing them here pre-bundles them up front.
+      include: ['framer-motion', 'mediabunny'],
     },
     build: {
       target: 'es2022',
+      minify: process.env.ANALYZE ? false : undefined,
+      rolldownOptions: process.env.ANALYZE ? { output: { sourcemap: true } } : undefined,
     },
   },
 });

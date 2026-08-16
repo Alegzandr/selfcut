@@ -1,4 +1,4 @@
-import { CanvasSink } from 'mediabunny';
+import { mediabunny } from './mediabunnyModule';
 import { Clip, ClipMask, Keyframe, MaskMotion, MediaAsset } from '../types';
 import { clipEndMs, timelineToSourceMs } from '../model';
 import { getInput } from './mediaCache';
@@ -199,13 +199,14 @@ export async function trackMaskMotion(
   const srcW = asset.width ?? 0;
   const srcH = asset.height ?? 0;
   if (!srcW || !srcH) return null;
-  const track = await getInput(asset).getPrimaryVideoTrack();
+  const track = await (await getInput(asset)).getPrimaryVideoTrack();
   if (!track) return null;
 
   // Downscaled working resolution (source aspect kept) — enough texture to track,
   // cheap enough to decode and search a whole clip in seconds.
   const workW = Math.min(360, srcW);
   const workH = Math.max(2, Math.round((workW * srcH) / srcW));
+  const { CanvasSink } = await mediabunny();
   const sink = new CanvasSink(track, { width: workW, height: workH, fit: 'fill' });
 
   // Timeline sample times from the reference frame to the clip end → source secs.

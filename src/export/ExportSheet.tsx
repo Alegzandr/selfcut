@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { Trans, useTranslation } from 'react-i18next';
 import { CheckCircle2, Download, Loader2, X, XCircle } from 'lucide-react';
 import { useStore } from '../store/store';
@@ -161,7 +161,7 @@ export function ExportSheet() {
     <AnimatePresence>
       {open && (
         <>
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -172,7 +172,7 @@ export function ExportSheet() {
               if (phase.kind !== 'rendering') close();
             }}
           />
-          <motion.div
+          <m.div
             initial={{ y: '110%' }}
             animate={{ y: 0 }}
             exit={{ y: '110%' }}
@@ -373,7 +373,7 @@ export function ExportSheet() {
                 </button>
               </div>
             )}
-          </motion.div>
+          </m.div>
         </>
       )}
     </AnimatePresence>

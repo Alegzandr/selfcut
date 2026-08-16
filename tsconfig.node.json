@@ -1,7 +1,12 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    // DOM as well as ES2022: the e2e specs are Node code, but the bodies of
+    // their `page.evaluate` callbacks are browser code that is typechecked
+    // here. Without it every canvas, every bitmap and every rAF in a spec has
+    // to be laundered through a `globalThis as unknown as {...}` cast, which
+    // hides real mistakes among the ceremony.
+    "lib": ["ES2022", "DOM"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "skipLibCheck": true,

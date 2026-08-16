@@ -16,16 +16,22 @@ import { loadTranscodedAudio, pruneTranscodedAudio } from './audioCache';
 import { pruneSubtitleCues } from './subtitleCache';
 import { mediaKeyOf } from './mediaKey';
 import { t } from '../i18n';
+import { reportSaveFailed, reportSaveOk } from './saveHealth';
 
-// Surface a save failure once per session: repeated debounced saves must not
-// spam the toast, but the user has to know their work is not being persisted
-// (storage full, or IndexedDB blocked in private mode).
-let saveErrorShown = false;
+/**
+ * Record a failed write. The toast fires on entering a failing streak, not once
+ * per session: the banner driven by `saveHealth` is what keeps the condition
+ * visible for as long as it lasts, and a failure AFTER a recovery is news
+ * again rather than being swallowed by a session-wide latch.
+ */
 function reportSaveFailure(err: unknown): void {
   console.warn('[persistence] save failed:', err);
-  if (saveErrorShown) return;
-  saveErrorShown = true;
-  useStore.getState().setError(t('errors.persistence.saveFailed'));
+  if (reportSaveFailed()) useStore.getState().setError(t('errors.persistence.saveFailed'));
+}
+
+/** Record a successful write, which is what clears the warning banner. */
+function reportSaveSuccess(): void {
+  reportSaveOk();
 }
 
 /**
@@ -267,6 +273,7 @@ export async function saveWholeProject(): Promise<void> {
     const store = tx.objectStore(ASSETS_STORE);
     for (const a of Object.values(assets)) store.put({ ...a, projectId: currentProjectId });
     await txDone(tx);
+    reportSaveSuccess();
   } catch (err) {
     reportSaveFailure(err);
   }
@@ -366,6 +373,7 @@ async function writeProject(project: Project): Promise<void> {
     // can order by "most recently edited". The editor never touches `updatedAt`.
     tx.objectStore(PROJECT_STORE).put({ ...project, updatedAt: Date.now() }, project.id);
     await txDone(tx);
+    reportSaveSuccess();
   } catch (err) {
     reportSaveFailure(err);
   }
@@ -389,6 +397,7 @@ async function syncAssets(
     // orphans are swept at the next startup instead.
     for (const id of Object.keys(prev)) if (!(id in next)) store.delete(id);
     await txDone(tx);
+    reportSaveSuccess();
   } catch (err) {
     reportSaveFailure(err);
   }

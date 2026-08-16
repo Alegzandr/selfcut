@@ -1,8 +1,9 @@
 import {
   Input,
   ALL_FORMATS,
-  BlobSource,
-  VideoSampleSink,
+  BufferSource,
+  EncodedPacketSink,
+  EncodedVideoPacketSource,
   Output,
   Mp4OutputFormat,
   Mp3OutputFormat,
@@ -16,15 +17,19 @@ import {
 } from 'mediabunny';
 import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
-import { Clip } from '../types';
-import { isTextClip, timelineToSourceMs } from '../model';
-import { drawClip, visibleVideoClips } from '../preview/compositor';
-import { syncLuts } from '../preview/colorPass';
-import { loadFonts } from '../lib/fonts';
-import { StillFrame, type DrawableFrame } from '../media/stillImage';
-import { ClipReader } from './clipReader';
-import type { Mp4Preset } from './presets';
-import { ExportErrorCode, ExportRequest, WorkerReply } from './protocol';
+import { FrameRenderer } from './frameRenderer';
+import { planSegments, type SegmentPlan } from './segmentPlan';
+import type { SegmentReply, SegmentRequest } from './segmentProtocol';
+import type { ExportVideoCodec, Mp4Preset } from './presets';
+import { endFrame, endSpan, mergeSnapshots, type PerfSnapshot, setPerfEnabled, snapshot, span } from '../perf/probe';
+import {
+  AUDIO_CHUNK_FRAMES,
+  type AudioMixInfo,
+  ExportErrorCode,
+  ExportRequest,
+  type MainToWorker,
+  WorkerReply,
+} from './protocol';
 
 /**
  * Offline export pipeline. Iterates output frames at the preset fps, maps
@@ -32,10 +37,71 @@ import { ExportErrorCode, ExportRequest, WorkerReply } from './protocol';
  * composites on an OffscreenCanvas and encodes through WebCodecs.
  * Never touches the preview pipeline.
  *
+ * Long enough renders fan out: the loop is encoder-bound (measured: 84% of
+ * every frame is spent waiting for the encoder even with four encodes in
+ * flight), and one encoder stays one encoder however deep its queue is. So the
+ * output is cut into slices, each rendered and encoded by its own worker into a
+ * standalone MP4, and this worker re-muxes the already-encoded packets into the
+ * real file. Nothing is encoded twice and nothing is decoded twice.
+ *
  * The worker is a separate bundle with no i18n instance and no knowledge of the
  * user locale: expected failures travel as an `ExportErrorCode`, translated by
  * the main thread. Unexpected ones travel as a raw diagnostic `crash` detail.
  */
+
+/**
+ * How many encodes may be outstanding at once in the serial path.
+ *
+ * Each one is a `VideoFrame` the encoder holds until it has produced a packet,
+ * so this is a memory cost as much as a throughput one: at 4K that is ~12 MB
+ * apiece. Four is deep enough to keep a hardware encoder fed across the jitter
+ * of a decode-heavy frame, and shallow enough that the queue is never the thing
+ * that runs the browser out of frames.
+ */
+const ENCODE_QUEUE_DEPTH = 4;
+
+/**
+ * Encoder preferences shared by every path that encodes.
+ *
+ * Deliberately WITHOUT `hardwareAcceleration: 'prefer-hardware'`.
+ *
+ * Asking for it looks free - it is documented as a hint, and a browser with no
+ * hardware encoder is supposed to fall back to software silently. It is not
+ * free: with `prefer-hardware` set, the "120 fps · 4K" preset stops producing a
+ * file at all. The hardware encoder accepts the configuration, cannot sustain
+ * 4K at 120 fps, and stalls rather than failing, so the render hangs instead of
+ * degrading. Measured, reproduced, and the reason this constant does not carry
+ * the line that an audit would expect it to.
+ *
+ * The browser's own default already picks hardware where hardware is the right
+ * answer. What was actually missing was not the preference but the OBSERVATION:
+ * see `reportEncoderConfig`, which sends back the configuration the browser
+ * settled on.
+ *
+ * `contentHint: 'detail'` stays: it tells the encoder this is an edit, not a
+ * video call, so it spends bits on sharpness rather than on smooth motion,
+ * which is what a cut with text and graphics in it needs.
+ */
+export const ENCODER_PREFERENCES = {
+  contentHint: 'detail',
+} as const;
+
+/**
+ * Report the encoder configuration the browser actually settled on, once.
+ *
+ * Whether an export is running on hardware is the single largest factor in how
+ * long it takes, and until now nothing anywhere said which one happened.
+ */
+function reportEncoderConfig(config: VideoEncoderConfig): void {
+  worker.postMessage({
+    type: 'encoder',
+    codec: config.codec,
+    hardwareAcceleration: config.hardwareAcceleration ?? 'no-preference',
+    width: config.width,
+    height: config.height,
+    bitrate: config.bitrate ?? 0,
+  });
+}
 
 /** An expected, user-facing failure - carries a code, never a message. */
 class ExportError extends Error {
@@ -45,25 +111,39 @@ class ExportError extends Error {
   }
 }
 
-/** One clip to composite into the current frame, with its decoded source frame. */
-interface FrameLayer {
-  clip: Clip;
-  xfadeInMs: number;
-  alphaMul: number;
-  sample: DrawableFrame | null;
-}
-
 const worker = self as unknown as {
   postMessage(message: WorkerReply, options?: StructuredSerializeOptions): void;
-  onmessage: ((e: MessageEvent<ExportRequest>) => void) | null;
+  onmessage: ((e: MessageEvent<MainToWorker>) => void) | null;
 };
 
+/**
+ * Resolver for the mix chunk currently being awaited.
+ *
+ * Exactly one request is ever in flight (see `pullAudio`), so a single slot is
+ * the whole queue. Null means nothing is waiting, in which case a stray chunk
+ * is dropped rather than resurrecting a settled promise.
+ */
+let awaitingAudio: ((chunk: Float32Array[] | null) => void) | null = null;
+
 worker.onmessage = (e) => {
+  const msg = e.data;
+  if (msg.type === 'audioChunk') {
+    const resolve = awaitingAudio;
+    awaitingAudio = null;
+    resolve?.(msg.channels);
+    return;
+  }
+  if (msg.type === 'audioFailed') {
+    const resolve = awaitingAudio;
+    awaitingAudio = null;
+    resolve?.(null);
+    return;
+  }
   void (async () => {
     try {
-      if (e.data.type === 'export') {
-        if (e.data.preset.kind === 'mp3') await exportMp3(e.data);
-        else await exportMp4(e.data, e.data.preset);
+      if (msg.type === 'export') {
+        if (msg.preset.kind === 'mp3') await exportMp3(msg);
+        else await exportMp4(msg, msg.preset);
       }
     } catch (err) {
       worker.postMessage(
@@ -75,30 +155,60 @@ worker.onmessage = (e) => {
   })();
 };
 
+/**
+ * Ask the main thread for the next slice of the mix and wait for it.
+ *
+ * `OfflineAudioContext` does not exist here, so the mix has to be rendered on
+ * the main thread - but pulling it slice by slice means neither side ever holds
+ * more than one slice. Resolves to null when that slice could not be rendered,
+ * which ends the audio track rather than failing the whole export: a video with
+ * a truncated soundtrack beats no video at all.
+ */
+function pullAudio(offset: number, frames: number): Promise<Float32Array[] | null> {
+  return new Promise((resolve) => {
+    awaitingAudio = resolve;
+    worker.postMessage({ type: 'needAudio', offset, frames });
+  });
+}
+
+/**
+ * The best available codec: the one asked for, or H.264, or nothing.
+ *
+ * Returns null only when even H.264 is unavailable at this configuration, which
+ * is the one case worth refusing an export over.
+ */
+async function pickCodec(
+  wanted: ExportVideoCodec,
+  width: number,
+  height: number,
+  bitrate: number,
+): Promise<ExportVideoCodec | null> {
+  if (await canEncodeVideo(wanted, { width, height, bitrate })) return wanted;
+  if (wanted !== 'avc' && (await canEncodeVideo('avc', { width, height, bitrate }))) return 'avc';
+  return null;
+}
+
 function postProgress(value: number): void {
   worker.postMessage({ type: 'progress', value: Math.min(1, Math.max(0, value)) });
 }
 
 async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   const { project, files, startMs, durationMs, audio } = req;
-  // Register the project's LUTs on this worker's colour pass, exactly as the
-  // preview does, so the export grades every clip identically to what was seen.
-  syncLuts(project.luts);
-  // Still-image assets arrive pre-rasterized from the main thread.
-  const stills = new Map<string, StillFrame>(
-    Object.entries(req.stills).map(([assetId, bitmap]) => [assetId, new StillFrame(bitmap)]),
-  );
+  setPerfEnabled(!!req.measure);
   const width = preset.width;
   const height = preset.height;
 
-  // Fail fast with a translatable message when this browser cannot encode
-  // H.264 at the requested size - otherwise the failure surfaces mid-render as
-  // a raw native crash string. The bitrate is part of the probe because a
-  // configuration can be rejected on bitrate alone (our 4K preset asks for
-  // 60 Mbps), and a geometry-only check would wave it through.
-  if (!(await canEncodeVideo('avc', { width, height, bitrate: preset.videoBitrate }))) {
-    throw new ExportError('videoEncoderUnsupported');
-  }
+  // The codec the preset asks for, if this browser can actually encode it at
+  // this geometry and bitrate; H.264 otherwise.
+  //
+  // The probe takes the whole configuration, not just the codec name: a
+  // configuration can be rejected on bitrate alone (the 4K preset asks for
+  // 60 Mbps) and a geometry-only check would wave it through, so the failure
+  // would surface mid-render as a raw native crash string. Falling back rather
+  // than failing is deliberate - a preset is a preference about file size, and
+  // no preference is worth refusing to export over.
+  const codec = await pickCodec(preset.codec ?? 'avc', width, height, preset.videoBitrate);
+  if (!codec) throw new ExportError('videoEncoderUnsupported');
   // Probe the exact configuration we are about to use, not just the codec: the
   // native AAC encoder advertises support for 'aac' in general while rejecting
   // specific parameter sets. Chrome tops out at 192 kbps for stereo 48 kHz,
@@ -109,7 +219,7 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   if (
     audio &&
     !(await canEncodeAudio('aac', {
-      numberOfChannels: audio.channels.length,
+      numberOfChannels: audio.channelCount,
       sampleRate: audio.sampleRate,
       bitrate: preset.audioBitrate,
     }))
@@ -118,6 +228,16 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   }
 
   const totalFrames = Math.max(1, Math.ceil((durationMs / 1000) * preset.fps));
+
+  const plan = req.noParallel
+    ? { segments: [{ firstFrame: 0, frameCount: totalFrames }], workers: 1 }
+    : planSegments({
+        totalFrames,
+        fps: preset.fps,
+        videoBitrate: preset.videoBitrate,
+        cores: navigator.hardwareConcurrency,
+      });
+  const parallel = plan.workers > 1;
 
   // Streaming straight into the user's file keeps memory flat and still puts
   // the metadata up front ('reserve' writes moov into space reserved at the
@@ -135,39 +255,41 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   const videoPackets = totalFrames;
   // AAC-LC packs 1024 samples per packet; assume half that, plus slack for the
   // encoder's priming and flush packets.
-  const audioPackets = audio ? Math.ceil(audio.channels[0]!.length / 512) + 64 : 0;
+  const audioPackets = audio ? Math.ceil(audio.totalFrames / 512) + 64 : 0;
 
-  const canvas = new OffscreenCanvas(width, height);
-  // No alpha channel: every frame starts as an opaque black fill, so the canvas
-  // never needs one. Dropping it skips premultiplied blending on each drawImage
-  // and lets the capture go straight to YUV - measurable at 4K over thousands
-  // of frames.
-  const ctx = canvas.getContext('2d', { alpha: false })!;
-  // High-quality resampling so every export resolution (incl. 4K downscales and
-  // upscaled sources) gets the cleanest fit/crop/zoom, not the default 'low' pass.
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  // A worker inherits nothing from `document.fonts`: without this the canvas
-  // would silently fall back to the default face and the export would not match
-  // the preview. Awaited up front, since wrapping measures against the real
-  // metrics from the very first frame.
-  await loadFonts(
-    req.project.tracks.flatMap((track) =>
-      track.clips.filter(isTextClip).map((clip) => clip.text.font),
-    ),
+  // Serial and parallel differ only in where the encoded packets come from:
+  // this worker's own encoder, or the segment workers'.
+  const renderer = parallel
+    ? null
+    : new FrameRenderer({
+        project,
+        files,
+        stills: req.stills,
+        width,
+        height,
+        fps: preset.fps,
+        startMs,
+      });
+  const canvasSource = renderer
+    ? new CanvasSource(renderer.canvas, {
+        codec,
+        bitrate: preset.videoBitrate,
+        // Offline export: never trade quality for latency, and never drop frames.
+        // (This is mediabunny's default, pinned here so an export stays lossless-of-
+        // intent even if the library default changes.)
+        latencyMode: 'quality',
+        // A key frame every 2 s matches YouTube's closed-GOP recommendation and keeps
+        // seeking/scrubbing responsive on the platforms without bloating the file.
+        keyFrameInterval: 2,
+        ...ENCODER_PREFERENCES,
+        onEncoderConfig: reportEncoderConfig,
+      })
+    : null;
+  const packetSource = parallel ? new EncodedVideoPacketSource(codec) : null;
+  output.addVideoTrack(
+    (canvasSource ?? packetSource)!,
+    writable ? { maximumPacketCount: videoPackets } : undefined,
   );
-  const videoSource = new CanvasSource(canvas, {
-    codec: 'avc',
-    bitrate: preset.videoBitrate,
-    // Offline export: never trade quality for latency, and never drop frames.
-    // (This is mediabunny's default, pinned here so an export stays lossless-of-
-    // intent even if the library default changes.)
-    latencyMode: 'quality',
-    // A key frame every 2 s matches YouTube's closed-GOP recommendation and keeps
-    // seeking/scrubbing responsive on the platforms without bloating the file.
-    keyFrameInterval: 2,
-  });
-  output.addVideoTrack(videoSource, writable ? { maximumPacketCount: videoPackets } : undefined);
 
   let audioSource: AudioSampleSource | null = null;
   if (audio) {
@@ -177,137 +299,21 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
 
   await output.start();
 
-  const inputs = new Map<string, Input>();
-  const getInput = (assetId: string): Input | null => {
-    let input = inputs.get(assetId) ?? null;
-    if (!input) {
-      const file = files[assetId];
-      if (!file) return null;
-      input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
-      inputs.set(assetId, input);
-    }
-    return input;
-  };
-
-  const openSink = async (clip: Clip): Promise<VideoSampleSink | null> => {
-    const input = getInput(clip.assetId);
-    if (!input) return null;
-    try {
-      const track = await input.getPrimaryVideoTrack();
-      if (track && (await track.canDecode())) return new VideoSampleSink(track);
-    } catch {
-      // Unreadable source (e.g. a still that failed to rasterize): the clip
-      // renders nothing rather than killing the whole export.
-    }
-    return null;
-  };
-
-  // One reader per clip, created on first use and released as soon as the clip
-  // is behind the render head.
-  //
-  // Keeping them all for the whole render is what a first pass does, and it
-  // scales with the length of the cut rather than with how much of it is on
-  // screen: each reader owns a configured VideoDecoder and holds one or two
-  // decoded samples (~12 MB apiece at 4K), so a fifty-clip 4K timeline had
-  // fifty decoders and hundreds of megabytes of frames live at the last frame
-  // of the render, competing for the handful of decoders a browser will run in
-  // parallel. The render walks output time strictly forward and no clip is
-  // visible twice, so a reader missing from the current frame's layers can
-  // only be one whose clip has ended: dropping it is exact, not a heuristic.
-  const readers = new Map<string, ClipReader>();
-  const getReader = (clip: Clip): ClipReader => {
-    let reader = readers.get(clip.id);
-    if (!reader) {
-      reader = new ClipReader(clip, openSink);
-      readers.set(clip.id, reader);
-    }
-    return reader;
-  };
-  const releaseFinishedReaders = async (visible: ReadonlySet<string>): Promise<void> => {
-    for (const [clipId, reader] of [...readers]) {
-      if (visible.has(clipId)) continue;
-      readers.delete(clipId);
-      try {
-        await reader.close();
-      } catch {
-        /* already released */
-      }
-    }
-  };
-
-  const frameDur = 1 / preset.fps;
   const videoWeight = audio ? 0.92 : 0.98;
-
   let finished = false;
-  // Encode of the previous frame, awaited only once the next one is decoded, so
-  // the encoder runs while the decoders do. CanvasSource.add() snapshots the
-  // canvas synchronously and only the returned promise is deferred, so the
-  // frame it captured is never the one we are about to draw.
-  let pendingEncode: Promise<void> | null = null;
+  /** Measurements from the slice workers, when this render fanned out. */
+  let segmentPerf: PerfSnapshot[] = [];
   try {
-    for (let i = 0; i < totalFrames; i++) {
-      // Output time i/fps maps to timeline time startMs + i/fps: exporting a
-      // region shifts what we read, never where the frame lands in the file.
-      const tMs = startMs + (i * 1000) / preset.fps;
-
-      // Bottom-up over tracks so the timeline's top lane paints last, then
-      // earliest-first within a track: during a crossfade the incoming clip
-      // composites over the outgoing one with rising alpha (same as preview).
-      const layers: FrameLayer[] = [];
-      for (let t = project.tracks.length - 1; t >= 0; t--) {
-        const track = project.tracks[t]!;
-        const alphaMul = track.opacity ?? 1;
-        if (alphaMul <= 0) continue;
-        for (const { clip, xfadeInMs } of visibleVideoClips(track, tMs)) {
-          layers.push({ clip, xfadeInMs, alphaMul, sample: null });
-        }
-      }
-
-      // Decode every visible media clip concurrently: the readers are
-      // independent, so N stacked tracks cost one decode wait instead of N.
-      await Promise.all(
-        layers.map(async (layer) => {
-          const { clip } = layer;
-          if (clip.kind !== 'media') return;
-          const still = stills.get(clip.assetId);
-          if (still) {
-            // A still is the same frame at every output time - nothing to decode.
-            layer.sample = still;
-            return;
-          }
-          layer.sample = await getReader(clip).frameAt(timelineToSourceMs(clip, tMs) / 1000);
-        }),
+    if (packetSource) {
+      segmentPerf = await renderParallel(req, preset, codec, plan, packetSource, totalFrames, (done) =>
+        postProgress((done / totalFrames) * videoWeight),
       );
-
-      if (pendingEncode) {
-        await pendingEncode;
-        pendingEncode = null;
-      }
-
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, width, height);
-      for (const { clip, xfadeInMs, alphaMul, sample } of layers) {
-        drawClip(ctx, clip, width, height, tMs, alphaMul, xfadeInMs, sample);
-      }
-
-      pendingEncode = videoSource.add(i * frameDur, frameDur);
-      // After the capture, never before: the layers hold frames these readers
-      // own, and `add` is what copies them out of the canvas.
-      await releaseFinishedReaders(new Set(layers.map((layer) => layer.clip.id)));
-      // Post every 5th frame, but always on the last one, so a very short
-      // (<5-frame) region still advances the bar past the video phase instead
-      // of jumping straight from 0 to finalize.
-      if (i % 5 === 0 || i === totalFrames - 1) postProgress((i / totalFrames) * videoWeight);
+    } else {
+      await renderSerial(renderer!, canvasSource!, preset, totalFrames, (done) =>
+        postProgress((done / totalFrames) * videoWeight),
+      );
     }
-    await pendingEncode;
-    pendingEncode = null;
-
-    for (const reader of readers.values()) await reader.close();
-    readers.clear();
-    for (const still of stills.values()) still.close();
-    stills.clear();
-    videoSource.close();
+    (canvasSource ?? packetSource)!.close();
 
     if (audioSource && audio) {
       await pushAudioMix(audioSource, audio, (v) => postProgress(videoWeight + v * 0.06));
@@ -318,31 +324,15 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
     await output.finalize();
     finished = true;
 
+    if (req.measure) {
+      // A fanned-out render has no frame loop of its own: the numbers live in
+      // the slice workers, merged here into the per-frame cost of the render.
+      const merged = segmentPerf.length > 0 ? mergeSnapshots(segmentPerf) : snapshot();
+      worker.postMessage({ type: 'perf', snapshot: { ...merged, workers: plan.workers } });
+    }
     postDone(target, 'video/mp4');
   } finally {
-    // On any failure path, release the decoded frames and rasterized stills the
-    // success path would have closed (WebCodecs frames are scarce), and always
-    // dispose the source inputs. The success path already cleared these maps, so
-    // this only does work when the render threw.
-    if (!finished) {
-      // A deferred encode still in flight would otherwise reject unhandled once
-      // the render has already failed for another reason.
-      pendingEncode?.catch(() => {});
-      for (const reader of readers.values()) {
-        try {
-          await reader.close();
-        } catch {
-          /* already released */
-        }
-      }
-      for (const still of stills.values()) {
-        try {
-          still.close();
-        } catch {
-          /* already closed */
-        }
-      }
-    }
+    await renderer?.dispose();
     if (!finished) {
       // Release the destination file: without this the writable stays open and
       // the user is left with a locked, half-written file.
@@ -352,8 +342,240 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
         /* already torn down */
       }
     }
-    for (const input of inputs.values()) input.dispose();
   }
+}
+
+/** The single-worker render: decode, composite and encode, one frame at a time. */
+async function renderSerial(
+  renderer: FrameRenderer,
+  videoSource: CanvasSource,
+  preset: Mp4Preset,
+  totalFrames: number,
+  onProgress: (done: number) => void,
+): Promise<void> {
+  await renderer.ready();
+  const frameDur = 1 / preset.fps;
+  const inFlight: Promise<void>[] = [];
+  const drainTo = async (depth: number): Promise<void> => {
+    while (inFlight.length > depth) await inFlight.shift()!;
+  };
+
+  try {
+    for (let i = 0; i < totalFrames; i++) {
+      const frameStarted = span();
+      await renderer.renderFrame(i);
+
+      const encodeStarted = span();
+      await drainTo(ENCODE_QUEUE_DEPTH - 1);
+      endSpan('encodeWait', encodeStarted);
+
+      inFlight.push(videoSource.add(i * frameDur, frameDur));
+      // After the capture, never before: the layers hold frames these readers
+      // own, and `add` is what copies them out of the canvas.
+      await renderer.releaseFinishedReaders();
+      // Post every 5th frame, but always on the last one, so a very short
+      // (<5-frame) region still advances the bar past the video phase instead
+      // of jumping straight from 0 to finalize.
+      if (i % 5 === 0 || i === totalFrames - 1) onProgress(i);
+      endSpan('frame', frameStarted);
+      endFrame();
+    }
+    await drainTo(0);
+  } catch (err) {
+    // Deferred encodes still in flight would otherwise reject unhandled once
+    // the render has already failed for another reason.
+    for (const p of inFlight) p.catch(() => {});
+    throw err;
+  }
+}
+
+/**
+ * The fanned-out render.
+ *
+ * Each slice is encoded by its own worker into a standalone MP4; this function
+ * demuxes those and appends their packets, in output order, with their
+ * timestamps shifted onto the timeline. The packets are never touched, so the
+ * result is bit-identical to what one encoder would have produced for each
+ * slice - what differs is only that four of them ran at once.
+ *
+ * Slices complete out of order and are held until their turn, which bounds the
+ * memory at roughly (workers x slice size) - the same bound the slice planner
+ * sizes slices against.
+ */
+async function renderParallel(
+  req: ExportRequest,
+  preset: Mp4Preset,
+  codec: ExportVideoCodec,
+  plan: SegmentPlan,
+  packetSource: EncodedVideoPacketSource,
+  totalFrames: number,
+  onProgress: (done: number) => void,
+): Promise<PerfSnapshot[]> {
+  const frameDur = 1 / preset.fps;
+  const done = new Map<number, ArrayBuffer>();
+  const progress = new Map<number, number>();
+  /** Segments finished and already muxed. */
+  let appended = 0;
+  let next = 0;
+  let dispatched = 0;
+  let failure: Error | null = null;
+  /** The decoder config of the first slice: every other slice must match it. */
+  let firstConfig: string | null = null;
+  /** Per-slice measurements, merged into one breakdown for the whole render. */
+  const segmentPerf: PerfSnapshot[] = [];
+
+  const workers: Worker[] = [];
+  /** Resolves when every slice has been muxed, or the first failure. */
+  let settle: () => void = () => {};
+  let fail: (e: Error) => void = () => {};
+  const allDone = new Promise<void>((resolve, reject) => {
+    settle = resolve;
+    fail = reject;
+  });
+
+  const reportProgress = (): void => {
+    let frames = 0;
+    for (let i = 0; i < appended; i++) frames += plan.segments[i]!.frameCount;
+    for (const [, f] of progress) frames += f;
+    onProgress(Math.min(totalFrames, frames));
+  };
+
+  /** Mux every slice that is now next in line. */
+  const drainReady = async (): Promise<void> => {
+    while (done.has(next)) {
+      const buffer = done.get(next)!;
+      done.delete(next);
+      const offset = plan.segments[next]!.firstFrame * frameDur;
+      const config = await appendSegment(packetSource, buffer, offset, firstConfig === null);
+      if (firstConfig === null) firstConfig = config;
+      else if (config !== firstConfig) {
+        // Two encoder instances configured identically produced different
+        // parameter sets. Concatenating them would give a file that decodes
+        // garbage from here on, so the render restarts serially instead - the
+        // main thread retries with `noParallel`.
+        throw new ExportError('segmentMismatch');
+      }
+      next++;
+      appended++;
+      reportProgress();
+    }
+  };
+
+  const dispatch = (w: Worker): void => {
+    if (dispatched >= plan.segments.length || failure) return;
+    const index = dispatched++;
+    const segment = plan.segments[index]!;
+    progress.set(index, 0);
+    const request: SegmentRequest = {
+      type: 'segment',
+      index,
+      project: req.project,
+      files: req.files,
+      // Cloned, not transferred: every worker needs its own copy of every still,
+      // and a transfer would move the bitmap out of this worker's reach.
+      stills: req.stills,
+      width: preset.width,
+      height: preset.height,
+      fps: preset.fps,
+      videoBitrate: preset.videoBitrate,
+      codec,
+      startMs: req.startMs,
+      firstFrame: segment.firstFrame,
+      frameCount: segment.frameCount,
+      ...(req.measure ? { measure: true } : {}),
+    };
+    w.postMessage(request);
+  };
+
+  try {
+    for (let i = 0; i < plan.workers; i++) {
+      const w = new Worker(new URL('./segmentWorker.ts', import.meta.url), { type: 'module' });
+      workers.push(w);
+      w.onmessage = (e: MessageEvent<SegmentReply>) => {
+        const msg = e.data;
+        if (msg.type === 'segmentProgress') {
+          progress.set(msg.index, msg.frames);
+          reportProgress();
+          return;
+        }
+        if (msg.type === 'segmentFailed') {
+          failure = new Error(`segment ${msg.index}: ${msg.detail}`);
+          fail(failure);
+          return;
+        }
+        progress.delete(msg.index);
+        if (msg.perf) segmentPerf.push(msg.perf);
+        done.set(msg.index, msg.buffer);
+        void drainReady()
+          .then(() => {
+            if (appended === plan.segments.length) settle();
+            else dispatch(w);
+          })
+          .catch((err: Error) => {
+            failure = err;
+            fail(err);
+          });
+      };
+      w.onerror = (event) => {
+        event.preventDefault?.();
+        const err = new Error(event instanceof ErrorEvent ? event.message : 'segment worker failed');
+        failure = err;
+        fail(err);
+      };
+    }
+    for (const w of workers) dispatch(w);
+    await allDone;
+    return segmentPerf;
+  } finally {
+    for (const w of workers) w.terminate();
+  }
+}
+
+/**
+ * Demux one finished slice and append its packets to the output, shifted onto
+ * the timeline. Returns a fingerprint of the slice's decoder configuration, so
+ * the caller can prove every slice agrees on one.
+ */
+async function appendSegment(
+  packetSource: EncodedVideoPacketSource,
+  buffer: ArrayBuffer,
+  offsetSec: number,
+  withMeta: boolean,
+): Promise<string> {
+  const input = new Input({ formats: ALL_FORMATS, source: new BufferSource(buffer) });
+  try {
+    const track = await input.getPrimaryVideoTrack();
+    if (!track) throw new Error('segment has no video track');
+    const config = await track.getDecoderConfig();
+    if (!config) throw new Error('segment has no decoder config');
+    const sink = new EncodedPacketSink(track);
+    let first = true;
+    for await (const packet of sink.packets()) {
+      await packetSource.add(
+        packet.clone({ timestamp: packet.timestamp + offsetSec }),
+        // The muxer wants the decoder config once, on the first packet of the
+        // track; later slices carry the same one and repeating it is noise.
+        withMeta && first ? { decoderConfig: config } : undefined,
+      );
+      first = false;
+    }
+    return fingerprint(config);
+  } finally {
+    input.dispose();
+  }
+}
+
+/** Stable string form of a decoder config, for comparing slices. */
+function fingerprint(config: VideoDecoderConfig): string {
+  const description = config.description;
+  let bytes = '';
+  if (description) {
+    const view = ArrayBuffer.isView(description)
+      ? new Uint8Array(description.buffer, description.byteOffset, description.byteLength)
+      : new Uint8Array(description as ArrayBuffer);
+    for (const b of view) bytes += b.toString(16).padStart(2, '0');
+  }
+  return `${config.codec}|${config.codedWidth}x${config.codedHeight}|${bytes}`;
 }
 
 /**
@@ -378,7 +600,7 @@ async function exportMp3(req: ExportRequest): Promise<void> {
   // the native one cannot take this exact configuration.
   if (
     !(await canEncodeAudio('mp3', {
-      numberOfChannels: audio.channels.length,
+      numberOfChannels: audio.channelCount,
       sampleRate: audio.sampleRate,
       bitrate: preset.audioBitrate,
     }))
@@ -415,27 +637,36 @@ async function exportMp3(req: ExportRequest): Promise<void> {
   }
 }
 
-/** Feed the pre-rendered mix to the encoder in ~1 s planar chunks. */
+/**
+ * Pull the mix from the main thread and feed it to the encoder, slice by slice.
+ *
+ * The mix used to arrive whole, in the export request: one contiguous Float32
+ * allocation for the entire timeline (690 MB for an hour of stereo 48 kHz),
+ * built before the first video frame was encoded and held until the last. Now
+ * the peak is one slice, and it is the same peak whether the cut is thirty
+ * seconds or three hours.
+ */
 async function pushAudioMix(
   source: AudioSampleSource,
-  audio: NonNullable<ExportRequest['audio']>,
+  audio: AudioMixInfo,
   onProgress: (v: number) => void,
 ): Promise<void> {
-  const { channels, sampleRate } = audio;
-  const numberOfChannels = channels.length;
-  const totalFrames = channels[0]!.length;
-  const chunkFrames = sampleRate;
+  const { sampleRate, channelCount, totalFrames } = audio;
 
-  for (let offset = 0; offset < totalFrames; offset += chunkFrames) {
-    const frames = Math.min(chunkFrames, totalFrames - offset);
-    const data = new Float32Array(frames * numberOfChannels);
-    for (let ch = 0; ch < numberOfChannels; ch++) {
-      data.set(channels[ch]!.subarray(offset, offset + frames), ch * frames);
+  for (let offset = 0; offset < totalFrames; offset += AUDIO_CHUNK_FRAMES) {
+    const frames = Math.min(AUDIO_CHUNK_FRAMES, totalFrames - offset);
+    const channels = await pullAudio(offset, frames);
+    // The main thread could not render this slice: stop rather than write
+    // silence, so the file's audio ends where the mix did.
+    if (!channels) return;
+    const data = new Float32Array(frames * channelCount);
+    for (let ch = 0; ch < channelCount; ch++) {
+      data.set(channels[ch]!.subarray(0, frames), ch * frames);
     }
     const sample = new AudioSample({
       data,
       format: 'f32-planar',
-      numberOfChannels,
+      numberOfChannels: channelCount,
       sampleRate,
       timestamp: offset / sampleRate,
     });

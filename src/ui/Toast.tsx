@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { AlertTriangle, Check } from 'lucide-react';
 import { useStore } from '../store/store';
 
@@ -28,7 +28,7 @@ export function Toast() {
   return (
     <AnimatePresence>
       {message && (
-        <motion.div
+        <m.div
           initial={{ y: 24, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 24, opacity: 0 }}
@@ -48,7 +48,7 @@ export function Toast() {
           <Icon className={`h-4 w-4 flex-none ${isError ? 'text-red-400' : 'text-emerald-400'}`} />
           {/* Multi-file import failures arrive as several lines: show them all. */}
           <span className="min-w-0 whitespace-pre-line">{message}</span>
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   );

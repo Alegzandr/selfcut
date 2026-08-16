@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:prod": "playwright test -c playwright.prod.config.ts"
+    "test:e2e:prod": "playwright test -c playwright.prod.config.ts",
+    "bench": "vitest run -c vitest.bench.config.ts",
+    "test:e2e:perf": "playwright test e2e/perf.spec.ts"
   },
   "dependencies": {
     "@ffmpeg/core": "^0.12.10",

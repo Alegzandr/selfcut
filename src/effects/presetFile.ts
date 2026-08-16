@@ -103,7 +103,7 @@ const ANIMATION_PROPS = ['x', 'y', 'scale', 'scaleX', 'scaleY', 'rotation', 'opa
 const EASE_SET = new Set<string>(EASE_IDS);
 const AUDIO_FX_SET = new Set<string>(AUDIO_FX_TYPES);
 
-function isFinite_(v: unknown): v is number {
+function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
@@ -180,11 +180,11 @@ export class PresetFileError extends Error {}
 export function isValidKeyframe(v: unknown): v is Keyframe {
   if (typeof v !== 'object' || v === null) return false;
   const k = v as Keyframe;
-  if (!isFinite_(k.t) || !isFinite_(k.value)) return false;
+  if (!isFiniteNumber(k.t) || !isFiniteNumber(k.value)) return false;
   if (k.ease !== undefined && !EASE_SET.has(k.ease)) return false;
   if (k.bezier !== undefined) {
     if (!Array.isArray(k.bezier) || k.bezier.length !== 4) return false;
-    if (!k.bezier.every(isFinite_)) return false;
+    if (!k.bezier.every(isFiniteNumber)) return false;
   }
   return true;
 }
@@ -207,7 +207,7 @@ export function isValidKeyframes(v: unknown): v is Keyframe[] {
 }
 
 export function isValidChannel(v: unknown): v is Channel {
-  return isFinite_(v) || isValidKeyframes(v);
+  return isFiniteNumber(v) || isValidKeyframes(v);
 }
 
 function sanitizeAudioFx(v: unknown): AudioFx[] | undefined {
@@ -217,7 +217,7 @@ function sanitizeAudioFx(v: unknown): AudioFx[] | undefined {
   for (const raw of v) {
     if (typeof raw !== 'object' || raw === null) continue;
     const fx = raw as AudioFx;
-    if (!AUDIO_FX_SET.has(fx.type) || !isFinite_(fx.amount)) continue;
+    if (!AUDIO_FX_SET.has(fx.type) || !isFiniteNumber(fx.amount)) continue;
     // One node per type: two of the same in the chain would run twice in the
     // graph while the inspector showed one row, the case `catalog.ts` guards.
     if (seen.has(fx.type)) continue;
@@ -252,14 +252,14 @@ export function sanitizeLook(v: unknown): PresetLook {
 
   if (typeof raw.transform === 'object' && raw.transform !== null) {
     const { x, y, scale, scaleX, scaleY, rotation } = raw.transform;
-    if (isFinite_(x) && isFinite_(y) && isFinite_(scale)) {
+    if (isFiniteNumber(x) && isFiniteNumber(y) && isFiniteNumber(scale)) {
       look.transform = {
         x,
         y,
         scale,
-        ...(isFinite_(scaleX) ? { scaleX } : {}),
-        ...(isFinite_(scaleY) ? { scaleY } : {}),
-        ...(isFinite_(rotation) ? { rotation } : {}),
+        ...(isFiniteNumber(scaleX) ? { scaleX } : {}),
+        ...(isFiniteNumber(scaleY) ? { scaleY } : {}),
+        ...(isFiniteNumber(rotation) ? { rotation } : {}),
       };
     }
   }
@@ -275,7 +275,7 @@ export function sanitizeLook(v: unknown): PresetLook {
 
   const audioFx = sanitizeAudioFx(raw.audioFx);
   if (audioFx) look.audioFx = audioFx;
-  if (isFinite_(raw.zoomEnd) && raw.zoomEnd > 0) look.zoomEnd = raw.zoomEnd;
+  if (isFiniteNumber(raw.zoomEnd) && raw.zoomEnd > 0) look.zoomEnd = raw.zoomEnd;
 
   return look;
 }
@@ -311,7 +311,7 @@ export function parsePresetFile(text: string): PresetFile {
     app: typeof file.app === 'string' ? file.app : '',
     createdAt: typeof file.createdAt === 'string' ? file.createdAt : '',
     name: typeof file.name === 'string' && file.name.trim() ? file.name : t('preset.untitled'),
-    sourceDurationMs: isFinite_(file.sourceDurationMs) ? file.sourceDurationMs : 0,
+    sourceDurationMs: isFiniteNumber(file.sourceDurationMs) ? file.sourceDurationMs : 0,
     look,
   };
 }

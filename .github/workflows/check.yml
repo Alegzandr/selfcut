@@ -1,0 +1,60 @@
+name: Checks
+
+# The one definition of "is this branch good". Called by ci.yml on pull
+# requests and by deploy.yml before anything is published, so the gate that
+# runs on a PR is byte-for-byte the gate that runs on main.
+on:
+  workflow_call:
+
+jobs:
+  static:
+    name: typecheck + lint + unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # Warnings fail here: the categories in .oxlintrc.json are deliberate, so
+      # a new warning is a decision to make, not a line to scroll past.
+      - run: npm run lint -- --deny-warnings
+      - run: npm test
+
+  e2e:
+    name: e2e (chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # `channel: 'chromium'` in playwright.config.ts: the full Chromium build,
+      # not the headless shell, whose VideoEncoder stalls forever on export.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7
+
+  perf:
+    name: perf bench
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Asserts the per-frame budgets in src/perf/*.bench.test.ts. A regression
+      # that makes compositing allocate again fails the branch, not a profile
+      # someone runs by hand six months later.
+      - run: npm run bench

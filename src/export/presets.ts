@@ -31,6 +31,21 @@ interface BaseExportPreset {
   audioBitrate: number;
 }
 
+/**
+ * Video codecs an MP4 export can be encoded with.
+ *
+ * H.264 is the floor: it plays everywhere, hardware-encodes everywhere, and is
+ * what every platform ingests. The other two exist because they are worth
+ * roughly half the bitrate for the same picture, which on a client-side editor
+ * is not an abstraction - it is the size of the file the user has to upload,
+ * and the number of bytes the encoder has to write to their disk.
+ *
+ * A preset asking for a codec this browser cannot encode falls back to H.264
+ * rather than failing (see the probe in the export worker), so a codec choice
+ * is always a preference and never a way to make an export impossible.
+ */
+export type ExportVideoCodec = 'avc' | 'hevc' | 'av1';
+
 /** How an MP4 preset settles its frame rate. */
 export type FpsMode =
   /** Follow the footage: the fastest source rate on the timeline (see projectExportFps). */
@@ -48,6 +63,11 @@ export interface Mp4Preset extends BaseExportPreset {
   fps: number;
   fpsMode: FpsMode;
   videoBitrate: number;
+  /**
+   * Codec to encode with. Absent means H.264, which is what every preset saved
+   * or shared before the choice existed meant.
+   */
+  codec?: ExportVideoCodec;
 }
 
 /** An audio-only export: fits any aspect ratio, no video geometry. */
@@ -151,11 +171,40 @@ interface CustomFormat {
    * wants"; above it buys headroom for re-editing, below it buys a small file.
    */
   bitrateScale: number;
+  /** Codec for this format; absent means H.264. */
+  codec?: ExportVideoCodec;
   /** Pinned frame rate, or null to follow the footage like the social presets. */
   fps: number | null;
 }
 
 const CUSTOM_FORMATS: readonly CustomFormat[] = [
+  {
+    // Modern codecs, offered as a pair rather than as a setting: what an editor
+    // wants to choose is "the smallest file that still looks right", not a
+    // codec name. Both fall back to H.264 where the browser cannot encode them,
+    // so picking one is never a way to make an export fail.
+    //
+    // The bitrate scales are the conservative end of the published figures:
+    // HEVC is usually quoted at 40-50% of H.264 for equal quality and AV1 below
+    // that, and asking for 60% and 50% leaves headroom for the hardware
+    // encoders, which are tuned for speed rather than for the last few percent.
+    id: 'hevc1080',
+    labelKey: 'export.preset.hevc1080.label',
+    hintKey: 'export.preset.hevc1080.hint',
+    tier: '1080',
+    bitrateScale: 0.6,
+    fps: null,
+    codec: 'hevc',
+  },
+  {
+    id: 'av1_1080',
+    labelKey: 'export.preset.av1_1080.label',
+    hintKey: 'export.preset.av1_1080.hint',
+    tier: '1080',
+    bitrateScale: 0.5,
+    fps: null,
+    codec: 'av1',
+  },
   {
     // ~1.35x YouTube's top 4K figure: past the point a platform asks for, which
     // is exactly what a master meant for re-grading or archiving wants. Pinned
@@ -274,6 +323,7 @@ export const PRESETS: ExportPreset[] = [
         tier: format.tier,
         bitrateScale: format.bitrateScale,
         fps: format.fps,
+        codec: format.codec,
       }),
     ),
   ),
@@ -296,6 +346,7 @@ function videoPreset(spec: {
   tier: VideoTier;
   bitrateScale: number;
   fps: number | null;
+  codec?: ExportVideoCodec;
 }): Mp4Preset {
   const { width, height, videoBitrate } = TIERS[spec.aspect][spec.tier];
   return {
@@ -312,6 +363,7 @@ function videoPreset(spec: {
     fps: spec.fps ?? PROJECT_FPS,
     fpsMode: spec.fps === null ? 'source' : 'fixed',
     videoBitrate: Math.round(videoBitrate * spec.bitrateScale),
+    ...(spec.codec ? { codec: spec.codec } : {}),
     // 384 kbps AAC-LC stereo @ 48 kHz — YouTube's recommended audio spec, high
     // enough that the platforms' re-encode stays clean.
     audioBitrate: 384_000,

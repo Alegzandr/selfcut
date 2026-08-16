@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import type { ParseKeys } from 'i18next';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { FolderPlus, Trash2 } from 'lucide-react';
 import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
@@ -122,7 +122,7 @@ export function MobileBottomBar() {
   return (
     <nav className="flex-none border-t border-zinc-800 bg-zinc-900/95 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur">
       <AnimatePresence mode="wait" initial={false}>
-        <motion.div
+        <m.div
           key={showClip ? 'clip' : 'tools'}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
@@ -130,7 +130,7 @@ export function MobileBottomBar() {
           transition={{ duration: 0.12 }}
         >
           <Rail tiles={tiles} />
-        </motion.div>
+        </m.div>
       </AnimatePresence>
     </nav>
   );

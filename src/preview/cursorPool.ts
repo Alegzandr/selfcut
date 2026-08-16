@@ -18,6 +18,57 @@
 export const MAX_LIVE_CURSORS = 8;
 
 /**
+ * Never fewer than this, whatever the arithmetic says: a crossfade between two
+ * clips on two stacked tracks needs four cursors at the same instant, and
+ * evicting one that is on screen would dispose the decoder about to be asked
+ * for the next frame. Below this the pool stops being a cache and starts being
+ * a bug.
+ */
+export const MIN_LIVE_CURSORS = 4;
+
+/**
+ * Bytes one decoded frame of a given size occupies.
+ *
+ * 1.5 bytes per pixel is 4:2:0 8-bit, which is what essentially all delivery
+ * codecs decode to: 12.4 MB for a 4K frame, 3.1 MB for 1080p. A 10-bit source
+ * is half again as much, and the caller passes that in rather than this
+ * guessing.
+ */
+export function frameBytes(width: number, height: number, bytesPerPixel = 1.5): number {
+  return Math.max(1, Math.round(width * height * bytesPerPixel));
+}
+
+/**
+ * How much memory the decoded-frame pool may hold.
+ *
+ * The count-based cap was blind to what it was capping. Eight cursors is
+ * ~200 MB of 4K frames on a machine that may only have 2 GB of RAM to give the
+ * whole tab, and 25 MB of 720p frames on a workstation that could hold ten
+ * times as many. Deriving the cap from the device, exactly as the audio cache
+ * already does, makes the same constant mean the same thing on both.
+ */
+export function cursorBudgetBytes(deviceMemoryGb?: number): number {
+  // `deviceMemory` is coarse (0.25 / 0.5 / 1 / 2 / 4 / 8) and capped at 8 for
+  // fingerprinting reasons, so a 64 GB workstation reports 8. Undefined
+  // (Firefox, Safari) assumes the same 4 GB midpoint the audio budget does.
+  const share = (deviceMemoryGb ?? 4) * 0.08 * 1024 * 1024 * 1024;
+  return Math.min(768 * 1024 * 1024, Math.max(96 * 1024 * 1024, share));
+}
+
+/**
+ * How many cursors fit in the budget, given the size of the frames in play.
+ *
+ * Two frames per cursor: the one being drawn and the one the decoder is
+ * producing. Clamped both ways, so the pool never drops below what a legal
+ * layout needs on screen, and never grows past what a browser will decode in
+ * parallel however much RAM the machine has.
+ */
+export function maxLiveCursors(largestFrameBytes: number, deviceMemoryGb?: number): number {
+  const fits = Math.floor(cursorBudgetBytes(deviceMemoryGb) / Math.max(1, largestFrameBytes * 2));
+  return Math.min(MAX_LIVE_CURSORS, Math.max(MIN_LIVE_CURSORS, fits));
+}
+
+/**
  * Which cursors to release, least-recently-used first.
  *
  * `ordered` is every live cursor id from least to most recently drawn; `keep`

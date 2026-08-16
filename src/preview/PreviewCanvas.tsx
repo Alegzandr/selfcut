@@ -428,6 +428,10 @@ function PreviewOverlays({
     const stage = stageRef.current;
     if (!viewport || !stage) return FULL_FRAME_BOUNDS;
     return visibleStageBounds(viewport.getBoundingClientRect(), stage.getBoundingClientRect());
+    // `previewView` and `panelTick` are the invalidation signals, not inputs:
+    // the measurement reads the live DOM, so the deps say WHEN to remeasure -
+    // the camera moved, the panel resized - rather than what to measure with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewView, panelTick, viewportRef, stageRef]);
 
   // A media clip visible right now that points at a disconnected source: the
@@ -1253,7 +1257,13 @@ export function PreviewCanvas() {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <canvas ref={canvasRef} className="h-full w-full rounded-lg shadow-lg shadow-black/50" />
+        {/* Marked so the e2e suite can read the composited picture back: what
+            the preview actually shows at a cut is only observable from here. */}
+        <canvas
+          ref={canvasRef}
+          data-preview-canvas
+          className="h-full w-full rounded-lg shadow-lg shadow-black/50"
+        />
         {croppingClip && cropAsset && <CropOverlay clip={croppingClip} asset={cropAsset} />}
         {/* Smart-guide lines while dragging a clip in the preview. */}
         {(guides.v.length > 0 || guides.h.length > 0) && (

@@ -16,6 +16,7 @@ import {
 import { gradeFrame } from './colorPass';
 import { fontStack } from '../lib/fonts';
 import type { DrawableFrame } from '../media/stillImage';
+import { count, endSpan, span } from '../perf/probe';
 
 type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -144,12 +145,26 @@ export function drawClipSample(
   // the frame's place; a null grade (no adjustment or no WebGL) draws the frame
   // directly, so the ungraded path is untouched.
   const color = resolveColor(clip, timelineMs);
-  const graded = color ? gradeFrame(sample, sw, sh, color) : null;
-  // Blur is the browser's own gaussian via the 2D filter — GPU-accelerated and
-  // higher quality than a hand-rolled shader blur; scaled to the output height
-  // so it looks the same across the preview's resolution rungs and the export.
+  let graded: CanvasImageSource | null = null;
+  if (color) {
+    const started = span();
+    graded = gradeFrame(sample, sw, sh, color);
+    endSpan('grade', started);
+    if (graded) count('gradedClips');
+  }
+  // Blur is the browser's own gaussian via the 2D filter. Its cost is measured
+  // (`blur` channel) rather than assumed: it is the one effect whose price is
+  // set by the browser's filter implementation and not by anything here.
   const blurPx = resolveBlur(clip, timelineMs) * outH * 0.06;
 
+  // Resampling quality is only worth paying for when the draw actually
+  // resamples. A 1:1 blit - the common case for a full-frame clip in an export
+  // at the source resolution - asks the rasterizer for a filtered path it then
+  // has no work to do in, so it is turned off outright there.
+  const resampling = Math.abs(dw - cropW) > 0.5 || Math.abs(dh - cropH) > 0.5;
+  setResampling(ctx, resampling);
+
+  const drawStarted = span();
   ctx.globalAlpha = alpha;
   if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
   withRotation(ctx, clipRotationAt(clip, timelineMs), dx + dw / 2, dy + dh / 2, () => {
@@ -158,6 +173,31 @@ export function drawClipSample(
   });
   if (blurPx > 0) ctx.filter = 'none';
   ctx.globalAlpha = 1;
+  endSpan(blurPx > 0 ? 'blur' : 'blit', drawStarted);
+  count('clipDraws');
+}
+
+/**
+ * Last resampling mode written to each context, so the common case (every clip
+ * in a frame wants the same one) touches the two properties once instead of
+ * once per clip. Weak, so a disposed offscreen context is not retained.
+ */
+const resamplingState = new WeakMap<object, boolean>();
+
+function setResampling(ctx: Ctx2D, on: boolean): void {
+  if (resamplingState.get(ctx) === on) return;
+  resamplingState.set(ctx, on);
+  ctx.imageSmoothingEnabled = on;
+  if (on) ctx.imageSmoothingQuality = 'high';
+}
+
+/**
+ * Forget what `setResampling` believes about a context. Resizing a canvas resets
+ * every context property, so the caller that resizes must say so or the cache
+ * would keep a stale belief and skip the re-arm.
+ */
+export function invalidateResampling(ctx: Ctx2D): void {
+  resamplingState.delete(ctx);
 }
 
 /** Font shorthand for a text clip at a given output height and clip scale. */
@@ -454,17 +494,85 @@ export function textClipRect(clip: TextClip, outW: number, outH: number, timelin
 }
 
 /**
+ * A track's clips sorted by start time, with the lookup tables that turn "which
+ * clips are visible at t" into a binary search plus a two-step walk instead of a
+ * scan of every clip.
+ *
+ * Memoized on the clips array itself (see `trackIndex`), the way
+ * `trackCrossfades` already is: an untouched track keeps its index across every
+ * frame of playback, and an edit produces a new array so the index rebuilds
+ * exactly once.
+ */
+interface TrackIndex {
+  /** Clips by ascending `timelineStartMs`. */
+  order: Clip[];
+  /** Exclusive end of `order[i]` on the timeline. */
+  ends: Float64Array;
+  /** max(ends[0..i]) - lets the backward walk stop as soon as nothing can reach t. */
+  maxEnd: Float64Array;
+}
+
+const trackIndexCache = new WeakMap<Clip[], TrackIndex>();
+
+function buildTrackIndex(clips: Clip[]): TrackIndex {
+  const order = clips.slice().sort((a, b) => a.timelineStartMs - b.timelineStartMs);
+  const ends = new Float64Array(order.length);
+  const maxEnd = new Float64Array(order.length);
+  let running = -Infinity;
+  for (let i = 0; i < order.length; i++) {
+    const clip = order[i]!;
+    ends[i] = clip.timelineStartMs + (clip.sourceOutMs - clip.sourceInMs) / clip.speed;
+    running = Math.max(running, ends[i]!);
+    maxEnd[i] = running;
+  }
+  return { order, ends, maxEnd };
+}
+
+function trackIndex(clips: Clip[]): TrackIndex {
+  let index = trackIndexCache.get(clips);
+  if (!index) {
+    index = buildTrackIndex(clips);
+    trackIndexCache.set(clips, index);
+  }
+  return index;
+}
+
+/** Index of the last clip whose start is <= t, or -1. */
+function lastStartedAt(index: TrackIndex, tMs: number): number {
+  let lo = 0;
+  let hi = index.order.length - 1;
+  let found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (index.order[mid]!.timelineStartMs <= tMs) {
+      found = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return found;
+}
+
+/**
  * Clips of a track visible at time t, in draw order (earliest start first -
  * the later clip composites over the earlier one during a crossfade).
  * A legal layout has at most two (pairwise overlaps only).
+ *
+ * Allocates its result, so it is for the paths that need an array (hit-testing,
+ * tests). The render loop uses `forEachVisibleVideoClip`, which does not.
  */
 export function clipsAt(clips: Clip[], tMs: number): Clip[] {
+  const index = trackIndex(clips);
+  const last = lastStartedAt(index, tMs);
   const visible: Clip[] = [];
-  for (const clip of clips) {
-    const dur = (clip.sourceOutMs - clip.sourceInMs) / clip.speed;
-    if (tMs >= clip.timelineStartMs && tMs < clip.timelineStartMs + dur) visible.push(clip);
+  if (last < 0) return visible;
+  let first = last;
+  while (first > 0 && index.maxEnd[first - 1]! > tMs) first--;
+  for (let i = first; i <= last; i++) {
+    if (index.ends[i]! > tMs) visible.push(index.order[i]!);
   }
-  return visible.sort((a, b) => a.timelineStartMs - b.timelineStartMs);
+  return visible;
 }
 
 /** A clip visible at a given time, paired with its crossfade ramp-in duration. */
@@ -474,16 +582,67 @@ export interface VisibleClip {
 }
 
 /**
- * Visible clips of a video track at time t, each with its crossfade ramp-in, in
- * draw order. Empty for non-video, hidden or empty tracks. Preview and export
- * both iterate this, so they composite tracks identically.
+ * Visit the visible clips of a video track at time t, each with its crossfade
+ * ramp-in, in draw order. Nothing for non-video, hidden or empty tracks. Preview
+ * and export both iterate this, so they composite tracks identically.
+ *
+ * Allocation-free: this runs once per track per frame, 60 times a second, and
+ * the array it used to build was garbage on every one of them.
  */
-export function visibleVideoClips(track: Track, tMs: number): VisibleClip[] {
-  if (track.kind !== 'video' || track.hidden) return [];
-  const visible = clipsAt(track.clips, tMs);
-  if (visible.length === 0) return [];
+export function forEachVisibleVideoClip(
+  track: Track,
+  tMs: number,
+  fn: (clip: Clip, xfadeInMs: number) => void,
+): void {
+  if (track.kind !== 'video' || track.hidden || track.clips.length === 0) return;
+  const index = trackIndex(track.clips);
+  const last = lastStartedAt(index, tMs);
+  if (last < 0) return;
+  // Walk back to the earliest clip that could still be on screen, then forward
+  // from there, so `fn` sees them in start order like the sort used to give.
+  let first = last;
+  while (first > 0 && index.maxEnd[first - 1]! > tMs) first--;
   const xfades = trackCrossfades(track.clips);
-  return visible.map((clip) => ({ clip, xfadeInMs: xfades.get(clip.id)?.inMs ?? 0 }));
+  for (let i = first; i <= last; i++) {
+    if (index.ends[i]! > tMs) fn(index.order[i]!, xfades.get(index.order[i]!.id)?.inMs ?? 0);
+  }
+}
+
+/**
+ * Visit the video clips of a track that start inside `(tMs, tMs + windowMs]`,
+ * in start order.
+ *
+ * The playback engine uses this to open a clip's decoder before the playhead
+ * reaches it. A cold cursor has to demux the file, configure a decoder and seek
+ * to a keyframe before it can hand over a first frame, and a clip with nothing
+ * decoded yet draws nothing - which on a straight cut is a black flash at every
+ * boundary.
+ */
+export function forEachUpcomingVideoClip(
+  track: Track,
+  tMs: number,
+  windowMs: number,
+  fn: (clip: Clip) => void,
+): void {
+  if (track.kind !== 'video' || track.hidden || track.clips.length === 0) return;
+  const index = trackIndex(track.clips);
+  const until = tMs + windowMs;
+  // Everything after `lastStartedAt` starts later than t, and `order` is sorted
+  // by start, so the first clip past the window ends the walk.
+  for (let i = lastStartedAt(index, tMs) + 1; i < index.order.length; i++) {
+    const clip = index.order[i]!;
+    if (clip.timelineStartMs > until) break;
+    fn(clip);
+  }
+}
+
+/** Array form of `forEachVisibleVideoClip`, for tests and non-hot callers. */
+export function visibleVideoClips(track: Track, tMs: number): VisibleClip[] {
+  const out: VisibleClip[] = [];
+  forEachVisibleVideoClip(track, tMs, (clip, xfadeInMs) => {
+    out.push({ clip, xfadeInMs });
+  });
+  return out;
 }
 
 /** Pixel geometry of a mask on an `outW × outH` frame: top-left box and centre. */
@@ -519,6 +678,100 @@ function getMaskScratch(w: number, h: number): typeof maskScratch {
     maskScratch.canvas.height = h;
   }
   return maskScratch;
+}
+
+/**
+ * Axis-aligned region of the frame a mask can leave visible, in pixels.
+ *
+ * A mask multiplies the clip's alpha, so every pixel outside the mask shape is
+ * transparent and compositing it is pure waste - and the scratch canvas it is
+ * built in is full-frame, so clearing and copying all of it was the single
+ * largest cost a masked clip carried. Returning a tight box lets the draw, the
+ * clear and the composite all shrink to it.
+ *
+ * An INVERTED mask keeps everything outside the shape, so its region is the
+ * whole frame and there is nothing to win: the function says so rather than
+ * pretending otherwise.
+ */
+export function maskDirtyRect(
+  mask: ClipMask,
+  outW: number,
+  outH: number,
+  motion: { tx: number; ty: number; scale: number; rotation: number },
+): { x: number; y: number; w: number; h: number } {
+  const full = { x: 0, y: 0, w: outW, h: outH };
+  if (mask.invert) return full;
+
+  const { left, top, w, h, cx: boxCx, cy: boxCy } = maskBoundsPx(mask, outW, outH);
+  let minx: number;
+  let miny: number;
+  let maxx: number;
+  let maxy: number;
+  const path = mask.shape === 'path' ? mask.path : undefined;
+  if (path) {
+    if (path.length < 2) return full;
+    minx = Infinity;
+    miny = Infinity;
+    maxx = -Infinity;
+    maxy = -Infinity;
+    // Handles are included: a bezier segment never leaves the hull of its
+    // anchors and control points, so this box always contains the curve.
+    for (const p of path) {
+      for (const q of [p, p.in, p.out]) {
+        if (!q) continue;
+        const x = q.x * outW;
+        const y = q.y * outH;
+        if (x < minx) minx = x;
+        if (x > maxx) maxx = x;
+        if (y < miny) miny = y;
+        if (y > maxy) maxy = y;
+      }
+    }
+  } else {
+    if (w <= 0 || h <= 0) return { x: 0, y: 0, w: 0, h: 0 };
+    minx = left;
+    miny = top;
+    maxx = left + w;
+    maxy = top + h;
+  }
+
+  // The same transform `applyMask` stamps the shape with: rotate/scale about the
+  // shape's own centre, then translate. Applied to the four corners, then re-boxed.
+  const { cx, cy } = path ? maskPathCenterPx(path, outW, outH) : { cx: boxCx, cy: boxCy };
+  const rad = (motion.rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  let rx0 = Infinity;
+  let ry0 = Infinity;
+  let rx1 = -Infinity;
+  let ry1 = -Infinity;
+  for (const [px, py] of [
+    [minx, miny],
+    [maxx, miny],
+    [minx, maxy],
+    [maxx, maxy],
+  ] as const) {
+    const sx = (px - cx) * motion.scale;
+    const sy = (py - cy) * motion.scale;
+    const x = cx + sx * cos - sy * sin + motion.tx * outW;
+    const y = cy + sx * sin + sy * cos + motion.ty * outH;
+    if (x < rx0) rx0 = x;
+    if (x > rx1) rx1 = x;
+    if (y < ry0) ry0 = y;
+    if (y > ry1) ry1 = y;
+  }
+
+  // Feather is a gaussian blur on the matte; three sigma covers >99.7% of it,
+  // and the browser's own blur kernel is cut off around there too.
+  const pad = mask.feather > 0 ? Math.max(0.5, mask.feather * outH * 0.5) * 3 + 2 : 1;
+  const x = Math.max(0, Math.floor(rx0 - pad));
+  const y = Math.max(0, Math.floor(ry0 - pad));
+  return {
+    x,
+    y,
+    w: Math.min(outW, Math.ceil(rx1 + pad)) - x,
+    h: Math.min(outH, Math.ceil(ry1 + pad)) - y,
+  };
 }
 
 /** Bounding-box centre (px) of a pen path — the pivot its motion turns around. */
@@ -620,13 +873,29 @@ function dispatchClipDraw(
 ): void {
   const scratch = clip.mask ? getMaskScratch(outW, outH) : null;
   if (clip.mask && scratch) {
-    scratch.ctx.clearRect(0, 0, outW, outH);
-    dispatchClipDrawRaw(scratch.ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs, sample);
+    const started = span();
     const motion = resolveMaskMotion(clip.mask, timelineMs - clip.timelineStartMs);
+    // Everything outside the mask ends up at alpha 0, so the clear, the draw,
+    // the matte composite and the copy-back all restrict to this box. A small
+    // mask on a 4K frame used to pay for the full 4K on every one of those four.
+    const dirty = maskDirtyRect(clip.mask, outW, outH, motion);
+    if (dirty.w <= 0 || dirty.h <= 0) {
+      endSpan('mask', started);
+      return;
+    }
+    count('maskPx', dirty.w * dirty.h);
+    scratch.ctx.save();
+    scratch.ctx.beginPath();
+    scratch.ctx.rect(dirty.x, dirty.y, dirty.w, dirty.h);
+    scratch.ctx.clip();
+    scratch.ctx.clearRect(dirty.x, dirty.y, dirty.w, dirty.h);
+    dispatchClipDrawRaw(scratch.ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs, sample);
     applyMask(scratch.ctx, clip.mask, outW, outH, motion);
+    scratch.ctx.restore();
     // Composited under the current ctx transform, so an in-flight transition
     // (slide/zoom) still carries the masked clip with it.
-    ctx.drawImage(scratch.canvas, 0, 0);
+    ctx.drawImage(scratch.canvas, dirty.x, dirty.y, dirty.w, dirty.h, dirty.x, dirty.y, dirty.w, dirty.h);
+    endSpan('mask', started);
     return;
   }
   dispatchClipDrawRaw(ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs, sample);

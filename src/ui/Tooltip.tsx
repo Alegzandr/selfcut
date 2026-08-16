@@ -9,7 +9,7 @@ import {
 } from 'react';
 import type { FocusEvent, PointerEvent, ReactElement, ReactNode, Ref } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, m, useReducedMotion } from 'framer-motion';
 import { useIsCoarsePointer } from '../lib/device';
 
 type Placement = 'top' | 'bottom';
@@ -161,7 +161,7 @@ export function Tooltip({
       {createPortal(
         <AnimatePresence>
           {open && (
-            <motion.div
+            <m.div
               ref={tipRef}
               role="tooltip"
               // `translate` centers/anchors the pill; framer drives `transform`
@@ -192,7 +192,7 @@ export function Tooltip({
                     : 'top-px -translate-y-1/2 border-l border-t border-zinc-700/70'
                 }`}
               />
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>,
         document.body,

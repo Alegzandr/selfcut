@@ -3,18 +3,17 @@ import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
 import en from './locales/en.json';
-import fr from './locales/fr.json';
-import es from './locales/es.json';
-import de from './locales/de.json';
-import ptBR from './locales/pt-BR.json';
 
 /**
  * i18n setup. English is the pivot locale: its dictionary is the source of
  * truth for the key set (see `I18nKeys` below - a missing or unknown key is a
  * TypeScript error, not a runtime "topbar.export" leaking into the UI).
  *
- * The five dictionaries are bundled statically (~3 kB gzip each): lazy-loading
- * them would cost a flash of untranslated UI on first paint for no real gain.
+ * English is bundled; the other four are fetched on demand. Five dictionaries of
+ * 666 keys is a real fraction of the editor's initial download, and four fifths
+ * of it is always for languages this visitor does not read. `ensureLocale` is
+ * awaited before the React root mounts, so nothing flashes untranslated - the
+ * cost is one small parallel request, not a repaint.
  *
  * Outside React (exporter, presets, probe, ...) import the default export and
  * call `i18n.t(...)` directly - see `t()` re-exported below.
@@ -36,13 +35,10 @@ void i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    resources: {
-      en: { translation: en },
-      fr: { translation: fr },
-      es: { translation: es },
-      de: { translation: de },
-      'pt-BR': { translation: ptBR },
-    },
+    resources: { en: { translation: en } },
+    // Adding a bundle after init must re-render what is already mounted, which
+    // is exactly what a language switch does once the app is running.
+    react: { bindI18nStore: 'added' },
     supportedLngs: Object.keys(LOCALES),
     fallbackLng: {
       // A browser reporting plain "pt" gets the Brazilian dictionary rather
@@ -66,6 +62,41 @@ void i18n
       escapeValue: false,
     },
   });
+
+/**
+ * The dictionaries that are not bundled. Static `import()` calls, not a
+ * template literal: the bundler has to see each path to emit a chunk for it.
+ */
+const LOADERS: Record<string, () => Promise<{ default: Record<string, string> }>> = {
+  fr: () => import('./locales/fr.json'),
+  es: () => import('./locales/es.json'),
+  de: () => import('./locales/de.json'),
+  'pt-BR': () => import('./locales/pt-BR.json'),
+};
+
+/**
+ * Make sure a language's dictionary is loaded. Resolves immediately for English
+ * and for anything already fetched; a failed fetch resolves too, leaving
+ * i18next on its English fallback rather than blocking the editor from booting
+ * over a missing translation file.
+ */
+export async function ensureLocale(lng: string | undefined): Promise<void> {
+  const base = lng && lng in LOADERS ? lng : (lng ?? '').split('-')[0];
+  const load = base ? LOADERS[base] : undefined;
+  if (!load || i18n.hasResourceBundle(base!, 'translation')) return;
+  try {
+    const mod = await load();
+    i18n.addResourceBundle(base!, 'translation', mod.default, true, true);
+  } catch {
+    /* stay on the English fallback */
+  }
+}
+
+// A language picked in Preferences (or restored from localStorage on a later
+// visit) has to bring its dictionary with it.
+i18n.on('languageChanged', (lng) => {
+  void ensureLocale(lng);
+});
 
 /** Keep the document in sync so screen readers and hyphenation follow the UI. */
 function syncDocumentLang(lng: string): void {
