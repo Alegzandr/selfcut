@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { appDepUrl } from './appModule';
+import { appDepUrl, appModuleUrl } from './appModule';
 
 /**
  * Does slicing a render into shorter segments still cost bitrate accuracy?
@@ -23,13 +23,16 @@ import { appDepUrl } from './appModule';
  */
 
 const TOTAL_SECONDS = 30;
+const MEDIABUNNY_MAIN = '/src/media/mediabunnyMain.ts';
 
 test('bitrate accuracy against slice length', async ({ page }) => {
   test.setTimeout(600_000);
   await page.goto('/app/');
   // Nothing has pulled mediabunny into the graph yet on a page that has not
   // imported a file; this is the app's own entry point to it.
-  await page.evaluate(() => import('/src/media/mediabunnyMain.ts'));
+  // The specifier goes through as an argument, not a literal: a bare
+  // `import('/src/…')` is a Vite path that `tsc` cannot resolve.
+  await page.evaluate((mod) => import(mod), await appModuleUrl(page, MEDIABUNNY_MAIN));
   const mb = await appDepUrl(page, 'mediabunny');
 
   const rows = await page.evaluate(

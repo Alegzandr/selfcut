@@ -660,11 +660,13 @@ async function renderParallel(
    * is in flight on a worker that is by definition not idle.
    */
   const pump = (): void => {
+    // Checked once, not per iteration: `failure` is only ever set from a worker
+    // message, so it cannot change while this loop runs.
+    if (failure) return;
     while (
       idle.length > 0 &&
       done.size < MAX_HELD_SEGMENTS &&
-      dispatched < plan.segments.length &&
-      !failure
+      dispatched < plan.segments.length
     ) {
       dispatch(idle.shift()!);
     }
