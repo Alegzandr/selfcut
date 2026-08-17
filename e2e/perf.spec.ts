@@ -131,6 +131,7 @@ async function gradeEveryClip(page: Page): Promise<void> {
 
 test('the preview loop holds its frame budget on an ordinary clip', async ({ page }) => {
   await importClip(page);
+  const gpu = await renderPath(page);
   await setProbe(page, true);
   await playFor(page, 2500);
 
@@ -140,16 +141,28 @@ test('the preview loop holds its frame budget on an ordinary clip', async ({ pag
   expect(snap.frames).toBeGreaterThan(30);
 
   // Frames the renderer could not keep up with. Audio is the clock, so this is
-  // the number that corresponds to what the eye actually sees.
+  // the number that corresponds to what the eye actually sees - and therefore a
+  // number about the machine's compositor as much as about this code. Keeping
+  // up with a 30 fps source is a claim about a GPU: the same clip on a software
+  // rasterizer measured 1.0-2.8 dropped frames per drawn frame across three CI
+  // runs, which is the rasterizer answering, not a regression.
   const dropped = counter(snap, 'droppedFrames');
-  expect(dropped?.mean ?? 0).toBeLessThan(1);
-
-  // The composite itself, on a single 1080p-class clip, must be a small
-  // fraction of a 60 fps budget. Loose by an order of magnitude: this is here
-  // to catch "compositing became the bottleneck", not a 10% drift.
   const draw = timing(snap, 'draw');
   expect(draw).toBeDefined();
-  expect(draw!.mean).toBeLessThan(8);
+
+  if (gpu.hardware) {
+    expect(dropped?.mean ?? 0).toBeLessThan(1);
+    // The composite itself, on a single 1080p-class clip, must be a small
+    // fraction of a 60 fps budget. Loose by an order of magnitude: this is here
+    // to catch "compositing became the bottleneck", not a 10% drift.
+    expect(draw!.mean).toBeLessThan(8);
+  } else {
+    // Bounds at roughly three times the worst software measurement (2.8 dropped,
+    // 6.1 ms of draw), so they still catch a collapse - one clip costing what
+    // the three-layer worst case costs - without asserting the runner's GPU.
+    expect(dropped?.mean ?? 0).toBeLessThan(8);
+    expect(draw!.mean).toBeLessThan(20);
+  }
 });
 
 test('a graded clip reaches the GPU without an intermediate canvas', async ({ page }) => {
@@ -309,15 +322,29 @@ test('the visible-clip lookup stays free on a heavily cut timeline', async ({ pa
   }
   await expect(page.locator('[data-clip-id]')).toHaveCount(24);
 
+  const gpu = await renderPath(page);
   await setProbe(page, true);
   await playFor(page, 2500);
 
   const snap = await snapshot(page);
   report('preview, 24 clips', snap);
 
+  // What this test is named after is the LOOKUP, and the lookup is asserted the
+  // same way everywhere: 24 clips must cost what one clip costs. The absolute
+  // half of that only means something on a GPU - a CI runner on SwiftShader
+  // measured 1.6-2.0 dropped frames per drawn frame here, and the identical
+  // 1.0-2.8 on the single-clip test above, which is the point: the cut did not
+  // add anything, the rasterizer did.
   const dropped = counter(snap, 'droppedFrames');
-  expect(dropped?.mean ?? 0).toBeLessThan(1.5);
-  expect(timing(snap, 'draw')!.mean).toBeLessThan(10);
+  const draw = timing(snap, 'draw')!;
+
+  if (gpu.hardware) {
+    expect(dropped?.mean ?? 0).toBeLessThan(1.5);
+    expect(draw.mean).toBeLessThan(10);
+  } else {
+    expect(dropped?.mean ?? 0).toBeLessThan(8);
+    expect(draw.mean).toBeLessThan(20);
+  }
 });
 
 test('the scopes readback stays off the frame budget', async ({ page }) => {
@@ -355,7 +382,13 @@ test('the scopes readback stays off the frame budget', async ({ page }) => {
   // everything else the loop did put together. Capped at 20 Hz it is 0.10 ms.
   // The bound below is an order of magnitude above the measurement and an order
   // of magnitude below the cost it replaced.
-  expect(scopeTiming!.mean).toBeLessThan(0.5);
+  //
+  // A readback is the one operation in the loop that waits on the compositor,
+  // so it is also the one whose absolute cost is least transferable: a CI runner
+  // on SwiftShader measured 0.4-2.0 ms for the same capped work. The software
+  // bound sits three times above the worst of those, and the relative bounds
+  // below - which are what the test is really asserting - run everywhere.
+  expect(scopeTiming!.mean).toBeLessThan(gpu.hardware ? 0.5 : 6);
 
   // Opening the scopes must not multiply the frame's cost. Before the cap it
   // multiplied it by nearly five.

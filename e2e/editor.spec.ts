@@ -111,6 +111,13 @@ test('the project survives a reload via IndexedDB', async ({ page }) => {
 });
 
 test('export renders an MP4 and hands it over as a download', async ({ page }) => {
+  // This test renders. Two Playwright workers share one encoder, and where that
+  // encoder is a software one the render is CPU-bound against whatever the
+  // neighbouring spec is encoding: the same export measured 11s alone and over
+  // 90s beside a busy worker on a CI runner. Nothing here asserts a duration -
+  // exportPerf.spec.ts is where the render's cost is a claim - so the budget is
+  // simply made wide enough that a slow machine is not a failure.
+  test.slow();
   // Headless has no save-file picker UI; removing the API entirely routes the
   // exporter onto its buffered fallback, which ends in a download-attribute
   // anchor click that Playwright can capture.
@@ -137,7 +144,7 @@ test('export renders an MP4 and hands it over as a download', async ({ page }) =
     })
     .toBe(true);
 
-  const downloadPromise = page.waitForEvent('download', { timeout: 90_000 });
+  const downloadPromise = page.waitForEvent('download', { timeout: 240_000 });
   // The CTA reads "Export <preset name>"; preset buttons themselves don't start with "Export".
   await sheet.getByRole('button', { name: /^Export / }).click();
   const download = await downloadPromise;
