@@ -61,6 +61,12 @@ import {
  */
 const ENCODE_QUEUE_DEPTH = 4;
 
+/**
+ * How many finished-but-not-yet-muxed slices the lead will hold before it stops
+ * handing out new work. See `pump`, which is where the reasoning lives.
+ */
+const MAX_HELD_SEGMENTS = 2;
+
 /*
  * Two encoder options this file deliberately does NOT set. Neither has a
  * declaration to hang off - that is the point of the note.
@@ -542,6 +548,8 @@ async function renderParallel(
   const segmentPerf: PerfSnapshot[] = [];
 
   const workers: Worker[] = [];
+  /** Workers with nothing to do, waiting for `pump` to find them a slice. */
+  const idle: Worker[] = [];
   /** Resolves when every slice has been muxed, or the first failure. */
   let settle: () => void = () => {};
   let fail: (e: Error) => void = () => {};
@@ -550,6 +558,24 @@ async function renderParallel(
     fail = reject;
   });
 
+  /**
+   * Frames rendered so far, counting a finished slice in full.
+   *
+   * Slices are muxed strictly in order but they FINISH out of order, so at any
+   * moment some of them are rendered, encoded and waiting on an earlier
+   * neighbour. Those frames are work that is genuinely done, and the progress
+   * this reports is the only thing standing between the user and a bar that
+   * appears frozen: with `progress` cleared on completion instead of held, the
+   * report was the muxed slices plus the two slices in flight, and nothing
+   * else. On a fourteen-slice render that pins the bar under
+   *
+   *     2 slices in flight / 14 slices = 14.3 %
+   *
+   * until the very first slice lands, however much has actually been encoded -
+   * which is exactly the "stuck at 14 % for an hour, GPU still busy" a tester
+   * reported. The bar was telling the truth about muxing and saying nothing
+   * about rendering.
+   */
   const reportProgress = (): void => {
     let frames = 0;
     for (let i = 0; i < appended; i++) frames += plan.segments[i]!.frameCount;
@@ -560,9 +586,10 @@ async function renderParallel(
   /** Mux every slice that is now next in line. */
   const drainReady = async (): Promise<void> => {
     while (done.has(next)) {
-      const buffer = done.get(next)!;
-      done.delete(next);
-      const offset = plan.segments[next]!.firstFrame * frameDur;
+      const index = next;
+      const buffer = done.get(index)!;
+      done.delete(index);
+      const offset = plan.segments[index]!.firstFrame * frameDur;
       const config = await appendSegment(packetSource, buffer, offset, firstConfig === null);
       if (firstConfig === null) firstConfig = config;
       else if (config !== firstConfig) {
@@ -574,6 +601,9 @@ async function renderParallel(
       }
       next++;
       appended++;
+      // `appended` now covers this slice's frames, so the entry that was
+      // holding them would double-count from here on.
+      progress.delete(index);
       reportProgress();
     }
   };
@@ -603,6 +633,41 @@ async function renderParallel(
       ...(req.measure ? { measure: true } : {}),
     };
     w.postMessage(request);
+  };
+
+  /**
+   * Hand work to every idle worker the memory budget still allows.
+   *
+   * Without the `done.size` test a worker that finishes ahead of its neighbour
+   * simply takes the next slice, and the next, for as long as the neighbour is
+   * slow - while every finished slice it hands back is held here, whole, until
+   * the neighbour arrives. Nothing bounded that but the slice count, and a
+   * fourteen-slice 4K render could reach thirteen buffered slices at once.
+   * How many bytes that is depends on the footage - the same 4K 120 preset
+   * measured 107 MB per fifteen-second slice on real gameplay and 592 MB on
+   * synthetic noise - but at either figure it is gigabytes of encoded video
+   * held to no purpose. "Array buffer allocation failed" was the shape that
+   * took; long before that, it is simply memory pressure, which the render pays
+   * for in decode time (see MIN_SEGMENT_SECONDS in segmentPlan).
+   *
+   * Two is slack enough that a worker only ever waits on a neighbour that is
+   * genuinely behind, and never on the muxer.
+   *
+   * This cannot deadlock. Slices are dispatched in index order, so if the slice
+   * the muxer is waiting for has not been dispatched yet, no later one has
+   * either and `done` is empty - the cap is not binding. Otherwise that slice
+   * is either already in `done`, and `drainReady` has just consumed it, or it
+   * is in flight on a worker that is by definition not idle.
+   */
+  const pump = (): void => {
+    while (
+      idle.length > 0 &&
+      done.size < MAX_HELD_SEGMENTS &&
+      dispatched < plan.segments.length &&
+      !failure
+    ) {
+      dispatch(idle.shift()!);
+    }
   };
 
   try {
@@ -638,13 +703,19 @@ async function renderParallel(
           fail(failure);
           return;
         }
-        progress.delete(msg.index);
+        // Held at its full frame count rather than dropped: the slice is
+        // rendered and encoded, and only its turn to be muxed is outstanding.
+        // `drainReady` removes the entry once `appended` accounts for it.
+        progress.set(msg.index, plan.segments[msg.index]!.frameCount);
         if (msg.perf) segmentPerf.push(msg.perf);
         done.set(msg.index, msg.buffer);
         void drainReady()
           .then(() => {
             if (appended === plan.segments.length) settle();
-            else dispatch(w);
+            else {
+              idle.push(w);
+              pump();
+            }
           })
           .catch((err: Error) => {
             failure = err;
@@ -658,7 +729,8 @@ async function renderParallel(
         fail(err);
       };
     }
-    for (const w of workers) dispatch(w);
+    idle.push(...workers);
+    pump();
     await allDone;
     return segmentPerf;
   } finally {

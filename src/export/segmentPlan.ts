@@ -20,23 +20,68 @@ export interface SegmentPlan {
 /**
  * Shortest slice worth splitting off.
  *
- * Every segment pays for its own worker boot, its own encoder configuration and
- * its own seek into each clip it touches. It also gets its own rate-control
- * window, and that is the binding constraint: measured on a one-minute render,
- * splitting into eight slices produced a file HALF the size of the serial one,
- * because no encoder ever ran long enough to settle at the target bitrate.
- * Fifteen seconds is long enough for that to be a rounding error and still
- * short enough to keep several workers busy on any render worth splitting.
+ * This was fifteen seconds, and the reason given was rate control: measured on
+ * a one-minute render, splitting into eight slices produced a file HALF the
+ * size of the serial one, because no encoder ever ran long enough to settle at
+ * the target bitrate.
+ *
+ * That diagnosis was wrong, and the re-measurement is in `e2e/probeSliceRate.spec.ts`.
+ * What the encoder was missing was not running time, it was the cadence: the
+ * export did not declare `frameRate` on its video track, so rate control had no
+ * idea how many frames a second it was budgeting for. With the cadence declared
+ * (see `videoTrackMetadata` in exportWorker), thirty seconds of 1080p60 asking
+ * for 24 Mbps comes back at
+ *
+ *   one 30 s slice  23.9 Mbps   four  8 s slices  24.5 Mbps
+ *   two 15 s slices 24.1 Mbps   eight 4 s slices  24.2 Mbps
+ *                               fifteen 2 s slices 24.3 Mbps
+ *
+ * - flat to within measurement noise, at every slice length. Slice length is
+ * simply not what decides bitrate accuracy.
+ *
+ * So the floor now answers the cost it really has to answer: every segment pays
+ * for its own encoder configuration and its own seek into each clip it touches,
+ * and a seek into 120 fps footage with a two-second GOP can be a couple of
+ * hundred frames of decode. Four seconds keeps that amortized while letting
+ * MAX_SEGMENT_BYTES below actually bind, which at 4K it never could at fifteen.
+ *
+ * Shortening it is not a memory trade paid for in time - it is faster outright.
+ * Ninety seconds of 4K 120 cut from a real 1440p120 capture, same machine, same
+ * warm cache, nothing else changed:
+ *
+ *   15 s slices   587 s wall   decode 30.51 ms/frame   longest stall 38.4 s
+ *    4 s slices    82 s wall   decode  0.61 ms/frame   longest stall  3.4 s
+ *
+ * 7x, and it is the DECODE that moves, which is the tell: the render was not
+ * short of encoder, it was short of memory. Two workers holding a ~100 MB slice
+ * each while the lead holds more is enough pressure that every VideoFrame the
+ * decoder allocates starts costing, and 4K 120 allocates one per frame.
  */
-export const MIN_SEGMENT_SECONDS = 15;
+export const MIN_SEGMENT_SECONDS = 4;
 
 /**
  * Ceiling on the encoded bytes one segment holds before it is handed back.
  *
- * A segment is buffered whole, in memory, in its worker. At the 60 Mbps of the
- * 4K preset a thirty-second slice would be 225 MB - per worker. Capping the
- * BYTES rather than the seconds keeps a 4K render's slices short and a 720p
- * render's slices long, which is what each of them wants.
+ * A segment is buffered whole, in memory, in its worker, and again in the lead
+ * until its turn to be muxed comes round. Capping the BYTES rather than the
+ * seconds keeps a 4K render's slices short and a 720p render's slices long,
+ * which is what each of them wants.
+ *
+ * It only started doing that once MIN_SEGMENT_SECONDS came down. The floor
+ * above is applied to this ceiling with `Math.max`, so while it stood at
+ * fifteen seconds the cap could never shorten a slice below fifteen seconds'
+ * worth - and at 4K 120 that is 252 MB against a 64 MB ceiling, four times
+ * over, before the encoder has overshot anything. The cap read as the binding
+ * constraint at 4K and was in fact dead there, which is how a fourteen-slice
+ * render came to be able to hold gigabytes of encoded video at once.
+ *
+ * The figure above is what the preset ASKS for, which is all the planner knows.
+ * What comes out is content-dependent and can be well either side of it: the
+ * same 4K 120 preset measured 57 Mbps on real 1440p120 gameplay and 355 Mbps on
+ * synthetic worst-case noise. So this cap sizes slices against the request and
+ * cannot promise a byte count - `MAX_HELD_SEGMENTS` in exportWorker is what
+ * bounds the count of them, which is the half that does not depend on guessing
+ * how compressible the footage is.
  */
 export const MAX_SEGMENT_BYTES = 64 * 1024 * 1024;
 
