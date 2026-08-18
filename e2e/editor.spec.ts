@@ -110,6 +110,30 @@ test('the project survives a reload via IndexedDB', async ({ page }) => {
   await expect(page.locator('[data-clip-id]').first()).toHaveAttribute('data-clip-kind', 'video');
 });
 
+/**
+ * Media imported into the library alone - no clip on the timeline - is the one
+ * shape of work that used to be dropped on the next start: the project record
+ * is what makes a library reachable, and only a TIMELINE edit ever wrote one,
+ * so an import-only session came back empty and the orphan sweep then deleted
+ * the files for good.
+ */
+test('media imported into the library alone survives a reload', async ({ page }) => {
+  await page.goto(EDITOR_URL);
+
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Import files' }).click();
+  await (await chooser).setFiles([FIXTURE_MP4, FIXTURE_WAV]);
+
+  // Both cards are in the library, and nothing was placed on the timeline.
+  await expect(page.getByLabel('2 files')).toBeVisible();
+  await expect(page.locator('[data-clip-id]')).toHaveCount(0);
+
+  await page.waitForTimeout(1200);
+  await page.reload();
+
+  await expect(page.getByLabel('2 files')).toBeVisible();
+});
+
 test('export renders an MP4 and hands it over as a download', async ({ page }) => {
   // This test renders. Two Playwright workers share one encoder, and where that
   // encoder is a software one the render is CPU-bound against whatever the

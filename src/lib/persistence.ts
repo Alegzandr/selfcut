@@ -49,6 +49,21 @@ function reportSaveSuccess(): void {
 type StoredAsset = MediaAsset & { projectId?: string };
 
 /**
+ * Project ids known to have a record in PROJECT_STORE.
+ *
+ * An asset is only reachable through its owner: the restore lists projects and
+ * loads the library of one of them, and `sweepOrphanAssets` deletes anything
+ * whose owner is not on disk. So a library written under a project that was
+ * never recorded is not merely unreachable, it is collected at the next start -
+ * and a project only got recorded when its TIMELINE changed, which importing
+ * media does not do. Filling the library and reloading lost the whole import.
+ *
+ * Tracking what is on disk is what lets `syncAssets` write the missing owner in
+ * the same transaction as the asset, so the two can never come apart.
+ */
+const persistedProjects = new Set<string>();
+
+/**
  * Ask the browser to stop counting this origin as disposable.
  *
  * Without it everything here is best-effort storage, which the browser is free
@@ -224,6 +239,7 @@ export async function deleteProjectFromDb(id: string): Promise<void> {
   const all = await requestDone(store.getAll());
   for (const a of all) if (isValidAsset(a) && (a as StoredAsset).projectId === id) store.delete(a.id);
   await txDone(tx);
+  persistedProjects.delete(id);
 }
 
 /** Rename a project that is NOT the open one (the open one is renamed via the store). */
@@ -273,6 +289,7 @@ export async function saveWholeProject(): Promise<void> {
     const store = tx.objectStore(ASSETS_STORE);
     for (const a of Object.values(assets)) store.put({ ...a, projectId: currentProjectId });
     await txDone(tx);
+    persistedProjects.add(project.id);
     reportSaveSuccess();
   } catch (err) {
     reportSaveFailure(err);
@@ -373,6 +390,7 @@ async function writeProject(project: Project): Promise<void> {
     // can order by "most recently edited". The editor never touches `updatedAt`.
     tx.objectStore(PROJECT_STORE).put({ ...project, updatedAt: Date.now() }, project.id);
     await txDone(tx);
+    persistedProjects.add(project.id);
     reportSaveSuccess();
   } catch (err) {
     reportSaveFailure(err);
@@ -382,11 +400,24 @@ async function writeProject(project: Project): Promise<void> {
 async function syncAssets(
   next: Record<string, MediaAsset>,
   prev: Record<string, MediaAsset>,
-  projectId: string,
+  project: Project,
 ): Promise<void> {
+  const projectId = project.id;
+  // An import changes the library and nothing else, so the debounced project
+  // save is never scheduled - and a library whose owner is not on disk is
+  // swept at the next start. Write the owner alongside the first asset, in one
+  // transaction: either both land or neither does, so media can never outlive
+  // the record that makes it reachable.
+  const ownerMissing = !persistedProjects.has(projectId);
   try {
     const d = await db();
-    const tx = d.transaction(ASSETS_STORE, 'readwrite');
+    const tx = d.transaction(
+      ownerMissing ? [PROJECT_STORE, ASSETS_STORE] : [ASSETS_STORE],
+      'readwrite',
+    );
+    if (ownerMissing) {
+      tx.objectStore(PROJECT_STORE).put({ ...project, updatedAt: Date.now() }, projectId);
+    }
     const store = tx.objectStore(ASSETS_STORE);
     for (const [id, asset] of Object.entries(next)) {
       if (prev[id] !== asset) store.put({ ...asset, projectId });
@@ -397,6 +428,7 @@ async function syncAssets(
     // orphans are swept at the next startup instead.
     for (const id of Object.keys(prev)) if (!(id in next)) store.delete(id);
     await txDone(tx);
+    if (ownerMissing) persistedProjects.add(projectId);
     reportSaveSuccess();
   } catch (err) {
     reportSaveFailure(err);
@@ -480,6 +512,7 @@ export async function initPersistence(): Promise<void> {
   // every project on disk plus the open one (a brand-new project may not be
   // persisted yet). Both run before the subscription, so no store write races.
   const validIds = new Set((await listProjectMetas()).map((m) => m.id));
+  for (const id of validIds) persistedProjects.add(id);
   validIds.add(useStore.getState().currentProjectId);
   await sweepOrphanAssets(validIds);
   await pruneMediaCaches();
@@ -512,7 +545,7 @@ export async function initPersistence(): Promise<void> {
       return;
     }
     if (s.project !== prev.project) scheduleProjectSave(s.project);
-    if (s.assets !== prev.assets) void syncAssets(s.assets, prev.assets, s.currentProjectId);
+    if (s.assets !== prev.assets) void syncAssets(s.assets, prev.assets, s.project);
   });
 
   // Flush the pending debounced save when the page goes away.
