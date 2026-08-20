@@ -54,8 +54,19 @@ async function scratchContents(page: import('@playwright/test').Page) {
     }
     const out: { name: string; size: number }[] = [];
     for await (const name of dir.keys()) {
-      const file = await (await dir.getFileHandle(name)).getFile();
-      out.push({ name, size: file.size });
+      // A name from `keys()` is a name the directory HAD. Startup fires its
+      // sweep without awaiting it (`void sweepExportScratch()`), so a reclaim
+      // can land between the listing and the open, and the file is gone by the
+      // time it is asked for - which is the very state this inventory is
+      // polled for. Counting it as absent is the honest reading and the one
+      // every caller wants; leaving it to throw turns the poll into a
+      // NotFoundError on the runs where the sweep happened to be fast.
+      try {
+        const file = await (await dir.getFileHandle(name)).getFile();
+        out.push({ name, size: file.size });
+      } catch {
+        continue;
+      }
     }
     return out;
   });
