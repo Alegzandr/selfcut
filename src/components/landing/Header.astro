@@ -12,19 +12,26 @@ const { strings, home } = Astro.props;
 
 <header>
   <a class="wordmark" href={home}
-    ><img src="/icon-192.png" alt="" width="192" height="192" />SelfCut</a
+    ><img src="/landing/logo-48.png" alt="" width="48" height="48" />SelfCut</a
   >
   <a class="btn btn-primary" href="/app/">{strings['header.cta']}</a>
 </header>
 
 <style>
+  /* The editor's own top bar: h-12, zinc-900, one hairline under it. The page
+     opens with the chrome the app opens with. */
   header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding-block: 1rem;
-    border-bottom: 1px solid var(--line-soft);
+    height: 3.5rem;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in oklab, var(--panel) 92%, transparent);
+    backdrop-filter: blur(8px);
   }
 
   .wordmark {
@@ -32,13 +39,19 @@ const { strings, home } = Astro.props;
     align-items: center;
     gap: 0.5rem;
     text-decoration: none;
-    font-weight: 800;
-    font-stretch: 118%;
-    font-size: 1.25rem;
-    letter-spacing: 0.01em;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
   }
   .wordmark img {
-    width: 1.6rem;
-    height: 1.6rem;
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  header .btn-primary {
+    padding: 0.45rem 0.9rem;
+    min-height: 0;
+    font-size: 0.9375rem;
   }
 </style>

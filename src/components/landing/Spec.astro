@@ -1,0 +1,58 @@
+---
+import type { LandingStrings } from '../../landing/strings';
+
+interface Props {
+  strings: LandingStrings;
+}
+
+const { strings } = Astro.props;
+
+// What the sections above do not already show, in one line each.
+const SPEC = [
+  { dt: strings['spec.sound.dt'], dd: strings['spec.sound.dd'] },
+  { dt: strings['spec.preview.dt'], dd: strings['spec.preview.dd'] },
+  { dt: strings['spec.mobile.dt'], dd: strings['spec.mobile.dd'] },
+  { dt: strings['spec.effects.dt'], dd: strings['spec.effects.dd'] },
+  { dt: strings['spec.lang.dt'], dd: strings['spec.lang.dd'] },
+  { dt: strings['spec.resume.dt'], dd: strings['spec.resume.dd'] },
+];
+---
+
+<section aria-labelledby="spec-title">
+  <h2 id="spec-title">{strings['spec.title']}</h2>
+  <dl class="spec">
+    {
+      SPEC.map((row) => (
+        <div>
+          <dt>{row.dt}</dt>
+          <dd>{row.dd}</dd>
+        </div>
+      ))
+    }
+  </dl>
+</section>
+
+<style>
+  .spec {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: 0 clamp(1.5rem, 4vw, 3.5rem);
+    margin-top: clamp(1.75rem, 3vw, 2.5rem);
+  }
+  .spec > div {
+    padding-block: 1.05rem;
+    border-top: 1px solid var(--line);
+  }
+  dt {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+  dd {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.9375rem;
+    text-wrap: pretty;
+  }
+</style>

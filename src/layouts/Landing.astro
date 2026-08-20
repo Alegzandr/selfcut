@@ -1,13 +1,14 @@
 ---
 import Closing from '../components/landing/Closing.astro';
-import Exports from '../components/landing/Exports.astro';
+import Cut from '../components/landing/Cut.astro';
 import Faq from '../components/landing/Faq.astro';
-import Features from '../components/landing/Features.astro';
 import Footer from '../components/landing/Footer.astro';
+import Formats from '../components/landing/Formats.astro';
 import Header from '../components/landing/Header.astro';
 import Hero from '../components/landing/Hero.astro';
-import Privacy from '../components/landing/Privacy.astro';
-import Scene from '../components/landing/Scene.astro';
+import Icons from '../components/landing/Icons.astro';
+import Proof from '../components/landing/Proof.astro';
+import Spec from '../components/landing/Spec.astro';
 import { ALTERNATES, DEFAULT_LANG, LANGS, ORIGIN, langByCode, urlOf } from '../landing/langs';
 import { faqPage, softwareApplication } from '../landing/schema';
 import { stringsFor } from '../landing/strings';
@@ -31,14 +32,21 @@ const isDefault = lang === DEFAULT_LANG;
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b0d10" />
+    <meta name="theme-color" content="#09090b" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link
       rel="preload"
-      href="/fonts/archivo-var-latin.woff2"
+      href="/fonts/madefor-display-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/madefor-text-latin.woff2"
       as="font"
       type="font/woff2"
       crossorigin
@@ -86,20 +94,21 @@ const isDefault = lang === DEFAULT_LANG;
   <body>
     <a class="skip-link" href="#main">{strings['skip']}</a>
 
-    <div class="frame">
-      <Header strings={strings} home={`/${lang.path}`} />
+    {/* The sprite the editor replica draws itself with, once per page. */}
+    <Icons />
 
-      <main id="main">
-        <Hero strings={strings} />
-        <Scene />
-        <Privacy strings={strings} />
-        <Features strings={strings} />
-        <Exports strings={strings} />
-        <Faq strings={strings} />
-        <Closing strings={strings} />
-      </main>
+    <Header strings={strings} home={`/${lang.path}`} />
 
-      <Footer strings={strings} current={lang.code} />
-    </div>
+    <main id="main">
+      <Hero strings={strings} code={code} />
+      <Proof strings={strings} />
+      <Cut strings={strings} code={code} />
+      <Formats strings={strings} code={code} />
+      <Spec strings={strings} />
+      <Faq strings={strings} />
+      <Closing strings={strings} />
+    </main>
+
+    <Footer strings={strings} current={lang.code} />
   </body>
 </html>

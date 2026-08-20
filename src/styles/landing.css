@@ -2,30 +2,109 @@
    component boundaries (the page gutter, the button, the section rhythm).
    Everything that belongs to one section lives in that section's component. */
 
+/* Wix Madefor, the landing's own voice: a UI superfamily (Display for headings,
+   Text for copy), neutral enough to sit beside the editor screenshots without
+   arguing with them. Two subsets each, split on unicode-range exactly like
+   Google Fonts serves them, so a French page never downloads the ext file it
+   does not need. */
 @font-face {
-  font-family: 'Archivo';
+  font-family: 'Madefor Display';
   font-style: normal;
-  font-weight: 100 900;
-  font-stretch: 62% 125%;
+  font-weight: 400 800;
   font-display: swap;
-  src: url('/fonts/archivo-var-latin.woff2') format('woff2');
+  src: url('/fonts/madefor-display-latin.woff2') format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Madefor Display';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/fonts/madefor-display-latin-ext.woff2') format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Madefor Text';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/fonts/madefor-text-latin.woff2') format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Madefor Text';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/fonts/madefor-text-latin-ext.woff2') format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 :root {
-  --bg: oklch(0.16 0.006 250);
-  --bg-deep: oklch(0.13 0.005 250);
-  --surface: oklch(0.2 0.007 250);
-  --line: oklch(0.31 0.009 250);
-  --line-soft: oklch(0.25 0.008 250);
-  --text: oklch(0.94 0.004 250);
-  --muted: oklch(0.72 0.012 250);
-  --faint: oklch(0.6 0.012 250);
-  --accent: oklch(0.7 0.135 237);
-  --accent-ink: oklch(0.2 0.05 240);
-  --accent-dim: oklch(0.45 0.09 237);
-  --playhead: oklch(0.63 0.21 27);
+  /* The editor's Tailwind tokens, spelled out. The landing paints the same
+     surfaces as the app - and the replica of the editor in the hero has to be
+     pixel-identical to the real thing - so both read from one set of values
+     rather than from two eyeballed approximations. Keep in sync with
+     tailwindcss/theme.css when the app's palette moves. */
+  --zinc-100: oklch(96.7% 0.001 286.375);
+  --zinc-200: oklch(92% 0.004 286.32);
+  --zinc-300: oklch(87.1% 0.006 286.286);
+  --zinc-400: oklch(70.5% 0.015 286.067);
+  --zinc-500: oklch(55.2% 0.016 285.938);
+  --zinc-700: oklch(37% 0.013 285.805);
+  --zinc-800: oklch(27.4% 0.006 286.033);
+  --zinc-900: oklch(21% 0.006 285.885);
+  --zinc-950: oklch(14.1% 0.005 285.823);
+  --sky-300: oklch(82.8% 0.111 230.318);
+  --sky-400: oklch(74.6% 0.16 232.661);
+  --sky-500: oklch(68.5% 0.169 237.323);
+  --sky-900: oklch(39.1% 0.09 240.876);
+  --sky-950: oklch(29.3% 0.066 243.157);
+  --emerald-300: oklch(84.5% 0.143 164.978);
+  --emerald-900: oklch(37.8% 0.077 168.94);
+  --emerald-950: oklch(26.2% 0.051 172.552);
+  --red-500: oklch(63.7% 0.237 25.331);
+
+  /* Roles. */
+  --bg: var(--zinc-950);
+  --panel: var(--zinc-900);
+  --line: var(--zinc-800);
+  --line-strong: var(--zinc-700);
+  --text: var(--zinc-100);
+  --muted: var(--zinc-400);
+  /* Not zinc-500: the editor uses it for chrome a user is already looking at,
+     but on this page it carries the footer and the CTA notes, and against
+     zinc-950 it lands at 4.1:1 - under AA. Nudged up until it clears 4.5. */
+  --faint: oklch(61% 0.016 285.938);
+  --accent: var(--sky-500);
+  --accent-text: var(--sky-300);
+
+  /* Type. Two families, one voice: Display carries the headings, Text the
+     copy. The replica of the editor deliberately opts out of both and runs on
+     `--font-app`, which is the stack the editor itself renders in. */
+  --font-display: 'Madefor Display', system-ui, sans-serif;
+  --font-text: 'Madefor Text', system-ui, sans-serif;
+  --font-app:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
   --pad: clamp(1.25rem, 4vw, 4rem);
-  --measure: 68ch;
+  --measure: 62ch;
+  /* The content column. Sections pad to it; the hero lets the editor run past
+     its right edge. */
+  --column: 74rem;
 }
 
 * {
@@ -39,12 +118,23 @@
   }
 }
 
+/* The hero's editor runs past the right edge on purpose. `clip` rather than
+   `hidden`: hidden would turn the element into a scroll container, which is
+   what breaks the sticky header. Both elements, because clipping on `body`
+   alone still lets the viewport scroll. */
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Archivo', system-ui, sans-serif;
+  font-family: var(--font-text);
   font-size: 1.0625rem;
-  line-height: 1.65;
+  /* Light type on a dark ground reads lighter than it is; the extra leading is
+     what keeps a paragraph from tightening up. */
+  line-height: 1.7;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -54,11 +144,11 @@ a {
 
 ::selection {
   background: var(--accent);
-  color: var(--accent-ink);
+  color: var(--zinc-950);
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--sky-400);
   outline-offset: 3px;
   border-radius: 2px;
 }
@@ -68,9 +158,9 @@ a {
   left: var(--pad);
   top: 0.75rem;
   translate: 0 -6rem;
-  z-index: 10;
+  z-index: 60;
   background: var(--accent);
-  color: var(--accent-ink);
+  color: var(--zinc-950);
   padding: 0.5rem 1rem;
   font-weight: 600;
   text-decoration: none;
@@ -80,34 +170,55 @@ a {
   translate: 0 0;
 }
 
-/* Sections span the full viewport; hairlines run edge to edge and the
-   content sits in a centered 72rem column via the inline padding. Global
-   because the elements it lines up live in a different component each. */
+/* Visible to assistive tech and to search, not on screen: used by the section
+   whose three claims are the heading. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Sections span the full viewport; hairlines run edge to edge and the content
+   sits in a centered column via the inline padding. Global because the
+   elements it lines up live in a different component each. */
 header,
 section,
 footer,
 .hero {
-  padding-inline: max(var(--pad), calc((100% - 72rem) / 2));
+  padding-inline: max(var(--pad), calc((100% - var(--column)) / 2));
 }
 
 section {
-  padding-block: clamp(3rem, 7vw, 5.5rem);
-  border-bottom: 1px solid var(--line-soft);
+  padding-block: clamp(3rem, 6vw, 5rem);
+  border-top: 1px solid var(--line);
 }
 
-h2 {
-  font-size: clamp(1.7rem, 3.4vw, 2.6rem);
-  line-height: 1.15;
-  font-weight: 750;
-  font-stretch: 112%;
-  letter-spacing: -0.01em;
-  max-width: 26ch;
+/* Headings. One family, real weight and size contrast, no width axis: the
+   editor's own chrome has no display face, so a stretched one on the landing
+   read as a different product. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
   text-wrap: balance;
 }
 
-.section-intro {
+h2 {
+  font-size: clamp(1.9rem, 3.6vw, 2.9rem);
+  line-height: 1.08;
+  max-width: 20ch;
+}
+
+/* The one lead paragraph shape, under a heading. */
+.lede {
   margin-top: 1.1rem;
-  max-width: var(--measure);
+  max-width: 46ch;
   color: var(--muted);
   text-wrap: pretty;
 }
@@ -117,13 +228,16 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.7rem 1.3rem;
+  padding: 0.6rem 1.1rem;
   min-height: 44px;
-  font: inherit;
+  font-family: var(--font-display);
+  font-size: 1rem;
   font-weight: 650;
+  letter-spacing: -0.01em;
   text-decoration: none;
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  border: 1px solid transparent;
+  /* rounded-lg, the radius every button in the editor is drawn with. */
+  border-radius: 0.5rem;
   transition:
     background-color 0.15s ease-out,
     border-color 0.15s ease-out,
@@ -134,10 +248,30 @@ h2 {
 }
 .btn-primary {
   background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
+  color: var(--zinc-950);
 }
 .btn-primary:hover {
-  background: oklch(0.76 0.125 237);
-  border-color: oklch(0.76 0.125 237);
+  background: var(--sky-400);
+}
+.btn-ghost {
+  border-color: var(--line-strong);
+  color: var(--zinc-200);
+}
+.btn-ghost:hover {
+  background: color-mix(in oklab, var(--zinc-800) 70%, transparent);
+}
+
+/* Keyboard hints, in the app's own idiom: a key cap, not a code span. */
+kbd {
+  font-family: var(--font-app);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--zinc-200);
+  background: var(--zinc-800);
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0.15em 0.45em;
+  white-space: nowrap;
 }

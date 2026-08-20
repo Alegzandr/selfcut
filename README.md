@@ -11,27 +11,65 @@ compositing and encoding all happen on your own machine: your files never leave
 the device, and there is no server to send them to.
 
 Built for short-form editing: a talking head, a few B-roll shots, some music,
-out to YouTube or TikTok in a couple of minutes.
+out to YouTube or TikTok in a couple of minutes. Everything past that - grading,
+masks, keyframes, scopes - is there when the edit asks for it, and out of the
+way when it does not.
 
 ## What you can do
 
-- **Drop in anything.** Video (MP4, MOV, WebM, MKV, TS, 3GP), audio (MP3, WAV,
-  Ogg, FLAC, AAC), images (PNG, JPEG, WebP, GIF, AVIF, SVG) and subtitle files
-  (SRT, VTT, ASS) as caption clips. Drop five files at once and you get a rough
-  cut immediately.
-- **Cut on a real timeline.** Split at the playhead, trim with handles, drag
-  clips in time and between tracks, with snapping to edges and playhead.
-  Unlimited video and audio tracks, reorderable, each mutable or hideable.
-- **Adjust each clip.** Volume, speed (0.5× to 2× or free entry), fade in/out,
-  crop, position and scale, all in the inspector.
-- **Watch it live.** Real-time preview with synced audio; the picture sharpens
-  to full resolution as soon as you stop scrubbing.
-- **Switch format.** One toggle flips the project between 16:9 and 9:16.
-- **Export.** YouTube 16:9, TikTok/Reels/Shorts 9:16, Instagram 1:1 and 4:5
-  (H.264 + AAC MP4, 720p to 4K), or MP3 for the audio mix alone.
+**Bring it in.** Video (MP4, MOV, WebM, MKV, TS/M2TS, 3GP), audio (MP3, WAV,
+Ogg, FLAC, AAC), images (PNG, JPEG, WebP, GIF, AVIF, SVG) and subtitle files
+(SRT, VTT, ASS/SSA) as caption clips. Drop five files at once - or a whole
+folder - and you get a rough cut immediately. Subtitles embedded in a container
+can be pulled out into caption clips; audio tracks WebCodecs cannot decode
+(E-AC-3, AC-3, DTS) are transcoded on demand instead of being dropped.
 
-Also there: text and titles, waveforms, undo/redo, autosave, and a media
-library that keeps every import at hand.
+**Cut on a real timeline.** Split at the playhead, trim with handles, drag clips
+in time and between tracks, with snapping to edges, markers and playhead.
+Unlimited video and audio tracks, reorderable, each mutable, hideable or
+lockable, with per-track gain, opacity and level meters. Markers, a loop region
+(play it, or export just that span), undo/redo, autosave.
+
+**Adjust each clip.** Volume, pan, mono downmix, speed, fades, crop, position,
+scale, non-uniform stretch and rotation - dragged in the preview or typed in
+the inspector.
+
+**Grade.** Brightness, contrast, saturation, white balance, tint, vignette and
+blur; per-channel tone curves; `.cube` LUTs imported into the project and reused
+across clips; chroma key for a green screen. Waveform, RGB parade, histogram and
+vectorscope to check the result.
+
+**Animate.** Keyframes on position, scale, stretch, rotation, opacity and every
+colour parameter, with easing presets or per-segment Bézier handles, edited on
+property lanes under the clip. Ken Burns zoom for the quick version.
+
+**Mask and hide.** Rectangle, ellipse or a bezier pen-tool shape, feathered and
+invertible; a planar motion tracker (position, scale, rotation) writes the
+motion so a mask follows what it covers. Redactions blur or pixelate a face, a
+plate or a screen in place, several per clip, each tracked on its own.
+
+**Add what is not in the footage.** Text and titles (six faces, outline, caption
+pill, alignment, wrap), solid colours and gradients, drawn shapes. Nine
+transitions rendered from clip overlap: dissolve, dip to black or white, four
+slides, wipe, zoom.
+
+**Mix.** Per-clip volume envelopes and audio effects - leveler, voice, bass,
+reverb, echo - all native Web Audio, so preview and export sound identical.
+Auto-captions transcribe a clip locally with Whisper (desktop only; the model
+downloads once and the audio never leaves the browser).
+
+**Watch it live.** Real-time preview with synced audio, decoded in a worker;
+the picture sharpens to full resolution as soon as you stop scrubbing.
+
+**Keep your work.** Projects live in the browser with a project browser to
+switch between them, save to a portable `.selfcut` file (timeline and metadata,
+never the media bytes), and relink their sources when the files move. Clip looks
+travel as `.sfx` presets.
+
+**Export.** YouTube 16:9, TikTok/Reels/Shorts 9:16, Instagram 1:1 and 4:5, plus
+custom presets: H.264, HEVC or AV1, 720p to 4K, a 120 fps cadence, 24p cinema, a
+light file for email, or MP3 for the audio mix alone. The frame rate follows the
+footage unless the preset pins it.
 
 Interface available in English, French, German, Spanish and Brazilian
 Portuguese.
@@ -43,7 +81,7 @@ browsers get a clear explanation screen instead of a broken editor. Everything
 is local, so a faster machine means a faster export.
 
 Your project is saved in the browser, on your device. Clearing site data clears
-the project.
+the project - save a `.selfcut` file if it matters.
 
 ---
 
@@ -51,11 +89,13 @@ the project.
 
 ```bash
 npm i
-npm run dev      # Astro dev server (port 5173)
-npm run test     # vitest
+npm run dev        # Astro dev server (port 5173)
+npm run test       # vitest (unit)
+npm run test:e2e   # playwright: `ui` project (parallel) + `render` (serial, real encodes)
+npm run bench      # render-budget benchmarks
 npm run typecheck
-npm run lint     # oxlint
-npm run build    # tsc + astro build
+npm run lint       # oxlint
+npm run build      # tsc + astro build
 ```
 
 ## Two pages, one build
@@ -79,43 +119,84 @@ COOP/COEP dev headers, and the sitemap.
 
 1. **Preview (real time)** · `src/preview/`. A `requestAnimationFrame` loop
    draws the visible frames for the current time onto a canvas (crop, position,
-   scale, `globalAlpha` for fades). Audio runs through a Web Audio graph: one
-   `GainNode` per clip, `playbackRate` for speed. Frames may drop on slower
-   machines; audio stays the clock.
-2. **Export (offline, in a Web Worker)** · `src/export/exportWorker.ts`.
-   Iterates frame by frame at `PROJECT_FPS` (60), maps output time to source
-   time, decodes with mediabunny `Input` + `VideoSampleSink`, composites on an
-   `OffscreenCanvas` and pushes into a `CanvasSource` (H.264). The audio mix is
-   rendered on the main thread with an `OfflineAudioContext` (Web Audio is
-   unavailable in workers), transferred as raw channels and encoded in the
-   worker. Muxing via `Output` + `Mp4OutputFormat`/`Mp3OutputFormat` with fast
-   start.
+   scale, stretch, rotation, masks, redactions, transitions, `globalAlpha` for
+   fades). Decoding happens in `frameWorker.ts`, one cursor per clip, so
+   demuxing never blocks the UI thread. Colour grading is an isolated WebGL2
+   pass (`colorPass.ts`) in front of the 2D compositor; without WebGL2 it
+   degrades to a no-op instead of breaking playback. Audio runs through a Web
+   Audio graph: one `GainNode` per clip, `playbackRate` for speed, effects as
+   native nodes. Frames may drop on slower machines; audio stays the clock.
+2. **Export (offline, in Web Workers)** · `src/export/`. Iterates frame by frame
+   at the export rate, maps output time to source time, decodes with mediabunny
+   `Input` + `VideoSampleSink`, composites on an `OffscreenCanvas` through the
+   same `FrameRenderer` the preview's compositor backs, and pushes into a
+   `CanvasSource`. The audio mix is rendered on the main thread with an
+   `OfflineAudioContext` (Web Audio is unavailable in workers), transferred as
+   raw channels and encoded in the worker. Muxing via `Output` +
+   `Mp4OutputFormat`/`Mp3OutputFormat` with fast start.
+
+The export loop is encoder-bound (measured: ~84% of a 1080p frame is spent
+waiting on the encoder, four encodes deep), so a long render is **split across
+segment workers** (`segmentPlan.ts`, `segmentWorker.ts`): each renders a
+contiguous frame range into a small standalone MP4, and the lead worker demuxes
+those and re-muxes the packets - already encoded - into the real output. Nothing
+is re-encoded. Slices are at least 4 s, which is about amortizing per-segment
+encoder setup and seeks, not about bitrate (`e2e/probeSliceRate.spec.ts` shows
+rate control is flat across slice lengths once the track declares its cadence).
+
+A render taps its own frames (`renderPreview.ts`, ~8 downscaled snapshots a
+second, fire-and-forget) so the monitor shows the export advancing. Stalled
+encoders and decoders are caught by deadlines in `stallGuard.ts` and answered by
+`retryPlan.ts` (fall back to a slower, safer configuration) rather than by an
+error. When the browser cannot hand us a file to stream into, the sink is a
+scratch file in OPFS (`src/lib/opfs.ts`) - a 6 GB "120 fps · 4K" render will not
+fit in one ArrayBuffer.
 
 AAC/MP3 encoders are feature-detected (`canEncodeAudio`); when the native
 WebCodecs encoder is missing, `@mediabunny/aac-encoder` /
-`@mediabunny/mp3-encoder` (WASM) are registered as fallbacks. That is why the
-export worker bundle is large (~1.8 MB); it only loads when an export starts.
+`@mediabunny/mp3-encoder` (WASM) are registered as fallbacks. A preset asking
+for HEVC or AV1 falls back to H.264 when the browser cannot encode it, so a
+codec choice is a preference and never a way to make an export fail.
+
+## ffmpeg.wasm, on the side
+
+`src/media/ffmpeg.ts` is a shared runtime for what native browser codecs cannot
+do: transcoding an undecodable audio track, extracting embedded subtitles. It is
+dynamically imported on first job (the core is a 32 MB download) and never
+touches a normal import path. Two builds ship - single-threaded, and the
+multi-threaded one used when the document is `crossOriginIsolated`.
 
 ## Data model
 
 See `src/types.ts`. A clip's timeline duration is
 `(sourceOutMs - sourceInMs) / speed`; export maps
 `sourceTime = sourceInMs + (t - timelineStartMs) * speed`. Video z-order =
-track order (last track on top); audio tracks are mixed together.
+track order (last track on top); audio tracks are mixed together. The model math
+(durations, fades, crossfades, output geometry, keyframe sampling, curves,
+chroma key, mask motion) lives in `src/model/`; `src/types.ts` is types only.
+
+An animatable property is a `Channel`: a plain number (the common case, costs
+nothing) or a sorted keyframe list sampled over clip-local time.
 
 ## Layout
 
 ```
 src/
-  app/        app-wide constants (APP_NAME, fps, zoom bounds…)
-  store/      Zustand store, undo/redo (gesture-based transactions)
-  media/      mediabunny wrappers: probing, thumbnails, decode caches
-  preview/    real-time compositor + Web Audio graph
-  export/     export worker, presets, main-thread orchestrator
-  timeline/   timeline UI (ruler, tracks, clips, snapping, playhead)
-  inspector/  selected-clip bottom sheet
-  ui/         top bar, transport, toasts, import, unsupported screen
+  app/        app-wide constants (APP_NAME, fps, zoom bounds…), COOP worker, error policy
+  store/      Zustand store split into slices, undo/redo (gesture-based transactions)
+  model/      pure timeline/clip math: animation, curves, chroma key, masks, redaction
+  media/      mediabunny wrappers: probing, thumbnails, decode caches, ffmpeg jobs,
+              embedded subtitles, Whisper captions, motion tracking
+  preview/    real-time compositor, decode worker, WebGL colour pass, scopes, Web Audio graph
+  export/     export worker, segment workers, presets, stall guard, main-thread orchestrator
+  effects/    effect catalogue, `.sfx` presets, `.cube` LUT parsing
+  timeline/   timeline UI (ruler, markers, tracks, clips, keyframe lanes, snapping, playhead)
+  inspector/  selected-clip panel, one section per family
+  ui/         menu bar, top bar, transport, libraries, dialogs, toasts, import, unsupported screen
+  perf/       frame instrumentation + HUD overlay
+  lib/        persistence (IndexedDB), project file, OPFS scratch, fonts, subtitles, helpers
   i18n/       locales (en, fr, de, es, pt-BR)
+  landing/    landing copy, schema, language list
 ```
 
 ## Decisions made along the way
@@ -138,12 +219,31 @@ src/
   **Link** re-forms one: select a video and an audio clip on opposite tracks,
   or select just one and it auto-pairs with the same-source clip.
 - **Overlaps are allowed** within a track; at a given time the latest-starting
-  clip wins. Permissive beats fighting the user mid-drag.
+  clip wins, and the overlap is where a transition renders. Permissive beats
+  fighting the user mid-drag.
 - **Track reordering** uses up/down buttons in the track header, simpler and
-  more reliable than vertical drag on mobile.
+  more reliable than vertical drag on mobile. **Locking** is enforced in the
+  selection slice: a clip that cannot be selected cannot be edited anywhere.
 - **Transform semantics**: crop is normalized over the source; the cropped
-  region is contain-fitted into the output, then scaled by `scale` and centered
-  at (`x`, `y`) in normalized output coordinates.
+  region is contain-fitted into the output, then scaled by `scale` (and
+  optionally stretched per axis), rotated around its centre, and centered at
+  (`x`, `y`) in normalized output coordinates.
+- **Masks and redactions share one shape type.** A `ClipRedaction` extends
+  `ClipMask`, so every helper - bounds, dirty rect, bezier tracing, motion
+  sampling, the tracker - takes either unchanged. Both are defined in
+  output-frame coordinates, which is what split screens and reveals want.
+- **The motion tracker is two translational trackers**, not an affine solve:
+  two patches matched across frames give translation (midpoint), scale (vector
+  length) and rotation (angle). Robust enough for a drifting face, cheap enough
+  to run on decoded frames locally.
+- **Effects are an index, not a registry.** A clip stores its look in flat
+  fields (`color`, `audioFx`, `transform`, `zoomEnd`); `src/effects/catalog.ts`
+  is a browsable, draggable index over them that adds no state and no rendering
+  path.
+- **`.selfcut` holds no media bytes.** The project file keeps the timeline plus
+  asset metadata, thumbnails and waveform peaks, so a 4 GB shoot saves in a few
+  hundred kilobytes and reopens showing the edit; the sources are relinked by
+  name through the same path a moved file uses.
 - **Wheel = pan, Ctrl/Cmd+wheel = zoom** on the timeline (zoom anchored at the
   cursor, Vegas-style). Pinch zoom on touch.
 - **Variable preview resolution** · the monitor composites at a fraction of the
@@ -159,10 +259,11 @@ src/
   targets.
 - **Speed does not preserve pitch** (plain `playbackRate`), as scoped.
 - **Import degrades instead of rejecting**: probing keeps whatever is usable.
-  Undecodable audio tracks are skipped individually; a file whose video codec
-  WebCodecs can't decode still imports as audio-only when it has decodable
-  sound (the toast names the codec). Only a file with nothing decodable is
-  refused.
+  Undecodable audio tracks are listed and can be transcoded on demand; a file
+  whose video codec WebCodecs can't decode still imports as audio-only when it
+  has decodable sound (the toast names the codec); an unreadable container is
+  remuxed to Matroska and re-imported under the same identity. Only a file with
+  nothing decodable is refused.
 - **Still images bypass the decoder pipeline** (`src/media/stillImage.ts`): an
   image is rasterized once into an `ImageBitmap` (SVG goes through an
   `<img>`/canvas fallback since `createImageBitmap` rejects it) and drawn
@@ -171,11 +272,17 @@ src/
   thread (SVG needs the DOM) and transfers the bitmaps to the worker. An image
   clip defaults to 5 s, trims without an upper bound, and slip is a no-op.
   Animated GIFs import as a still of their first frame.
+- **Auto-captions are desktop-only**, by decision: Whisper needs a capable
+  machine and a model download, which is not what a phone visit should meet.
 
-## Out of scope (v1)
+## Measuring
 
-Filters, transitions other than fades, keyframes, HDR, pitch preservation,
-multi-project. The data model already accommodates several of these.
+`src/perf/probe.ts` instruments every render path (preview loop, compositor,
+colour pass, export worker). It is off by default and free when off: no
+allocation in the hot loop, thread-local, published to the HUD at most every
+few frames. `npm run bench` runs the render-budget benchmarks;
+`npm run test:e2e:perf` and the swiftshader config exercise the same paths in a
+browser, with and without a real GPU.
 
 ## Deployment
 
@@ -185,16 +292,26 @@ to `main` and publishes `dist/` to GitHub Pages, served at
 
 - Pages serves over HTTPS, which satisfies WebCodecs' secure-context
   requirement.
-- No COOP/COEP headers needed: SelfCut uses WebCodecs, not ffmpeg.wasm.
-- The CSP ships as a meta tag, since Pages allows no custom headers. Astro
-  composes it from `security.csp` in `astro.config.ts`, hashing every script it
-  inlines - which is how the landing's language script stays allowed without
-  opening `script-src` to `'unsafe-inline'`.
+- The editor gets **COOP/COEP from a service worker** (`public/coop-sw.js`),
+  since a static host sends no headers: cross-origin isolation is what lets the
+  multi-threaded ffmpeg core use `SharedArrayBuffer`. It is scoped to the
+  editor, and isolation only takes effect from the next navigation - so
+  registration is silent and never forces a reload. Dev serves the same headers
+  from the Astro server instead (`integrations/crossOriginIsolation.ts`).
+- The CSP ships as a meta tag, for the same reason. Astro composes it from
+  `security.csp` in `astro.config.ts`, hashing every script it inlines - which
+  is how the landing's language script stays allowed without opening
+  `script-src` to `'unsafe-inline'`.
 - `src/pages/404.astro` renders the landing, so unknown paths show it instead of
   the default Pages 404 (still served with a 404 status, so stray URLs are not
   indexed).
 - `base` is `/` for the custom domain; set `VITE_BASE` to build for a
   subpath.
+
+## Out of scope
+
+HDR, pitch preservation, collaborative editing, anything needing a server. The
+scope document for the effects epic is in `docs/`.
 
 ## License
 

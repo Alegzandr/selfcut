@@ -1,0 +1,853 @@
+---
+/**
+ * A replica of the editor, drawn in the landing's own CSS.
+ *
+ * Not a decorative impression of one: the chrome is built from the editor's
+ * measurements (`h-8` menu bar, `h-12` toolbar, `h-11` transport, `rounded-lg`
+ * buttons, `top-1 bottom-1` clips), from its palette (the zinc/sky tokens in
+ * landing.css, which are the app's Tailwind values spelled out) and from its
+ * icons (`landing/icons.ts`, rendered from the same Radix set the app imports).
+ * The labels come from the *editor's* dictionaries, so the replica speaks
+ * whatever language the page does and cannot drift from the real menu titles.
+ *
+ * Everything is sized in `em` against `.app`'s own font-size, so the whole
+ * thing scales to the space it is given by setting that one value - no
+ * transform, no fixed height to keep in sync. Numbers therefore read exactly
+ * like the app's Tailwind classes: `h-12` is `3em`.
+ *
+ * The playhead sweeps, and the monitor cuts to the shot the playhead is over -
+ * one animation, timed off one duration, honest about what an editor does.
+ * The three shots are real frames of the footage that fills the timeline.
+ */
+import { appStringsFor } from '../../landing/appStrings';
+import type { LangCode } from '../../landing/langs';
+
+interface Props {
+  code: LangCode;
+  /** Marks the copy of the replica that carries the page's LCP image. */
+  eager?: boolean;
+  /**
+   * `full` is the whole editor. `timeline` keeps only the part a section about
+   * cutting is actually about - same markup, same measurements, the chrome
+   * above it simply not rendered.
+   */
+  variant?: 'full' | 'timeline';
+}
+
+const { code, eager = false, variant = 'full' } = Astro.props;
+const full = variant === 'full';
+const app = appStringsFor(code);
+
+const MENUS = [
+  app['menu.file'],
+  app['menu.edit'],
+  app['menu.insert'],
+  app['menu.clip'],
+  app['menu.view'],
+  app['menu.playback'],
+  app['menu.help'],
+];
+
+// The toolbar, in the app's own order and grouping (DESKTOP_TOOL_GROUPS).
+const TOOLS = [
+  ['ViewVertical', 'CardStackPlus', 'Link2'],
+  ['Target', 'ViewHorizontal'],
+  ['Text', 'Bookmark'],
+];
+
+// Clip A ends where B starts, B where C starts: the same three boundaries the
+// monitor cuts on. Percentages of the track's width.
+const CUT_A = 24;
+const CUT_B = 62;
+---
+
+<div class:list={['app', { 'only-timeline': !full }]} aria-hidden="true">
+  {full && (
+  <div class="menubar">
+    <span class="wm"><img src="/landing/logo-48.png" alt="" width="48" height="48" />SelfCut</span>
+    {MENUS.map((label) => <span class="menu">{label}</span>)}
+    <span class="master">
+      <svg viewBox="0 0 15 15"><use href="#i-SpeakerLoud"></use></svg>
+      <span class="slider" style="--at: 82%"></span>
+    </span>
+  </div>
+  )}
+
+  {full && (
+  <div class="toolbar">
+    {
+      TOOLS.map((group, i) => (
+        <>
+          {i > 0 && <span class="sep" />}
+          {group.map((name) => (
+            <span class="tool">
+              <svg viewBox="0 0 15 15"><use href={`#i-${name}`} /></svg>
+            </span>
+          ))}
+        </>
+      ))
+    }
+    <span class="spacer"></span>
+    <span class="tool"><svg viewBox="0 0 15 15"><use href="#i-Reset"></use></svg></span>
+    <span class="tool"><svg viewBox="0 0 15 15"><use href="#i-Reload"></use></svg></span>
+    <span class="export">
+      <svg viewBox="0 0 15 15"><use href="#i-Download"></use></svg>{app['topbar.export']}
+    </span>
+    <span class="ratios">
+      <span class="ratio on">16:9</span><span class="ratio">9:16</span><span class="ratio">1:1</span
+      ><span class="ratio">4:5</span>
+    </span>
+  </div>
+  )}
+
+  {full && (
+  <div class="middle">
+    <div class="panel media">
+      <div class="panel-head">
+        <svg viewBox="0 0 15 15"><use href="#i-Archive"></use></svg>{app['topbar.library']}
+        <span class="up"><svg viewBox="0 0 15 15"><use href="#i-Upload"></use></svg></span>
+      </div>
+      <div class="pool">
+        <span class="pool-item"><img src="/landing/pool-1.webp" alt="" width="264" height="148" loading="lazy" /></span>
+        <span class="pool-item"><img src="/landing/pool-2.webp" alt="" width="264" height="148" loading="lazy" /></span>
+        <span class="pool-item"><img src="/landing/pool-3.webp" alt="" width="264" height="148" loading="lazy" /></span>
+      </div>
+    </div>
+
+    <div class="monitor">
+      <div class="frame">
+        <img
+          class="shot a"
+          src="/landing/monitor-16.webp"
+          alt=""
+          width="960"
+          height="540"
+          loading={eager ? 'eager' : 'lazy'}
+          fetchpriority={eager ? 'high' : undefined}
+        />
+        <img class="shot b" src="/landing/monitor-36.webp" alt="" width="960" height="540" loading="lazy" />
+        <img class="shot c" src="/landing/monitor-73.webp" alt="" width="960" height="540" loading="lazy" />
+        <!-- The title the violet text clip on V2 burns in, on screen for
+             exactly as long as the playhead is over that clip. -->
+        <span class="burn">Highlights #12</span>
+      </div>
+    </div>
+
+    <div class="panel inspector">
+      <div class="insp-title">highlight_02.mp4</div>
+      <div class="row">
+        <span>{app['inspector.speed']}</span>
+        <span class="pills"
+          ><i>0.5&times;</i><i class="on">1&times;</i><i>1.5&times;</i><i>2&times;</i></span
+        >
+      </div>
+      <div class="row">
+        <span>{app['inspector.fadeIn']}</span>
+        <span class="slider" style="--at: 22%"></span>
+      </div>
+      <div class="row">
+        <span>{app['inspector.fadeOut']}</span>
+        <span class="slider" style="--at: 40%"></span>
+      </div>
+      <div class="row">
+        <span>{app['inspector.volume']}</span>
+        <span class="slider" style="--at: 78%"></span>
+      </div>
+      <div class="insp-section">{app['inspector.transform']}</div>
+      <div class="insp-buttons">
+        <span><svg viewBox="0 0 15 15"><use href="#i-Crop"></use></svg>{app['inspector.crop.edit']}</span>
+        <span><svg viewBox="0 0 15 15"><use href="#i-ViewHorizontal"></use></svg>{app['inspector.streamLayout']}</span>
+      </div>
+      <div class="row">
+        <span>{app['inspector.scale']}</span>
+        <span class="slider" style="--at: 42%"></span>
+      </div>
+    </div>
+  </div>
+  )}
+
+  {full && (
+  <div class="transport">
+    <span class="tool"><svg viewBox="0 0 15 15"><use href="#i-TrackPrevious"></use></svg></span>
+    <span class="play"><svg viewBox="0 0 15 15"><use href="#i-Play"></use></svg></span>
+    <span class="tc">0:12<i>.04</i> / 0:26</span>
+    <span class="tool"><svg viewBox="0 0 15 15"><use href="#i-Loop"></use></svg></span>
+  </div>
+  )}
+
+  <!-- The timeline is what the `timeline` variant keeps. -->
+  <div class="timeline">
+    <div class="heads">
+      <span class="head"></span>
+      <span class="head">
+        <svg viewBox="0 0 15 15"><use href="#i-EyeOpen"></use></svg>
+        <svg viewBox="0 0 15 15"><use href="#i-SpeakerLoud"></use></svg>
+      </span>
+      <span class="head">
+        <svg viewBox="0 0 15 15"><use href="#i-EyeOpen"></use></svg>
+        <svg viewBox="0 0 15 15"><use href="#i-SpeakerLoud"></use></svg>
+      </span>
+      <span class="head">
+        <svg viewBox="0 0 15 15"><use href="#i-SpeakerLoud"></use></svg>
+      </span>
+    </div>
+
+    <div class="lanes">
+      <div class="ruler">
+        <span>0:00</span><span>0:05</span><span>0:10</span><span>0:15</span><span>0:20</span><span
+          >0:25</span
+        >
+      </div>
+
+      <!-- V2: a title, burned over the opening shot. -->
+      <div class="lane">
+        <span class="clip text" style="--from: 3%; --to: 19%">
+          <svg viewBox="0 0 15 15"><use href="#i-Text"></use></svg><b>Highlights #12</b>
+        </span>
+      </div>
+
+      <!-- V1: the three shots the monitor cuts between. -->
+      <div class="lane">
+        <span class="clip video" style={`--from: 0%; --to: ${CUT_A}%; --strip: url(/landing/strip-a.webp)`}>
+          <b>highlight_01.mp4</b>
+        </span>
+        <span
+          class="clip video sel"
+          style={`--from: ${CUT_A}%; --to: ${CUT_B}%; --strip: url(/landing/strip-b.webp)`}
+        >
+          <b>highlight_02.mp4</b><i class="grab left"></i><i class="grab right"></i>
+        </span>
+        <span class="clip video" style={`--from: ${CUT_B}%; --to: 100%; --strip: url(/landing/strip-c.webp)`}>
+          <b>highlight_03.mp4</b>
+        </span>
+      </div>
+
+      <!-- A1 -->
+      <div class="lane audio">
+        <span class="clip sound" style="--from: 0%; --to: 96%">
+          <svg viewBox="0 0 15 15"><use href="#i-SpeakerLoud"></use></svg><b>music.mp3</b>
+        </span>
+      </div>
+
+      <div class="sweep"><span class="playhead"></span></div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* One knob scales the whole replica: every length below is in `em`. */
+  .app {
+    --dur: 12s;
+    --cut-a: 24%;
+    --cut-b: 62%;
+    font-family: var(--font-app);
+    font-size: 15px;
+    line-height: 1.4;
+    color: var(--zinc-100);
+    background: var(--zinc-950);
+    border: 1px solid var(--line);
+    border-radius: 0.75em;
+    overflow: hidden;
+    user-select: none;
+    /* The app is a fixed-width picture of a desktop editor; the containers it
+       sits in decide how much of it is on screen. */
+    width: 64em;
+    flex: none;
+  }
+
+
+  /* Menu bar - h-8, bg-zinc-900, text-xs. */
+  .menubar {
+    display: flex;
+    align-items: center;
+    gap: 0.125em;
+    height: 2em;
+    padding-inline: 0.5em;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    font-size: 0.75em;
+  }
+  .wm {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375em;
+    padding-right: 0.5em;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    color: var(--zinc-200);
+  }
+  .wm img {
+    width: 1.333em;
+    height: 1.333em;
+  }
+  .menu {
+    padding: 0.25em 0.625em;
+    border-radius: 0.25em;
+    color: var(--zinc-300);
+  }
+  .master {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    margin-left: auto;
+    color: var(--zinc-400);
+  }
+  .master svg {
+    width: 1.2em;
+    height: 1.2em;
+  }
+  .master .slider {
+    width: 7em;
+  }
+
+  /* Toolbar - h-12, gap-2, rounded-lg p-2 buttons with h-4 icons. */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.25em;
+    height: 3em;
+    padding-inline: 0.75em;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .tool {
+    display: grid;
+    place-items: center;
+    padding: 0.5em;
+    border-radius: 0.5em;
+    color: var(--zinc-400);
+  }
+  .tool svg {
+    width: 1em;
+    height: 1em;
+  }
+  .sep {
+    width: 1px;
+    height: 1.25em;
+    margin-inline: 0.25em;
+    background: var(--line);
+  }
+  .spacer {
+    flex: 1;
+  }
+  .export {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375em;
+    padding: 0.4em 0.75em;
+    border-radius: 0.5em;
+    background: var(--sky-500);
+    color: white;
+    font-size: 0.875em;
+    font-weight: 500;
+  }
+  .export svg {
+    width: 1em;
+    height: 1em;
+  }
+  .ratios {
+    display: inline-flex;
+    margin-left: 0.5em;
+    font-size: 0.75em;
+    font-variant-numeric: tabular-nums;
+  }
+  .ratio {
+    padding: 0.35em 0.5em;
+    color: var(--zinc-400);
+  }
+  .ratio.on {
+    border-radius: 0.35em;
+    background: color-mix(in oklab, var(--sky-500) 20%, transparent);
+    color: var(--sky-300);
+  }
+
+  /* Media panel · monitor · inspector */
+  .middle {
+    display: flex;
+    min-height: 0;
+  }
+  .panel {
+    flex: none;
+    background: var(--panel);
+  }
+  .media {
+    width: 11em;
+    border-right: 1px solid var(--line);
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    height: 1.75em;
+    padding-inline: 0.5em;
+    font-size: 0.6875em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    color: var(--zinc-400);
+  }
+  .panel-head svg {
+    width: 1.2em;
+    height: 1.2em;
+  }
+  .up {
+    display: grid;
+    place-items: center;
+    margin-left: auto;
+    padding: 0.25em;
+    border-radius: 0.25em;
+    background: color-mix(in oklab, var(--sky-500) 15%, transparent);
+    color: var(--sky-300);
+  }
+  .pool {
+    display: grid;
+    gap: 0.375em;
+    padding: 0.375em;
+  }
+  .pool-item {
+    display: block;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 0.375em;
+  }
+  .pool-item img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .monitor {
+    display: grid;
+    place-items: center;
+    flex: 1;
+    min-width: 0;
+    padding: 0.75em;
+    background: var(--zinc-950);
+  }
+  .frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: black;
+  }
+  .shot {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* Without motion, the replica is a still of the shot under the playhead's
+     resting position - the selected clip's. */
+  .shot.a,
+  .shot.c {
+    opacity: 0;
+  }
+  .burn {
+    position: absolute;
+    left: 6%;
+    bottom: 8%;
+    opacity: 0;
+    font-family: var(--font-display);
+    font-size: 1.5em;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: white;
+    text-shadow: 0 0.08em 0.25em rgb(0 0 0 / 0.55);
+  }
+
+  .inspector {
+    width: 15.5em;
+    padding: 0.5em 0.625em 0.625em;
+    border-left: 1px solid var(--line);
+    font-size: 0.75em;
+  }
+  .insp-title {
+    padding-bottom: 0.5em;
+    font-weight: 600;
+    color: var(--zinc-100);
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5em;
+    padding-block: 0.5em;
+    color: var(--zinc-400);
+  }
+  /* German and French labels are long; the row keeps them on one line and
+     lets the control give up the width instead. */
+  .row > span:first-child {
+    white-space: nowrap;
+  }
+  .pills {
+    display: inline-flex;
+    gap: 0.2em;
+  }
+  .pills i {
+    padding: 0.15em 0.3em;
+    border-radius: 0.25em;
+    background: var(--zinc-800);
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+  }
+  .pills i.on {
+    background: var(--sky-500);
+    color: white;
+  }
+  /* The inspector's slider: a 4px track with a 10px knob, drawn the way
+     `.slider-thin` draws it in the app. */
+  .slider {
+    position: relative;
+    flex: none;
+    width: 4.5em;
+    height: 0.75em;
+  }
+  .slider::before {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    top: 50%;
+    height: 0.3em;
+    translate: 0 -50%;
+    border-radius: 999px;
+    background: var(--zinc-700);
+  }
+  .slider::after {
+    content: '';
+    position: absolute;
+    left: var(--at);
+    top: 50%;
+    width: 0.75em;
+    height: 0.75em;
+    translate: -50% -50%;
+    border-radius: 999px;
+    background: var(--sky-400);
+  }
+
+  .insp-section {
+    padding-top: 0.75em;
+    padding-bottom: 0.15em;
+    font-size: 0.85em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--zinc-500);
+  }
+  .insp-buttons {
+    display: grid;
+    gap: 0.35em;
+    padding-block: 0.35em;
+  }
+  .insp-buttons span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4em;
+    padding: 0.35em;
+    border: 1px solid var(--line);
+    border-radius: 0.35em;
+    background: var(--zinc-800);
+    color: var(--zinc-300);
+    white-space: nowrap;
+  }
+  .insp-buttons svg {
+    width: 1em;
+    height: 1em;
+    flex: none;
+  }
+
+  /* Transport - h-11, border-y, the zinc-300 round play button. */
+  .transport {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5em;
+    height: 2.75em;
+    border-block: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .play {
+    display: grid;
+    place-items: center;
+    padding: 0.625em;
+    border-radius: 999px;
+    background: var(--zinc-300);
+    color: var(--zinc-950);
+  }
+  .play svg {
+    width: 1em;
+    height: 1em;
+    translate: 1px 0;
+  }
+  .tc {
+    min-width: 8em;
+    font-family: var(--font-mono);
+    font-size: 0.75em;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    color: var(--zinc-400);
+  }
+  .tc i {
+    font-style: normal;
+    font-size: 0.85em;
+  }
+
+  /* Timeline */
+  .timeline {
+    display: flex;
+    align-items: flex-start;
+    background: var(--zinc-950);
+  }
+  .heads {
+    flex: none;
+    width: 4.5em;
+    border-right: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .head:last-child {
+    border-bottom: 0;
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35em;
+    height: 3.5em;
+    border-bottom: 1px solid var(--line);
+    color: var(--zinc-400);
+  }
+  .head:first-child {
+    height: 1.5em;
+  }
+  .head svg {
+    width: 0.8em;
+    height: 0.8em;
+  }
+
+  .lanes {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+  }
+  .ruler {
+    display: flex;
+    height: 1.5em;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    /* A tick every 5%, drawn like the app's zinc-700 hairlines. */
+    background-image: repeating-linear-gradient(
+      90deg,
+      var(--zinc-700) 0 1px,
+      transparent 1px 5%
+    );
+  }
+  .ruler span {
+    flex: 1;
+    padding-left: 0.35em;
+    font-size: 0.625em;
+    line-height: 2.4;
+    font-variant-numeric: tabular-nums;
+    color: var(--zinc-400);
+  }
+  .lane {
+    position: relative;
+    height: 3.5em;
+    border-bottom: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+  }
+  .lane:last-of-type {
+    border-bottom: 0;
+  }
+
+  /* Clips - `absolute top-1 bottom-1 rounded-md border`. */
+  .clip {
+    position: absolute;
+    top: 0.25em;
+    bottom: 0.25em;
+    left: var(--from);
+    width: calc(var(--to) - var(--from));
+    overflow: hidden;
+    border: 1px solid;
+    border-radius: 0.375em;
+  }
+  .clip b {
+    position: absolute;
+    left: 0.375em;
+    bottom: 0.15em;
+    max-width: calc(100% - 0.75em);
+    overflow: hidden;
+    font-size: 0.6875em;
+    font-weight: 500;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .clip.video {
+    background-color: var(--sky-950);
+    background-image: var(--strip);
+    background-size: auto 100%;
+    background-repeat: repeat-x;
+    border-color: var(--sky-900);
+  }
+  .clip.video b {
+    color: white;
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
+  }
+  /* Selection: `ring-2 ring-sky-400` plus the two trim handles. */
+  .clip.sel {
+    border-color: transparent;
+    box-shadow: 0 0 0 2px var(--sky-400);
+  }
+  .grab {
+    position: absolute;
+    inset-block: 0;
+    width: 0.75em;
+    background: color-mix(in oklab, var(--sky-400) 80%, transparent);
+  }
+  .grab.left {
+    left: 0;
+  }
+  .grab.right {
+    right: 0;
+  }
+  .clip.text {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, oklch(38% 0.189 293.745) 60%, transparent),
+      oklch(28.3% 0.141 291.089)
+    );
+    border-color: oklch(38% 0.189 293.745);
+    color: oklch(81.1% 0.111 293.571);
+  }
+  .clip.sound {
+    background:
+      /* The waveform is a picture of the footage's own audio, drawn in the
+         emerald the app draws waveforms in. */
+      center / 100% 70% no-repeat url(/landing/waveform.webp),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklab, var(--emerald-900) 60%, transparent),
+        var(--emerald-950)
+      );
+    border-color: var(--emerald-900);
+    color: var(--emerald-300);
+  }
+  .clip.sound b,
+  .clip.text b {
+    left: 1.85em;
+    bottom: auto;
+    top: 0.15em;
+    color: inherit;
+  }
+  .clip.sound svg,
+  .clip.text svg {
+    position: absolute;
+    left: 0.375em;
+    top: 0.35em;
+    width: 0.8em;
+    height: 0.8em;
+  }
+
+  /* The playhead. `.sweep` is as wide as the lanes, so translating it by 100%
+     walks the head across exactly one timeline - and translate composes on the
+     compositor instead of relaying out the lane on every frame. */
+  .sweep {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .playhead {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 2px;
+    background: var(--red-500);
+  }
+  /* Frozen, the replica still has to make sense: park the playhead inside the
+     clip the inspector is describing, rather than at 0:00 while the monitor
+     shows the middle shot. */
+  @media (prefers-reduced-motion: reduce) {
+    .playhead {
+      left: 38%;
+    }
+  }
+  .playhead::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 1.05em;
+    height: 1.3em;
+    translate: -50% 0;
+    border-radius: 0 0 0.375em 0.375em;
+    background: var(--red-500);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .sweep {
+      animation: sweep var(--dur) linear infinite;
+    }
+    @keyframes sweep {
+      from {
+        translate: 0 0;
+      }
+      to {
+        translate: 100% 0;
+      }
+    }
+
+    /* The monitor cuts on the same boundaries the clips do. Hard cuts, no
+       cross-fade: that is what a cut looks like. */
+    .shot.a {
+      animation: shot-a var(--dur) step-end infinite;
+    }
+    .shot.b {
+      animation: shot-b var(--dur) step-end infinite;
+    }
+    .shot.c {
+      animation: shot-c var(--dur) step-end infinite;
+    }
+    .burn {
+      animation: burn var(--dur) step-end infinite;
+    }
+    @keyframes shot-a {
+      0% {
+        opacity: 1;
+      }
+      24% {
+        opacity: 0;
+      }
+    }
+    @keyframes shot-b {
+      0% {
+        opacity: 0;
+      }
+      24% {
+        opacity: 1;
+      }
+      62% {
+        opacity: 0;
+      }
+    }
+    @keyframes shot-c {
+      0% {
+        opacity: 0;
+      }
+      62% {
+        opacity: 1;
+      }
+    }
+    /* On screen for exactly the span of the text clip on V2 (3% to 19%). */
+    @keyframes burn {
+      0% {
+        opacity: 0;
+      }
+      3% {
+        opacity: 1;
+      }
+      19% {
+        opacity: 0;
+      }
+    }
+  }
+</style>

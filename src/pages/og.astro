@@ -1,0 +1,91 @@
+---
+/**
+ * The source of `public/og-image.jpg`, the card every share of the site shows.
+ *
+ * It exists as a page rather than as a hand-made image so the card cannot rot:
+ * it draws the same editor replica the landing draws, from the same tokens and
+ * the same dictionaries, so re-shooting it after a UI change is one command
+ * rather than an afternoon in a design tool.
+ *
+ * Re-shoot (dev server running, then convert and delete the PNG):
+ *
+ *   npx playwright screenshot --viewport-size=1200,630 \
+ *     --wait-for-timeout=1500 http://localhost:5173/og/ public/og-image.png
+ *
+ * `noindex` because this is an asset, not a page. It is not in the sitemap and
+ * nothing links to it.
+ */
+import Editor from '../components/landing/Editor.astro';
+import Icons from '../components/landing/Icons.astro';
+import '../styles/landing.css';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>SelfCut - Open Graph card</title>
+  </head>
+  <body>
+    <Icons />
+    <div class="og">
+      <div class="bar">
+        <img src="/landing/logo-48.png" alt="" width="48" height="48" /><span>SelfCut</span>
+      </div>
+      {/* English: one card serves all five languages, and the localised title
+          and description travel in the meta tags beside it. */}
+      <div class="stage"><Editor code="en" eager /></div>
+    </div>
+
+    <style>
+      body {
+        margin: 0;
+      }
+      .og {
+        display: flex;
+        flex-direction: column;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: var(--zinc-950);
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1.1rem 2rem 0.9rem;
+        font-family: var(--font-display);
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--zinc-100);
+      }
+      .bar img {
+        width: 2.4rem;
+        height: 2.4rem;
+      }
+      .stage {
+        display: flex;
+        justify-content: center;
+        padding-inline: 2rem;
+      }
+      /* Sized so the card ends part-way down the timeline: the crop says there
+         is more editor below, which there is. */
+      .stage :global(.app) {
+        font-size: 14.6px;
+        box-shadow: 0 1.5rem 4rem -1rem oklch(0% 0 0 / 0.7);
+      }
+      /* The card is a still, so the replica is frozen the way it freezes for a
+         reader who asked for no motion: playhead parked on the selected clip. */
+      .stage :global(.sweep),
+      .stage :global(.shot),
+      .stage :global(.burn) {
+        animation: none !important;
+      }
+      .stage :global(.playhead) {
+        left: 38%;
+      }
+    </style>
+  </body>
+</html>

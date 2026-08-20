@@ -1,0 +1,52 @@
+---
+import Editor from './Editor.astro';
+import type { LandingStrings } from '../../landing/strings';
+import type { LangCode } from '../../landing/langs';
+
+interface Props {
+  strings: LandingStrings;
+  code: LangCode;
+}
+
+const { strings, code } = Astro.props;
+---
+
+<section id="features" aria-labelledby="cut-title">
+  <div class="head">
+    <h2 id="cut-title">{strings['cut.title']}</h2>
+    {/* Carries the <kbd> for the split shortcut. */}
+    <p class="lede" set:html={strings['cut.lead']} />
+  </div>
+
+  {/* The same replica as the hero, cropped to the part this section is
+      about - so what is described and what is shown cannot disagree. */}
+  <div class="stage"><Editor code={code} variant="timeline" /></div>
+
+  <p class="note">{strings['cut.note']}</p>
+</section>
+
+<style>
+  .head {
+    max-width: 46rem;
+  }
+  .stage {
+    display: flex;
+    margin-top: clamp(2rem, 4vw, 3rem);
+    /* Bleed to the page edges: the timeline is a strip, and a strip reads
+       better running the full width than boxed inside the column. */
+    margin-inline: calc(max(var(--pad), (100vw - var(--column)) / 2) * -1);
+    padding-inline: clamp(0rem, 2vw, 2rem);
+  }
+  .stage :global(.app) {
+    width: 100%;
+    max-width: none;
+    font-size: clamp(11px, 1.15vw, 17px);
+    border-radius: 0;
+    border-inline: 0;
+  }
+  .note {
+    margin-top: 1.5rem;
+    color: var(--faint);
+    font-size: 0.9375rem;
+  }
+</style>

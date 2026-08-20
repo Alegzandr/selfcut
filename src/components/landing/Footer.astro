@@ -71,6 +71,7 @@ const currentName = LANGS.find((lang) => lang.code === current)?.name;
 
 <style>
   footer {
+    border-top: 1px solid var(--line);
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -118,13 +119,13 @@ const currentName = LANGS.find((lang) => lang.code === current)?.name;
     width: min(20rem, calc(100vw - 2rem));
     margin: auto;
     padding: 0;
-    border: 1px solid var(--line);
+    border: 1px solid var(--line-strong);
     border-radius: 8px;
-    background: var(--surface);
+    background: var(--panel);
     color: var(--text);
   }
   .lang-dialog::backdrop {
-    background: oklch(0.1 0.005 250 / 0.6);
+    background: oklch(0% 0 0 / 0.6);
   }
   .lang-dialog-body {
     padding: 1.1rem 1.1rem 1.25rem;
@@ -172,7 +173,7 @@ const currentName = LANGS.find((lang) => lang.code === current)?.name;
     color: var(--muted);
   }
   .lang-dialog nav a:hover {
-    background: var(--line-soft);
+    background: var(--line);
     color: var(--text);
   }
   .lang-dialog nav a[aria-current] {
@@ -180,8 +181,8 @@ const currentName = LANGS.find((lang) => lang.code === current)?.name;
     font-weight: 650;
   }
   .lang-dialog nav a[aria-current]::after {
-    content: '✓';
+    content: '¹3';
     margin-left: 0.5rem;
-    color: var(--accent);
+    color: var(--accent-text);
   }
 </style>

@@ -8,19 +8,27 @@ interface Props {
 const { strings } = Astro.props;
 ---
 
+{/* One line and the button. Everything that would go in a paragraph here has
+    already been said, twice. */}
 <section class="closing" aria-labelledby="closing-title">
   <h2 id="closing-title">{strings['closing.title']}</h2>
-  <p class="section-intro">{strings['closing.intro']}</p>
   <a class="btn btn-primary" href="/app/">{strings['closing.cta']}</a>
 </section>
 
 <style>
   .closing {
-    padding-bottom: clamp(3.5rem, 8vw, 6rem);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem 3rem;
+    padding-block: clamp(3.5rem, 8vw, 6rem);
+  }
+  .closing h2 {
+    max-width: 16ch;
   }
   .closing .btn-primary {
-    margin-top: 2rem;
-    padding: 0.95rem 1.8rem;
-    font-size: 1.15rem;
+    padding: 0.9rem 1.6rem;
+    font-size: 1.0625rem;
   }
 </style>

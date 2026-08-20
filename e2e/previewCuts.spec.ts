@@ -108,7 +108,8 @@ interface CutProbe {
   black: number;
   /** Timeline position of each black frame, in ms. */
   at: number[];
-  stop: boolean;
+  /** Set by the probe itself, once the playhead leaves the sampling window. */
+  done: boolean;
 }
 
 /** The preview canvas, as much of it as reading pixels back needs. */
@@ -159,17 +160,28 @@ test('a straight cut never shows the black backdrop', async ({ page }) => {
     // frame right now. That cold start is not what this test measures.
     for (let i = 0; i < 240 && brightestPixel() < 12; i++) await nextFrame();
 
-    const probe: CutProbe = { frames: 0, black: 0, at: [], stop: false };
+    // Sample past both cuts (1 s and 2 s), and stop before the end of the 3 s
+    // timeline, where the playhead lands on nothing and a black frame is the
+    // right answer. The window closes here, in the page, rather than by the
+    // test reading the playhead out and sending a stop back: that round trip is
+    // longer than the last 600 ms of playback, so the probe kept sampling into
+    // the tail and reported the backdrop there as a regression.
+    const untilMs = 2400;
+
+    const probe: CutProbe = { frames: 0, black: 0, at: [], done: false };
     g.cutProbe = probe;
     const tick = (): void => {
-      if (probe.stop) return;
-      const brightest = brightestPixel();
+      const at = Math.round(useStore.getState().currentTimeMs);
+      if (at > untilMs) {
+        probe.done = true;
+        return;
+      }
       probe.frames++;
-      if (brightest < 12) {
+      if (brightestPixel() < 12) {
         probe.black++;
         // Where on the timeline, so a failure names the boundary it happened at
         // instead of just a count.
-        probe.at.push(Math.round(useStore.getState().currentTimeMs));
+        probe.at.push(at);
       }
       g.requestAnimationFrame(tick);
     };
@@ -177,28 +189,19 @@ test('a straight cut never shows the black backdrop', async ({ page }) => {
   }, await appModuleUrl(page, STORE_MODULE));
 
   await page.keyboard.press('Space');
-  // Past both cuts (1 s and 2 s) and stopped before the end of the timeline,
-  // where the playhead lands on nothing and a black frame is the right answer.
-  //
   // The playhead, not the wall clock. A machine that plays back slower than
   // real time reaches 2500 ms of wall having crossed neither cut, which is a
   // test that asserts nothing and reports a pass; and a machine that keeps up
   // waits no longer here than it has to.
   await expect
     .poll(
-      async () =>
-        page.evaluate(async (mod) => {
-          const { useStore } = (await import(mod)) as { useStore: { getState: () => never } };
-          return (useStore.getState() as unknown as { currentTimeMs: number }).currentTimeMs;
-        }, await appModuleUrl(page, STORE_MODULE)),
+      () => page.evaluate(() => (globalThis as unknown as { cutProbe: CutProbe }).cutProbe.done),
       { message: 'playhead past the second cut', timeout: 30_000 },
     )
-    .toBeGreaterThan(2400);
-  const probe = await page.evaluate(() => {
-    const g = globalThis as unknown as { cutProbe: CutProbe };
-    g.cutProbe.stop = true;
-    return g.cutProbe;
-  });
+    .toBe(true);
+  const probe = await page.evaluate(
+    () => (globalThis as unknown as { cutProbe: CutProbe }).cutProbe,
+  );
 
   // Really sampled a playback's worth of frames, rather than reporting a clean
   // run because the loop never went round.

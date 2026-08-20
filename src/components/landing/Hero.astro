@@ -1,73 +1,100 @@
 ---
+import Editor from './Editor.astro';
 import type { LandingStrings } from '../../landing/strings';
+import type { LangCode } from '../../landing/langs';
 
 interface Props {
   strings: LandingStrings;
+  code: LangCode;
 }
 
-const { strings } = Astro.props;
+const { strings, code } = Astro.props;
 ---
 
 <div class="hero">
-  <p class="kicker">{strings['hero.kicker']}</p>
-  {/* Carries a <br /> and the <em> that accents the last word. */}
-  <h1 set:html={strings['hero.title']} />
-  <p>{strings['hero.lead']}</p>
-  <div class="hero-cta">
-    <a class="btn btn-primary" href="/app/">{strings['hero.cta']}</a>
-    <span class="hero-note">{strings['hero.note']}</span>
+  <div class="copy">
+    {/* Carries a <br /> and the <em> that accents the second line. */}
+    <h1 set:html={strings['hero.title']} />
+    <p class="lede">{strings['hero.lead']}</p>
+    <div class="cta">
+      <a class="btn btn-primary big" href="/app/">{strings['hero.cta']}</a>
+      <span class="note">{strings['hero.note']}</span>
+    </div>
   </div>
+
+  {/* The editor runs off the right edge of the viewport: what is on screen is
+      a real desktop editor at a real size, and there is visibly more of it. */}
+  <div class="stage"><Editor code={code} eager /></div>
 </div>
 
 <style>
   .hero {
-    padding-block: clamp(3.5rem, 9vw, 7rem) clamp(2.5rem, 6vw, 4.5rem);
-  }
-
-  .kicker {
-    color: var(--accent);
-    font-weight: 600;
-    font-size: 0.95rem;
+    display: grid;
+    grid-template-columns: minmax(0, 30rem) 1fr;
+    align-items: center;
+    gap: clamp(2rem, 4vw, 4.5rem);
+    padding-block: clamp(2.75rem, 6vw, 5rem) clamp(3rem, 7vw, 5.5rem);
   }
 
   h1 {
-    margin-top: 0.9rem;
-    max-width: 24ch;
-    font-size: clamp(2.5rem, 6.5vw, 4.9rem);
-    line-height: 1.04;
+    font-size: clamp(2.6rem, 5.4vw, 4rem);
+    line-height: 1.02;
     font-weight: 800;
-    font-stretch: 116%;
-    letter-spacing: -0.015em;
-    text-wrap: balance;
+    letter-spacing: -0.035em;
   }
-  /* :global because the <em> comes from the translated string, so it is not
-     in this template and never gets the scoping attribute. */
+  /* :global because the <em> comes from the translated string, so it is not in
+     this template and never gets the scoping attribute. */
   h1 :global(em) {
     font-style: normal;
-    color: var(--accent);
+    color: var(--sky-400);
   }
 
-  .hero p:not(.kicker) {
-    margin-top: 1.5rem;
-    max-width: var(--measure);
-    font-size: clamp(1.1rem, 1.8vw, 1.3rem);
-    color: var(--muted);
-    text-wrap: pretty;
+  .copy .lede {
+    margin-top: 1.35rem;
+    font-size: 1.1rem;
   }
 
-  .hero-cta {
+  .cta {
     margin-top: 2.25rem;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 1.25rem;
+    gap: 0.75rem 1.25rem;
   }
-  .hero-cta .btn-primary {
-    padding: 0.9rem 1.7rem;
-    font-size: 1.1rem;
+  .big {
+    padding: 0.85rem 1.5rem;
+    font-size: 1.0625rem;
   }
-  .hero-note {
+  .note {
     color: var(--faint);
-    font-size: 0.95rem;
+    font-size: 0.9375rem;
+  }
+
+  .stage {
+    /* The replica is wider than this column on purpose; `body` clips it at the
+       viewport edge. */
+    display: flex;
+    min-width: 0;
+  }
+  .stage :global(.app) {
+    font-size: clamp(9px, 0.95vw, 15px);
+    box-shadow: 0 1rem 3rem -1.5rem oklch(0% 0 0 / 0.7);
+  }
+
+  @media (max-width: 62rem) {
+    .hero {
+      grid-template-columns: 1fr;
+      gap: clamp(2.5rem, 7vw, 3.5rem);
+    }
+    /* Pull the replica back to the page edge: cropped by the viewport rather
+       than by the gutter, which reads as a window onto something bigger
+       instead of an image that did not fit. */
+    .stage {
+      margin-inline: calc(var(--pad) * -1);
+      padding-left: var(--pad);
+    }
+    .stage :global(.app) {
+      font-size: clamp(7px, 2.1vw, 15px);
+    }
   }
 </style>

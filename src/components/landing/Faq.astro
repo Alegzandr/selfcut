@@ -29,10 +29,10 @@ const entries = faqEntries(strings);
     max-width: 58rem;
   }
   .faq-list details {
-    border-top: 1px solid var(--line-soft);
+    border-top: 1px solid var(--line);
   }
   .faq-list details:last-child {
-    border-bottom: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line);
   }
   .faq-list summary {
     list-style: none;
@@ -42,16 +42,17 @@ const entries = faqEntries(strings);
     align-items: baseline;
     gap: 1rem;
     padding: 1.15rem 0.25rem;
-    font-size: 1.12rem;
+    font-family: var(--font-display);
+    font-size: 1.1rem;
     font-weight: 650;
-    font-stretch: 106%;
+    letter-spacing: -0.01em;
   }
   .faq-list summary::-webkit-details-marker {
     display: none;
   }
   .faq-list summary::after {
     content: '+';
-    color: var(--accent);
+    color: var(--accent-text);
     font-weight: 500;
     font-size: 1.3rem;
     line-height: 1;

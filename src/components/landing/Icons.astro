@@ -1,0 +1,26 @@
+---
+// The icon sprite for the editor replica: one <symbol> per icon the replica
+// draws, referenced with <use href="#i-Name" />. Rendered once per page, right
+// before the first replica, so a <use> always resolves.
+//
+// A sprite rather than inline <svg> bodies because several icons repeat across
+// the hero replica and the section fragments, and each body is up to 2 kB of
+// path data.
+import { ICONS } from '../../landing/icons';
+
+const NAMES = Object.keys(ICONS) as (keyof typeof ICONS)[];
+---
+
+<svg class="icon-sprite" aria-hidden="true" focusable="false">
+  <defs>
+    {NAMES.map((name) => <symbol id={`i-${name}`} viewBox="0 0 15 15" set:html={ICONS[name]} />)}
+  </defs>
+</svg>
+
+<style>
+  .icon-sprite {
+    position: absolute;
+    width: 0;
+    height: 0;
+  }
+</style>

@@ -1,0 +1,113 @@
+---
+import { appStringsFor } from '../../landing/appStrings';
+import type { LandingStrings } from '../../landing/strings';
+import type { LangCode } from '../../landing/langs';
+
+interface Props {
+  strings: LandingStrings;
+  code: LangCode;
+}
+
+const { strings, code } = Astro.props;
+// The preset names come from the editor's export dialog: what the page
+// promises is spelled the way the button that delivers it is spelled.
+const app = appStringsFor(code);
+---
+
+<section id="formats" aria-labelledby="formats-title">
+  <h2 id="formats-title">{strings['formats.title']}</h2>
+  <p class="lede">{strings['formats.lead']}</p>
+
+  {/* One frame of the edit, in each shape it can leave as. Different sizes on
+      purpose: these are aspect ratios, and equal boxes would hide the one
+      thing the section is about. */}
+  <div class="formats">
+    <figure class="wide">
+      <img src="/landing/format-169.webp" alt="" width="640" height="360" loading="lazy" />
+      <figcaption>
+        <strong>{app['export.preset.youtube.label']}</strong>{strings['formats.169']}
+      </figcaption>
+    </figure>
+
+    <figure class="tall">
+      <img src="/landing/format-916.webp" alt="" width="405" height="720" loading="lazy" />
+      <figcaption>
+        <strong>{app['export.preset.tiktok.label']}</strong>{strings['formats.916']}
+      </figcaption>
+    </figure>
+
+    <figure class="sound">
+      <div class="wave"></div>
+      <figcaption>
+        <strong>{app['export.preset.mp3.label']}</strong>{strings['formats.mp3']}
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<style>
+  /* Pictures share one baseline, captions hang below it on a row of their
+     own: a two-line caption then cannot push its picture out of line. Column
+     widths are deliberately unequal - these are aspect ratios, and equal boxes
+     would hide the one thing the section is about. */
+  .formats {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 0.72fr) minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: end;
+    gap: 0.85rem clamp(1.5rem, 4vw, 3rem);
+    margin-top: clamp(1.75rem, 3vw, 2.5rem);
+  }
+  figure {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    gap: inherit;
+  }
+  figure > :first-child {
+    align-self: end;
+  }
+  figure img,
+  .wave {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+  }
+  @media (max-width: 52rem) {
+    .formats {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 0.5fr);
+    }
+    .sound {
+      grid-column: 1 / -1;
+    }
+  }
+  /* The audio export, drawn as the editor draws an audio clip: the footage's
+     own waveform over the emerald body. */
+  .wave {
+    aspect-ratio: 16 / 5;
+    background:
+      center / 92% 60% no-repeat url(/landing/waveform.webp),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklab, var(--emerald-900) 60%, transparent),
+        var(--emerald-950)
+      );
+    border-color: var(--emerald-900);
+  }
+
+  figcaption {
+    color: var(--muted);
+    font-size: 0.9375rem;
+    text-wrap: pretty;
+  }
+  figcaption strong {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--text);
+  }
+</style>

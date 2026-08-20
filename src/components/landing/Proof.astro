@@ -1,0 +1,65 @@
+---
+import type { LandingStrings } from '../../landing/strings';
+
+interface Props {
+  strings: LandingStrings;
+}
+
+const { strings } = Astro.props;
+
+const CLAIMS = [
+  { title: strings['proof.1.title'], body: strings['proof.1.body'] },
+  { title: strings['proof.2.title'], body: strings['proof.2.body'] },
+  { title: strings['proof.3.title'], body: strings['proof.3.body'] },
+];
+---
+
+{/* Three claims and nothing else. The heading exists for the outline and for
+    search; on screen the three titles say it faster than a sentence would. */}
+<section id="privacy" class="proof" aria-labelledby="proof-title">
+  <h2 id="proof-title" class="sr-only">{strings['proof.title']}</h2>
+  <div class="claims">
+    {
+      CLAIMS.map((claim) => (
+        <div>
+          <h3>{claim.title}</h3>
+          <p>{claim.body}</p>
+        </div>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  /* A zinc-900 band on the zinc-950 page: the same figure/ground the editor
+     uses for a panel, and the one break in the page's surface. */
+  .proof {
+    padding-block: clamp(2.25rem, 4vw, 3.25rem);
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .claims {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1.75rem clamp(1.5rem, 4vw, 3.5rem);
+  }
+  /* Hairline separators, not boxes: the same rule that divides two panels in
+     the editor. */
+  @media (min-width: 52rem) {
+    .claims > div + div {
+      padding-left: clamp(1.5rem, 4vw, 3.5rem);
+      margin-left: calc(clamp(1.5rem, 4vw, 3.5rem) * -1);
+      border-left: 1px solid var(--line);
+    }
+  }
+  h3 {
+    font-size: 1.3rem;
+    font-weight: 700;
+  }
+  p {
+    margin-top: 0.4rem;
+    color: var(--muted);
+    font-size: 0.9875rem;
+    text-wrap: pretty;
+  }
+</style>
