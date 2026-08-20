@@ -24,13 +24,7 @@ const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtur
 const FIXTURE_MP4 = path.join(FIXTURES, 'clip.mp4');
 
 test('exports the 120 fps 4K preset without running out of memory', async ({ page }) => {
-  // Generous, because the ceiling is here to catch a hang, not to time the
-  // encode. A hosted runner has no GPU, so all 360 frames go through a
-  // software encoder at 4K, and the runner CPU it gets is shared: the same
-  // render that finishes in a couple of minutes one hour times out the next.
-  // A 210 s download budget went red once and passed on the retry, which is a
-  // number too close to the work rather than a regression to report.
-  test.setTimeout(420_000);
+  test.setTimeout(240_000);
 
   // No save picker, so the render takes the fallback sink - the exact path the
   // failure was reported on.
@@ -72,7 +66,7 @@ test('exports the 120 fps 4K preset without running out of memory', async ({ pag
   // quality reads "4K".
   await sheet.getByRole('button', { name: '120 fps · 4K' }).click();
 
-  const downloadPromise = page.waitForEvent('download', { timeout: 390_000 });
+  const downloadPromise = page.waitForEvent('download', { timeout: 210_000 });
   await sheet.getByRole('button', { name: /^Export 120 fps · 4K/ }).click();
   const download = await downloadPromise;
 

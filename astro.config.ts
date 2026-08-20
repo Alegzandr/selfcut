@@ -85,12 +85,30 @@ export default defineConfig({
       // transformers.js (captions worker) pulls onnxruntime-web's workers/wasm via
       // import.meta.url like ffmpeg; pre-bundling breaks those URLs.
       exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util', '@huggingface/transformers'],
-      // Both are reached through a dynamic import (the media stack is off the
-      // critical path, the animation engine is behind LazyMotion). The dev
-      // server's dependency scanner only sees them once the page asks for
-      // them, which re-runs the optimizer mid-load and 504s the pre-bundle the
-      // page is already holding. Listing them here pre-bundles them up front.
-      include: ['framer-motion', 'mediabunny'],
+      // None of these are reachable from the entry the dev server scans at
+      // startup, and every one of them is imported at a moment where re-running
+      // the optimizer is destructive: it ends in 'optimized dependencies
+      // changed. reloading', which reloads the page out from under whatever it
+      // was doing. Listing them pre-bundles them up front instead.
+      //
+      // framer-motion and mediabunny are behind dynamic imports (the media
+      // stack is off the critical path, the animation engine behind LazyMotion),
+      // so the scanner only meets them once the page asks - mid-load, where the
+      // reload also 504s the pre-bundle the page is already holding.
+      //
+      // The two encoders are imported statically, but by exportWorker, and the
+      // scanner does not follow a worker entry. So they are discovered at the
+      // FIRST export of a session, and the reload lands squarely in the middle
+      // of that render: the sheet and its worker go away, no file is ever
+      // produced, and nothing reports an error - the export simply never ends.
+      // In e2e that was the first render spec of the run hanging until its
+      // budget expired and passing on the retry, every run.
+      include: [
+        'framer-motion',
+        'mediabunny',
+        '@mediabunny/aac-encoder',
+        '@mediabunny/mp3-encoder',
+      ],
     },
     build: {
       target: 'es2022',
