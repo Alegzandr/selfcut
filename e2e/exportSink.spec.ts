@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { appModuleUrl } from './appModule';
 
 /**
  * Where an export's bytes land when the browser will not hand us a file.
@@ -16,6 +17,14 @@ import { fileURLToPath } from 'node:url';
  *
  * The fallback now streams into origin-private scratch storage, so memory stays
  * flat whatever the length and the user still gets their download.
+ *
+ * It is also the one spec that drives the export sheet the way a user does -
+ * shortcut, CTA, download - rather than calling the exporter directly the way
+ * the other export specs do to keep their subject in view. So the wiring
+ * between the two is asserted here as well: that the CTA renders the preset the
+ * sheet has highlighted, and that the sheet reports where the file went. There
+ * was a second spec doing exactly that and nothing else, which meant a third
+ * full render of the same three seconds for one extra assertion.
  */
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -97,6 +106,10 @@ test('without a save picker the render streams to disk, not into memory', async 
   expect(scratch[0]!.name).toMatch(/\.mp4$/);
   expect(scratch[0]!.size).toBe(size);
 
+  // And the sheet says so, which is the only part of a finished export the user
+  // ever sees.
+  await expect(sheet.getByText('Saved as', { exact: false })).toBeVisible();
+
   // A second export reclaims the first one's file rather than stacking
   // gigabytes of finished renders in the origin's storage.
   await sheet.getByRole('button', { name: 'New export' }).click();
@@ -113,7 +126,18 @@ test('startup reclaims a leftover scratch file', async ({ page }) => {
   await expect(page.locator('canvas').first()).toBeVisible();
   // Let THIS session's startup sweep run first, so the file seeded below is
   // only ever reclaimed by the next one - which is what is being tested.
-  await page.waitForTimeout(1500);
+  //
+  // Startup fires the sweep and does not await it (`void sweepExportScratch()`
+  // in persistence.ts), so there is nothing to wait ON - but running one more
+  // and awaiting THAT drains the directory's work queue, which is the property
+  // actually needed. It replaces a flat 1500 ms guess that was both slower than
+  // this and no guarantee on a slow machine.
+  await page.evaluate(async (mod) => {
+    const { sweepExportScratch } = (await import(mod)) as {
+      sweepExportScratch: (except?: string) => Promise<void>;
+    };
+    await sweepExportScratch();
+  }, await appModuleUrl(page, '/src/lib/opfs.ts'));
 
   // Stand in for the file a finished export leaves behind on purpose (the
   // download reads from it long after the render ends, so it cannot be deleted

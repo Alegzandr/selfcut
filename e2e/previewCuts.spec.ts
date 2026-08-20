@@ -179,7 +179,21 @@ test('a straight cut never shows the black backdrop', async ({ page }) => {
   await page.keyboard.press('Space');
   // Past both cuts (1 s and 2 s) and stopped before the end of the timeline,
   // where the playhead lands on nothing and a black frame is the right answer.
-  await page.waitForTimeout(2500);
+  //
+  // The playhead, not the wall clock. A machine that plays back slower than
+  // real time reaches 2500 ms of wall having crossed neither cut, which is a
+  // test that asserts nothing and reports a pass; and a machine that keeps up
+  // waits no longer here than it has to.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async (mod) => {
+          const { useStore } = (await import(mod)) as { useStore: { getState: () => never } };
+          return (useStore.getState() as unknown as { currentTimeMs: number }).currentTimeMs;
+        }, await appModuleUrl(page, STORE_MODULE)),
+      { message: 'playhead past the second cut', timeout: 30_000 },
+    )
+    .toBeGreaterThan(2400);
   const probe = await page.evaluate(() => {
     const g = globalThis as unknown as { cutProbe: CutProbe };
     g.cutProbe.stop = true;

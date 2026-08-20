@@ -115,13 +115,40 @@ test('an unbroken edit stream still reaches the disk', async ({ page }) => {
   await page.goto(EDITOR_URL);
   await page.setInputFiles('input[type="file"]', FIXTURE_MP4);
   await expect(page.locator('[data-clip-id]')).toHaveCount(1);
-  // Let the import settle, so the measurement below only sees the burst.
-  await page.waitForTimeout(1500);
-
   const mods = {
     store: await appModuleUrl(page, STORE_MODULE),
     idb: await appModuleUrl(page, IDB_MODULE),
   };
+
+  // Let the import settle, so the measurement below only sees the burst. The
+  // observable end of "settled" is the project record existing, which is what
+  // the burst is then measured against - waiting a flat 1500 ms instead was
+  // both slower than it needed to be and no guarantee on a slow machine.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async ({ store, idb }) => {
+          const { useStore } = (await import(store)) as { useStore: { getState: () => never } };
+          const { db, PROJECT_STORE, requestDone } = (await import(idb)) as {
+            db: () => Promise<{
+              transaction: (
+                store: string,
+                mode: string,
+              ) => { objectStore: (name: string) => { get: (key: string) => unknown } };
+            }>;
+            PROJECT_STORE: string;
+            requestDone: (request: unknown) => Promise<unknown>;
+          };
+          const id = (useStore.getState() as unknown as { project: { id: string } }).project.id;
+          const handle = await db();
+          const stored = await requestDone(
+            handle.transaction(PROJECT_STORE, 'readonly').objectStore(PROJECT_STORE).get(id),
+          );
+          return stored != null;
+        }, mods),
+      { message: 'import committed to IndexedDB' },
+    )
+    .toBe(true);
 
   const result = await page.evaluate(async ({ store, idb }) => {
     type Clip = { id: string; timelineStartMs: number };

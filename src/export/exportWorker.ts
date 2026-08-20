@@ -72,9 +72,6 @@ import {
  */
 const ENCODE_QUEUE_DEPTH = 4;
 
-/** FAULT INJECTION - temporary */
-let faultStallEncoder = false;
-
 /**
  * How many finished-but-not-yet-muxed slices the lead will hold before it stops
  * handing out new work. See `pump`, which is where the reasoning lives.
@@ -502,8 +499,6 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
         cores: navigator.hardwareConcurrency,
       });
   const parallel = plan.workers > 1;
-  // FAULT INJECTION - temporary
-  faultStallEncoder = hardwareAcceleration === 'no-preference';
 
   // Streaming straight into the user's file keeps memory flat and still puts
   // the metadata up front ('reserve' writes moov into space reserved at the
@@ -679,12 +674,7 @@ async function renderSerial(
       await drainTo(ENCODE_QUEUE_DEPTH - 1);
       endSpan('encodeWait', encodeStarted);
 
-      // FAULT INJECTION - temporary
-      inFlight.push(
-        faultStallEncoder && i === 0
-          ? new Promise<void>(() => {})
-          : videoSource.add(i * frameDur, frameDur),
-      );
+      inFlight.push(videoSource.add(i * frameDur, frameDur));
       // Once the encoder has its copy, so the monitor never makes it wait.
       preview.capture(i);
       // After the capture, never before: the layers hold frames these readers

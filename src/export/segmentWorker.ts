@@ -139,12 +139,7 @@ async function render(req: SegmentRequest): Promise<void> {
       endSpan('encodeWait', encodeStarted);
       // Local timestamps: the segment is a self-contained file starting at 0.
       // The lead shifts them onto the timeline when it re-muxes.
-      // FAULT INJECTION - temporary
-      inFlight.push(
-        req.hardwareAcceleration === 'no-preference' && i === 0
-          ? new Promise<void>(() => {})
-          : source.add(i * frameDur, frameDur),
-      );
+      inFlight.push(source.add(i * frameDur, frameDur));
       // After the capture, so the encoder never waits on the monitor.
       preview.capture(req.firstFrame + i);
       await renderer.releaseFinishedReaders();

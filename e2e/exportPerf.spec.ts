@@ -55,8 +55,18 @@ test('an export spends its time where the instrumentation says it does', async (
   // Repeat the clip until the render is long enough that the fixed costs -
   // booting the worker, configuring the encoder, finalizing the container - are
   // not what the throughput number is measuring.
+  //
+  // Three clips at 360p rather than ten at 1080p where there is no GPU. The
+  // breakdown is a ratio between channels, so it survives the change intact -
+  // and only ONE assertion below is even asked on a software rasterizer, the
+  // rest being gated on `gpu.hardware`. At full size this spent two minutes
+  // rendering 900 frames in CI to conclude that more than ten had been
+  // rendered; 270 frames answer the same question, and the fixed costs are
+  // still nothing beside them.
+  const clipCount = gpu.hardware ? 10 : 3;
+  const size = gpu.hardware ? { width: 1920, height: 1080 } : { width: 640, height: 360 };
   const storeSetup = await appModuleUrl(page, STORE_MODULE);
-  await page.evaluate(async (mod) => {
+  await page.evaluate(async ({ mod, count }) => {
     const { useStore } = (await import(mod)) as {
       useStore: { getState: () => never; setState: (p: unknown) => void };
     };
@@ -66,7 +76,7 @@ test('an export spends its time where the instrumentation says it does', async (
     const track = state.project.tracks.find((t) => t.clips.length > 0)!;
     const seed = track.clips[0]! as { sourceInMs: number; sourceOutMs: number; speed: number };
     const durMs = (seed.sourceOutMs - seed.sourceInMs) / seed.speed;
-    const clips = Array.from({ length: 10 }, (_, i) => ({
+    const clips = Array.from({ length: count }, (_, i) => ({
       ...seed,
       id: `perf-clip-${i}`,
       timelineStartMs: Math.round(i * durMs),
@@ -77,7 +87,7 @@ test('an export spends its time where the instrumentation says it does', async (
         tracks: state.project.tracks.map((t) => (t.id === track.id ? { ...t, clips } : t)),
       },
     });
-  }, storeSetup);
+  }, { mod: storeSetup, count: clipCount });
 
   // The main thread's probe has to be on: it is what sets `measure` on the
   // export request, which is what arms the worker's own probe.
@@ -91,7 +101,7 @@ test('an export spends its time where the instrumentation says it does', async (
   const storeUrl = await appModuleUrl(page, STORE_MODULE);
 
   const result = await page.evaluate(
-    async ({ exporter, store }) => {
+    async ({ exporter, store, out }) => {
       const { startExport, lastExportPerf } = (await import(exporter)) as {
         startExport: (
           project: unknown,
@@ -104,15 +114,15 @@ test('an export spends its time where the instrumentation says it does', async (
       const { useStore } = (await import(store)) as { useStore: { getState: () => never } };
       const s = useStore.getState() as unknown as { project: unknown; assets: unknown };
       const preset = {
-        id: 'test-1080p',
+        id: 'test-fixed',
         group: 'social',
         labelKey: 'export.preset.mp3.label',
         descriptionKey: 'export.preset.audio.description',
         qualityKey: 'export.quality.mp3_high',
         kind: 'mp4',
         aspect: '16:9',
-        width: 1920,
-        height: 1080,
+        width: out.width,
+        height: out.height,
         fps: 30,
         fpsMode: 'fixed',
         videoBitrate: 8_000_000,
@@ -126,7 +136,7 @@ test('an export spends its time where the instrumentation says it does', async (
       }
       return { wallMs: performance.now() - t0, snapshot: lastExportPerf() };
     },
-    { exporter: exporterUrl, store: storeUrl },
+    { exporter: exporterUrl, store: storeUrl, out: size },
   );
 
   expect(result.error ?? null).toBeNull();

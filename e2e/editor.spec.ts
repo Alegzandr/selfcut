@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
-import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { appModuleUrl } from './appModule';
 
 /**
  * Core editing flow, driven through the real UI in Chromium (the app is built
@@ -19,6 +19,53 @@ const FIXTURE_MP4 = path.join(FIXTURES, 'clip.mp4');
 const FIXTURE_WAV = path.join(FIXTURES, 'tone.wav');
 
 const EDITOR_URL = '/app/';
+
+const PERSISTENCE_MODULE = '/src/lib/persistence.ts';
+const STORE_MODULE = '/src/store/store.ts';
+
+/**
+ * Commit the debounced project write, then wait until the database really holds
+ * what the reload is about to read.
+ *
+ * This was a `waitForTimeout(1200)` against a 500 ms debounce: two thirds of a
+ * second of nothing on every run, and a coin toss on a machine slow enough for
+ * the write to take longer than the guess. Asking the database is both faster
+ * and stricter - it is the question the test is about, so a save that lands
+ * empty now fails here, naming what it found, rather than three lines later as
+ * a clip count nobody can explain.
+ */
+async function persisted(page: Page, clips: number, assets: number): Promise<void> {
+  const persistence = await appModuleUrl(page, PERSISTENCE_MODULE);
+  const store = await appModuleUrl(page, STORE_MODULE);
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(
+          async ({ p, s }) => {
+            const persist = (await import(p)) as {
+              flushProjectSave: () => void;
+              loadProjectById: (
+                id: string,
+              ) => Promise<{ project: { tracks: { clips: unknown[] }[] }; assets: unknown[] } | null>;
+            };
+            const { useStore } = (await import(s)) as { useStore: { getState: () => never } };
+            // A no-op once the debounce has already fired; what follows is what
+            // decides, either way.
+            persist.flushProjectSave();
+            const id = (useStore.getState() as unknown as { project: { id: string } }).project.id;
+            const saved = await persist.loadProjectById(id);
+            if (!saved) return null;
+            return {
+              clips: saved.project.tracks.reduce((n, t) => n + t.clips.length, 0),
+              assets: saved.assets.length,
+            };
+          },
+          { p: persistence, s: store },
+        ),
+      { message: 'project written to IndexedDB' },
+    )
+    .toEqual({ clips, assets });
+}
 
 /** Open the editor and import the 3 s video fixture; resolves once its clip is on the timeline. */
 async function importFixture(page: Page): Promise<void> {
@@ -102,8 +149,7 @@ test('the project survives a reload via IndexedDB', async ({ page }) => {
   await importFixture(page);
   await splitClip(page);
 
-  // The project JSON write is debounced (500 ms); let it commit before reloading.
-  await page.waitForTimeout(1200);
+  await persisted(page, 2, 1);
   await page.reload();
 
   await expect(page.locator('[data-clip-id]')).toHaveCount(2);
@@ -128,55 +174,9 @@ test('media imported into the library alone survives a reload', async ({ page })
   await expect(page.getByLabel('2 files')).toBeVisible();
   await expect(page.locator('[data-clip-id]')).toHaveCount(0);
 
-  await page.waitForTimeout(1200);
+  // No clips, both files: the exact shape that used to come back empty.
+  await persisted(page, 0, 2);
   await page.reload();
 
   await expect(page.getByLabel('2 files')).toBeVisible();
-});
-
-test('export renders an MP4 and hands it over as a download', async ({ page }) => {
-  // This test renders. Two Playwright workers share one encoder, and where that
-  // encoder is a software one the render is CPU-bound against whatever the
-  // neighbouring spec is encoding: the same export measured 11s alone and over
-  // 90s beside a busy worker on a CI runner. Nothing here asserts a duration -
-  // exportPerf.spec.ts is where the render's cost is a claim - so the budget is
-  // simply made wide enough that a slow machine is not a failure.
-  test.slow();
-  // Headless has no save-file picker UI; removing the API entirely routes the
-  // exporter onto its buffered fallback, which ends in a download-attribute
-  // anchor click that Playwright can capture.
-  await page.addInitScript(() => {
-    // `globalThis` rather than `window`: this file typechecks under the Node
-    // tsconfig (no DOM lib), and in the page the two are the same object.
-    delete (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker;
-  });
-  await importFixture(page);
-
-  await page.keyboard.press('Control+e');
-  const sheet = page.getByRole('dialog', { name: 'Export' });
-  await expect(sheet).toBeVisible();
-  // The sheet springs in from below (framer-motion). Clicking mid-animation
-  // can land on the backdrop, which dismisses the sheet in its idle phase:
-  // wait until its bounding box stops moving.
-  let prevBox = '';
-  await expect
-    .poll(async () => {
-      const box = JSON.stringify(await sheet.boundingBox());
-      const settled = box === prevBox;
-      prevBox = box;
-      return settled;
-    })
-    .toBe(true);
-
-  const downloadPromise = page.waitForEvent('download', { timeout: 240_000 });
-  // The CTA reads "Export <preset name>"; preset buttons themselves don't start with "Export".
-  await sheet.getByRole('button', { name: /^Export / }).click();
-  const download = await downloadPromise;
-
-  expect(download.suggestedFilename()).toMatch(/\.mp4$/);
-  const file = await download.path();
-  const { size } = await stat(file);
-  expect(size).toBeGreaterThan(10_000);
-
-  await expect(sheet.getByText('Saved as', { exact: false })).toBeVisible();
 });

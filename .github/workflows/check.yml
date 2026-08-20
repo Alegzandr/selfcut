@@ -24,8 +24,21 @@ jobs:
       - run: npm test
 
   e2e:
-    name: e2e (chromium)
+    # Two jobs rather than one, and they are not a shard of each other: `render`
+    # runs a single worker because its specs each want the whole machine, `ui`
+    # runs four because its specs are sub-second DOM work. Merged into one job
+    # at two workers, a render and a neighbour landed together and the render
+    # timed out - the suite took 12 minutes to report failures that pass in
+    # seconds when nothing is running beside them.
+    name: e2e (${{ matrix.project }})
     runs-on: ubuntu-latest
+    strategy:
+      # Both halves always run: a red `render` should not hide whether the UI
+      # specs are fine, since that is the difference between a real regression
+      # and a codec the runner declined to provide today.
+      fail-fast: false
+      matrix:
+        project: [ui, render]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -36,11 +49,11 @@ jobs:
       # `channel: 'chromium'` in playwright.config.ts: the full Chromium build,
       # not the headless shell, whose VideoEncoder stalls forever on export.
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: npm run test:e2e:${{ matrix.project }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: playwright-report
           retention-days: 7
 

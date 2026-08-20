@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appDepUrl, appModuleUrl } from './appModule';
+import { renderPath } from './renderPath';
 
 /**
  * The fanned-out render is faster than the single-worker one, and produces the
@@ -75,8 +76,18 @@ const SAMPLE_SECONDS = [0.5, 8, 17, 26, 35, 44, 53];
  * Heavy enough that the encoder is the bottleneck, which is the only condition
  * under which fanning out is supposed to help - and so the only condition under
  * which asserting that it does says anything. See the note at the top.
+ *
+ * That reasoning is about a machine with a GPU, and it inverts without one: a
+ * software rasterizer spends ~95% of a frame compositing, so the encoder never
+ * gets to be the bottleneck and the resolution is no longer what makes the
+ * split worth measuring - the per-frame CPU cost is, and the fan-out shares
+ * that across workers just the same (a GPU-less runner measures 1.17-1.30x per
+ * round either way). So the pixels are what gets cut there and nothing else:
+ * same twenty copies, same three rounds, same assertions, a ninth of the work.
+ * At 1080p these six renders were the single most expensive thing in CI at 2.7
+ * minutes, for a number the 360p ones report just as well.
  */
-const PRESET = {
+const PRESET_HD = {
   id: 'test-1080p',
   group: 'social',
   labelKey: 'export.preset.mp3.label',
@@ -92,6 +103,14 @@ const PRESET = {
   audioBitrate: 192_000,
 };
 
+/**
+ * The same render for a software rasterizer. The bitrate stays far above what
+ * 640x360 needs on purpose: the encoder should still have real work to do, so
+ * that the size comparison below is measuring rate control rather than an
+ * encoder coasting.
+ */
+const PRESET_SW = { ...PRESET_HD, id: 'test-360p', width: 640, height: 360, videoBitrate: 8_000_000 };
+
 test('a fanned-out render matches the serial one, and beats it', async ({ page }) => {
   test.setTimeout(300_000);
 
@@ -100,6 +119,8 @@ test('a fanned-out render matches the serial one, and beats it', async ({ page }
   });
 
   await page.goto('/app/');
+  const gpu = await renderPath(page);
+  const PRESET = gpu.hardware ? PRESET_HD : PRESET_SW;
   await page.setInputFiles('input[type="file"]', FIXTURE_MP4);
   await expect(page.locator('[data-clip-id]')).toHaveCount(1);
 

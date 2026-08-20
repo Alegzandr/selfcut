@@ -88,8 +88,29 @@ test('a transcoded track survives a reload without re-transcoding', async ({ pag
 
   expect(seeded.cachedBytes).toBeGreaterThan(0);
 
-  // Let the asset write commit, then come back as a fresh session.
-  await page.waitForTimeout(1200);
+  // Come back as a fresh session - once the asset is really on disk. `addAsset`
+  // above schedules a debounced write, so the reload has to wait for the record
+  // rather than for a length of time: the database is the thing the next
+  // session reads, so it is the thing worth asking.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async ({ persistence, store }) => {
+          const persist = (await import(persistence)) as {
+            flushProjectSave: () => void;
+            loadProjectById: (id: string) => Promise<{ assets: unknown[] } | null>;
+          };
+          const { useStore } = (await import(store)) as { useStore: { getState: () => never } };
+          persist.flushProjectSave();
+          const id = (useStore.getState() as unknown as { project: { id: string } }).project.id;
+          return (await persist.loadProjectById(id))?.assets.length ?? 0;
+        }, {
+          persistence: await appModuleUrl(page, '/src/lib/persistence.ts'),
+          store: await appModuleUrl(page, '/src/store/store.ts'),
+        }),
+      { message: 'the audio asset was written to IndexedDB' },
+    )
+    .toBeGreaterThan(0);
   await page.reload();
 
   // The restore decodes in the background, so the flag arrives asynchronously -
