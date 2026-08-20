@@ -19,15 +19,24 @@ import { appModuleUrl } from './appModule';
  * of two, then the software encoder - and their whole point is that the export
  * finishes without the user knowing any of it happened.
  *
- * A `probe*` spec: real footage from a scratch directory, and a render that
- * holds the machine's one hardware encoder for minutes. Run it by hand against
- * whatever a bug report arrived with:
+ * A `probe*` spec: real footage, and a render that holds the machine's one
+ * hardware encoder for minutes. The footage has to be supplied - a stall is a
+ * property of a particular capture on a particular encoder, so there is no
+ * fixture that stands in for it and no default worth hard-coding: a path that
+ * only resolves on the machine it was written on is a test nobody else can run
+ * and a failure nobody else can read.
  *
- *   PROBE=1 npx playwright test e2e/probeEncoderStall.spec.ts
+ * The fallbacks themselves - which encoder is tried next, and when the watchdog
+ * gives up on one - are covered without any of this, in `src/export/retryPlan.
+ * test.ts` and `src/export/stallGuard.test.ts`. What is left here is the whole
+ * chain against a capture that actually stalls, which is worth having the day a
+ * bug report arrives with one attached:
+ *
+ *   PROBE=1 STALL_SOURCE=D:/clips/report.mp4 npx playwright test e2e/probeEncoderStall.spec.ts
  *   PROBE=1 STALL_SOURCE=D:/clips/report.mp4 STALL_QUALITY=4K npx playwright test e2e/probeEncoderStall.spec.ts
  */
 
-const SOURCE = process.env.STALL_SOURCE ?? 'D:/Users/Alegzandr/Downloads/Episort.mp4';
+const SOURCE = process.env.STALL_SOURCE;
 /** The rung to export, as the sheet spells it ("1440p", "Full HD 1080p", "4K"). */
 const QUALITY = process.env.STALL_QUALITY ?? '1440p';
 
@@ -54,7 +63,7 @@ async function renderAtQuality(page: Page, quality: string): Promise<void> {
   });
 
   await page.goto('/app/');
-  await page.setInputFiles('input[type="file"]', SOURCE);
+  await page.setInputFiles('input[type="file"]', SOURCE!);
   // A linked import lands as a video clip and its audio partner.
   await expect(page.locator('[data-clip-id]')).toHaveCount(2, { timeout: 120_000 });
 
@@ -104,6 +113,7 @@ async function renderAtQuality(page: Page, quality: string): Promise<void> {
 }
 
 test(`renders ${QUALITY} to the end, whatever the encoder does`, async ({ page }) => {
+  test.skip(!SOURCE, 'set STALL_SOURCE to the capture the stall was reported on');
   // Room for the render, its fallbacks, and a software encode of the whole
   // timeline if that is what it comes to.
   test.setTimeout(2_400_000);
