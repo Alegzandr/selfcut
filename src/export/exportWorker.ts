@@ -19,10 +19,21 @@ import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
 import { FrameRenderer } from './frameRenderer';
 import { RenderPreviewTap } from './renderPreview';
+import { chooseEncoderSetup, type EncoderSetup, type ProbeResult } from './encoderSetup';
 import { planSegments, type SegmentPlan } from './segmentPlan';
 import type { SegmentReply, SegmentRequest } from './segmentProtocol';
 import type { ExportVideoCodec, Mp4Preset } from './presets';
 import { endFrame, endSpan, mergeSnapshots, type PerfSnapshot, setPerfEnabled, snapshot, span } from '../perf/probe';
+import {
+  AUDIO_CHUNK_STALL_MS,
+  ENCODE_STALL_MS,
+  FIRST_ENCODE_STALL_MS,
+  FRAME_STALL_MS,
+  PROBE_STALL_MS,
+  StalledError,
+  SUPPORT_PROBE_MS,
+  withDeadline,
+} from './stallGuard';
 import {
   AUDIO_CHUNK_FRAMES,
   type AudioMixInfo,
@@ -61,6 +72,9 @@ import {
  */
 const ENCODE_QUEUE_DEPTH = 4;
 
+/** FAULT INJECTION - temporary */
+let faultStallEncoder = false;
+
 /**
  * How many finished-but-not-yet-muxed slices the lead will hold before it stops
  * handing out new work. See `pump`, which is where the reasoning lives.
@@ -81,6 +95,11 @@ const MAX_HELD_SEGMENTS = 2;
  * answer; what was missing was not the preference but the OBSERVATION, which is
  * what `reportEncoderConfig` below provides.
  *
+ * `prefer-software` IS asked for, but only ever as a fallback and only once the
+ * browser's own pick has been caught producing nothing (see `chooseEncoderSetup`
+ * in `encoderSetup`). That is the same hang from the other side: the way out of
+ * an encoder that cannot deliver a configuration it accepted.
+ *
  * `contentHint: 'detail'`. It reads like the obviously correct hint for an edit
  * rather than a video call, and it was set here for exactly that reason. Every
  * geometry was then measured with it and without it, and it never once produced
@@ -95,57 +114,96 @@ const MAX_HELD_SEGMENTS = 2;
  */
 
 /**
- * Whether this browser will encode `codec` at this geometry with the cadence
- * declared on the track.
+ * Encode a single frame at exactly the configuration the render is about to
+ * use, and report which of the three things happened.
  *
- * Declaring the frame rate is worth a great deal (see `videoTrackMetadata`),
- * but it is also the one thing that can make an otherwise supported
- * configuration be refused outright: HEVC at 4K 120 is accepted with no cadence
- * and rejected with one, because the cadence is what pushes the required level
- * past what the encoder implements.
- *
- * `canEncodeVideo` cannot answer this - it hardcodes `framerate: undefined`
- * when it builds the configuration to probe, so it is blind to the very field
- * in question. So the probe is a real one: build the real output, encode a
- * single frame, throw it away. One frame costs milliseconds against an export
- * measured in minutes, and unlike a guess at the codec string it tests the
- * exact configuration the render is about to use.
+ * `canEncodeVideo` cannot answer any of this. It hardcodes `framerate:
+ * undefined` when it builds the configuration to probe, so it is blind to the
+ * cadence - and being a support query rather than an encode, it is blind to an
+ * encoder that says yes and then delivers nothing, which is the failure this
+ * probe exists to catch. One frame costs milliseconds against an export
+ * measured in minutes.
  */
-async function canDeclareFrameRate(
+async function probeEncode(
   codec: ExportVideoCodec,
   width: number,
   height: number,
   bitrate: number,
   fps: number,
-): Promise<boolean> {
+  declareFrameRate: boolean,
+  hardwareAcceleration: 'no-preference' | 'prefer-software',
+): Promise<ProbeResult> {
   const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
   const canvas = new OffscreenCanvas(width, height);
   // A canvas that has never been given a context is not a usable image source,
   // and the frame constructor rejects it - which would fail the probe for a
-  // reason that has nothing to do with the cadence, and silently give up the
-  // gain everywhere. Asking for the context is what makes the canvas real.
-  if (!canvas.getContext('2d')) return false;
+  // reason that has nothing to do with the configuration, and silently give up
+  // the gain everywhere. Asking for the context is what makes the canvas real.
+  if (!canvas.getContext('2d')) return 'refused';
   const source = new CanvasSource(canvas, {
     codec,
     bitrate,
     latencyMode: 'quality',
     keyFrameInterval: 2,
+    hardwareAcceleration,
+    // Reported from the probe as well as from the render: on a fanned-out
+    // export the encoders live in the segment workers, so without this nothing
+    // anywhere would say what the browser settled on - and "was it hardware"
+    // is the first question any slow-or-stuck export raises.
+    onEncoderConfig: reportEncoderConfig,
   });
-  output.addVideoTrack(source, { frameRate: fps });
+  output.addVideoTrack(source, declareFrameRate ? { frameRate: fps } : undefined);
   try {
-    await output.start();
-    await source.add(0, 1 / fps);
-    source.close();
-    await output.finalize();
-    return true;
-  } catch {
-    try {
-      await output.cancel();
-    } catch {
-      /* already torn down */
-    }
-    return false;
+    await withDeadline(
+      (async () => {
+        await output.start();
+        await source.add(0, 1 / fps);
+        source.close();
+        await output.finalize();
+      })(),
+      PROBE_STALL_MS,
+      `${codec} ${width}x${height}@${fps} encoder probe`,
+    );
+    return 'ok';
+  } catch (err) {
+    // NOT awaited. Tearing down an encoder that has stopped responding goes
+    // through that same encoder, so awaiting the teardown of a stalled probe
+    // is one more way to hang on it - which is the thing being escaped.
+    void output.cancel().catch(() => {});
+    return err instanceof StalledError ? 'stalled' : 'refused';
   }
+}
+
+/**
+ * Settle how the render will encode, by encoding.
+ *
+ * Both decisions - the cadence and the encoder - come out of the same one-frame
+ * probe, and the reasoning that turns three possible answers into a setup lives
+ * in `encoderSetup`, away from the canvas and the muxer. This is the half that
+ * needs an encoder.
+ */
+function resolveEncoderSetup(
+  codec: ExportVideoCodec,
+  width: number,
+  height: number,
+  bitrate: number,
+  fps: number,
+  /** Skip the browser's own choice: a previous attempt stalled on it. */
+  forceSoftware: boolean,
+): Promise<EncoderSetup> {
+  return chooseEncoderSetup(
+    (declareFrameRate, hardwareAcceleration) =>
+      probeEncode(codec, width, height, bitrate, fps, declareFrameRate, hardwareAcceleration),
+    forceSoftware,
+    (hardwareAcceleration) => {
+      // Loud, because it is the sentence that explains an export that suddenly
+      // takes five times as long - and the only trace anywhere that this
+      // machine's encoder takes configurations it cannot deliver.
+      console.warn(
+        `[export] ${hardwareAcceleration} encoder stalled probing ${width}x${height}@${fps}`,
+      );
+    },
+  );
 }
 
 /**
@@ -212,6 +270,19 @@ class ExportError extends Error {
   }
 }
 
+/**
+ * Re-throw, turning "the encoder stopped responding" into the one failure the
+ * main thread knows how to act on.
+ *
+ * Every other error out of the render loop is reported and the export is over;
+ * this one is retried on the software encoder, which is why it needs a code
+ * rather than a message.
+ */
+function asEncoderStall(err: unknown): never {
+  if (err instanceof StalledError) throw new ExportError('encoderStalled');
+  throw err;
+}
+
 const worker = self as unknown as {
   postMessage(message: WorkerReply, options?: StructuredSerializeOptions): void;
   onmessage: ((e: MessageEvent<MainToWorker>) => void) | null;
@@ -266,10 +337,23 @@ worker.onmessage = (e) => {
  * a truncated soundtrack beats no video at all.
  */
 function pullAudio(offset: number, frames: number): Promise<Float32Array[] | null> {
-  return new Promise((resolve) => {
+  const chunk = new Promise<Float32Array[] | null>((resolve) => {
     awaitingAudio = resolve;
     worker.postMessage({ type: 'needAudio', offset, frames });
   });
+  // A reply that never arrives - a wedged main thread, a message lost with a
+  // worker that was replaced - reads as a slice that could not be rendered.
+  // The soundtrack then ends where the mix did, which is the same outcome the
+  // main thread reports for a slice it failed to render, and not a video that
+  // is 92% encoded and waiting for ever.
+  return withDeadline(chunk, AUDIO_CHUNK_STALL_MS, 'audio mix from the main thread').catch(
+    (err: unknown) => {
+      if (!(err instanceof StalledError)) throw err;
+      console.warn('[export] no audio slice from the main thread, truncating the mix');
+      awaitingAudio = null;
+      return null;
+    },
+  );
 }
 
 /**
@@ -284,9 +368,78 @@ async function pickCodec(
   height: number,
   bitrate: number,
 ): Promise<ExportVideoCodec | null> {
-  if (await canEncodeVideo(wanted, { width, height, bitrate })) return wanted;
-  if (wanted !== 'avc' && (await canEncodeVideo('avc', { width, height, bitrate }))) return 'avc';
+  if (await supportsVideo(wanted, width, height, bitrate)) return wanted;
+  if (wanted !== 'avc' && (await supportsVideo('avc', width, height, bitrate))) return 'avc';
   return null;
+}
+
+/**
+ * `canEncodeVideo`, with a deadline.
+ *
+ * A support query is the very first thing an export does, before a frame is
+ * rendered or a byte is written, so a query that never answers is an export
+ * that never starts - and that is indistinguishable, from the outside, from the
+ * encoder stall this whole file guards against. An unanswered question is read
+ * as a no: the codec falls back, and a wrong no costs a larger file rather than
+ * a render nobody can cancel.
+ */
+async function supportsVideo(
+  codec: ExportVideoCodec,
+  width: number,
+  height: number,
+  bitrate: number,
+): Promise<boolean> {
+  try {
+    return await withDeadline(
+      canEncodeVideo(codec, { width, height, bitrate }),
+      SUPPORT_PROBE_MS,
+      `canEncodeVideo(${codec})`,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** `canEncodeAudio`, with the same deadline and the same reading of silence. */
+async function supportsAudio(
+  codec: 'aac' | 'mp3',
+  config: { numberOfChannels: number; sampleRate: number; bitrate: number },
+): Promise<boolean> {
+  try {
+    return await withDeadline(
+      canEncodeAudio(codec, config),
+      SUPPORT_PROBE_MS,
+      `canEncodeAudio(${codec})`,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Open the destination for writing, allowing for a lock the previous attempt
+ * has not let go of yet.
+ *
+ * A file handle takes one writable at a time. When a render is retried - a
+ * stalled encoder, a segment mismatch - the worker that held the first one has
+ * just been terminated, and the browser releases its lock as it tears the
+ * worker down rather than the instant `terminate()` returns. Racing that gives
+ * a `NoModificationAllowedError` and turns a retry that was about to work into
+ * a failed export.
+ *
+ * Retried rather than waited out unconditionally, so the first attempt - which
+ * is nearly every attempt - pays nothing at all.
+ */
+async function openWritable(handle: FileSystemFileHandle): Promise<FileSystemWritableFileStream> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await handle.createWritable();
+    } catch (err) {
+      const locked = err instanceof DOMException && err.name === 'NoModificationAllowedError';
+      if (!locked || attempt >= 4) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
 }
 
 function postProgress(value: number): void {
@@ -312,12 +465,13 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   if (!codec) throw new ExportError('videoEncoderUnsupported');
   // Settled once, here, because every segment worker has to encode the same way
   // the lead does for their packets to splice into one stream.
-  const declareFrameRate = await canDeclareFrameRate(
+  const { declareFrameRate, hardwareAcceleration } = await resolveEncoderSetup(
     codec,
     width,
     height,
     preset.videoBitrate,
     preset.fps,
+    !!req.preferSoftwareEncoder,
   );
   // Probe the exact configuration we are about to use, not just the codec: the
   // native AAC encoder advertises support for 'aac' in general while rejecting
@@ -328,7 +482,7 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   // encoder string.
   if (
     audio &&
-    !(await canEncodeAudio('aac', {
+    !(await supportsAudio('aac', {
       numberOfChannels: audio.channelCount,
       sampleRate: audio.sampleRate,
       bitrate: preset.audioBitrate,
@@ -348,6 +502,8 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
         cores: navigator.hardwareConcurrency,
       });
   const parallel = plan.workers > 1;
+  // FAULT INJECTION - temporary
+  faultStallEncoder = hardwareAcceleration === 'no-preference';
 
   // Streaming straight into the user's file keeps memory flat and still puts
   // the metadata up front ('reserve' writes moov into space reserved at the
@@ -355,7 +511,7 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   // That mode needs an upper bound on packets per track, and overshooting only
   // reserves a few unused bytes while undershooting aborts the render, so both
   // bounds below are deliberately loose.
-  const writable = req.fileHandle ? await req.fileHandle.createWritable() : null;
+  const writable = req.fileHandle ? await openWritable(req.fileHandle) : null;
   const target = writable ? new StreamTarget(writable, { chunked: true }) : new BufferTarget();
   const output = new Output({
     format: new Mp4OutputFormat({ fastStart: writable ? 'reserve' : 'in-memory' }),
@@ -384,6 +540,10 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
     ? new CanvasSource(renderer.canvas, {
         codec,
         bitrate: preset.videoBitrate,
+        // What the probe found this browser will actually deliver at this
+        // geometry, which is 'no-preference' unless the browser's own choice
+        // was the thing that stopped responding.
+        hardwareAcceleration,
         // Offline export: never trade quality for latency, and never drop frames.
         // (This is mediabunny's default, pinned here so an export stays lossless-of-
         // intent even if the library default changes.)
@@ -418,7 +578,7 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
         req,
         preset,
         codec,
-        declareFrameRate,
+        { declareFrameRate, hardwareAcceleration },
         plan,
         packetSource,
         totalFrames,
@@ -437,7 +597,12 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
     }
 
     postProgress(0.99);
-    await output.finalize();
+    // The flush goes through the encoder too, so it can stop responding at the
+    // very last step - after every frame is encoded, which is the cruellest
+    // moment to hang.
+    await withDeadline(output.finalize(), ENCODE_STALL_MS, 'output finalize').catch(
+      asEncoderStall,
+    );
     finished = true;
 
     if (req.measure) {
@@ -452,10 +617,16 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
     if (!finished) {
       // Release the destination file: without this the writable stays open and
       // the user is left with a locked, half-written file.
+      //
+      // Deadlined, because the teardown runs through the same encoder the
+      // render may have just given up on: without one, a stalled export would
+      // stall again on its way out and the failure would never be reported. A
+      // file left locked is a worse outcome than a file left open, so this
+      // waits - it just does not wait for ever.
       try {
-        await output.cancel();
+        await withDeadline(output.cancel(), ENCODE_STALL_MS, 'output teardown');
       } catch {
-        /* already torn down */
+        /* already torn down, or torn down by an encoder that stopped answering */
       }
     }
   }
@@ -473,8 +644,24 @@ async function renderSerial(
   await renderer.ready();
   const frameDur = 1 / preset.fps;
   const inFlight: Promise<void>[] = [];
+  // Every wait on the encoder carries a deadline: an encoder that accepts a
+  // configuration and then emits nothing is the failure `stallGuard` documents,
+  // and it is invisible from here without one - the promise for the packet
+  // simply never settles.
+  //
+  // Shorter until the encoder has produced its first packet: one that has never
+  // emitted anything has not started, and that is the failure worth catching
+  // quickly enough to fall back while the user is still watching.
+  let encoded = 0;
   const drainTo = async (depth: number): Promise<void> => {
-    while (inFlight.length > depth) await inFlight.shift()!;
+    while (inFlight.length > depth) {
+      await withDeadline(
+        inFlight.shift()!,
+        encoded === 0 ? FIRST_ENCODE_STALL_MS : ENCODE_STALL_MS,
+        'video encoder',
+      ).catch(asEncoderStall);
+      encoded++;
+    }
   };
   const preview = new RenderPreviewTap(renderer.canvas, startMs, preset.fps, (bitmap, timeMs) => {
     worker.postMessage({ type: 'previewFrame', bitmap, timeMs }, { transfer: [bitmap] });
@@ -483,13 +670,21 @@ async function renderSerial(
   try {
     for (let i = 0; i < totalFrames; i++) {
       const frameStarted = span();
-      await renderer.renderFrame(i);
+      // The decoders get their own deadline, and deliberately not the encoder's
+      // code: a source that stops decoding is not fixed by a software encoder,
+      // so it is reported rather than retried.
+      await withDeadline(renderer.renderFrame(i), FRAME_STALL_MS, `frame ${i} decode`);
 
       const encodeStarted = span();
       await drainTo(ENCODE_QUEUE_DEPTH - 1);
       endSpan('encodeWait', encodeStarted);
 
-      inFlight.push(videoSource.add(i * frameDur, frameDur));
+      // FAULT INJECTION - temporary
+      inFlight.push(
+        faultStallEncoder && i === 0
+          ? new Promise<void>(() => {})
+          : videoSource.add(i * frameDur, frameDur),
+      );
       // Once the encoder has its copy, so the monitor never makes it wait.
       preview.capture(i);
       // After the capture, never before: the layers hold frames these readers
@@ -528,7 +723,7 @@ async function renderParallel(
   req: ExportRequest,
   preset: Mp4Preset,
   codec: ExportVideoCodec,
-  declareFrameRate: boolean,
+  setup: EncoderSetup,
   plan: SegmentPlan,
   packetSource: EncodedVideoPacketSource,
   totalFrames: number,
@@ -626,7 +821,8 @@ async function renderParallel(
       fps: preset.fps,
       videoBitrate: preset.videoBitrate,
       codec,
-      declareFrameRate,
+      declareFrameRate: setup.declareFrameRate,
+      hardwareAcceleration: setup.hardwareAcceleration,
       startMs: req.startMs,
       firstFrame: segment.firstFrame,
       frameCount: segment.frameCount,
@@ -701,7 +897,13 @@ async function renderParallel(
           return;
         }
         if (msg.type === 'segmentFailed') {
-          failure = new Error(`segment ${msg.index}: ${msg.detail}`);
+          // A slice whose encoder stopped responding is not a broken slice: the
+          // same thing would happen to whichever slice ran next. It travels as
+          // a code so the main thread re-runs the whole render on the software
+          // encoder instead of showing the user a crash they cannot act on.
+          failure = msg.stalled
+            ? new ExportError('encoderStalled')
+            : new Error(`segment ${msg.index}: ${msg.detail}`);
           fail(failure);
           return;
         }
@@ -808,7 +1010,7 @@ async function exportMp3(req: ExportRequest): Promise<void> {
   // what has to be supported, so the fallback encoder is registered whenever
   // the native one cannot take this exact configuration.
   if (
-    !(await canEncodeAudio('mp3', {
+    !(await supportsAudio('mp3', {
       numberOfChannels: audio.channelCount,
       sampleRate: audio.sampleRate,
       bitrate: preset.audioBitrate,
@@ -820,7 +1022,7 @@ async function exportMp3(req: ExportRequest): Promise<void> {
   // Same destination handling as the video path, so both presets behave the
   // same way. An mp3 is small enough that memory was never the issue here - it
   // is about the file landing where the user asked for it.
-  const writable = req.fileHandle ? await req.fileHandle.createWritable() : null;
+  const writable = req.fileHandle ? await openWritable(req.fileHandle) : null;
   const target = writable ? new StreamTarget(writable, { chunked: true }) : new BufferTarget();
   const output = new Output({ format: new Mp3OutputFormat(), target });
   const audioSource = new AudioSampleSource({ codec: 'mp3', bitrate: preset.audioBitrate });
@@ -832,15 +1034,15 @@ async function exportMp3(req: ExportRequest): Promise<void> {
     await pushAudioMix(audioSource, audio, (v) => postProgress(v * 0.97));
     audioSource.close();
 
-    await output.finalize();
+    await withDeadline(output.finalize(), ENCODE_STALL_MS, 'output finalize');
     finished = true;
     postDone(target, 'audio/mpeg');
   } finally {
     if (!finished) {
       try {
-        await output.cancel();
+        await withDeadline(output.cancel(), ENCODE_STALL_MS, 'output teardown');
       } catch {
-        /* already torn down */
+        /* already torn down, or torn down by an encoder that stopped answering */
       }
     }
   }
@@ -879,7 +1081,7 @@ async function pushAudioMix(
       sampleRate,
       timestamp: offset / sampleRate,
     });
-    await source.add(sample);
+    await withDeadline(source.add(sample), ENCODE_STALL_MS, 'audio encoder');
     sample.close();
     onProgress(offset / totalFrames);
   }

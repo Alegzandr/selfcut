@@ -32,6 +32,7 @@ import {
   ReloadIcon,
   ResetIcon,
   ScissorsIcon,
+  ShadowIcon,
   SewingPinIcon,
   SpeakerLoudIcon,
   SquareIcon,
@@ -49,6 +50,7 @@ import {
   ZoomOutIcon,
 } from '@radix-ui/react-icons';
 import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
+import { defaultRedaction } from '../model';
 import type { LibraryTab } from '../store/editorState';
 import { useImport } from './useImport';
 import { openMediaPicker, openSubtitlePicker } from './mediaPicker';
@@ -111,6 +113,10 @@ export function useEditorCommands(): Record<string, Command> {
   const selectedClip = useStore(getSelectedClip);
   // Stream layout only makes sense on a real media clip (not text/solid overlays).
   const canStream = selectedClip !== null && selectedClip.assetId !== '';
+  // Blurring a region needs a picture to blur: every generated clip has one, a
+  // media clip only when its asset is not pure audio.
+  const selectedAssetKind = useStore((s) => (selectedClip ? s.assets[selectedClip.assetId]?.kind : undefined));
+  const canRedact = selectedClip !== null && (selectedClip.kind !== 'media' || selectedAssetKind === 'video' || selectedAssetKind === 'image');
   const isLinked = selectedClip !== null && selectedClip.linkId != null;
   // Link is offered when the selection resolves to a joinable A/V pair (two
   // clips on opposite tracks, or one clip with an obvious partner from the same
@@ -220,6 +226,22 @@ export function useEditorCommands(): Record<string, Command> {
     { id: 'clip.duplicate', labelKey: 'menu.clip.duplicate', icon: CardStackPlusIcon, shortcut: 'Ctrl+D', disabled: !hasSelection, onClick: () => st().duplicateClips(st().selectedClipIds) },
     { id: 'clip.punchIn', labelKey: 'menu.clip.punchIn', icon: TargetIcon, shortcut: 'P', disabled: !selectedId, onClick: () => st().punchZoomSelected() },
     { id: 'clip.stream', labelKey: 'menu.clip.stream', icon: ViewHorizontalIcon, disabled: !canStream, onClick: () => selectedId && st().applyStreamLayout(selectedId) },
+    // Blur a face, a plate, a screen. Adds the region and opens it for editing
+    // rather than dropping an invisible one on the clip: the whole point is that
+    // the next thing the user does is drag it onto the thing to hide.
+    {
+      id: 'clip.blurRegion',
+      labelKey: 'menu.clip.blurRegion',
+      hintKey: 'menu.clip.blurRegion.hint',
+      icon: ShadowIcon,
+      disabled: !canRedact,
+      onClick: () => {
+        if (!selectedId) return;
+        const id = st().addClipRedaction(selectedId, defaultRedaction());
+        st().setSelectedRedactionId(id);
+        st().setInspectorOpen(true);
+      },
+    },
     { id: 'clip.adjust', labelKey: 'menu.clip.adjust', icon: MixerHorizontalIcon, disabled: !selectedId, onClick: () => st().setInspectorOpen(true) },
     { id: 'clip.link', labelKey: 'menu.clip.link', icon: Link2Icon, disabled: !canLink, onClick: () => { const targets = getLinkTargets(st()); if (targets) st().linkClips(targets); } },
     { id: 'clip.unlink', labelKey: 'menu.clip.unlink', icon: LinkBreak2Icon, disabled: !isLinked, onClick: () => selectedId && st().unlinkClip(selectedId) },

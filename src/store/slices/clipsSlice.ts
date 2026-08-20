@@ -131,6 +131,11 @@ export function createClipsSlice(
   | 'setClipMask'
   | 'setClipMaskMotionLive'
   | 'toggleClipMaskMotionKeyframe'
+  | 'addClipRedaction'
+  | 'setClipRedaction'
+  | 'removeClipRedaction'
+  | 'setClipRedactionMotionLive'
+  | 'toggleClipRedactionMotionKeyframe'
   | 'toggleClipKeyframe'
   | 'moveClipKeyframes'
   | 'setClipKeyframesEase'
@@ -605,6 +610,111 @@ export function createClipsSlice(
       });
     },
 
+    addClipRedaction: (clipId, redaction) => {
+      const id = uid();
+      withHistory((p) => {
+        const clip = findClip(p, clipId)?.clip;
+        if (!clip) return;
+        // Appended, so the list reads in the order the regions were added and a
+        // new one never renumbers the ones already on screen.
+        clip.redactions = [...(clip.redactions ?? []), { ...redaction, id }];
+      });
+      return id;
+    },
+
+    /**
+     * Aimed at one redaction on one clip, never spread across the selection:
+     * region ids are per clip, so "the same region" does not exist on a second
+     * clip to apply the edit to.
+     */
+    setClipRedaction: (clipId, redactionId, patch) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([
+            [
+              clipId,
+              (c: Clip): Clip => {
+                const list = c.redactions;
+                if (!list?.some((r) => r.id === redactionId)) return c;
+                return {
+                  ...c,
+                  redactions: list.map((r) => (r.id === redactionId ? { ...r, ...patch } : r)),
+                } as Clip;
+              },
+            ],
+          ]),
+        ),
+      }),
+
+    removeClipRedaction: (clipId, redactionId) => {
+      withHistory((p) => {
+        const clip = findClip(p, clipId)?.clip;
+        if (!clip?.redactions) return;
+        const left = clip.redactions.filter((r) => r.id !== redactionId);
+        // Dropped entirely rather than left as `[]`: an empty list would send
+        // every frame of the clip through the redaction scratch for nothing.
+        clip.redactions = left.length ? left : undefined;
+      });
+      if (get().selectedRedactionId === redactionId) set({ selectedRedactionId: null });
+    },
+
+    setClipRedactionMotionLive: (clipId, redactionId, prop, value, timelineMs) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([
+            [
+              clipId,
+              (c: Clip): Clip => {
+                const list = c.redactions;
+                const target = list?.find((r) => r.id === redactionId);
+                if (!list || !target) return c;
+                const local = timelineMs - c.timelineStartMs;
+                const motion: MaskMotion = { ...(target.motion ?? {}) };
+                const ch = motion[prop];
+                // Same rule as the mask motion sliders: once the axis animates,
+                // a drag writes the key under the playhead rather than a
+                // constant that would wipe the tracked motion.
+                if (Array.isArray(ch) && ch.length) {
+                  if (!spansPlayhead(c, timelineMs)) return c;
+                  motion[prop] = setKeyframe(ch, local, value);
+                } else {
+                  motion[prop] = value;
+                }
+                return {
+                  ...c,
+                  redactions: list.map((r) => (r.id === redactionId ? { ...r, motion } : r)),
+                } as Clip;
+              },
+            ],
+          ]),
+        ),
+      }),
+
+    toggleClipRedactionMotionKeyframe: (clipId, redactionId, prop, timelineMs) => {
+      withHistory((p) => {
+        const clip = findClip(p, clipId)?.clip;
+        const list = clip?.redactions;
+        const target = list?.find((r) => r.id === redactionId);
+        if (!clip || !list || !target || !spansPlayhead(clip, timelineMs)) return;
+        const local = timelineMs - clip.timelineStartMs;
+        const identity: Record<MaskMotionProp, number> = { tx: 0, ty: 0, scale: 1, rotation: 0 };
+        const motion: MaskMotion = { ...(target.motion ?? {}) };
+        const ch = motion[prop];
+        if (Array.isArray(ch) && ch.length) {
+          // A key on the playhead is removed; otherwise one is added holding the
+          // current sampled value, so toggling never makes the region jump.
+          motion[prop] = ch.some((k) => Math.abs(k.t - local) < 1)
+            ? removeKeyframe(ch, local)
+            : setKeyframe(ch, local, sampleChannel(ch, local));
+        } else {
+          motion[prop] = setKeyframe([], local, typeof ch === 'number' ? ch : identity[prop]);
+        }
+        clip.redactions = list.map((r) => (r.id === redactionId ? { ...r, motion } : r));
+      });
+    },
+
     toggleClipKeyframe: (clipId, prop, timelineMs) => {
       const ids = targetsOf(clipId);
       withHistory((p) => {
@@ -750,20 +860,37 @@ export function createClipsSlice(
       const edit = (clip: Clip): Clip => {
         const asset = assets[clip.assetId];
         const minSourceSpan = MIN_CLIP_DURATION_MS * clip.speed;
+        // A clip with no fixed-length media - a generated clip (text, solid,
+        // shape) or a still - has no source to run out of, on either side.
+        const unbounded = !asset || asset.kind === 'image';
         if (edge === 'left') {
           const proposed = Math.max(0, timelineMs);
-          let sourceIn = clip.sourceInMs + (proposed - clip.timelineStartMs) * clip.speed;
-          sourceIn = clamp(sourceIn, 0, clip.sourceOutMs - minSourceSpan);
-          if (sourceIn === clip.sourceInMs) return clip;
+          const sourceIn = clip.sourceInMs + (proposed - clip.timelineStartMs) * clip.speed;
+          if (unbounded && sourceIn < 0) {
+            // Nothing to reveal, so the left edge LENGTHENS the clip instead of
+            // stopping at source 0: keep the right edge and the source window's
+            // head where they are, and grow the window to cover the new span.
+            const endMs = clipEndMs(clip);
+            const start = Math.min(proposed, endMs - MIN_CLIP_DURATION_MS);
+            if (start === clip.timelineStartMs) return clip;
+            return {
+              ...clip,
+              timelineStartMs: start,
+              sourceInMs: 0,
+              sourceOutMs: (endMs - start) * clip.speed,
+            };
+          }
+          const clamped = clamp(sourceIn, 0, clip.sourceOutMs - minSourceSpan);
+          if (clamped === clip.sourceInMs) return clip;
           return {
             ...clip,
-            timelineStartMs: clip.timelineStartMs + (sourceIn - clip.sourceInMs) / clip.speed,
-            sourceInMs: sourceIn,
+            timelineStartMs: clip.timelineStartMs + (clamped - clip.sourceInMs) / clip.speed,
+            sourceInMs: clamped,
           };
         }
         let sourceOut = clip.sourceInMs + (timelineMs - clip.timelineStartMs) * clip.speed;
         // A still has no intrinsic duration: its clips stretch without bound.
-        const maxOut = asset && asset.kind !== 'image' ? asset.durationMs : Infinity;
+        const maxOut = unbounded ? Infinity : asset.durationMs;
         sourceOut = clamp(sourceOut, clip.sourceInMs + minSourceSpan, maxOut);
         if (sourceOut === clip.sourceOutMs) return clip;
         return { ...clip, sourceOutMs: sourceOut };
@@ -829,6 +956,7 @@ export function createClipsSlice(
         selectedClipIds: primaries,
         selectedClipId: primaries[primaries.length - 1] ?? null,
         cropEditing: false,
+        selectedRedactionId: null,
       });
       return idMap;
     },

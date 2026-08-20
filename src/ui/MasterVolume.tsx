@@ -64,7 +64,7 @@ export function MasterVolume() {
         max={UNITY_FADER}
         step={DB_STEP_FADER}
         value={gainToFader(volume)}
-        className={`slider-thin w-24 cursor-ew-resize ${muted ? 'text-zinc-600' : 'text-sky-500'}`}
+        className={`slider-thin w-24 cursor-ew-resize ${muted ? 'text-zinc-600' : 'text-zinc-300'}`}
         aria-label={t('master.volume', { db: gainDb(volume) })}
         onFocus={() => setActive(true)}
         onBlur={() => setActive(false)}

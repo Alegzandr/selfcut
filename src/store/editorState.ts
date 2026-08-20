@@ -3,6 +3,7 @@ import {
   ClipColor,
   ClipCurves,
   ClipMask,
+  ClipRedaction,
   ClipShape,
   ColorProp,
   MaskMotionProp,
@@ -541,6 +542,42 @@ export interface EditorState {
   ) => void;
   /** Add or remove a mask-motion keyframe for `prop` at the playhead (one undo step). */
   toggleClipMaskMotionKeyframe: (clipId: string, prop: MaskMotionProp, timelineMs: number) => void;
+
+  /**
+   * Add a redaction region to a clip (one undo step) and return its new id, so
+   * the caller can immediately make it the one the preview edits.
+   */
+  addClipRedaction: (clipId: string, redaction: Omit<ClipRedaction, 'id'>) => string;
+  /**
+   * Live (uncommitted) edit of one redaction region, committed by the control's
+   * gesture like the mask and colour controls. Aimed at a single clip: region
+   * ids are per clip, so there is nothing to spread across a multi-selection.
+   */
+  setClipRedaction: (clipId: string, redactionId: string, patch: Partial<ClipRedaction>) => void;
+  /** Drop a redaction region from a clip (one undo step). */
+  removeClipRedaction: (clipId: string, redactionId: string) => void;
+  /** Live (uncommitted) edit of a redaction's motion channel. See `setClipMaskMotionLive`. */
+  setClipRedactionMotionLive: (
+    clipId: string,
+    redactionId: string,
+    prop: MaskMotionProp,
+    value: number,
+    timelineMs: number,
+  ) => void;
+  /** Add or remove a redaction motion keyframe for `prop` at the playhead (one undo step). */
+  toggleClipRedactionMotionKeyframe: (
+    clipId: string,
+    redactionId: string,
+    prop: MaskMotionProp,
+    timelineMs: number,
+  ) => void;
+  /**
+   * Which redaction region the preview overlay edits — the one drawn with
+   * handles, the rest showing as outlines. Session state, cleared whenever the
+   * clip selection changes, since a region id only means anything on its clip.
+   */
+  selectedRedactionId: string | null;
+  setSelectedRedactionId: (id: string | null) => void;
   /**
    * Import a parsed `.cube` LUT into the project (one undo step) and return its
    * new id, so the caller can immediately apply it to the selection.

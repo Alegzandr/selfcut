@@ -32,8 +32,10 @@ export function createSelectionSlice(
         // A plain click is a fresh start: the boxed keyframes go with it. The
         // marquee sets both sets itself, so it never routes through here.
         selectedKeyframes: [],
-        // Crop-edit mode is bound to one clip; any selection change ends it.
+        // Both are bound to one clip, so any selection change ends them: crop
+        // mode, and whichever redaction region the preview was editing.
         cropEditing: false,
+        selectedRedactionId: null,
         ...(ids.length === 0 ? { inspectorOpen: false } : {}),
       });
     },
@@ -61,6 +63,7 @@ export function createSelectionSlice(
         selectedClipIds: ids,
         selectedClipId: ids[ids.length - 1] ?? null,
         cropEditing: false,
+        selectedRedactionId: null,
         ...(ids.length === 0 ? { inspectorOpen: false } : {}),
       });
     },
@@ -97,6 +100,7 @@ export function createSelectionSlice(
         selectedClipIds: ids,
         selectedClipId: ids.includes(targetId) ? targetId : (ids[ids.length - 1] ?? null),
         cropEditing: false,
+        selectedRedactionId: null,
       });
     },
   };

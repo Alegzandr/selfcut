@@ -59,6 +59,7 @@ const CLIP_TILES: readonly Tile[] = [
   { cmd: 'clip.duplicate', labelKey: 'clipbar.duplicate' },
   { cmd: 'clip.punchIn', labelKey: 'clipbar.punchIn' },
   { cmd: 'clip.stream', labelKey: 'clipbar.stream', mediaOnly: true },
+  { cmd: 'clip.blurRegion', labelKey: 'clipbar.blurRegion' },
   { cmd: 'clip.adjust', labelKey: 'clipbar.adjust' },
   { cmd: 'clip.link', labelKey: 'clipbar.link', linkableOnly: true },
   { cmd: 'clip.unlink', labelKey: 'clipbar.unlink', linkedOnly: true },

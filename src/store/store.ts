@@ -275,6 +275,7 @@ export const useStore = create<EditorState>((set, get) => {
     future: [],
     gestureSnapshot: null,
     cropEditing: false,
+    selectedRedactionId: null,
     previewTool: 'select',
     previewShapeKind: 'rect',
     previewView: PREVIEW_VIEW_RESET,

@@ -38,6 +38,7 @@ import { confirmDiscardProject } from './ui/projectActions';
 import { ContextMenu } from './ui/menu/ContextMenu';
 import { A11yAnnouncer } from './ui/A11yAnnouncer';
 import { useEditorHotkeys } from './ui/useEditorHotkeys';
+import { useFileDragOverlay } from './ui/useFileDragOverlay';
 import { useIsCoarsePointer } from './lib/device';
 import { isSoftwareRendering } from './lib/gpu';
 import { PerfOverlay } from './perf/PerfOverlay';
@@ -75,7 +76,7 @@ export default function App() {
   const { t } = useTranslation();
   const [supported] = useState(isSupported);
   const importFiles = useImport();
-  const [dragging, setDragging] = useState(false);
+  const dragging = useFileDragOverlay();
   // While the timeline is showing where the files would land, the full-screen
   // overlay would only bury that preview under a wash of blue.
   const droppingOnTimeline = useStore((s) => s.dropPreview !== null);
@@ -115,18 +116,16 @@ export default function App() {
     <div
       className="flex h-dvh flex-col overflow-hidden bg-zinc-950 text-zinc-100"
       onDragOver={(e) => {
+        // Accepting the drag everywhere is what keeps the browser from taking
+        // the file over and navigating away from the editor. The overlay's own
+        // state is tracked on the window, by `useFileDragOverlay`.
         e.preventDefault();
-        // Internal asset drags (media library → timeline) must not trigger the import overlay.
-        if (e.dataTransfer.types.includes('Files')) setDragging(true);
-      }}
-      onDragLeave={(e) => {
-        if (e.currentTarget === e.target) setDragging(false);
       }}
       onDrop={(e) => {
-        setDragging(false);
         // The timeline claims the file drops that land on it - it places them
         // at the exact spot they were let go. A prevented default is how it
-        // says so; the event still reaches here, so the overlay closes anyway.
+        // says so; the event still reaches here, so the files are not imported
+        // twice.
         if (e.isDefaultPrevented()) return;
         e.preventDefault();
         if (e.dataTransfer.files.length) void importFiles(e.dataTransfer.files);

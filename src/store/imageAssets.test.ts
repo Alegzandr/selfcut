@@ -59,6 +59,17 @@ describe('image assets', () => {
     expect(onlyClip().sourceOutMs).toBe(20_000);
   });
 
+  it('trim left past the source head: a still stretches instead of stopping', () => {
+    const clip = onlyClip();
+    s().moveClip(clip.id, 4000);
+    s().trimClip(clip.id, 'left', 1000);
+    const trimmed = onlyClip();
+    expect(trimmed.timelineStartMs).toBe(1000);
+    expect(trimmed.sourceInMs).toBe(0);
+    // The right edge held still: 1000 -> 9000 instead of the original 4000 -> 9000.
+    expect(trimmed.sourceOutMs - trimmed.sourceInMs).toBe(8000);
+  });
+
   it('slip is a no-op: a still always shows the same frame', () => {
     const clip = onlyClip();
     s().updateClip(clip.id, { sourceInMs: 0, sourceOutMs: 3000 });

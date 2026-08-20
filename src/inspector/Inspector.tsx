@@ -22,6 +22,7 @@ import { ColorSection } from './sections/ColorSection';
 import { CurvesSection } from './sections/CurvesSection';
 import { ChromaSection } from './sections/ChromaSection';
 import { MaskSection } from './sections/MaskSection';
+import { RedactionSection } from './sections/RedactionSection';
 import { TransitionSection } from './sections/TransitionSection';
 import { clipDisplayName } from '../ui/clipName';
 
@@ -220,6 +221,7 @@ function InspectorBody({
 
       {(isVideo || isText || isShape) && <TransformSection clip={clip} isVideo={isVideo} />}
       {(isVideo || isText || isShape) && <MaskSection clip={clip} />}
+      {(isVideo || isText || isShape) && <RedactionSection clip={clip} />}
       {isVideo && <ColorSection clip={clip} />}
       {isVideo && <CurvesSection clip={clip} />}
       {isVideo && <ChromaSection clip={clip} />}

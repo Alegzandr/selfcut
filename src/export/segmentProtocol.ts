@@ -37,6 +37,12 @@ export interface SegmentRequest {
    * stream rather than merely produce a bigger file.
    */
   declareFrameRate: boolean;
+  /**
+   * Which encoder to ask for, resolved by the lead's probe for the same reason
+   * the cadence is: every slice has to be encoded the same way. 'no-preference'
+   * unless the browser's own choice was found to stall at this geometry.
+   */
+  hardwareAcceleration: 'no-preference' | 'prefer-software';
   /** First timeline ms of the whole render (a region's in point, else 0). */
   startMs: number;
   /** First output frame of this segment, counted from the start of the render. */
@@ -65,4 +71,10 @@ export type SegmentReply =
    * closes the rest (see `renderParallel`).
    */
   | { type: 'segmentPreview'; index: number; bitmap: ImageBitmap; timeMs: number }
-  | { type: 'segmentFailed'; index: number; detail: string };
+  /**
+   * `stalled` marks the one failure that is about the encoder rather than about
+   * this slice: it emitted nothing at all. The lead turns it into an
+   * `encoderStalled` code so the render is retried on the software encoder,
+   * where any other detail ends the export.
+   */
+  | { type: 'segmentFailed'; index: number; detail: string; stalled?: boolean };

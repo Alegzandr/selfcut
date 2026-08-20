@@ -19,7 +19,13 @@ export default defineConfig({
   // (`npx playwright test e2e/probeExport.spec.ts`) and ruinous in a suite:
   // they hold the machine's one hardware encoder for minutes, which times out
   // every other export test running beside them.
-  testIgnore: [/prod-.*\.spec\.ts/, /probe.*\.spec\.ts/],
+  //
+  // `PROBE=1` is what lets one be run by hand: without it the pattern below
+  // hides them from `npx playwright test e2e/probeSliceRate.spec.ts` too, which
+  // is the very invocation their headers document.
+  testIgnore: process.env.PROBE
+    ? [/prod-.*\.spec\.ts/]
+    : [/prod-.*\.spec\.ts/, /probe.*\.spec\.ts/],
   // Video decode/encode dominates test time; keep the budget generous.
   timeout: 120_000,
   expect: { timeout: 15_000 },

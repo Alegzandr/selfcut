@@ -452,6 +452,44 @@ export interface MaskMotion {
 /** A property of a mask's animated motion — the keyframable transform channels. */
 export type MaskMotionProp = 'tx' | 'ty' | 'scale' | 'rotation';
 
+/**
+ * How a redaction hides what it covers.
+ *
+ *  - `blur`     — a gaussian, the discreet one: the shape of what is under it
+ *                 survives, the detail does not.
+ *  - `pixelate` — a mosaic, the unambiguous one: it reads as "deliberately
+ *                 hidden" at a glance, and coarse cells cannot be undone the
+ *                 way a gaussian can be sharpened back.
+ */
+export type RedactionMode = 'blur' | 'pixelate';
+
+/**
+ * A region of the clip's picture that is obscured in place — the face, the
+ * licence plate, the name on the screen behind the subject.
+ *
+ * Structurally a `ClipMask`, so every mask helper (bounds, dirty rect, bezier
+ * tracing, motion sampling, the motion tracker) takes one unchanged: a redaction
+ * is a shape on the output frame that happens to blur what it covers instead of
+ * cutting the clip out around it. `invert` flips the sense — obscure everything
+ * EXCEPT the shape, which is how you blur a background and keep the subject.
+ *
+ * A clip holds a list of them: one picture routinely has several things to hide,
+ * and each one moves on its own, so each carries its own shape and `motion`.
+ */
+export interface ClipRedaction extends ClipMask {
+  /** Stable across edits — the inspector list and the preview overlay key on it. */
+  id: string;
+  mode: RedactionMode;
+  /**
+   * Strength, 0..1. Scaled against the region's own short side rather than the
+   * frame, so a small region gets a proportionate blur radius / mosaic cell and
+   * the setting means the same thing on a face as on a whole wall.
+   */
+  amount: number;
+  /** Muted without being deleted, to compare with and without. Default on. */
+  disabled?: boolean;
+}
+
 /** A control point of a tone curve, normalized 0..1 (x = input, y = output). */
 export interface CurvePoint {
   x: number;
@@ -602,6 +640,13 @@ interface BaseClip {
    * Undefined = the whole clip shows.
    */
   mask?: ClipMask;
+  /**
+   * Regions of this clip's picture obscured in place (blur or mosaic), applied
+   * to the clip alone before it is composited — so what is behind it is never
+   * touched, and a redaction over a semi-transparent clip stays as transparent
+   * as the clip. Undefined/empty = nothing hidden.
+   */
+  redactions?: ClipRedaction[];
   /**
    * How this clip enters over its overlap with the previous clip. Undefined =
    * `dissolve` (the historical cross-dissolve). Only takes effect where an

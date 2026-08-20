@@ -1,4 +1,4 @@
-import { BezierPoint, Clip, ClipMask, ClipShape, ClipText, ShapeClip, SolidClip, TextClip, Track, TransitionType } from '../types';
+import { BezierPoint, Clip, ClipMask, ClipRedaction, ClipShape, ClipText, ShapeClip, SolidClip, TextClip, Track, TransitionType } from '../types';
 import {
   DEFAULT_TEXT_WIDTH_FRAC,
   DEFAULT_TRANSFORM,
@@ -658,26 +658,64 @@ export function maskBoundsPx(
   return { left: cx - w / 2, top: cy - h / 2, w, h, cx, cy };
 }
 
-/**
- * A reusable full-frame scratch canvas for masked clips: the clip is drawn here,
- * the mask multiplied into its alpha, then the result composited onto the frame.
- * One per thread (preview main-thread, export worker), grown to the output size.
- */
-let maskScratch: { canvas: OffscreenCanvas; ctx: OffscreenCanvasRenderingContext2D } | null = null;
+interface Scratch {
+  canvas: OffscreenCanvas;
+  ctx: OffscreenCanvasRenderingContext2D;
+}
 
-function getMaskScratch(w: number, h: number): typeof maskScratch {
+/**
+ * Reusable scratch canvases, one set per thread (preview main-thread, export
+ * worker), kept at the output size and never reallocated per frame.
+ *
+ *  - `clip`   holds a single clip drawn in isolation, so a mask can multiply
+ *             into its alpha and a redaction can replace part of it without
+ *             touching what is composited underneath.
+ *  - `redact` holds one obscured region on its way back onto `clip`.
+ *
+ * Two are needed rather than one: building the obscured copy reads the clip's
+ * own pixels while it writes, and a canvas cannot be its own filtered source.
+ */
+const scratches = new Map<string, Scratch>();
+
+function getScratch(slot: string, w: number, h: number): Scratch | null {
   if (typeof OffscreenCanvas === 'undefined') return null;
-  if (!maskScratch) {
+  let scratch = scratches.get(slot) ?? null;
+  if (!scratch) {
     const canvas = new OffscreenCanvas(w, h);
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
-    maskScratch = { canvas, ctx };
+    scratch = { canvas, ctx };
+    scratches.set(slot, scratch);
   }
-  if (maskScratch.canvas.width !== w || maskScratch.canvas.height !== h) {
-    maskScratch.canvas.width = w;
-    maskScratch.canvas.height = h;
+  if (scratch.canvas.width !== w || scratch.canvas.height !== h) {
+    scratch.canvas.width = w;
+    scratch.canvas.height = h;
   }
-  return maskScratch;
+  return scratch;
+}
+
+/**
+ * The tiny buffer a mosaic is averaged down into — one pixel per cell. Sized in
+ * blocks of 64 and grow-only: the cell count changes with every region size and
+ * strength, and resizing a canvas reallocates its backing store, which is not
+ * something a per-frame path should do.
+ */
+let mosaicScratch: Scratch | null = null;
+
+function getMosaicScratch(cols: number, rows: number): Scratch | null {
+  if (typeof OffscreenCanvas === 'undefined') return null;
+  const fit = (n: number) => Math.min(4096, Math.ceil(n / 64) * 64);
+  if (!mosaicScratch) {
+    const canvas = new OffscreenCanvas(fit(cols), fit(rows));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    mosaicScratch = { canvas, ctx };
+    return mosaicScratch;
+  }
+  const { canvas } = mosaicScratch;
+  if (canvas.width < cols) canvas.width = fit(cols);
+  if (canvas.height < rows) canvas.height = fit(rows);
+  return mosaicScratch;
 }
 
 /**
@@ -852,14 +890,164 @@ function applyMask(
 }
 
 /**
+ * Gaussian radius, in pixels, a `blur` redaction of this strength uses over a
+ * region whose short side is `shortPx`.
+ *
+ * Scaled against the REGION, not the frame: the setting has to mean the same
+ * thing on a face and on a whole wall, and a radius set by the frame would drag
+ * half the picture into a small region while barely touching a large one. Even
+ * at strength 0 it blurs — a redaction that hides nothing is not a setting
+ * anyone wants, it is a bug report.
+ */
+export function redactionBlurRadiusPx(strength: number, shortPx: number): number {
+  const s = Math.max(0, Math.min(1, strength));
+  return Math.max(1, shortPx * (0.03 + 0.22 * s));
+}
+
+/**
+ * Mosaic cell size, in pixels, for a `pixelate` redaction of this strength: from
+ * roughly 25 cells across the region's short side down to 4. Never below 3px —
+ * a one-pixel "mosaic" is just the picture back.
+ */
+export function redactionCellPx(strength: number, shortPx: number): number {
+  const s = Math.max(0, Math.min(1, strength));
+  return Math.max(3, Math.round(shortPx * (0.04 + 0.21 * s)));
+}
+
+/**
+ * Where a mosaic's cells fall: the sampled rect and how many cells it holds.
+ *
+ * Anchored to the FRAME (`x0`/`y0` are snapped to a multiple of the cell) rather
+ * than to the region: a tracked region moves sub-pixel from frame to frame, and
+ * a grid that followed it would make every cell crawl for the whole shot.
+ *
+ * `gw`/`gh` clamp the grid to the frame, since its last row and column can
+ * overhang. The same rect is used on the way down and on the way back, so every
+ * cell lands where it was sampled; only the edge cell ends up a little narrower
+ * than the others.
+ */
+export function mosaicGrid(
+  box: { x: number; y: number; w: number; h: number },
+  cell: number,
+  srcW: number,
+  srcH: number,
+): { x0: number; y0: number; cols: number; rows: number; gw: number; gh: number } {
+  const x0 = Math.floor(box.x / cell) * cell;
+  const y0 = Math.floor(box.y / cell) * cell;
+  return {
+    x0,
+    y0,
+    cols: Math.ceil((box.x + box.w - x0) / cell),
+    rows: Math.ceil((box.y + box.h - y0) / cell),
+    gw: Math.min(Math.ceil((box.x + box.w - x0) / cell) * cell, srcW - x0),
+    gh: Math.min(Math.ceil((box.y + box.h - y0) / cell) * cell, srcH - y0),
+  };
+}
+
+/**
+ * Average `box` down to one pixel per cell and blow it back up with no
+ * interpolation - the mosaic.
+ */
+function drawMosaic(
+  dst: OffscreenCanvasRenderingContext2D,
+  src: OffscreenCanvas,
+  box: { x: number; y: number; w: number; h: number },
+  cell: number,
+): void {
+  const { x0, y0, cols, rows, gw, gh } = mosaicGrid(box, cell, src.width, src.height);
+  const mosaic = getMosaicScratch(cols, rows);
+  if (!mosaic || cols < 1 || rows < 1 || gw <= 0 || gh <= 0) return;
+
+  mosaic.ctx.clearRect(0, 0, cols, rows);
+  // Smoothing ON for the way down: each destination pixel is then an average of
+  // the cell it stands for, instead of one arbitrary sample from inside it.
+  mosaic.ctx.imageSmoothingEnabled = true;
+  mosaic.ctx.imageSmoothingQuality = 'low';
+  mosaic.ctx.drawImage(src, x0, y0, gw, gh, 0, 0, cols, rows);
+
+  dst.imageSmoothingEnabled = false;
+  dst.drawImage(mosaic.canvas, 0, 0, cols, rows, x0, y0, gw, gh);
+}
+
+/**
+ * Obscure a clip's redaction regions, on a context holding THAT CLIP'S pixels
+ * and nothing else.
+ *
+ * Per region: build the obscured copy out of the clip's own pixels, feather it
+ * to the shape, punch that same feathered shape out of the clip, then drop the
+ * copy into the hole it left. Punching first is what makes the result exact at
+ * any opacity - simply laying a blurred copy over the original would composite
+ * the clip twice inside the region, and a clip fading in would show its
+ * redactions as denser patches. Because the two use one feather kernel, the
+ * alpha they sum to across the soft edge is the alpha the clip already had.
+ *
+ * `invert` obscures everything EXCEPT the shape (blur the room, keep the face),
+ * which is the same two steps with the sense of both flipped.
+ */
+function applyRedactions(
+  ctx: OffscreenCanvasRenderingContext2D,
+  redactions: ClipRedaction[],
+  outW: number,
+  outH: number,
+  localMs: number,
+): void {
+  const scratch = getScratch('redact', outW, outH);
+  if (!scratch) return;
+  for (const redaction of redactions) {
+    const motion = resolveMaskMotion(redaction, localMs);
+    const box = maskDirtyRect(redaction, outW, outH, motion);
+    if (box.w <= 0 || box.h <= 0) continue;
+    const started = span();
+    const short = Math.min(box.w, box.h);
+
+    scratch.ctx.save();
+    scratch.ctx.beginPath();
+    scratch.ctx.rect(box.x, box.y, box.w, box.h);
+    scratch.ctx.clip();
+    scratch.ctx.clearRect(box.x, box.y, box.w, box.h);
+    if (redaction.mode === 'pixelate') {
+      drawMosaic(scratch.ctx, ctx.canvas, box, redactionCellPx(redaction.amount, short));
+    } else {
+      const radius = redactionBlurRadiusPx(redaction.amount, short);
+      // Padded by three sigma, and no more: the blur has to see the neighbours
+      // of every pixel it writes or the region darkens towards its own edge,
+      // but filtering the whole frame to fill a small box is the kind of cost
+      // that only shows up at 4K.
+      const pad = Math.ceil(radius * 3);
+      const sx = Math.max(0, box.x - pad);
+      const sy = Math.max(0, box.y - pad);
+      const sw = Math.min(outW, box.x + box.w + pad) - sx;
+      const sh = Math.min(outH, box.y + box.h + pad) - sy;
+      scratch.ctx.filter = `blur(${radius}px)`;
+      scratch.ctx.drawImage(ctx.canvas, sx, sy, sw, sh, sx, sy, sw, sh);
+      scratch.ctx.filter = 'none';
+    }
+    applyMask(scratch.ctx, redaction, outW, outH, motion);
+    scratch.ctx.restore();
+
+    applyMask(ctx, { ...redaction, invert: !redaction.invert }, outW, outH, motion);
+    ctx.drawImage(scratch.canvas, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h);
+    count('redactPx', box.w * box.h);
+    endSpan('redact', started);
+  }
+}
+
+/** The redactions that actually paint, or null when the clip has none enabled. */
+function activeRedactions(clip: Clip): ClipRedaction[] | null {
+  const list = clip.redactions?.filter((r) => !r.disabled);
+  return list && list.length > 0 ? list : null;
+}
+
+/**
  * Draw a single clip onto the frame, dispatching by kind - the one place clip-
  * kind rendering is decided, shared by preview and export. Media clips need a
  * decoded `sample` (null skips them); text and solid clips are self-contained.
  *
- * A clip carrying a `mask` is rendered to a scratch frame first, the mask
- * multiplied into its alpha, then composited in one draw — so masking works the
- * same for footage, text, solids and shapes, and feathered edges blend over the
- * lower tracks.
+ * A clip carrying a `mask` or a `redaction` is rendered to a scratch frame
+ * first, the redactions replaced and the mask multiplied into its alpha, then
+ * the result composited in one draw — so both work the same for footage, text,
+ * solids and shapes, feathered edges blend over the lower tracks, and neither
+ * can reach the tracks underneath.
  */
 function dispatchClipDraw(
   ctx: Ctx2D,
@@ -871,14 +1059,20 @@ function dispatchClipDraw(
   xfadeInMs: number,
   sample: DrawableFrame | null,
 ): void {
-  const scratch = clip.mask ? getMaskScratch(outW, outH) : null;
-  if (clip.mask && scratch) {
+  const mask = clip.mask;
+  const redactions = activeRedactions(clip);
+  const scratch = mask || redactions ? getScratch('clip', outW, outH) : null;
+  if (scratch && (mask || redactions)) {
     const started = span();
-    const motion = resolveMaskMotion(clip.mask, timelineMs - clip.timelineStartMs);
+    const localMs = timelineMs - clip.timelineStartMs;
+    const motion = mask ? resolveMaskMotion(mask, localMs) : null;
     // Everything outside the mask ends up at alpha 0, so the clear, the draw,
     // the matte composite and the copy-back all restrict to this box. A small
     // mask on a 4K frame used to pay for the full 4K on every one of those four.
-    const dirty = maskDirtyRect(clip.mask, outW, outH, motion);
+    // A clip that is only redacted still shows everywhere, so it has no such box
+    // to win: it pays one full-frame round-trip, which is the price of keeping
+    // the blur off whatever is composited underneath.
+    const dirty = mask && motion ? maskDirtyRect(mask, outW, outH, motion) : { x: 0, y: 0, w: outW, h: outH };
     if (dirty.w <= 0 || dirty.h <= 0) {
       endSpan('mask', started);
       return;
@@ -890,7 +1084,10 @@ function dispatchClipDraw(
     scratch.ctx.clip();
     scratch.ctx.clearRect(dirty.x, dirty.y, dirty.w, dirty.h);
     dispatchClipDrawRaw(scratch.ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs, sample);
-    applyMask(scratch.ctx, clip.mask, outW, outH, motion);
+    // Before the mask: a region the mask cuts away has nothing left to hide, and
+    // a redaction must never blur the matte's own soft edge into the frame.
+    if (redactions) applyRedactions(scratch.ctx, redactions, outW, outH, localMs);
+    if (mask && motion) applyMask(scratch.ctx, mask, outW, outH, motion);
     scratch.ctx.restore();
     // Composited under the current ctx transform, so an in-flight transition
     // (slide/zoom) still carries the masked clip with it.

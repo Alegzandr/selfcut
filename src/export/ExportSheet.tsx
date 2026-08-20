@@ -11,7 +11,13 @@ import {
 import { useStore } from '../store/store';
 import { formatTime } from '../lib/time';
 import { presetSectionsForAspect, resolveMp4Preset, ExportPreset, PresetGroup } from './presets';
-import { startExport, downloadBlob, ExportCanceledError, ExportHandle } from './exporter';
+import {
+  startExport,
+  downloadBlob,
+  ExportCanceledError,
+  type ExportFallback,
+  ExportHandle,
+} from './exporter';
 import {
   estimateRemainingMs,
   formatDuration,
@@ -22,7 +28,12 @@ import {
 
 type Phase =
   | { kind: 'idle' }
-  | { kind: 'rendering'; progress: number }
+  /**
+   * `fallback` is set when the encoder stopped responding and the render
+   * started over on gentler terms. It is the only thing standing between the
+   * user and a progress bar that visibly went backwards for no reason.
+   */
+  | { kind: 'rendering'; progress: number; fallback?: ExportFallback }
   /** `blob` is null when the render went straight to the file the user picked. */
   | { kind: 'done'; filename: string; blob: Blob | null }
   | { kind: 'error'; message: string };
@@ -139,8 +150,13 @@ export function ExportSheet() {
       project,
       assets,
       preset,
-      (progress) => setPhase((p) => (p.kind === 'rendering' ? { kind: 'rendering', progress } : p)),
+      (progress) =>
+        setPhase((p) => (p.kind === 'rendering' ? { ...p, kind: 'rendering', progress } : p)),
       exportedRegion,
+      {
+        onFallback: (fallback) =>
+          setPhase((p) => (p.kind === 'rendering' ? { ...p, fallback } : p)),
+      },
     );
     handleRef.current = handle;
     handle.promise
@@ -325,6 +341,11 @@ export function ExportSheet() {
                     </span>
                   </div>
                 </div>
+                {phase.fallback && (
+                  <p className="text-2xs text-amber-300/90">
+                    {t(`export.fallback.${phase.fallback}`)}
+                  </p>
+                )}
                 <button
                   className="w-full rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
                   onClick={() => {

@@ -9,6 +9,7 @@ import { openExportScratch, readExportScratch } from '../lib/opfs';
 import { flushProjectSave } from '../lib/persistence';
 import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
 import { clearRenderPreview, publishRenderFrame } from './renderPreviewBus';
+import { nextAttempt, retryReason, type ExportAttempt } from './retryPlan';
 import { perfEnabled, type PerfSnapshot } from '../perf/probe';
 import {
   type AudioMixInfo,
@@ -17,6 +18,17 @@ import {
   ExportRequest,
   WorkerReply,
 } from './protocol';
+
+/**
+ * Why a render started over.
+ *
+ * Only ever reported for the encoder fallbacks, because those are the ones the
+ * user watches happen: the bar goes back to the beginning and the render takes
+ * longer than the one that was abandoned. Told what it is, that is a machine
+ * being worked around; untold, it is the app losing several minutes of work for
+ * no stated reason.
+ */
+export type ExportFallback = 'oneEncoder' | 'softwareEncoder';
 
 /** Rarely-used knobs on a render. */
 export interface ExportOptions {
@@ -30,6 +42,12 @@ export interface ExportOptions {
    * two paths on identical input.
    */
   noParallel?: boolean;
+  /**
+   * Called when the render is about to be re-run on gentler terms. The progress
+   * that has been reported so far is abandoned at that point, so this is what
+   * lets the UI explain a bar that just went backwards.
+   */
+  onFallback?: (reason: ExportFallback) => void;
 }
 
 export interface ExportHandle {
@@ -115,6 +133,10 @@ const ERROR_KEYS = {
   // if the retry itself somehow reports it, the user gets a sentence and not a
   // blank error.
   segmentMismatch: 'errors.export.workerCrashed',
+  // Only ever shown once every fallback has stalled too: the render is retried
+  // on one encoder, then on the software one, without the user being told
+  // anything. Reaching this sentence means the encoder answers nothing at all.
+  encoderStalled: 'errors.export.encoderStalled',
 } as const satisfies Record<ExportErrorCode, string>;
 
 /**
@@ -290,7 +312,9 @@ export function startExport(
      * the request that is not already shared, so the copy is cheaper than the
      * bookkeeping that would avoid it.
      */
-    const runWorker = (noParallel: boolean): Promise<{ buffer: ArrayBuffer | null; mime: string }> => {
+    const runWorker = (
+      attempt: ExportAttempt,
+    ): Promise<{ buffer: ArrayBuffer | null; mime: string }> => {
       worker = new Worker(new URL('./exportWorker.ts', import.meta.url), { type: 'module' });
       const request: ExportRequest = {
         type: 'export',
@@ -303,7 +327,8 @@ export function startExport(
         audio: mix?.info ?? null,
         fileHandle,
         measure: perfEnabled(),
-        ...(noParallel ? { noParallel: true } : {}),
+        ...(attempt.noParallel ? { noParallel: true } : {}),
+        ...(attempt.preferSoftware ? { preferSoftwareEncoder: true } : {}),
       };
       return new Promise((resolve, reject) => {
         rejectWorkerReply = reject;
@@ -347,22 +372,40 @@ export function startExport(
       });
     };
 
+    /**
+     * Run the render, and re-run it on less demanding terms for each failure
+     * that has an answer. `nextAttempt` owns which those are, and when there is
+     * nothing left to try it returns null and the failure reaches the user.
+     */
+    let attempt: ExportAttempt = { noParallel: !!options?.noParallel, preferSoftware: false };
     let buffer: { buffer: ArrayBuffer | null; mime: string };
-    try {
-      buffer = await runWorker(!!options?.noParallel);
-    } catch (err) {
-      // Two identically configured encoders disagreed on their parameter sets,
-      // so their slices cannot be concatenated. Never observed in practice, but
-      // the consequence would be a file that decodes garbage halfway through -
-      // so the render restarts on one worker instead.
-      if (!(err instanceof ExportWorkerError) || err.code !== 'segmentMismatch') throw err;
-      console.warn('[export] segment encoders disagreed, re-rendering serially');
-      // Cast: nothing in this function body assigns `worker`, so control-flow
-      // analysis still believes it is null - `runWorker` sets it from inside a
-      // closure that the analysis cannot follow.
-      (worker as Worker | null)?.terminate();
-      worker = null;
-      buffer = await runWorker(true);
+    for (;;) {
+      try {
+        buffer = await runWorker(attempt);
+        break;
+      } catch (err) {
+        if (!(err instanceof ExportWorkerError)) throw err;
+        const next = nextAttempt(attempt, err.code);
+        if (!next) throw err;
+        console.warn(`[export] ${retryReason(err.code, next)}`);
+        if (err.code === 'encoderStalled') {
+          options?.onFallback?.(next.preferSoftware ? 'softwareEncoder' : 'oneEncoder');
+        }
+        attempt = next;
+        // Cast: nothing in this function body assigns `worker`, so control-flow
+        // analysis still believes it is null - `runWorker` sets it from inside a
+        // closure that the analysis cannot follow.
+        (worker as Worker | null)?.terminate();
+        worker = null;
+        // `cause` keeps the failure that was in hand when the cancel landed:
+        // the user sees the cancel, and a render that gave up on itself can
+        // still be traced back.
+        if (canceled) throw new Error(t('errors.export.canceled'), { cause: err });
+        // The new attempt walks the same ground from the start: put the bar back
+        // where that attempt begins rather than let it appear to freeze at
+        // whatever the abandoned render had reached.
+        onProgress(0.1);
+      }
     }
     rejectWorkerReply = null;
     for (const bitmap of Object.values(stills)) bitmap.close();

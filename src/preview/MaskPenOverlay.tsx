@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useStore, getSelectedClip } from '../store/store';
-import { BezierPoint } from '../types';
+import { BezierPoint, ClipMask } from '../types';
 
 /**
  * Pen-tool overlay for bezier mask paths — draw and edit, right on the monitor.
@@ -8,8 +8,12 @@ import { BezierPoint } from '../types';
  * Two modes, chosen by the active tool and selection:
  *  - draw   (pen tool): click to drop an anchor, drag to pull smooth tangent
  *           handles; click the first anchor again to close the path into a mask.
- *  - edit   (select tool + the selected clip has a path mask): drag anchors and
+ *  - edit   (select tool + the target is already a drawn path): drag anchors and
  *           their handles to reshape.
+ *
+ * The target is the redaction region the inspector has open, when there is one,
+ * and the clip's mask otherwise — the same pen either way, because both are the
+ * same shape in the same coordinate space.
  *
  * Coordinates are fractions of the output frame (0..1) — the same space masks
  * store — so the SVG's viewBox is the output size and a pointer position maps
@@ -49,8 +53,13 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
   const editing = useRef<EditTarget | null>(null);
 
   const drawing = previewTool === 'pen';
-  const pathMask = selected?.mask?.shape === 'path' ? selected.mask : undefined;
-  const editable = !drawing && !!pathMask && previewTool === 'select';
+  // Whichever shape the pen is aimed at: the open redaction region wins over the
+  // clip mask, since opening one is how the user said which shape they mean.
+  const redactionId = useStore((s) => s.selectedRedactionId);
+  const region = selected?.redactions?.find((r) => r.id === redactionId);
+  const target: ClipMask | undefined = region ?? selected?.mask;
+  const pathShape = target?.shape === 'path' ? target : undefined;
+  const editable = !drawing && !!pathShape && previewTool === 'select';
 
   // Nothing to do: let clicks fall through to the clip drag/selection below.
   if (!drawing && !editable) return null;
@@ -63,6 +72,17 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
   const dist = (a: { x: number; y: number }, b: { x: number; y: number }): number =>
     Math.hypot((a.x - b.x) * outW, (a.y - b.y) * outH) / outW;
 
+  /**
+   * Send the drawn shape where it belongs. A redaction keeps everything the pen
+   * has no opinion about (its mode, its strength) because the patch merges.
+   */
+  const write = (shape: ClipMask) => {
+    if (!selected) return;
+    const st = useStore.getState();
+    if (region) st.setClipRedaction(selected.id, region.id, shape);
+    else st.setClipMask(selected.id, shape);
+  };
+
   const finalize = (points: BezierPoint[]) => {
     const st = useStore.getState();
     setDraft([]);
@@ -70,9 +90,9 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
     st.setPreviewTool('select');
     // A closed area needs at least three anchors; anything less is discarded.
     if (points.length < 3 || !selected) return;
-    const ex = selected.mask;
+    const ex = target;
     st.beginGesture();
-    st.setClipMask(selected.id, {
+    write({
       shape: 'path',
       x: ex?.x ?? 0.5,
       y: ex?.y ?? 0.5,
@@ -87,8 +107,8 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
   };
 
   const setPath = (points: BezierPoint[]) => {
-    if (!pathMask || !selected) return;
-    useStore.getState().setClipMask(selected.id, { ...pathMask, path: points });
+    if (!pathShape) return;
+    write({ ...pathShape, path: points });
   };
 
   // Draw mode only (in edit mode the SVG is click-through and the anchors/handles
@@ -113,7 +133,7 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
     e.stopPropagation();
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     const p = toNorm(e);
-    editing.current = { kind, index, orig: JSON.parse(JSON.stringify(pathMask!.path![index]!)), startX: p.x, startY: p.y };
+    editing.current = { kind, index, orig: JSON.parse(JSON.stringify(pathShape!.path![index]!)), startX: p.x, startY: p.y };
     useStore.getState().beginGesture();
   };
 
@@ -129,8 +149,8 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
       return;
     }
     const ed = editing.current;
-    if (!ed || !pathMask) return;
-    const path = pathMask.path!;
+    if (!ed || !pathShape) return;
+    const path = pathShape.path!;
     const dx = p.x - ed.startX;
     const dy = p.y - ed.startY;
     const o = ed.orig;
@@ -166,7 +186,7 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
 
   const px = (v: number, s: number) => v * s;
   const r = outH * 0.011;
-  const live = drawing ? draft : pathMask!.path!;
+  const live = drawing ? draft : pathShape!.path!;
 
   return (
     <svg

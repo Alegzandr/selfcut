@@ -98,6 +98,16 @@ export interface ExportRequest {
    * slow export rather than a broken file.
    */
   noParallel?: boolean;
+  /**
+   * Ask the browser for the software encoder rather than letting it choose.
+   *
+   * Set by the main thread after an attempt reported `encoderStalled`. The
+   * browser's own pick is right nearly always and is several times faster, so
+   * this is never the first thing tried - but when the encoder it picked
+   * accepts the configuration and then emits nothing, it is the only thing that
+   * turns a render that hangs for ever into a render that finishes.
+   */
+  preferSoftwareEncoder?: boolean;
 }
 
 /**
@@ -105,7 +115,16 @@ export interface ExportRequest {
  * and knows nothing about the user locale, so it never sends a human message:
  * it sends a code, and the main thread turns it into a translated string.
  */
-export type ExportErrorCode = 'noAudibleAudio' | 'videoEncoderUnsupported' | 'segmentMismatch';
+export type ExportErrorCode =
+  | 'noAudibleAudio'
+  | 'videoEncoderUnsupported'
+  | 'segmentMismatch'
+  /**
+   * The encoder accepted the configuration and then stopped producing packets.
+   * Acted on rather than shown: the main thread re-runs the render on the
+   * software encoder, and only a second stall reaches the user.
+   */
+  | 'encoderStalled';
 
 export type WorkerReply =
   | { type: 'progress'; value: number }

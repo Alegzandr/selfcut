@@ -338,22 +338,25 @@ export const applyClipDrag = (
       const delta = newEnd - (d.origStartMs + d.durMs);
       state.moveClips(d.ripple.map((r) => ({ clipId: r.id, timelineStartMs: r.startMs + delta })));
     } else {
-      const sourceIn = clamp(
-        d.origSourceInMs + (tMs - d.origStartMs) * clip.speed,
-        0,
-        d.origSourceOutMs - minSpan,
+      // How much the left edge eats (positive) or adds (negative). A clip with
+      // no fixed-length media - generated or a still - has no source head to
+      // run out of, so its edge also travels outward and pushes the downstream
+      // content along instead of closing a gap.
+      const removedMs = clamp(
+        tMs - d.origStartMs,
+        asset && asset.kind !== 'image' ? -d.origSourceInMs / clip.speed : -Infinity,
+        (d.origSourceOutMs - d.origSourceInMs - minSpan) / clip.speed,
       );
-      const removedMs = (sourceIn - d.origSourceInMs) / clip.speed;
-      // trimClip works from the clip's CURRENT geometry: derive the absolute
-      // target that lands on `sourceIn` from the live store state (the `clip`
-      // prop can lag a render), then pull the trimmed clip back to its
-      // original start - ripple keeps the edit point still, the downstream
-      // content closes the gap instead.
+      // trimClip works from the clip's CURRENT geometry and holds the right
+      // edge still: ask for the start that yields the target duration, reading
+      // the live store state (the `clip` prop can lag a render), then pull the
+      // trimmed clip back to its original start - ripple keeps the edit point
+      // still, the downstream content moves instead.
       const live = state.project.tracks
         .flatMap((tr) => tr.clips)
         .find((c) => c.id === clip.id);
       if (!live) return;
-      state.trimClip(clip.id, 'left', live.timelineStartMs + (sourceIn - live.sourceInMs) / clip.speed);
+      state.trimClip(clip.id, 'left', clipEndMs(live) - (d.durMs - removedMs));
       state.moveClips([
         { clipId: clip.id, timelineStartMs: d.origStartMs },
         ...d.ripple.map((r) => ({ clipId: r.id, timelineStartMs: r.startMs - removedMs })),

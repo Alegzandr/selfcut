@@ -91,6 +91,7 @@ export function createUiSlice(
   | 'setRenamingMarker'
   | 'setTimeFormat'
   | 'setPreviewTool'
+  | 'setSelectedRedactionId'
   | 'setPreviewShapeKind'
   | 'setPreviewView'
   | 'resetPreviewView'
@@ -237,6 +238,10 @@ export function createUiSlice(
 
     setPreviewTool: (tool) => {
       if (get().previewTool !== tool) set({ previewTool: tool });
+    },
+
+    setSelectedRedactionId: (id) => {
+      if (get().selectedRedactionId !== id) set({ selectedRedactionId: id });
     },
 
     // Fires on every pointermove of a pan and every wheel notch, so it skips the

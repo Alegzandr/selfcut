@@ -11,6 +11,7 @@ import type { FocusEvent, PointerEvent, ReactElement, ReactNode, Ref } from 'rea
 import { createPortal } from 'react-dom';
 import { AnimatePresence, m, useReducedMotion } from 'framer-motion';
 import { useIsCoarsePointer } from '../lib/device';
+import { Kbd } from './Kbd';
 
 type Placement = 'top' | 'bottom';
 
@@ -180,9 +181,7 @@ export function Tooltip({
             >
               <span>{label}</span>
               {shortcut && (
-                <kbd className="flex-none rounded border border-zinc-700 bg-zinc-800/80 px-1 py-px font-mono text-3xs leading-none tracking-tight text-zinc-400">
-                  {shortcut}
-                </kbd>
+                <Kbd>{shortcut}</Kbd>
               )}
               {/* Caret. Tucked under the pill by 1px so its top edges stay hidden. */}
               <span

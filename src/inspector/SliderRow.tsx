@@ -158,7 +158,10 @@ export function SliderRow({
           max={max}
           step={step}
           value={value}
-          className="min-w-0 flex-1 accent-sky-500 pointer-coarse:h-8"
+          // `color-scheme: dark` is what keeps the *unfilled* half of the track
+          // dark: without it the browser paints its light-theme groove, which a
+          // near-white accent would be invisible against.
+          className="min-w-0 flex-1 accent-zinc-300 pointer-coarse:h-8 [color-scheme:dark]"
           onPointerDown={beginGesture}
           onPointerUp={endGesture}
           onContextMenu={onContextMenu}

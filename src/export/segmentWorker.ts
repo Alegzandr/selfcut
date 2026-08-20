@@ -2,6 +2,13 @@ import { BufferTarget, CanvasSource, Mp4OutputFormat, Output } from 'mediabunny'
 import { FrameRenderer } from './frameRenderer';
 import { RenderPreviewTap } from './renderPreview';
 import { endFrame, endSpan, perfReset, setPerfEnabled, snapshot, span } from '../perf/probe';
+import {
+  ENCODE_STALL_MS,
+  FIRST_ENCODE_STALL_MS,
+  FRAME_STALL_MS,
+  StalledError,
+  withDeadline,
+} from './stallGuard';
 import type { SegmentReply, SegmentRequest } from './segmentProtocol';
 
 /**
@@ -40,6 +47,10 @@ worker.onmessage = (e) => {
       type: 'segmentFailed',
       index: req.index,
       detail: err instanceof Error ? err.message : String(err),
+      // The lead reads this rather than the message: a stalled encoder is the
+      // one failure worth re-running the whole render for, on the software
+      // encoder, and it must not be mistaken for a slice that went wrong.
+      ...(err instanceof StalledError ? { stalled: true } : {}),
     });
   });
 };
@@ -65,6 +76,9 @@ async function render(req: SegmentRequest): Promise<void> {
   const source = new CanvasSource(renderer.canvas, {
     codec: req.codec,
     bitrate: req.videoBitrate,
+    // The lead's answer, like the cadence: the slices splice packet for packet,
+    // so they all encode through the same kind of encoder or not at all.
+    hardwareAcceleration: req.hardwareAcceleration,
     // Offline export: never trade quality for latency, and never drop frames.
     latencyMode: 'quality',
     // A key frame every 2 s, as in the serial path. The segment's own first
@@ -72,8 +86,9 @@ async function render(req: SegmentRequest): Promise<void> {
     keyFrameInterval: 2,
     // Nothing else: the slices have to be encoded the way one encoder would
     // have encoded the whole thing, and the serial path sets nothing else
-    // either. `canDeclareFrameRate` in exportWorker carries the measurements
-    // for why neither `prefer-hardware` nor `contentHint` appears in either.
+    // either. The note above `probeEncode` in exportWorker carries the
+    // measurements for why `prefer-hardware` and `contentHint` are never asked
+    // for in either.
   });
   // The cadence, when the lead's probe found the browser will take it. Same
   // reasoning as the serial path, and the lead's answer rather than this
@@ -83,8 +98,21 @@ async function render(req: SegmentRequest): Promise<void> {
 
   const frameDur = 1 / req.fps;
   const inFlight: Promise<void>[] = [];
+  // Deadlines, not budgets: an encoder that takes a configuration it cannot
+  // sustain emits nothing and never rejects, so without one this await is where
+  // a render stops for ever. See `stallGuard`.
+  // Shorter until this encoder has produced its first packet: one that has
+  // emitted nothing has not started, and every other slice is queued behind it.
+  let encoded = 0;
   const drainTo = async (depth: number): Promise<void> => {
-    while (inFlight.length > depth) await inFlight.shift()!;
+    while (inFlight.length > depth) {
+      await withDeadline(
+        inFlight.shift()!,
+        encoded === 0 ? FIRST_ENCODE_STALL_MS : ENCODE_STALL_MS,
+        `segment ${req.index} video encoder`,
+      );
+      encoded++;
+    }
   };
 
   // Every slice offers snapshots even though the lead only forwards one of
@@ -101,13 +129,22 @@ async function render(req: SegmentRequest): Promise<void> {
   try {
     for (let i = 0; i < req.frameCount; i++) {
       const frameStarted = span();
-      await renderer.renderFrame(req.firstFrame + i);
+      await withDeadline(
+        renderer.renderFrame(req.firstFrame + i),
+        FRAME_STALL_MS,
+        `frame ${req.firstFrame + i} decode`,
+      );
       const encodeStarted = span();
       await drainTo(ENCODE_QUEUE_DEPTH - 1);
       endSpan('encodeWait', encodeStarted);
       // Local timestamps: the segment is a self-contained file starting at 0.
       // The lead shifts them onto the timeline when it re-muxes.
-      inFlight.push(source.add(i * frameDur, frameDur));
+      // FAULT INJECTION - temporary
+      inFlight.push(
+        req.hardwareAcceleration === 'no-preference' && i === 0
+          ? new Promise<void>(() => {})
+          : source.add(i * frameDur, frameDur),
+      );
       // After the capture, so the encoder never waits on the monitor.
       preview.capture(req.firstFrame + i);
       await renderer.releaseFinishedReaders();
@@ -119,7 +156,9 @@ async function render(req: SegmentRequest): Promise<void> {
     }
     await drainTo(0);
     source.close();
-    await output.finalize();
+    // The flush runs through the encoder too, and a slice that hangs here hangs
+    // the whole render: every other slice is waiting its turn to be muxed.
+    await withDeadline(output.finalize(), ENCODE_STALL_MS, `segment ${req.index} finalize`);
     const buffer = target.buffer!;
     worker.postMessage(
       {
@@ -133,11 +172,12 @@ async function render(req: SegmentRequest): Promise<void> {
     );
   } catch (err) {
     for (const p of inFlight) p.catch(() => {});
-    try {
-      await output.cancel();
-    } catch {
-      /* already torn down */
-    }
+    // NOT awaited. Tearing an output down goes through the encoder that is
+    // being torn down, so when the encoder is what stopped responding, awaiting
+    // this hangs exactly where the watchdog just escaped from - and the failure
+    // would never reach the lead. Fire and forget: the worker is finished with
+    // either way, and the lead terminates it.
+    void output.cancel().catch(() => {});
     throw err;
   } finally {
     await renderer.dispose();

@@ -68,7 +68,10 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
 
   const btn =
     'touch-hit flex h-4.5 w-4.5 items-center justify-center rounded text-zinc-500 hover:bg-zinc-700/60 active:bg-zinc-700 pointer-coarse:h-7 pointer-coarse:w-7';
-  const slider = 'slider-thin w-full min-w-0 cursor-ew-resize';
+  // One neutral knob colour for every fader in the app: the track's kind is
+  // already said by its icon and its lane, so tinting the slider only competed
+  // with it.
+  const slider = 'slider-thin w-full min-w-0 cursor-ew-resize text-zinc-300';
   const volumeEntry = useVolumeEntry({
     gain: track.volume ?? 1,
     onCommit: (volume) => {
@@ -199,7 +202,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
                 max={1}
                 step={DB_STEP_FADER}
                 value={gainToFader(track.volume ?? 1)}
-                className={`${slider} ${track.kind === 'video' ? 'text-sky-500' : 'text-emerald-500'}`}
+                className={slider}
                 title={t('track.volume', { db: gainDb(track.volume ?? 1) })}
                 aria-label={t('a11y.track.volume')}
                 // The range's raw value is a fader position (0..1): meaningless
@@ -231,7 +234,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
                 max={1}
                 step={0.01}
                 value={track.opacity ?? 1}
-                className={`${slider} text-zinc-400`}
+                className={slider}
                 title={t('track.opacity', { pct: Math.round((track.opacity ?? 1) * 100) })}
                 aria-label={t('a11y.track.opacity')}
                 aria-valuetext={`${Math.round((track.opacity ?? 1) * 100)}%`}
