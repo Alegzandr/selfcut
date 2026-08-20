@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
-import { Search, X } from 'lucide-react';
+import { Cross2Icon, MagnifyingGlassIcon } from '@radix-ui/react-icons';
 import { Tooltip } from './Tooltip';
 import { JobProgress } from './JobProgress';
 import type { FFmpegProgress } from '../media/ffmpeg';
@@ -140,7 +140,7 @@ export function TrackPickerDialog({
                   className="touch-hit -mt-1 flex-none rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800"
                   onClick={onClose}
                 >
-                  <X className="h-4 w-4" />
+                  <Cross2Icon className="h-4 w-4" />
                 </button>
               </Tooltip>
             </div>
@@ -151,7 +151,7 @@ export function TrackPickerDialog({
               // too: `outline-none` on the input alone left the field with no
               // visible focus at all.
               <div className="mt-3 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 focus-within:border-sky-500">
-                <Search className="h-3.5 w-3.5 flex-none text-zinc-500" />
+                <MagnifyingGlassIcon className="h-3.5 w-3.5 flex-none text-zinc-500" />
                 <input
                   className="min-w-0 flex-1 bg-transparent text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
                   placeholder={t('library.tracks.filter')}

@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PlugZap } from 'lucide-react';
+import { LinkBreak1Icon } from '@radix-ui/react-icons';
 import { PlaybackEngine } from './PlaybackEngine';
 import { useStore, getSelectedClip } from '../store/store';
 import { Clip, ClipTransform, MediaAsset, Project } from '../types';
@@ -740,7 +740,7 @@ function PreviewOverlays({
     <>
       {disconnectedNow && (
         <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg bg-zinc-950/70 px-4 text-center">
-          <PlugZap className="h-7 w-7 text-amber-300" />
+          <LinkBreak1Icon className="h-7 w-7 text-amber-300" />
           <p className="text-xs font-medium text-amber-100">{t('preview.disconnected')}</p>
         </div>
       )}

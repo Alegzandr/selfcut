@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ParseKeys } from 'i18next';
-import { Crosshair, RotateCcw, X } from 'lucide-react';
+import { Cross2Icon, Crosshair2Icon, ResetIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../store/store';
 import { Clip, ClipMask, MaskMotionProp } from '../../types';
 import { sampleChannel } from '../../model';
@@ -285,7 +285,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                     className="touch-hit rounded p-0.5 text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-200"
                     aria-label={t('confirm.cancel')}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <Cross2Icon className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ) : (
@@ -295,7 +295,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                     onClick={() => void runTracking()}
                     className="touch-hit flex flex-1 items-center justify-center gap-1.5 rounded-md bg-zinc-800 px-2 py-1.5 text-2xs font-medium text-zinc-200 hover:bg-zinc-700/70 active:bg-zinc-700"
                   >
-                    <Crosshair className="h-3.5 w-3.5" />
+                    <Crosshair2Icon className="h-3.5 w-3.5" />
                     {t('inspector.mask.track')}
                   </button>
                   {hasMotion && (
@@ -306,7 +306,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                       aria-label={t('inspector.mask.clearMotion')}
                       className="touch-hit rounded-md border border-zinc-700 px-2 py-1.5 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
                     >
-                      <RotateCcw className="h-3.5 w-3.5" />
+                      <ResetIcon className="h-3.5 w-3.5" />
                     </button>
                   )}
                 </div>

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
-import { AlertTriangle, Check } from 'lucide-react';
+import { CheckIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 
 const DISMISS_MS = 5000;
@@ -23,7 +23,7 @@ export function Toast() {
     return () => clearTimeout(timer);
   }, [message, isError]);
 
-  const Icon = isError ? AlertTriangle : Check;
+  const Icon = isError ? ExclamationTriangleIcon : CheckIcon;
 
   return (
     <AnimatePresence>

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Crop, LayoutPanelTop, RotateCcw } from 'lucide-react';
+import { CropIcon, ResetIcon, ViewHorizontalIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../store/store';
 import { Tooltip } from '../../ui/Tooltip';
 import { AnimatableProp, Clip, EaseId } from '../../types';
@@ -97,7 +97,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
           className="touch-hit flex items-center gap-1 rounded-md px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
           onClick={() => updateClipCommitted(clip.id, { transform: undefined, animation: undefined })}
         >
-          <RotateCcw className="h-3 w-3" />
+          <ResetIcon className="h-3 w-3" />
           {t('inspector.reset')}
         </button>
       </div>
@@ -108,7 +108,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
               className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-2xs font-medium ${cropEditing ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'}`}
               onClick={() => setCropEditing(!cropEditing)}
             >
-              <Crop className="h-3.5 w-3.5" />
+              <CropIcon className="h-3.5 w-3.5" />
               {cropEditing ? t('inspector.crop.done') : t('inspector.crop.edit')}
             </button>
           </Tooltip>
@@ -117,7 +117,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
               className="touch-hit flex flex-1 items-center justify-center gap-1.5 rounded-md bg-zinc-800 px-2 py-1.5 text-2xs font-medium text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700"
               onClick={() => useStore.getState().applyStreamLayout(clip.id)}
             >
-              <LayoutPanelTop className="h-3.5 w-3.5" />
+              <ViewHorizontalIcon className="h-3.5 w-3.5" />
               {t('inspector.streamLayout')}
             </button>
           </Tooltip>

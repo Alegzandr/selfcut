@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence } from 'framer-motion';
-import { MoreHorizontal } from 'lucide-react';
+import { DotsHorizontalIcon } from '@radix-ui/react-icons';
 import { Tooltip } from './Tooltip';
 import { MenuList, type MenuEntry } from './menu/MenuList';
 import { MenuPanel, useDismissOnOutside } from './menu/MenuPanel';
@@ -33,7 +33,7 @@ export function ToolOverflowMenu({ entries }: { entries: MenuEntry[] }) {
           }`}
           onClick={() => setOpen((v) => !v)}
         >
-          <MoreHorizontal className="h-4 w-4" />
+          <DotsHorizontalIcon className="h-4 w-4" />
         </button>
       </Tooltip>
 

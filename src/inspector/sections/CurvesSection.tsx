@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RotateCcw } from 'lucide-react';
+import { ResetIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../store/store';
 import { Clip, ClipCurves, CurvePoint } from '../../types';
 import { CURVE_CHANNELS, IDENTITY_POINTS, type CurveChannel } from '../../model';
@@ -202,7 +202,7 @@ export function CurvesSection({ clip }: { clip: Clip }) {
             onClick={resetChannel}
             className="touch-hit flex items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
           >
-            <RotateCcw className="h-3 w-3" />
+            <ResetIcon className="h-3 w-3" />
             {t('inspector.reset')}
           </button>
         )}

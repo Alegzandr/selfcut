@@ -2,7 +2,7 @@ import type { ComponentType } from 'react';
 import type { ParseKeys } from 'i18next';
 import { AnimatePresence, m } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { FolderPlus, Trash2 } from 'lucide-react';
+import { TrashIcon, UploadIcon } from '@radix-ui/react-icons';
 import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
 import { useIsCoarsePointer } from '../lib/device';
 import { useEditorCommands } from './commands';
@@ -36,9 +36,9 @@ type Tile = {
 };
 
 const TOOL_TILES: readonly Tile[] = [
-  // "Import media" reads better as a folder with a plus than as the menu's
+  // "Import media" reads better as an upload arrow than as the menu's
   // generic file glyph, and this tile is the entry point of the whole app.
-  { cmd: 'file.import', icon: FolderPlus, labelKey: 'mobile.media' },
+  { cmd: 'file.import', icon: UploadIcon, labelKey: 'mobile.media' },
   { cmd: 'edit.paste', labelKey: 'clipbar.paste' },
   { cmd: 'insert.text', labelKey: 'mobile.text' },
   { cmd: 'insert.color', labelKey: 'mobile.color' },
@@ -67,7 +67,7 @@ const CLIP_TILES: readonly Tile[] = [
   // where a monteur has the keyboard shortcut (Del vs Shift+Del) and the mental
   // model for it - two identical trash icons and the word "ripple" only confuse
   // a casual mobile user.
-  { cmd: 'clip.rippleDelete', icon: Trash2, labelKey: 'clipbar.delete', danger: true },
+  { cmd: 'clip.rippleDelete', icon: TrashIcon, labelKey: 'clipbar.delete', danger: true },
 ];
 
 function Rail({ tiles }: { tiles: readonly Tile[] }) {

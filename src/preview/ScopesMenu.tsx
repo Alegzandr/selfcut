@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Activity, Check } from 'lucide-react';
+import { BarChartIcon, CheckIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { useIsCoarsePointer } from '../lib/device';
 import { SCOPE_MODES, type ScopeMode } from './scopes';
@@ -58,7 +58,7 @@ export function ScopesMenu() {
                 setOpen(false);
               }}
             >
-              <Check className={`h-3.5 w-3.5 flex-none ${mode === opt ? '' : 'invisible'}`} />
+              <CheckIcon className={`h-3.5 w-3.5 flex-none ${mode === opt ? '' : 'invisible'}`} />
               <span className="flex-1">{t(`preview.scopes.${opt}`)}</span>
             </button>
           ))}
@@ -75,7 +75,7 @@ export function ScopesMenu() {
         }`}
         onClick={() => setOpen((v) => !v)}
       >
-        <Activity className="h-3.5 w-3.5" />
+        <BarChartIcon className="h-3.5 w-3.5" />
         {mode !== 'off' && <span>{t(`preview.scopes.${mode}`)}</span>}
       </button>
     </div>

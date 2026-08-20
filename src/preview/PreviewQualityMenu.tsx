@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Gauge } from 'lucide-react';
+import { CheckIcon, LapTimerIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { PREVIEW_RESOLUTION_SCALE, type PreviewResolutionMode } from '../app/config';
 
@@ -66,7 +66,7 @@ export function PreviewQualityMenu() {
                 setOpen(false);
               }}
             >
-              <Check className={`h-3.5 w-3.5 flex-none ${mode === opt ? '' : 'invisible'}`} />
+              <CheckIcon className={`h-3.5 w-3.5 flex-none ${mode === opt ? '' : 'invisible'}`} />
               <span className="flex-1 tabular-nums">{rungLabel(opt, fullLabel)}</span>
             </button>
           ))}
@@ -83,7 +83,7 @@ export function PreviewQualityMenu() {
         }`}
         onClick={() => setOpen((v) => !v)}
       >
-        <Gauge className="h-3.5 w-3.5" />
+        <LapTimerIcon className="h-3.5 w-3.5" />
         {rungLabel(mode, fullLabel)}
       </button>
     </div>

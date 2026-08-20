@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Volume1, Volume2, VolumeX } from 'lucide-react';
+import { SpeakerLoudIcon, SpeakerOffIcon, SpeakerQuietIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
 import { gainDb } from '../inspector/format';
@@ -27,7 +27,7 @@ export function MasterVolume() {
   // Unity is the ceiling here too: the entry cannot boost past what the fader can.
   const volumeEntry = useVolumeEntry({ gain: volume, maxDb: 0, onCommit: setPreviewVolume });
 
-  const Icon = muted || volume <= 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
+  const Icon = muted || volume <= 0 ? SpeakerOffIcon : volume < 0.5 ? SpeakerQuietIcon : SpeakerLoudIcon;
   const label = muted ? t('master.unmute') : t('master.mute');
 
   return (

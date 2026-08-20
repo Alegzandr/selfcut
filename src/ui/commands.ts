@@ -1,53 +1,53 @@
 import type { ComponentType } from 'react';
 import type { ParseKeys } from 'i18next';
 import {
-  Blend,
-  Copy,
-  CopyPlus,
-  Download,
-  File,
-  FilePlus,
-  Film,
-  Flag,
-  Focus,
-  FoldHorizontal,
-  FolderOpen,
-  Save,
-  SaveAll,
-  ListChecks,
-  Music,
-  Redo2,
-  Repeat,
-  Scissors,
-  SkipBack,
-  SlidersHorizontal,
-  Square,
-  SquareSplitHorizontal,
-  Trash2,
-  Type,
-  Link2,
-  Unlink,
-  Undo2,
-  Keyboard,
-  LayoutPanelTop,
-  ClipboardPaste,
-  ZoomIn,
-  ZoomOut,
-  Expand,
-  Hand,
-  MousePointer2,
-  Search,
-  Play,
-  Magnet,
-  MapPin,
-  Settings,
-  Info,
-  Captions,
-  Wand2,
-  Sparkles,
-  Upload,
-  Library,
-} from 'lucide-react';
+  ArchiveIcon,
+  BlendingModeIcon,
+  BookmarkIcon,
+  CardStackIcon,
+  CardStackPlusIcon,
+  ChatBubbleIcon,
+  CheckboxIcon,
+  ClipboardIcon,
+  CopyIcon,
+  CursorArrowIcon,
+  DiscIcon,
+  DownloadIcon,
+  DrawingPinIcon,
+  EnterFullScreenIcon,
+  FileIcon,
+  FilePlusIcon,
+  GearIcon,
+  HandIcon,
+  InfoCircledIcon,
+  KeyboardIcon,
+  Link2Icon,
+  LinkBreak2Icon,
+  LoopIcon,
+  MagicWandIcon,
+  MagnifyingGlassIcon,
+  MixerHorizontalIcon,
+  PinLeftIcon,
+  PlayIcon,
+  ReloadIcon,
+  ResetIcon,
+  ScissorsIcon,
+  SewingPinIcon,
+  SpeakerLoudIcon,
+  SquareIcon,
+  StackIcon,
+  StarIcon,
+  TargetIcon,
+  TextIcon,
+  TrackPreviousIcon,
+  TrashIcon,
+  UploadIcon,
+  VideoIcon,
+  ViewHorizontalIcon,
+  ViewVerticalIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+} from '@radix-ui/react-icons';
 import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
 import type { LibraryTab } from '../store/editorState';
 import { useImport } from './useImport';
@@ -143,7 +143,7 @@ export function useEditorCommands(): Record<string, Command> {
     {
       id: 'file.new',
       labelKey: 'menu.file.new',
-      icon: File,
+      icon: FileIcon,
       // Multi-project: a new project no longer throws the old one away — it opens
       // a fresh untitled project alongside it, and the old one stays in the
       // browser. The new project is not tied to any `.selfcut` file yet.
@@ -151,22 +151,22 @@ export function useEditorCommands(): Record<string, Command> {
         void createNewProject().then(() => unbindProjectFile());
       },
     },
-    { id: 'file.open', labelKey: 'menu.file.open', icon: FolderOpen, shortcut: 'Ctrl+O', onClick: () => openProject() },
+    { id: 'file.open', labelKey: 'menu.file.open', icon: ArchiveIcon, shortcut: 'Ctrl+O', onClick: () => openProject() },
     {
       id: 'file.projects',
       labelKey: 'menu.file.projects',
-      icon: Library,
+      icon: StackIcon,
       onClick: () => {
         st().setProjectLibraryOpen(true);
         void refreshProjects();
       },
     },
-    { id: 'file.save', labelKey: 'menu.file.save', icon: Save, shortcut: 'Ctrl+S', onClick: () => saveProject(false) },
-    { id: 'file.saveAs', labelKey: 'menu.file.saveAs', icon: SaveAll, shortcut: 'Ctrl+Shift+S', onClick: () => saveProject(true) },
-    { id: 'file.import', labelKey: 'menu.file.import', icon: FilePlus, onClick: () => openMediaPicker(importFiles) },
+    { id: 'file.save', labelKey: 'menu.file.save', icon: DiscIcon, shortcut: 'Ctrl+S', onClick: () => saveProject(false) },
+    { id: 'file.saveAs', labelKey: 'menu.file.saveAs', icon: CardStackIcon, shortcut: 'Ctrl+Shift+S', onClick: () => saveProject(true) },
+    { id: 'file.import', labelKey: 'menu.file.import', icon: FilePlusIcon, onClick: () => openMediaPicker(importFiles) },
     // Its own entry rather than a note under Import: dropping an .srt on the
     // window has always worked, but nothing on screen ever said so.
-    { id: 'file.importSubtitles', labelKey: 'menu.file.importSubtitles', hintKey: 'menu.file.importSubtitles.hint', icon: Captions, onClick: () => openSubtitlePicker(importFiles) },
+    { id: 'file.importSubtitles', labelKey: 'menu.file.importSubtitles', hintKey: 'menu.file.importSubtitles.hint', icon: ChatBubbleIcon, onClick: () => openSubtitlePicker(importFiles) },
     // Presets are files like a project or a render is, so they belong with the
     // other file actions rather than tucked inside the panel that happens to
     // edit the look. Import both shelves and applies: the file dialog is the
@@ -174,7 +174,7 @@ export function useEditorCommands(): Record<string, Command> {
     {
       id: 'file.importPreset',
       labelKey: 'menu.file.importPreset',
-      icon: Upload,
+      icon: UploadIcon,
       onClick: () =>
         importPreset((presetName, look) => {
           st().addLoadedPreset(presetName, look);
@@ -184,7 +184,7 @@ export function useEditorCommands(): Record<string, Command> {
     {
       id: 'file.savePreset',
       labelKey: 'menu.file.savePreset',
-      icon: Sparkles,
+      icon: StarIcon,
       disabled: selectedClip === null,
       // Called straight from the click: the save picker needs transient user
       // activation, which would be gone after an await.
@@ -194,67 +194,67 @@ export function useEditorCommands(): Record<string, Command> {
         exportClipPreset(clip.id, clipDisplayName(clip, st().assets[clip.assetId], t));
       },
     },
-    { id: 'file.export', labelKey: 'menu.file.export', icon: Download, shortcut: 'Ctrl+E', onClick: () => st().setExportOpen(true) },
+    { id: 'file.export', labelKey: 'menu.file.export', icon: DownloadIcon, shortcut: 'Ctrl+E', onClick: () => st().setExportOpen(true) },
 
     // ── Edit ──────────────────────────────────────────────────────────────
-    { id: 'edit.undo', labelKey: 'menu.edit.undo', icon: Undo2, shortcut: 'Ctrl+Z', disabled: !canUndo, onClick: () => st().undo() },
-    { id: 'edit.redo', labelKey: 'menu.edit.redo', icon: Redo2, shortcut: 'Ctrl+Shift+Z', disabled: !canRedo, onClick: () => st().redo() },
-    { id: 'edit.cut', labelKey: 'menu.edit.cut', icon: Scissors, shortcut: 'Ctrl+X', disabled: !hasSelection, onClick: () => st().cutClips(st().selectedClipIds) },
-    { id: 'edit.copy', labelKey: 'menu.edit.copy', icon: Copy, shortcut: 'Ctrl+C', disabled: !hasSelection, onClick: () => st().copyClips(st().selectedClipIds) },
-    { id: 'edit.paste', labelKey: 'menu.edit.paste', icon: ClipboardPaste, shortcut: 'Ctrl+V', disabled: !hasClipboard, onClick: () => st().pasteAtPlayhead() },
-    { id: 'edit.selectAll', labelKey: 'menu.edit.selectAll', icon: ListChecks, shortcut: 'Ctrl+A', onClick: () => st().selectAllClips() },
-    { id: 'edit.preferences', labelKey: 'menu.edit.preferences', icon: Settings, onClick: () => st().setPreferencesOpen(true) },
+    { id: 'edit.undo', labelKey: 'menu.edit.undo', icon: ResetIcon, shortcut: 'Ctrl+Z', disabled: !canUndo, onClick: () => st().undo() },
+    { id: 'edit.redo', labelKey: 'menu.edit.redo', icon: ReloadIcon, shortcut: 'Ctrl+Shift+Z', disabled: !canRedo, onClick: () => st().redo() },
+    { id: 'edit.cut', labelKey: 'menu.edit.cut', icon: ScissorsIcon, shortcut: 'Ctrl+X', disabled: !hasSelection, onClick: () => st().cutClips(st().selectedClipIds) },
+    { id: 'edit.copy', labelKey: 'menu.edit.copy', icon: CopyIcon, shortcut: 'Ctrl+C', disabled: !hasSelection, onClick: () => st().copyClips(st().selectedClipIds) },
+    { id: 'edit.paste', labelKey: 'menu.edit.paste', icon: ClipboardIcon, shortcut: 'Ctrl+V', disabled: !hasClipboard, onClick: () => st().pasteAtPlayhead() },
+    { id: 'edit.selectAll', labelKey: 'menu.edit.selectAll', icon: CheckboxIcon, shortcut: 'Ctrl+A', onClick: () => st().selectAllClips() },
+    { id: 'edit.preferences', labelKey: 'menu.edit.preferences', icon: GearIcon, onClick: () => st().setPreferencesOpen(true) },
 
     // ── Insert ────────────────────────────────────────────────────────────
-    { id: 'insert.text', labelKey: 'menu.insert.text', icon: Type, shortcut: 'T', onClick: () => st().addTextClip() },
-    { id: 'insert.color', labelKey: 'menu.insert.color', icon: Square, onClick: () => st().addSolidClip('color') },
-    { id: 'insert.gradient', labelKey: 'menu.insert.gradient', icon: Blend, onClick: () => st().addSolidClip('gradient') },
-    { id: 'insert.videoTrack', labelKey: 'menu.insert.videoTrack', icon: Film, onClick: () => st().addTrack('video') },
-    { id: 'insert.audioTrack', labelKey: 'menu.insert.audioTrack', icon: Music, onClick: () => st().addTrack('audio') },
-    { id: 'insert.marker', labelKey: 'menu.insert.marker', icon: Flag, shortcut: 'M', onClick: () => st().addMarkerAtPlayhead() },
+    { id: 'insert.text', labelKey: 'menu.insert.text', icon: TextIcon, shortcut: 'T', onClick: () => st().addTextClip() },
+    { id: 'insert.color', labelKey: 'menu.insert.color', icon: SquareIcon, onClick: () => st().addSolidClip('color') },
+    { id: 'insert.gradient', labelKey: 'menu.insert.gradient', icon: BlendingModeIcon, onClick: () => st().addSolidClip('gradient') },
+    { id: 'insert.videoTrack', labelKey: 'menu.insert.videoTrack', icon: VideoIcon, onClick: () => st().addTrack('video') },
+    { id: 'insert.audioTrack', labelKey: 'menu.insert.audioTrack', icon: SpeakerLoudIcon, onClick: () => st().addTrack('audio') },
+    { id: 'insert.marker', labelKey: 'menu.insert.marker', icon: BookmarkIcon, shortcut: 'M', onClick: () => st().addMarkerAtPlayhead() },
 
     // ── Clip ──────────────────────────────────────────────────────────────
-    { id: 'clip.split', labelKey: 'menu.clip.split', icon: SquareSplitHorizontal, shortcut: 'S', onClick: () => st().splitAtPlayhead() },
+    { id: 'clip.split', labelKey: 'menu.clip.split', icon: ViewVerticalIcon, shortcut: 'S', onClick: () => st().splitAtPlayhead() },
     // C (Premiere) and B (Resolve) also split - see useEditorHotkeys. Only S is
     // advertised here: a menu row listing three keys reads as a puzzle.
-    { id: 'clip.duplicate', labelKey: 'menu.clip.duplicate', icon: CopyPlus, shortcut: 'Ctrl+D', disabled: !hasSelection, onClick: () => st().duplicateClips(st().selectedClipIds) },
-    { id: 'clip.punchIn', labelKey: 'menu.clip.punchIn', icon: Focus, shortcut: 'P', disabled: !selectedId, onClick: () => st().punchZoomSelected() },
-    { id: 'clip.stream', labelKey: 'menu.clip.stream', icon: LayoutPanelTop, disabled: !canStream, onClick: () => selectedId && st().applyStreamLayout(selectedId) },
-    { id: 'clip.adjust', labelKey: 'menu.clip.adjust', icon: SlidersHorizontal, disabled: !selectedId, onClick: () => st().setInspectorOpen(true) },
-    { id: 'clip.link', labelKey: 'menu.clip.link', icon: Link2, disabled: !canLink, onClick: () => { const targets = getLinkTargets(st()); if (targets) st().linkClips(targets); } },
-    { id: 'clip.unlink', labelKey: 'menu.clip.unlink', icon: Unlink, disabled: !isLinked, onClick: () => selectedId && st().unlinkClip(selectedId) },
-    { id: 'clip.delete', labelKey: 'menu.clip.delete', icon: Trash2, shortcut: 'Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, false) },
-    { id: 'clip.rippleDelete', labelKey: 'menu.clip.rippleDelete', icon: FoldHorizontal, shortcut: 'Shift+Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, true) },
+    { id: 'clip.duplicate', labelKey: 'menu.clip.duplicate', icon: CardStackPlusIcon, shortcut: 'Ctrl+D', disabled: !hasSelection, onClick: () => st().duplicateClips(st().selectedClipIds) },
+    { id: 'clip.punchIn', labelKey: 'menu.clip.punchIn', icon: TargetIcon, shortcut: 'P', disabled: !selectedId, onClick: () => st().punchZoomSelected() },
+    { id: 'clip.stream', labelKey: 'menu.clip.stream', icon: ViewHorizontalIcon, disabled: !canStream, onClick: () => selectedId && st().applyStreamLayout(selectedId) },
+    { id: 'clip.adjust', labelKey: 'menu.clip.adjust', icon: MixerHorizontalIcon, disabled: !selectedId, onClick: () => st().setInspectorOpen(true) },
+    { id: 'clip.link', labelKey: 'menu.clip.link', icon: Link2Icon, disabled: !canLink, onClick: () => { const targets = getLinkTargets(st()); if (targets) st().linkClips(targets); } },
+    { id: 'clip.unlink', labelKey: 'menu.clip.unlink', icon: LinkBreak2Icon, disabled: !isLinked, onClick: () => selectedId && st().unlinkClip(selectedId) },
+    { id: 'clip.delete', labelKey: 'menu.clip.delete', icon: TrashIcon, shortcut: 'Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, false) },
+    { id: 'clip.rippleDelete', labelKey: 'menu.clip.rippleDelete', icon: PinLeftIcon, shortcut: 'Shift+Del', danger: true, disabled: !hasSelection, onClick: () => st().deleteClips(st().selectedClipIds, true) },
 
     // ── Preview tools ─────────────────────────────────────────────────────
     // Modes of the preview surface, not one-shot actions: exactly one is always
     // active, so they read as a radio group (`checked` lights the pressed one).
-    { id: 'preview.toolSelect', labelKey: 'preview.tool.select', icon: MousePointer2, shortcut: 'V', checked: previewTool === 'select', onClick: () => st().setPreviewTool('select') },
-    { id: 'preview.toolHand', labelKey: 'preview.tool.hand.name', hintKey: 'preview.tool.hand', icon: Hand, shortcut: 'H', checked: previewTool === 'hand', onClick: () => st().setPreviewTool('hand') },
-    { id: 'preview.toolZoom', labelKey: 'preview.tool.zoom.name', hintKey: 'preview.tool.zoom', icon: Search, shortcut: 'Z', checked: previewTool === 'zoom', onClick: () => st().setPreviewTool('zoom') },
-    { id: 'preview.resetView', labelKey: 'preview.view.reset', icon: Expand, disabled: previewFitted, onClick: () => st().resetPreviewView() },
+    { id: 'preview.toolSelect', labelKey: 'preview.tool.select', icon: CursorArrowIcon, shortcut: 'V', checked: previewTool === 'select', onClick: () => st().setPreviewTool('select') },
+    { id: 'preview.toolHand', labelKey: 'preview.tool.hand.name', hintKey: 'preview.tool.hand', icon: HandIcon, shortcut: 'H', checked: previewTool === 'hand', onClick: () => st().setPreviewTool('hand') },
+    { id: 'preview.toolZoom', labelKey: 'preview.tool.zoom.name', hintKey: 'preview.tool.zoom', icon: MagnifyingGlassIcon, shortcut: 'Z', checked: previewTool === 'zoom', onClick: () => st().setPreviewTool('zoom') },
+    { id: 'preview.resetView', labelKey: 'preview.view.reset', icon: EnterFullScreenIcon, disabled: previewFitted, onClick: () => st().resetPreviewView() },
 
     // ── View ──────────────────────────────────────────────────────────────
-    { id: 'view.zoomIn', labelKey: 'menu.view.zoomIn', icon: ZoomIn, shortcut: '+', onClick: () => zoomAtPlayhead(1.25) },
-    { id: 'view.zoomOut', labelKey: 'menu.view.zoomOut', icon: ZoomOut, shortcut: '−', onClick: () => zoomAtPlayhead(1 / 1.25) },
-    { id: 'view.subtitles', labelKey: 'menu.view.subtitles', icon: Captions, checked: inspectorTab === 'subtitles', onClick: () => toggleSubtitlesPane() },
+    { id: 'view.zoomIn', labelKey: 'menu.view.zoomIn', icon: ZoomInIcon, shortcut: '+', onClick: () => zoomAtPlayhead(1.25) },
+    { id: 'view.zoomOut', labelKey: 'menu.view.zoomOut', icon: ZoomOutIcon, shortcut: '−', onClick: () => zoomAtPlayhead(1 / 1.25) },
+    { id: 'view.subtitles', labelKey: 'menu.view.subtitles', icon: ChatBubbleIcon, checked: inspectorTab === 'subtitles', onClick: () => toggleSubtitlesPane() },
     // The library's three bins. Desktop docks the column permanently, so these
     // only pick a tab; on mobile they also raise the drawer that holds it.
-    { id: 'view.media', labelKey: 'menu.view.media', icon: FolderOpen, checked: libraryTab === 'media', onClick: () => showLibraryTab('media') },
-    { id: 'view.effects', labelKey: 'menu.view.effects', icon: Wand2, checked: libraryTab === 'effects', onClick: () => showLibraryTab('effects') },
-    { id: 'view.transitions', labelKey: 'menu.view.transitions', icon: Blend, checked: libraryTab === 'transitions', onClick: () => showLibraryTab('transitions') },
-    { id: 'view.snap', labelKey: 'menu.view.snap', hintKey: snapEnabled ? 'transport.snapping.on' : 'transport.snapping.off', icon: Magnet, shortcut: 'N', checked: snapEnabled, onClick: () => st().toggleSnap() },
+    { id: 'view.media', labelKey: 'menu.view.media', icon: ArchiveIcon, checked: libraryTab === 'media', onClick: () => showLibraryTab('media') },
+    { id: 'view.effects', labelKey: 'menu.view.effects', icon: MagicWandIcon, checked: libraryTab === 'effects', onClick: () => showLibraryTab('effects') },
+    { id: 'view.transitions', labelKey: 'menu.view.transitions', icon: BlendingModeIcon, checked: libraryTab === 'transitions', onClick: () => showLibraryTab('transitions') },
+    { id: 'view.snap', labelKey: 'menu.view.snap', hintKey: snapEnabled ? 'transport.snapping.on' : 'transport.snapping.off', icon: DrawingPinIcon, shortcut: 'N', checked: snapEnabled, onClick: () => st().toggleSnap() },
 
     // ── Playback ──────────────────────────────────────────────────────────
-    { id: 'playback.playPause', labelKey: 'menu.playback.playPause', icon: Play, shortcut: 'Space', onClick: () => st().setPlaying(!st().playing) },
-    { id: 'playback.start', labelKey: 'menu.playback.start', icon: SkipBack, shortcut: 'Home', onClick: () => st().seek(0) },
-    { id: 'playback.loop', labelKey: 'menu.playback.loop', icon: Repeat, shortcut: 'Q', checked: loopEnabled, onClick: () => st().toggleLoopEnabled() },
-    { id: 'playback.regionIn', labelKey: 'menu.playback.regionIn', icon: MapPin, shortcut: 'I', onClick: () => st().setRegionEdgeAtPlayhead('in') },
-    { id: 'playback.regionOut', labelKey: 'menu.playback.regionOut', icon: MapPin, shortcut: 'O', onClick: () => st().setRegionEdgeAtPlayhead('out') },
+    { id: 'playback.playPause', labelKey: 'menu.playback.playPause', icon: PlayIcon, shortcut: 'Space', onClick: () => st().setPlaying(!st().playing) },
+    { id: 'playback.start', labelKey: 'menu.playback.start', icon: TrackPreviousIcon, shortcut: 'Home', onClick: () => st().seek(0) },
+    { id: 'playback.loop', labelKey: 'menu.playback.loop', icon: LoopIcon, shortcut: 'Q', checked: loopEnabled, onClick: () => st().toggleLoopEnabled() },
+    { id: 'playback.regionIn', labelKey: 'menu.playback.regionIn', icon: SewingPinIcon, shortcut: 'I', onClick: () => st().setRegionEdgeAtPlayhead('in') },
+    { id: 'playback.regionOut', labelKey: 'menu.playback.regionOut', icon: SewingPinIcon, shortcut: 'O', onClick: () => st().setRegionEdgeAtPlayhead('out') },
 
     // ── Help ──────────────────────────────────────────────────────────────
-    { id: 'help.shortcuts', labelKey: 'menu.help.shortcuts', icon: Keyboard, shortcut: '?', onClick: () => st().setShortcutsOpen(true) },
-    { id: 'help.about', labelKey: 'menu.help.about', icon: Info, onClick: () => st().setAboutOpen(true) },
+    { id: 'help.shortcuts', labelKey: 'menu.help.shortcuts', icon: KeyboardIcon, shortcut: '?', onClick: () => st().setShortcutsOpen(true) },
+    { id: 'help.about', labelKey: 'menu.help.about', icon: InfoCircledIcon, onClick: () => st().setAboutOpen(true) },
   ];
 
   return Object.fromEntries(list.map((c) => [c.id, c]));

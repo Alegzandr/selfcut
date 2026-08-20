@@ -8,7 +8,7 @@ import { EFFECT_DRAG_MIME, PRESET_DRAG_MIME, TRANSITION_DRAG_MIME } from '../app
 import { useIsCoarsePointer } from '../lib/device';
 import { applyPresetToClips } from './presetActions';
 import { importLutFromDisk } from './lutActions';
-import { Plus, X } from 'lucide-react';
+import { Cross2Icon, PlusIcon } from '@radix-ui/react-icons';
 
 /**
  * The Effects and Transitions panes of the media library. Both are catalogues
@@ -154,7 +154,7 @@ function PresetsGroup({ coarse }: { coarse: boolean }) {
                 className="absolute right-0.5 top-0.5 rounded p-0.5 text-zinc-600 hover:bg-zinc-700 hover:text-zinc-200"
                 onClick={() => useStore.getState().removeLoadedPreset(preset.id)}
               >
-                <X className="h-3 w-3" />
+                <Cross2Icon className="h-3 w-3" />
               </button>
             </div>
           ))}
@@ -216,7 +216,7 @@ function LutsGroup({ coarse }: { coarse: boolean }) {
           onClick={() => importLutFromDisk()}
           title={t('library.lut.import')}
         >
-          <Plus className="h-3 w-3" />
+          <PlusIcon className="h-3 w-3" />
           {t('library.lut.import')}
         </button>
       </div>
@@ -240,7 +240,7 @@ function LutsGroup({ coarse }: { coarse: boolean }) {
                 className="absolute right-0.5 top-0.5 rounded p-0.5 text-zinc-600 hover:bg-zinc-700 hover:text-zinc-200"
                 onClick={() => useStore.getState().removeLut(lut.id)}
               >
-                <X className="h-3 w-3" />
+                <Cross2Icon className="h-3 w-3" />
               </button>
             </div>
           ))}

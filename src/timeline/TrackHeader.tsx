@@ -2,18 +2,18 @@ import { memo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  Diamond,
-  Eye,
-  EyeOff,
-  Lock,
-  LockOpen,
-  Trash2,
-  Volume2,
-  VolumeX,
-} from 'lucide-react';
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ChevronUpIcon,
+  ComponentInstanceIcon,
+  EyeClosedIcon,
+  EyeOpenIcon,
+  LockClosedIcon,
+  LockOpen1Icon,
+  SpeakerLoudIcon,
+  SpeakerOffIcon,
+  TrashIcon,
+} from '@radix-ui/react-icons';
 import { Track } from '../types';
 import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
@@ -111,9 +111,9 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
                 onClick={() => toggleTrackExpanded(track.id)}
               >
                 {expanded ? (
-                  <ChevronDown className="h-3 w-3 text-sky-300" />
+                  <ChevronDownIcon className="h-3 w-3 text-sky-300" />
                 ) : (
-                  <ChevronRight className="h-3 w-3" />
+                  <ChevronRightIcon className="h-3 w-3" />
                 )}
               </button>
             </Tooltip>
@@ -131,15 +131,15 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
                 onClick={() => toggleTrackLocked(track.id)}
               >
                 {track.locked ? (
-                  <Lock className="h-3 w-3 text-amber-400" />
+                  <LockClosedIcon className="h-3 w-3 text-amber-400" />
                 ) : (
-                  <LockOpen className="h-3 w-3" />
+                  <LockOpen1Icon className="h-3 w-3" />
                 )}
               </button>
             </Tooltip>
             <Tooltip label={t('track.delete')}>
               <button className={btn} onClick={() => removeTrack(track.id)}>
-                <Trash2 className="h-3 w-3" />
+                <TrashIcon className="h-3 w-3" />
               </button>
             </Tooltip>
           </div>
@@ -154,9 +154,9 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
                 onClick={() => toggleTrackMuted(track.id)}
               >
                 {track.muted ? (
-                  <VolumeX className="h-3 w-3 text-red-400" />
+                  <SpeakerOffIcon className="h-3 w-3 text-red-400" />
                 ) : (
-                  <Volume2 className="h-3 w-3" />
+                  <SpeakerLoudIcon className="h-3 w-3" />
                 )}
               </button>
             </Tooltip>
@@ -168,7 +168,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
                   aria-pressed={!!track.hidden}
                   onClick={() => toggleTrackHidden(track.id)}
                 >
-                  {track.hidden ? <EyeOff className="h-3 w-3 text-red-400" /> : <Eye className="h-3 w-3" />}
+                  {track.hidden ? <EyeClosedIcon className="h-3 w-3 text-red-400" /> : <EyeOpenIcon className="h-3 w-3" />}
                 </button>
               </Tooltip>
             ) : (
@@ -178,12 +178,12 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
           <div className="flex items-center gap-0.5">
             <Tooltip label={t('track.moveUp')}>
               <button className={btn} onClick={() => moveTrack(track.id, -1)}>
-                <ChevronUp className="h-3 w-3" />
+                <ChevronUpIcon className="h-3 w-3" />
               </button>
             </Tooltip>
             <Tooltip label={t('track.moveDown')}>
               <button className={btn} onClick={() => moveTrack(track.id, 1)}>
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDownIcon className="h-3 w-3" />
               </button>
             </Tooltip>
           </div>
@@ -280,7 +280,7 @@ export const TrackHeader = memo(function TrackHeader({ track }: Props) {
               className="flex items-center gap-1 border-t border-zinc-800/50 bg-zinc-900/40 px-1.5 text-4xs uppercase tracking-wide text-zinc-500"
               style={{ height: KEYFRAME_LANE_HEIGHT_PX }}
             >
-              <Diamond className="h-2 w-2 -rotate-45 fill-zinc-500 text-zinc-500" />
+              <ComponentInstanceIcon className="h-2 w-2 text-zinc-500" />
               <span className="truncate">{t(propHeaderKey(prop))}</span>
             </div>
           ))}

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { RotateCcw } from 'lucide-react';
+import { ResetIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../store/store';
 import { Channel, Clip, ColorProp, EaseId } from '../../types';
 import { COLOR_PROPS, EASE_IDS, keyframesOf, sampleChannel } from '../../model';
@@ -143,7 +143,7 @@ export function ColorSection({ clip }: { clip: Clip }) {
           className="touch-hit flex items-center gap-1 rounded-md px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
           onClick={() => updateClipCommitted(clip.id, { color: undefined })}
         >
-          <RotateCcw className="h-3 w-3" />
+          <ResetIcon className="h-3 w-3" />
           {t('inspector.reset')}
         </button>
       </div>

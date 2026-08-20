@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
-import { Check, FilePlus2, Pencil, Trash2, X } from 'lucide-react';
+import { CheckIcon, Cross2Icon, FilePlusIcon, Pencil2Icon, TrashIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import {
   createNewProject,
@@ -90,7 +90,7 @@ export function ProjectLibrary() {
                 onClick={close}
                 aria-label={t('projects.close')}
               >
-                <X className="h-4 w-4" />
+                <Cross2Icon className="h-4 w-4" />
               </button>
             </header>
 
@@ -133,7 +133,7 @@ export function ProjectLibrary() {
                           <div className="mt-0.5 flex items-center gap-1.5 text-2xs text-zinc-500">
                             {isCurrent && (
                               <span className="inline-flex items-center gap-0.5 text-sky-400">
-                                <Check className="h-3 w-3" />
+                                <CheckIcon className="h-3 w-3" />
                                 {t('projects.currentBadge')}
                               </span>
                             )}
@@ -147,7 +147,7 @@ export function ProjectLibrary() {
                           aria-label={t('projects.rename')}
                           onClick={() => setEditing({ id: p.id, value: p.name ?? '' })}
                         >
-                          <Pencil className="h-3.5 w-3.5" />
+                          <Pencil2Icon className="h-3.5 w-3.5" />
                         </button>
                         <button
                           className="touch-hit rounded p-1 text-zinc-500 opacity-0 hover:bg-red-500/20 hover:text-red-300 focus:opacity-100 group-hover:opacity-100"
@@ -155,7 +155,7 @@ export function ProjectLibrary() {
                           aria-label={t('projects.delete')}
                           onClick={() => void askDelete(p.id, name)}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <TrashIcon className="h-3.5 w-3.5" />
                         </button>
                       </li>
                     );
@@ -171,7 +171,7 @@ export function ProjectLibrary() {
                   void createNewProject().then(() => refreshProjects());
                 }}
               >
-                <FilePlus2 className="h-4 w-4" />
+                <FilePlusIcon className="h-4 w-4" />
                 {t('projects.new')}
               </button>
             </footer>

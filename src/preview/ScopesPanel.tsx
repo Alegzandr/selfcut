@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
+import { Cross2Icon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { useIsCoarsePointer } from '../lib/device';
 import { subscribeScopeFrame, type ScopeFrame } from './scopeBus';
@@ -275,7 +275,7 @@ export function Scopes() {
           className="touch-hit rounded p-0.5 text-zinc-500 hover:bg-zinc-800/80 hover:text-zinc-200"
           onClick={() => useStore.getState().setScopesMode('off')}
         >
-          <X className="h-3.5 w-3.5" />
+          <Cross2Icon className="h-3.5 w-3.5" />
         </button>
       </div>
       <canvas ref={canvasRef} className="block h-auto w-full" />

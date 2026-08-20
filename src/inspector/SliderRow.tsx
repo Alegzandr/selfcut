@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { MouseEvent } from 'react';
-import { Diamond } from 'lucide-react';
+import { ComponentInstanceIcon } from '@radix-ui/react-icons';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/store';
 import { decimalsForStep, seedDecimals } from './entryDecimals';
@@ -138,7 +138,10 @@ export function SliderRow({
                 : 'text-zinc-500 hover:text-zinc-300'
           }`}
         >
-          <Diamond className="h-3 w-3" fill={keyframe.onKey ? 'currentColor' : 'none'} />
+          {/* Radix glyphs carry their own fill, so `onKey` cannot be shown by
+              flipping the diamond solid the way the outlined Lucide one was.
+              The button colour above already carries that state. */}
+          <ComponentInstanceIcon className="h-3 w-3" />
         </button>
       )}
       {/* `min-w-0`: without it the row keeps its `min-width: auto` floor, which

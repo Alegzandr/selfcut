@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { Circle, Pentagon, RectangleHorizontal } from 'lucide-react';
+import { CircleIcon, SquareIcon, TriangleUpIcon } from '@radix-ui/react-icons';
 import type { ClipShape } from '../types';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
@@ -11,9 +11,9 @@ const SHAPES: readonly {
   icon: ComponentType<{ className?: string }>;
   labelKey: ParseKeys;
 }[] = [
-  { kind: 'rect', icon: RectangleHorizontal, labelKey: 'preview.shape.rect' },
-  { kind: 'ellipse', icon: Circle, labelKey: 'preview.shape.ellipse' },
-  { kind: 'polygon', icon: Pentagon, labelKey: 'preview.shape.polygon' },
+  { kind: 'rect', icon: SquareIcon, labelKey: 'preview.shape.rect' },
+  { kind: 'ellipse', icon: CircleIcon, labelKey: 'preview.shape.ellipse' },
+  { kind: 'polygon', icon: TriangleUpIcon, labelKey: 'preview.shape.polygon' },
 ];
 
 /**

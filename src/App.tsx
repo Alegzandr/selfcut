@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
-import { HardDriveDownload, PlugZap, UploadCloud, X, Zap } from 'lucide-react';
+import {
+  Cross2Icon,
+  DownloadIcon,
+  LightningBoltIcon,
+  LinkBreak1Icon,
+  UploadIcon,
+} from '@radix-ui/react-icons';
 import { useStore } from './store/store';
 import { initPersistence } from './lib/persistence';
 import { saveProjectFile, unbindProjectFile } from './lib/projectFile';
@@ -171,7 +177,7 @@ export default function App() {
             exit={{ opacity: 0 }}
             className="pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 border-4 border-dashed border-sky-500 bg-sky-500/10 backdrop-blur-sm"
           >
-            <UploadCloud className="h-12 w-12 text-sky-400" />
+            <UploadIcon className="h-12 w-12 text-sky-400" />
             <p className="text-sm font-medium text-sky-200">{t('app.drop.title')}</p>
           </m.div>
         )}
@@ -200,7 +206,7 @@ function SoftwareRenderingBanner() {
 
   return (
     <div className="flex flex-none items-center gap-x-3 gap-y-1.5 border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-      <Zap className="h-4 w-4 flex-none text-amber-300" />
+      <LightningBoltIcon className="h-4 w-4 flex-none text-amber-300" />
       <span className="min-w-0 flex-1">{t('gpu.softwareRendering')}</span>
       <button
         className="touch-hit flex-none rounded p-1 text-amber-200/80 hover:bg-amber-400/10 hover:text-amber-100"
@@ -211,7 +217,7 @@ function SoftwareRenderingBanner() {
           setDismissed(true);
         }}
       >
-        <X className="h-3.5 w-3.5" />
+        <Cross2Icon className="h-3.5 w-3.5" />
       </button>
     </div>
   );
@@ -235,7 +241,7 @@ function SaveFailureBanner() {
       role="status"
       className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100"
     >
-      <HardDriveDownload className="h-4 w-4 flex-none text-rose-300" aria-hidden="true" />
+      <DownloadIcon className="h-4 w-4 flex-none text-rose-300" aria-hidden="true" />
       <span className="min-w-0 flex-1">{t('save.failing.message')}</span>
       <button
         className="flex-none rounded bg-rose-400/20 px-2.5 py-1 font-medium text-rose-100 hover:bg-rose-400/30"
@@ -282,7 +288,7 @@ function DisconnectedBanner() {
 
   return (
     <div className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-      <PlugZap className="h-4 w-4 flex-none text-amber-300" />
+      <LinkBreak1Icon className="h-4 w-4 flex-none text-amber-300" />
       <span className="min-w-0 flex-1">
         {t('restore.disconnected', { count: disconnected.length })}
       </span>

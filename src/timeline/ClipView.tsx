@@ -6,7 +6,7 @@
  */
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link2, Music, Type } from 'lucide-react';
+import { Link2Icon, SpeakerLoudIcon, TextIcon } from '@radix-ui/react-icons';
 import { Clip } from '../types';
 import { audioTrackForClip, clipDurationMs } from '../model';
 import { useStore } from '../store/store';
@@ -169,7 +169,7 @@ export const ClipView = memo(function ClipView({
     >
       {clip.kind === 'text' ? (
         <div className="pointer-events-none flex h-full w-full items-center gap-1 bg-gradient-to-b from-violet-900/60 to-violet-950 px-1.5">
-          <Type className="h-3 w-3 flex-none text-violet-300" />
+          <TextIcon className="h-3 w-3 flex-none text-violet-300" />
           <span className="truncate text-2xs font-medium text-violet-100">
             {clip.text.content.split('\n')[0] || t('clip.text.placeholder')}
           </span>
@@ -216,9 +216,9 @@ export const ClipView = memo(function ClipView({
           )}
           <div className="absolute left-0 top-0 flex max-w-full items-center gap-1 px-1.5 py-0.5">
             {clip.linkId ? (
-              <Link2 className="h-3 w-3 flex-none text-emerald-300" />
+              <Link2Icon className="h-3 w-3 flex-none text-emerald-300" />
             ) : (
-              <Music className="h-3 w-3 flex-none text-emerald-300" />
+              <SpeakerLoudIcon className="h-3 w-3 flex-none text-emerald-300" />
             )}
             <span className="truncate text-3xs text-emerald-100">{asset?.file.name}</span>
             {trackBadge && (
@@ -233,7 +233,7 @@ export const ClipView = memo(function ClipView({
       {/* A/V-link badge: this video clip's audio lives on a linked audio clip. */}
       {isVideo && clip.kind === 'media' && clip.linkId && (
         <div className="pointer-events-none absolute left-0.5 top-0.5 rounded bg-black/55 p-0.5">
-          <Link2 className="h-2.5 w-2.5 text-sky-200" />
+          <Link2Icon className="h-2.5 w-2.5 text-sky-200" />
         </div>
       )}
 

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence } from 'framer-motion';
-import { ChevronDown, Rows3 } from 'lucide-react';
+import { ChevronDownIcon, RowsIcon } from '@radix-ui/react-icons';
 import { TRACK_HEIGHT_PX } from '../app/config';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
@@ -52,8 +52,8 @@ export function TrackHeightMenu() {
           }`}
           onClick={() => setOpen((v) => !v)}
         >
-          <Rows3 className="h-4 w-4" />
-          <ChevronDown className="h-3 w-3" />
+          <RowsIcon className="h-4 w-4" />
+          <ChevronDownIcon className="h-3 w-3" />
         </button>
       </Tooltip>
 

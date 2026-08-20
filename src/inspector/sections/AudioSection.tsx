@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
+import { Cross2Icon } from '@radix-ui/react-icons';
 import { useStore } from '../../store/store';
 import { ToggleButton } from '../../ui/ToggleButton';
 import { AudioFxType, Clip } from '../../types';
@@ -143,7 +143,7 @@ export function AudioSection({ clip }: { clip: Clip }) {
                   name: t(`inspector.audioFx.${fx.type}`),
                 })}
               >
-                <X className="h-3 w-3" />
+                <Cross2Icon className="h-3 w-3" />
               </button>
             </div>
           ))

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pause, Play, Repeat, SkipBack } from 'lucide-react';
+import { LoopIcon, PauseIcon, PlayIcon, TrackPreviousIcon } from '@radix-ui/react-icons';
 import { useStore, projectDurationMs } from '../store/store';
 import { Tooltip } from './Tooltip';
 import { useEditorCommands } from './commands';
@@ -206,7 +206,7 @@ export function Transport() {
           className="touch-hit rounded-lg p-2 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
           onClick={() => seek(0)}
         >
-          <SkipBack className="h-4 w-4" />
+          <TrackPreviousIcon className="h-4 w-4" />
         </button>
       </Tooltip>
       <Tooltip label={playing ? t('transport.pause') : t('transport.play')}>
@@ -214,7 +214,7 @@ export function Transport() {
         className="touch-hit relative rounded-full bg-zinc-300 p-2.5 text-zinc-950 hover:bg-zinc-100 active:bg-zinc-200"
         onClick={() => setPlaying(!playing)}
       >
-        {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-px" />}
+        {playing ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4 translate-x-px" />}
         {/* Shuttle badge: visible while J/L drive playback at a non-1× rate. */}
         {playing && playbackRate !== 1 && (
           <span className="absolute -right-1.5 -top-1.5 rounded-full bg-sky-500 px-1 text-4xs font-bold leading-4 text-white">
@@ -233,7 +233,7 @@ export function Transport() {
           aria-pressed={loopEnabled}
           onClick={toggleLoopEnabled}
         >
-          <Repeat className="h-4 w-4" />
+          <LoopIcon className="h-4 w-4" />
         </button>
       </Tooltip>
 

@@ -2,19 +2,19 @@ import { useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import {
-  AudioLines,
-  Captions,
-  ChevronRight,
-  Film,
-  FolderOpen,
-  Image,
-  Import,
-  Music,
-  Plus,
-  PlugZap,
-  Trash2,
-  X,
-} from 'lucide-react';
+  ArchiveIcon,
+  ChatBubbleIcon,
+  ChevronRightIcon,
+  Cross2Icon,
+  ImageIcon,
+  LinkBreak1Icon,
+  PlusIcon,
+  SpeakerLoudIcon,
+  SpeakerModerateIcon,
+  TrashIcon,
+  UploadIcon,
+  VideoIcon,
+} from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
 import { MediaAsset } from '../types';
@@ -75,7 +75,7 @@ function LibraryTabs() {
           onClick={() => useStore.getState().setLibraryOpen(false)}
           title={t('library.close')}
         >
-          <X className="h-3.5 w-3.5" />
+          <Cross2Icon className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
@@ -96,7 +96,7 @@ export function MediaLibrary() {
   const mediaPane = (
     <>
       <div className="flex h-7 flex-none items-center gap-1.5 px-2 text-2xs font-semibold uppercase tracking-wide text-zinc-400">
-        <FolderOpen className="h-3.5 w-3.5" />
+        <ArchiveIcon className="h-3.5 w-3.5" />
         {/* Bare count badge: no unit to translate, but it needs a spoken label. */}
         {list.length > 0 && (
           <span
@@ -114,7 +114,7 @@ export function MediaLibrary() {
             onClick={importHere}
             aria-label={t('library.import')}
           >
-            <Import className="h-3.5 w-3.5" />
+            <UploadIcon className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
       </div>
@@ -360,7 +360,7 @@ function TrackGroup({
               onClick={() => setPickerOpen(true)}
             >
               <span className="min-w-0 flex-1 truncate text-left">{summary}</span>
-              <ChevronRight className="h-3 w-3 flex-none" />
+              <ChevronRightIcon className="h-3 w-3 flex-none" />
             </button>
           </Tooltip>
         ) : (
@@ -444,7 +444,7 @@ function UndecodableAudio({ asset }: { asset: MediaAsset }) {
       dialogHint={t('library.audio.activateHint')}
       action={t('library.audio.activate')}
       actionHint={t('library.audio.activateHint')}
-      icon={<AudioLines className="mr-0.5 inline h-3 w-3" />}
+      icon={<SpeakerModerateIcon className="mr-0.5 inline h-3 w-3" />}
       rowTitle={(track) => t('library.audio.needsTranscode', { codec: track.detail })}
       onPick={(indexes) => {
         // Deliberately one at a time: converted audio is held whole in the
@@ -513,7 +513,7 @@ function SubtitleTracks({ asset }: { asset: MediaAsset }) {
       dialogHint={t('library.subtitles.importHint')}
       action={t('library.subtitles.import')}
       actionHint={t('library.subtitles.importHint')}
-      icon={<Captions className="mr-0.5 inline h-3 w-3" />}
+      icon={<ChatBubbleIcon className="mr-0.5 inline h-3 w-3" />}
       rowTitle={(track) =>
         track.unavailable
           ? t('library.subtitles.bitmapHint', { format: track.detail })
@@ -568,7 +568,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-emerald-900/50 to-emerald-950">
-            <Music className={`h-6 w-6 text-emerald-300 ${disconnected ? 'opacity-40' : ''}`} />
+            <SpeakerLoudIcon className={`h-6 w-6 text-emerald-300 ${disconnected ? 'opacity-40' : ''}`} />
           </div>
         )}
         {disconnected && (
@@ -577,7 +577,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
             onClick={() => reconnectAssetViaPicker(asset.id)}
             title={t('library.reconnect')}
           >
-            <PlugZap className="h-5 w-5" />
+            <LinkBreak1Icon className="h-5 w-5" />
             <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-4xs font-semibold uppercase tracking-wide">
               {t('library.disconnected')}
             </span>
@@ -591,11 +591,11 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
         )}
         <span className="absolute left-1 top-1 rounded bg-black/70 p-0.5 text-zinc-300">
           {asset.kind === 'video' ? (
-            <Film className="h-3 w-3" />
+            <VideoIcon className="h-3 w-3" />
           ) : asset.kind === 'image' ? (
-            <Image className="h-3 w-3" />
+            <ImageIcon className="h-3 w-3" />
           ) : (
-            <Music className="h-3 w-3" />
+            <SpeakerLoudIcon className="h-3 w-3" />
           )}
         </span>
       </div>
@@ -612,7 +612,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
             className="touch-hit flex-none rounded p-1 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 hover:text-red-400 active:text-red-400 pointer-coarse:p-2"
             onClick={() => removeAsset(asset.id)}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <TrashIcon className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
         {disconnected ? (
@@ -621,7 +621,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
               className="touch-hit flex-none rounded bg-amber-500/15 p-1 text-amber-300 hover:bg-amber-500/25 active:bg-amber-500/30 pointer-coarse:p-2"
               onClick={() => reconnectAssetViaPicker(asset.id)}
             >
-              <PlugZap className="h-3.5 w-3.5" />
+              <LinkBreak1Icon className="h-3.5 w-3.5" />
             </button>
           </Tooltip>
         ) : (
@@ -634,7 +634,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
                 useStore.getState().setLibraryOpen(false);
               }}
             >
-              <Plus className="h-3.5 w-3.5" />
+              <PlusIcon className="h-3.5 w-3.5" />
             </button>
           </Tooltip>
         )}

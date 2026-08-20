@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
-import { X } from 'lucide-react';
+import { Cross2Icon } from '@radix-ui/react-icons';
 import i18n, { LOCALES, type Locale } from '../i18n';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
@@ -91,7 +91,7 @@ export function Preferences() {
                   className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800"
                   onClick={() => setPreferencesOpen(false)}
                 >
-                  <X className="h-4 w-4" />
+                  <Cross2Icon className="h-4 w-4" />
                 </button>
               </Tooltip>
             </div>

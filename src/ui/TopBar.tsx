@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Download, FileX2, FolderOpen } from 'lucide-react';
+import { ArchiveIcon, DownloadIcon, FileMinusIcon } from '@radix-ui/react-icons';
 import { APP_NAME } from '../app/config';
 // ?url keeps this a plain URL string: Astro otherwise resolves an image
 // import in src/ to an ImageMetadata object, which renders as [object Object].
@@ -168,7 +168,7 @@ function NewProjectButton() {
           });
         }}
       >
-        <FileX2 className="h-4 w-4" />
+        <FileMinusIcon className="h-4 w-4" />
       </button>
     </Tooltip>
   );
@@ -207,7 +207,7 @@ export function TopBar() {
           aria-label={t('topbar.library')}
           title={t('topbar.library')}
         >
-          <FolderOpen className="h-4 w-4" />
+          <ArchiveIcon className="h-4 w-4" />
           {assetCount > 0 && (
             <span
               aria-hidden="true"
@@ -239,7 +239,7 @@ export function TopBar() {
             className="touch-hit flex items-center gap-1.5 rounded-lg bg-sky-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-400 active:bg-sky-600"
             onClick={() => setExportOpen(true)}
           >
-            <Download className="h-4 w-4" />
+            <DownloadIcon className="h-4 w-4" />
             <span className="hidden sm:inline">{t('topbar.export')}</span>
           </button>
         </Tooltip>

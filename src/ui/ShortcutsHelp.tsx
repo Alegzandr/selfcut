@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
-import { X } from 'lucide-react';
+import { Cross2Icon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
 
@@ -187,7 +187,7 @@ export function ShortcutsHelp() {
                   className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
                   onClick={() => setShortcutsOpen(false)}
                 >
-                  <X className="h-4 w-4" />
+                  <Cross2Icon className="h-4 w-4" />
                 </button>
               </Tooltip>
             </div>

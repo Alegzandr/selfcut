@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence } from 'framer-motion';
-import { ChevronDown, Expand } from 'lucide-react';
+import { ChevronDownIcon, EnterFullScreenIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { MIN_PREVIEW_ZOOM, MAX_PREVIEW_ZOOM, isViewReset } from './view';
 import { Tooltip } from '../ui/Tooltip';
@@ -48,7 +48,7 @@ export function PreviewZoomMenu() {
       // the view": in a list of scales, the odd one out is the one that picks
       // the scale for you.
       labelKey: 'preview.zoom.fit',
-      icon: Expand,
+      icon: EnterFullScreenIcon,
       disabled: isViewReset(view),
       onClick: () => useStore.getState().resetPreviewView(),
     },
@@ -80,7 +80,7 @@ export function PreviewZoomMenu() {
           {/* Reserved width so the cluster does not shuffle between 25% and
               800%, centred so the slack splits evenly on both sides. */}
           <span className="min-w-[34px] text-center">{current}%</span>
-          <ChevronDown className="h-3 w-3" />
+          <ChevronDownIcon className="h-3 w-3" />
         </button>
       </Tooltip>
 

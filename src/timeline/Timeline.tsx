@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { Plus } from 'lucide-react';
+import { PlusIcon } from '@radix-ui/react-icons';
 import { useStore, projectDurationMs } from '../store/store';
 import { TrackRow } from './TrackRow';
 import { Ruler } from './Ruler';
@@ -458,14 +458,14 @@ export function Timeline() {
                 className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:py-2"
                 onClick={() => addTrack('video')}
               >
-                <Plus className="mr-1 inline h-3 w-3" />
+                <PlusIcon className="mr-1 inline h-3 w-3" />
                 {t('timeline.addVideoTrack')}
               </button>
               <button
                 className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:py-2"
                 onClick={() => addTrack('audio')}
               >
-                <Plus className="mr-1 inline h-3 w-3" />
+                <PlusIcon className="mr-1 inline h-3 w-3" />
                 {t('timeline.addAudioTrack')}
               </button>
             </div>

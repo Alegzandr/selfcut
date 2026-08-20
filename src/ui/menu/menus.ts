@@ -1,16 +1,16 @@
 import {
-  AudioLines,
-  ChevronDown,
-  ChevronUp,
-  Eye,
-  Flag,
-  LockOpen,
-  Pencil,
-  PlugZap,
-  Plus,
-  Trash2,
-  Volume2,
-} from 'lucide-react';
+  BookmarkIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  EyeOpenIcon,
+  LinkBreak1Icon,
+  LockOpen1Icon,
+  Pencil2Icon,
+  PlusIcon,
+  SpeakerLoudIcon,
+  SpeakerModerateIcon,
+  TrashIcon,
+} from '@radix-ui/react-icons';
 import { useTranslation } from 'react-i18next';
 import { useStore, getLinkTargets } from '../../store/store';
 import { audioKey } from '../../media/mediaCache';
@@ -61,7 +61,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         id: `clip.activateAudio.${tr.index}`,
         labelKey: 'clip.activateAudio',
         label: `${t('clip.activateAudio')} · ${tr.label ?? tr.language ?? tr.codec ?? '?'}`,
-        icon: AudioLines,
+        icon: SpeakerModerateIcon,
         disabled: audioKey(asset!.id, tr.index) in transcodes,
         onClick: () => void st().transcodeAudioTrack(asset!.id, tr.index),
       }));
@@ -106,7 +106,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         {
           id: 'ctx.marker.goto',
           labelKey: 'ctx.marker.goto',
-          icon: Flag,
+          icon: BookmarkIcon,
           onClick: () => {
             const marker = st().project.markers.find((m) => m.id === id);
             if (marker) st().seek(marker.timeMs);
@@ -115,14 +115,14 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         {
           id: 'ctx.marker.rename',
           labelKey: 'ctx.marker.rename',
-          icon: Pencil,
+          icon: Pencil2Icon,
           onClick: () => st().setRenamingMarker(id),
         },
         '---',
         {
           id: 'ctx.marker.delete',
           labelKey: 'ctx.marker.delete',
-          icon: Trash2,
+          icon: TrashIcon,
           danger: true,
           onClick: () => st().removeMarker(id),
         },
@@ -139,7 +139,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
           // icon is unconditional: `checked` swaps it for a checkmark, so a
           // state-dependent icon here could never render in the state it means.
           labelKey: track?.muted ? 'track.unmute' : 'track.mute',
-          icon: Volume2,
+          icon: SpeakerLoudIcon,
           checked: track?.muted,
           onClick: () => st().toggleTrackMuted(id),
         },
@@ -148,7 +148,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         items.push({
           id: 'ctx.track.hide',
           labelKey: track.hidden ? 'track.show' : 'track.hide',
-          icon: Eye,
+          icon: EyeOpenIcon,
           checked: track.hidden,
           onClick: () => st().toggleTrackHidden(id),
         });
@@ -157,7 +157,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         {
           id: 'ctx.track.lock',
           labelKey: track?.locked ? 'track.unlock' : 'track.lock',
-          icon: LockOpen,
+          icon: LockOpen1Icon,
           checked: track?.locked,
           onClick: () => st().toggleTrackLocked(id),
         },
@@ -165,13 +165,13 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         {
           id: 'ctx.track.moveUp',
           labelKey: 'track.moveUp',
-          icon: ChevronUp,
+          icon: ChevronUpIcon,
           onClick: () => st().moveTrack(id, -1),
         },
         {
           id: 'ctx.track.moveDown',
           labelKey: 'track.moveDown',
-          icon: ChevronDown,
+          icon: ChevronDownIcon,
           onClick: () => st().moveTrack(id, 1),
         },
         '---',
@@ -180,7 +180,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         {
           id: 'ctx.track.delete',
           labelKey: 'track.delete',
-          icon: Trash2,
+          icon: TrashIcon,
           danger: true,
           onClick: () => st().removeTrack(id),
         },
@@ -195,7 +195,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         {
           id: 'ctx.asset.add',
           labelKey: 'library.add',
-          icon: Plus,
+          icon: PlusIcon,
           disabled: asset?.disconnected,
           onClick: () => st().addClipFromAsset(id),
         },
@@ -205,13 +205,13 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
       items.push({
         id: asset?.disconnected ? 'ctx.asset.reconnect' : 'ctx.asset.replace',
         labelKey: asset?.disconnected ? 'library.reconnect' : 'library.replaceSource',
-        icon: PlugZap,
+        icon: LinkBreak1Icon,
         onClick: () => reconnectAssetViaPicker(id),
       });
       items.push('---', {
         id: 'ctx.asset.remove',
         labelKey: 'library.remove',
-        icon: Trash2,
+        icon: TrashIcon,
         danger: true,
         onClick: () => st().removeAsset(id),
       });

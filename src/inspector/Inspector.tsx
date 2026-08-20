@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { Trash2, X } from 'lucide-react';
+import { Cross2Icon, TrashIcon } from '@radix-ui/react-icons';
 import { useStore, getSelectedClip } from '../store/store';
 import type { InspectorTab } from '../store/editorState';
 import { SubtitlesPanel } from './SubtitlesPanel';
@@ -184,7 +184,7 @@ function InspectorBody({
             // buttons on screen must not mean two different things.
             onClick={() => deleteClips(useStore.getState().selectedClipIds, false)}
           >
-            <Trash2 className="h-4 w-4" />
+            <TrashIcon className="h-4 w-4" />
           </button>
         </Tooltip>
         <Tooltip label={t('inspector.close')}>
@@ -192,7 +192,7 @@ function InspectorBody({
             className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:p-2.5"
             onClick={() => (coarse ? setInspectorOpen(false) : selectClip(null))}
           >
-            <X className="h-4 w-4" />
+            <Cross2Icon className="h-4 w-4" />
           </button>
         </Tooltip>
       </div>

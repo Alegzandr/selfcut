@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { PenTool } from 'lucide-react';
+import { Pencil1Icon } from '@radix-ui/react-icons';
 import { useEditorCommands, type Command } from '../ui/commands';
 import { ShapeToolButton } from '../ui/ShapeToolButton';
 import { Tooltip } from '../ui/Tooltip';
@@ -63,7 +63,7 @@ function PenToolButton() {
         aria-pressed={active}
         onClick={() => useStore.getState().setPreviewTool(active ? 'select' : 'pen')}
       >
-        <PenTool className="h-4 w-4" />
+        <Pencil1Icon className="h-4 w-4" />
       </button>
     </Tooltip>
   );

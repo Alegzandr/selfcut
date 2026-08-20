@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { Trans, useTranslation } from 'react-i18next';
-import { CheckCircle2, Download, Loader2, X, XCircle } from 'lucide-react';
+import {
+  CheckCircledIcon,
+  Cross2Icon,
+  CrossCircledIcon,
+  DownloadIcon,
+  UpdateIcon,
+} from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { formatTime } from '../lib/time';
 import { presetSectionsForAspect, resolveMp4Preset, ExportPreset, PresetGroup } from './presets';
@@ -197,7 +203,7 @@ export function ExportSheet() {
                   if (phase.kind !== 'rendering') close();
                 }}
               >
-                <X className="h-4 w-4" />
+                <Cross2Icon className="h-4 w-4" />
               </button>
             </div>
 
@@ -280,7 +286,7 @@ export function ExportSheet() {
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-500 py-3 text-sm font-semibold text-white hover:bg-sky-400 active:bg-sky-600"
                   onClick={() => run(selected)}
                 >
-                  <Download className="h-4 w-4" />
+                  <DownloadIcon className="h-4 w-4" />
                   {t(exportedRegion ? 'export.cta.region' : 'export.cta', {
                     preset: `${t(selected.labelKey)}${selected.qualityKey ? ` · ${t(selected.qualityKey)}` : ''}`,
                   })}
@@ -292,7 +298,7 @@ export function ExportSheet() {
             {phase.kind === 'rendering' && (
               <div className="space-y-3 py-2">
                 <div className="flex items-center gap-2 text-sm text-zinc-300">
-                  <Loader2 className="h-4 w-4 animate-spin text-sky-400" />
+                  <UpdateIcon className="h-4 w-4 animate-spin text-sky-400" />
                   {t('export.rendering', { pct: Math.round(phase.progress * 100) })}
                 </div>
                 {/* The timings caption the bar, hence the tighter spacing. */}
@@ -335,7 +341,7 @@ export function ExportSheet() {
 
             {phase.kind === 'done' && (
               <div className="space-y-3 py-2 text-center">
-                <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-400" />
+                <CheckCircledIcon className="mx-auto h-8 w-8 text-emerald-400" />
                 <p className="text-sm text-zinc-200">
                   {/* The file name keeps its monospace styling, hence <Trans>. */}
                   <Trans
@@ -365,7 +371,7 @@ export function ExportSheet() {
 
             {phase.kind === 'error' && (
               <div className="space-y-3 py-2 text-center">
-                <XCircle className="mx-auto h-8 w-8 text-red-400" />
+                <CrossCircledIcon className="mx-auto h-8 w-8 text-red-400" />
                 {/* Already translated by the exporter, worker codes included. */}
                 <p className="text-sm text-red-300">{phase.message}</p>
                 <button

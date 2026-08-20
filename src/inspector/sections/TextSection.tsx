@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { AlignCenter, AlignLeft, AlignRight } from 'lucide-react';
+import { TextAlignCenterIcon, TextAlignLeftIcon, TextAlignRightIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../store/store';
 import { Tooltip } from '../../ui/Tooltip';
 import { ToggleButton } from '../../ui/ToggleButton';
@@ -9,10 +9,10 @@ import { DEFAULT_FONT_ID, FONTS, fontStack, loadFonts } from '../../lib/fonts';
 import { PERCENT_ENTRY, SliderRow } from '../SliderRow';
 import { pct } from '../format';
 
-const ALIGNMENTS: { value: TextAlign; icon: typeof AlignLeft }[] = [
-  { value: 'left', icon: AlignLeft },
-  { value: 'center', icon: AlignCenter },
-  { value: 'right', icon: AlignRight },
+const ALIGNMENTS: { value: TextAlign; icon: typeof TextAlignLeftIcon }[] = [
+  { value: 'left', icon: TextAlignLeftIcon },
+  { value: 'center', icon: TextAlignCenterIcon },
+  { value: 'right', icon: TextAlignRightIcon },
 ];
 
 export function TextSection({ clip }: { clip: TextClip }) {

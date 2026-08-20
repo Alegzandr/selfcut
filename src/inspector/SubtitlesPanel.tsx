@@ -1,6 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FilePlus, Sparkles, Trash2, Type, X } from 'lucide-react';
+import {
+  Cross2Icon,
+  FilePlusIcon,
+  MagicWandIcon,
+  TextIcon,
+  TrashIcon,
+} from '@radix-ui/react-icons';
 import { useStore, getSelectedClip } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { openSubtitlePicker } from '../ui/mediaPicker';
@@ -69,7 +75,7 @@ function CaptionControl({
           aria-label={t('confirm.cancel')}
           className="touch-hit rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
         >
-          <X className="h-3.5 w-3.5" />
+          <Cross2Icon className="h-3.5 w-3.5" />
         </button>
       </div>
     );
@@ -85,7 +91,7 @@ function CaptionControl({
           : 'flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-40'
       }
     >
-      <Sparkles className={compact ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+      <MagicWandIcon className={compact ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
       {!compact && t('subtitles.generate')}
     </button>
   );
@@ -158,7 +164,7 @@ export function SubtitlesPanel() {
   if (cues.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 px-2 py-8 text-center">
-        <Type className="h-7 w-7 text-zinc-600" />
+        <TextIcon className="h-7 w-7 text-zinc-600" />
         <p className="text-xs leading-relaxed text-zinc-400">{t('subtitles.empty')}</p>
         {captionsAvailable && (
           <>
@@ -179,7 +185,7 @@ export function SubtitlesPanel() {
           className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-800/70"
           onClick={importSubtitles}
         >
-          <FilePlus className="h-3.5 w-3.5" />
+          <FilePlusIcon className="h-3.5 w-3.5" />
           {t('subtitles.import')}
         </button>
         <p className="text-2xs text-zinc-500">{t('subtitles.empty.formats')}</p>
@@ -211,7 +217,7 @@ export function SubtitlesPanel() {
                 className="touch-hit rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
                 onClick={importSubtitles}
               >
-                <FilePlus className="h-4 w-4" />
+                <FilePlusIcon className="h-4 w-4" />
               </button>
             </Tooltip>
           </>
@@ -263,7 +269,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
             className="touch-hit rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-400"
             onClick={() => deleteClips([clip.id], false)}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <TrashIcon className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
       </div>

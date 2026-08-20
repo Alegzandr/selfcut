@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
-import { X } from 'lucide-react';
+import { Cross2Icon } from '@radix-ui/react-icons';
 // ?url keeps this a plain URL string: Astro otherwise resolves an image
 // import in src/ to an ImageMetadata object, which renders as [object Object].
 import logoUrl from '../assets/logo.png?url';
@@ -59,7 +59,7 @@ export function About() {
                   className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800"
                   onClick={() => setAboutOpen(false)}
                 >
-                  <X className="h-4 w-4" />
+                  <Cross2Icon className="h-4 w-4" />
                 </button>
               </Tooltip>
             </div>

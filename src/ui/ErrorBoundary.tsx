@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Download, RotateCcw } from 'lucide-react';
+import { DownloadIcon, ExclamationTriangleIcon, ResetIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { saveProjectFile, SaveCanceledError } from '../lib/projectFile';
 import { flushProjectSave } from '../lib/persistence';
@@ -71,7 +71,7 @@ function CrashScreen({ error, onRetry }: { error: Error; onRetry: () => void }) 
       role="alert"
       className="flex h-dvh flex-col items-center justify-center gap-6 bg-zinc-950 px-6 text-zinc-100"
     >
-      <AlertTriangle className="h-10 w-10 text-amber-400" aria-hidden="true" />
+      <ExclamationTriangleIcon className="h-10 w-10 text-amber-400" aria-hidden="true" />
       <div className="flex max-w-md flex-col gap-2 text-center">
         <h1 className="text-lg font-semibold">{t('crash.title')}</h1>
         <p className="text-sm text-zinc-400">{t('crash.body')}</p>
@@ -81,14 +81,14 @@ function CrashScreen({ error, onRetry }: { error: Error; onRetry: () => void }) 
           className="flex items-center gap-2 rounded bg-sky-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-sky-500"
           onClick={rescue}
         >
-          <Download className="h-4 w-4" aria-hidden="true" />
+          <DownloadIcon className="h-4 w-4" aria-hidden="true" />
           {t('crash.save')}
         </button>
         <button
           className="flex items-center gap-2 rounded bg-zinc-800 px-3.5 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-700"
           onClick={onRetry}
         >
-          <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          <ResetIcon className="h-4 w-4" aria-hidden="true" />
           {t('crash.retry')}
         </button>
         <button
