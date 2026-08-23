@@ -43,6 +43,10 @@ const app = appStringsFor(code);
       </figcaption>
     </figure>
   </div>
+
+  {/* The three pictures are the aspect ratios; everything else the export
+      sheet offers is a list, and reads better as one. */}
+  <p class="more">{strings['formats.more']}</p>
 </section>
 
 <style>
@@ -102,6 +106,14 @@ const app = appStringsFor(code);
     font-size: 0.9375rem;
     text-wrap: pretty;
   }
+  .more {
+    margin-top: clamp(1.5rem, 3vw, 2rem);
+    max-width: var(--measure);
+    color: var(--faint);
+    font-size: 0.9375rem;
+    text-wrap: pretty;
+  }
+
   figcaption strong {
     display: block;
     font-family: var(--font-display);

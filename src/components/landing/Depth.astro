@@ -1,0 +1,71 @@
+---
+import type { LandingStrings } from '../../landing/strings';
+
+interface Props {
+  strings: LandingStrings;
+}
+
+const { strings } = Astro.props;
+
+// The advanced tier, in one paragraph each. No pictures here, deliberately:
+// the page is meant to read as simple editing first, and a row of grading
+// screenshots would outweigh the timeline this section sits below. Whatever
+// this section grows into later, it stays typographic.
+const ROWS = [
+  { dt: strings['depth.grade.dt'], dd: strings['depth.grade.dd'] },
+  { dt: strings['depth.keyframes.dt'], dd: strings['depth.keyframes.dd'] },
+  { dt: strings['depth.masks.dt'], dd: strings['depth.masks.dd'] },
+  { dt: strings['depth.text.dt'], dd: strings['depth.text.dd'] },
+];
+---
+
+<section id="advanced" aria-labelledby="depth-title">
+  <div class="head">
+    <h2 id="depth-title">{strings['depth.title']}</h2>
+    <p class="lede">{strings['depth.lead']}</p>
+  </div>
+
+  <dl class="depth">
+    {
+      ROWS.map((row) => (
+        <div>
+          <dt>{row.dt}</dt>
+          <dd>{row.dd}</dd>
+        </div>
+      ))
+    }
+  </dl>
+</section>
+
+<style>
+  .head {
+    max-width: 46rem;
+  }
+
+  /* Two columns at most, and a rule above each row rather than a box around
+     it: the quietest shape the page already uses (`Spec`), given more room to
+     breathe because these entries run to three lines. */
+  .depth {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr));
+    gap: 0 clamp(1.5rem, 4vw, 3.5rem);
+    margin-top: clamp(1.75rem, 3vw, 2.5rem);
+  }
+  .depth > div {
+    padding-block: 1.25rem;
+    border-top: 1px solid var(--line);
+  }
+  dt {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+  dd {
+    margin: 0.35rem 0 0;
+    color: var(--muted);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+</style>
