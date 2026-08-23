@@ -158,7 +158,13 @@ function audioBufferBytes(buffer: AudioBuffer): number {
  * time, never data - the same rule the transcoded-audio cache is built on.
  */
 let budget: number | null = null;
-function currentBudget(): number {
+
+/**
+ * The budget this cache is actually enforcing, memoized. Exported alongside
+ * `cachedAudioBytes` so a test can compare the two without re-deriving the
+ * number from the machine and hoping it lands on the same one.
+ */
+export function audioBudgetBytes(): number {
   budget ??= audioCacheBudgetBytes(readMemoryEnv());
   return budget;
 }
@@ -211,7 +217,7 @@ export function selectAudioEvictions(
 }
 
 function enforceAudioBudget(keep?: string): void {
-  for (const key of selectAudioEvictions(audioEntries, currentBudget(), keep)) {
+  for (const key of selectAudioEvictions(audioEntries, audioBudgetBytes(), keep)) {
     audioEntries.delete(key);
   }
 }
@@ -397,7 +403,7 @@ function queueWarm(asset: MediaAsset, audioTrackIndex?: number): void {
   warmQueue = warmQueue.then(async () => {
     // Re-checked here, not when queued: the entries ahead in the queue are what
     // fills the cache, so the decision is only meaningful at its turn.
-    if (cachedAudioBytes() >= currentBudget()) return;
+    if (cachedAudioBytes() >= audioBudgetBytes()) return;
     await getAudioBuffer(asset, audioTrackIndex);
   }, () => {});
 }
@@ -413,7 +419,7 @@ function queueWarm(asset: MediaAsset, audioTrackIndex?: number): void {
  * so what is announced and what happens are the same decision.
  */
 function warmable(asset: MediaAsset, track?: { sampleRate?: number; channels?: number }): boolean {
-  return decodedTrackBytes(asset.durationMs, track ?? {}) <= trackDecodeCapBytes(currentBudget());
+  return decodedTrackBytes(asset.durationMs, track ?? {}) <= trackDecodeCapBytes(audioBudgetBytes());
 }
 
 /** Kick off background audio decoding (every playable audio track) right after import. */
