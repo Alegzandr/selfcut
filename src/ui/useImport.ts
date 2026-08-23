@@ -6,7 +6,16 @@ import { isSubtitleFile, parseSubtitles } from '../lib/subtitles';
 import { findExistingAsset, isDetached } from './importDedup';
 import { findClip } from '../store/projectOps';
 import { clipEndMs } from '../model';
-import { t } from '../i18n';
+import i18n, { t } from '../i18n';
+import {
+  BATCH_NOTICE_FACTOR,
+  audioCacheBudgetBytes,
+  estimateAudioTracks,
+  formatBytes,
+  readMemoryEnv,
+  trackDecodeCapBytes,
+} from '../media/audioMemory';
+import type { MediaAsset } from '../types';
 
 /**
  * A line for the import badge while an unreadable container is being remuxed.
@@ -17,6 +26,40 @@ function remuxStatus(name: string, progress: FFmpegProgress): string {
   if (progress.phase === 'downloading') return t('app.remux.preparing', { name });
   const pct = progress.ratio != null ? ` ${Math.round(progress.ratio * 100)}%` : '';
   return t('app.remux.converting', { name }) + pct;
+}
+
+/**
+ * What this file's audio will cost to decode, and whether that is worth saying.
+ *
+ * Every source audio track is decoded into one full `AudioBuffer` (a deliberate
+ * choice: instant to schedule, identical in preview and export), which is
+ * ~23 MB per stereo minute. A track past the cap is a single allocation large
+ * enough to fail outright, and no eviction can help - there is nothing to free
+ * that makes one object fit.
+ *
+ * The warning therefore has to carry the remedy, not just the number: it is
+ * raised at import, and the failure it predicts may land ten minutes later when
+ * the clip is finally played. Someone who read "this is big" and nothing else
+ * will not connect the two.
+ */
+function audioMemoryWarnings(
+  asset: MediaAsset,
+  capBytes: number,
+): { lines: string[]; bytes: number } {
+  const lines: string[] = [];
+  let bytes = 0;
+  const multiTrack = asset.audioTracks.length > 1;
+  for (const track of estimateAudioTracks(asset.durationMs, asset.audioTracks)) {
+    bytes += track.bytes;
+    if (track.bytes <= capBytes) continue;
+    const size = formatBytes(track.bytes, i18n.language);
+    lines.push(
+      multiTrack
+        ? t('errors.audio.heavyTrack', { name: asset.file.name, track: track.index + 1, size })
+        : t('errors.audio.heavy', { name: asset.file.name, size }),
+    );
+  }
+  return { lines, bytes };
 }
 
 /** Options for a single import batch. */
@@ -91,6 +134,10 @@ export function useImport(): (files: Iterable<File>, opts?: ImportOptions) => Pr
     const failures: string[] = [];
     const warnings: string[] = [];
     const notices: string[] = [];
+    // Decoded-audio budget for this machine, read once for the whole batch.
+    const audioBudget = audioCacheBudgetBytes(readMemoryEnv());
+    const trackCap = trackDecodeCapBytes(audioBudget);
+    let audioBytes = 0;
     try {
       for (const file of list) {
         try {
@@ -135,6 +182,11 @@ export function useImport(): (files: Iterable<File>, opts?: ImportOptions) => Pr
           // Partial import (e.g. undecodable video codec, audio kept): the
           // file landed, but the user must know what was left out.
           if (warning) warnings.push(warning);
+          // Same rank: the file is in and usable, and something about it is
+          // going to bite later if nothing is done about it.
+          const audio = audioMemoryWarnings(asset, trackCap);
+          warnings.push(...audio.lines);
+          audioBytes += audio.bytes;
           // Nothing missing, just something extra on offer (advanced audio).
           if (notice) notices.push(notice);
         } catch (err) {
@@ -148,6 +200,14 @@ export function useImport(): (files: Iterable<File>, opts?: ImportOptions) => Pr
     } finally {
       setImporting(false);
       setImportStatus(null);
+      // A batch well past the budget breaks nothing - the cache evicts - but it
+      // will re-decode as the playhead moves between files, and a pause nobody
+      // explained reads as the editor being slow.
+      if (audioBytes > audioBudget * BATCH_NOTICE_FACTOR) {
+        notices.push(
+          t('library.audio.batchHeavy', { size: formatBytes(audioBytes, i18n.language) }),
+        );
+      }
       const problems = [...failures, ...warnings];
       if (problems.length > 0) setError(problems.join('\n'));
       else if (notices.length > 0) setNotice([...new Set(notices)].join('\n'));

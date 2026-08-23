@@ -106,6 +106,13 @@ export interface AudioTrackInfo {
   label?: string;
   /** Channel count of the source track (≥ 1). */
   channels: number;
+  /**
+   * Sample rate of the source track, in Hz, when the container states one.
+   * Read at probe time and kept for one reason: with the channel count and the
+   * duration it says exactly how large the decoded buffer will be, which is
+   * what the memory guard needs BEFORE decoding (see `media/audioMemory.ts`).
+   */
+  sampleRate?: number;
   /** Normalized peaks (0..1) over the whole duration, for this track's waveform. */
   peaks?: number[];
   /** Container codec string ('eac3', 'ac-3'…), kept to name the codec in the UI. */

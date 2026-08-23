@@ -253,10 +253,18 @@ src/
   settles (Premiere's "Paused Resolution = Full"). Persisted under
   `selfcut.previewResolution`; export is unaffected.
 - **Audio decode strategy**: each source audio track is decoded once into a
-  full `AudioBuffer`, memoized per `(asset, audioTrackIndex)` so a multi-track
+  full `AudioBuffer`, cached per `(asset, audioTrackIndex)` so a multi-track
   video's tracks never evict one another. Instant to schedule; costs memory
   (~23 MB per stereo minute per track), fine for the short-form editing this
-  targets.
+  targets. The cache is **bounded**: a budget derived from the machine
+  (`deviceMemory`, capped by `jsHeapSizeLimit` where Chrome exposes it, halved
+  on a touch device when neither says anything) and LRU eviction, transcoded PCM
+  ranked last since it cost minutes rather than seconds. Import sizes what a
+  file will cost before decoding it (`media/audioMemory.ts`): a track past half
+  the budget is imported but not warmed, with a warning that carries the remedy,
+  because a single buffer that large is one allocation no eviction can rescue.
+  An allocation that does fail names the file and the track instead of leaving a
+  silent clip behind.
 - **Speed does not preserve pitch** (plain `playbackRate`), as scoped.
 - **Import degrades instead of rejecting**: probing keeps whatever is usable.
   Undecodable audio tracks are listed and can be transcoded on demand; a file

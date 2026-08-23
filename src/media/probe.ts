@@ -48,6 +48,7 @@ async function probeAudioTracks(input: Input): Promise<AudioTrackInfo[]> {
       language: track.languageCode && track.languageCode !== 'und' ? track.languageCode : undefined,
       label: track.name ?? undefined,
       channels: Math.max(1, track.numberOfChannels),
+      ...(track.sampleRate > 0 ? { sampleRate: track.sampleRate } : {}),
       ...(track.codec ? { codec: track.codec } : {}),
       ...(decodable ? {} : { undecodable: true as const }),
     });

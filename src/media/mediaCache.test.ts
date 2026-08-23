@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { audioCacheBudgetBytes, selectAudioEvictions } from './mediaCache';
+import { selectAudioEvictions } from './mediaCache';
+// The budget it is measured against is pure: see audioMemory.test.ts.
+import { audioCacheBudgetBytes } from './audioMemory';
 
 type Entry = { bytes: number; lastUsedAt: number; pinned: boolean };
 
@@ -7,25 +9,6 @@ const entry = (bytes: number, lastUsedAt: number, pinned = false): Entry => ({
   bytes,
   lastUsedAt,
   pinned,
-});
-
-const MB = 1024 * 1024;
-
-describe('audioCacheBudgetBytes', () => {
-  it('scales with the machine, between a floor and a ceiling', () => {
-    expect(audioCacheBudgetBytes(16)).toBe(1024 * MB);
-    expect(audioCacheBudgetBytes(8)).toBe(1024 * MB);
-    // Between the rails it is simply a fifth of what the machine reports.
-    expect(audioCacheBudgetBytes(4)).toBe(Math.round(0.8 * 1024 * MB));
-    // A machine that reports very little RAM still gets enough for a couple of
-    // tracks: the cache exists precisely so playback is not a decode away.
-    expect(audioCacheBudgetBytes(0.5)).toBe(192 * MB);
-  });
-
-  it('assumes a modest machine when the browser will not say', () => {
-    // Safari and Firefox do not expose deviceMemory at all.
-    expect(audioCacheBudgetBytes(undefined)).toBe(audioCacheBudgetBytes(4));
-  });
 });
 
 describe('selectAudioEvictions', () => {
@@ -90,7 +73,7 @@ describe('selectAudioEvictions', () => {
       `asset-${i}#0`,
       entry(perClip, i),
     ]);
-    const budget = audioCacheBudgetBytes(8);
+    const budget = audioCacheBudgetBytes({ deviceMemoryGb: 8 });
     const doomed = new Set(selectAudioEvictions(entries, budget));
     const remaining = entries
       .filter(([key]) => !doomed.has(key))

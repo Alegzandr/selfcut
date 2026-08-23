@@ -2,6 +2,15 @@ import type { Input, InputAudioTrack } from 'mediabunny';
 import { mediabunny } from './mediabunnyModule';
 import { MediaAsset, isTrackPlayable } from '../types';
 import { StillFrame, decodeImageFile } from './stillImage';
+import {
+  AudioMemoryError,
+  audioCacheBudgetBytes,
+  decodedTrackBytes,
+  formatBytes,
+  isAllocationFailure,
+  readMemoryEnv,
+  trackDecodeCapBytes,
+} from './audioMemory';
 
 /**
  * Cache key for a single audio track of an asset. `undefined` means the source's
@@ -140,30 +149,17 @@ function audioBufferBytes(buffer: AudioBuffer): number {
  * large allocation after that - the export's output buffer, the offline mix -
  * failed outright with "Array buffer allocation failed".
  *
- * The budget is derived from `deviceMemory` for the same reason the on-disk
- * cache derives its own from the storage quota: the right number is a property
- * of the machine, not something the app can guess. The floor keeps a browser
- * that under-reports (the API caps at 8 GB, and Safari/Firefox omit it) from
- * disabling the cache outright; the ceiling stops a 64 GB workstation from
- * handing us a budget large enough to be the problem again.
+ * The budget itself, and what it is derived from, live in `audioMemory.ts`:
+ * the import path needs the same numbers before any of this runs, to say what
+ * a file is about to cost. Read once - the machine does not change mid-session,
+ * and a budget that moved under the eviction policy would be its own bug.
  *
  * Every entry is reconstructible by re-decoding the source, so eviction costs
  * time, never data - the same rule the transcoded-audio cache is built on.
  */
-export function audioCacheBudgetBytes(deviceMemoryGb?: number): number {
-  const MIN = 192 * 1024 * 1024;
-  const MAX = 1024 * 1024 * 1024;
-  // A fifth of reported RAM: the tab also holds decoded video frames, the
-  // preview canvases and the project itself, and it is not the only tab open.
-  const share = (deviceMemoryGb ?? 4) * 0.2 * 1024 * 1024 * 1024;
-  return Math.round(Math.min(MAX, Math.max(MIN, share)));
-}
-
 let budget: number | null = null;
 function currentBudget(): number {
-  budget ??= audioCacheBudgetBytes(
-    (navigator as Navigator & { deviceMemory?: number }).deviceMemory,
-  );
+  budget ??= audioCacheBudgetBytes(readMemoryEnv());
   return budget;
 }
 
@@ -241,7 +237,7 @@ export function getAudioBuffer(
     return existing.promise;
   }
   const entry: AudioEntry = {
-    promise: decodeFullAudio(asset, audioTrackIndex).catch(() => null),
+    promise: decodeGuarded(asset, audioTrackIndex, key),
     bytes: 0,
     lastUsedAt: ++useStamp,
     pinned: false,
@@ -258,6 +254,90 @@ export function getAudioBuffer(
   return entry.promise;
 }
 
+/**
+ * One decode, with the one failure that is worth naming pulled out of the
+ * anonymous `catch` everything else lands in.
+ *
+ * An allocation failure used to resolve to null like any other problem: the
+ * clip went silent, no message was shown, and an export produced a video whose
+ * sound was simply missing. It gets one retry, because the common shape of the
+ * failure is not "this track is impossible" but "this track plus everything
+ * already cached is" - and everything already cached is reconstructible.
+ */
+async function decodeGuarded(
+  asset: MediaAsset,
+  audioTrackIndex: number | undefined,
+  key: string,
+): Promise<AudioBuffer | null> {
+  try {
+    return await decodeFullAudio(asset, audioTrackIndex);
+  } catch (err) {
+    if (!(err instanceof AudioMemoryError)) return null;
+    releaseReclaimable(key);
+    try {
+      return await decodeFullAudio(asset, audioTrackIndex);
+    } catch (retryErr) {
+      reportAudioMemory(asset, retryErr instanceof AudioMemoryError ? retryErr : err);
+      return null;
+    }
+  }
+}
+
+/**
+ * Drop every entry that can simply be decoded again, keeping `keep`.
+ *
+ * Deliberately not `enforceAudioBudget(0)`: that would take the pinned
+ * transcoded PCM with it, and re-creating one of those is a minutes-long ffmpeg
+ * conversion where re-decoding costs seconds. Freeing room for a decode must
+ * not cost more than the decode it rescues.
+ */
+function releaseReclaimable(keep: string): void {
+  for (const [key, entry] of [...audioEntries]) {
+    if (key !== keep && !entry.pinned) audioEntries.delete(key);
+  }
+}
+
+/**
+ * Problems already reported, so the preview loop cannot say the same thing
+ * sixty times a second. Same reasoning as `errorSignature` in `app/errorPolicy`.
+ */
+const reportedMemoryFailures = new Set<string>();
+
+/**
+ * Say it, once, in the user's language.
+ *
+ * The store and i18n are reached by dynamic import rather than from the top of
+ * the module. This is a cold path that runs at most once per track, both
+ * modules are already resident in the running app, and keeping the UI layer out
+ * of this module's import graph is what lets the decode caches be unit-tested
+ * without a DOM. Console first, so the detail survives even if the toast does
+ * not.
+ */
+function reportAudioMemory(asset: MediaAsset, err: AudioMemoryError): void {
+  const key = `${asset.id}#${err.trackIndex ?? 'p'}`;
+  if (reportedMemoryFailures.has(key)) return;
+  reportedMemoryFailures.add(key);
+  console.warn('[mediaCache]', err);
+  void (async () => {
+    try {
+      const [{ useStore }, i18n] = await Promise.all([import('../store/store'), import('../i18n')]);
+      const size = formatBytes(err.estimatedBytes, i18n.default.language);
+      // The track number only helps when there is more than one to tell apart.
+      const message =
+        asset.audioTracks.length > 1 && err.trackIndex != null
+          ? i18n.t('errors.audio.outOfMemoryTrack', {
+              name: asset.file.name,
+              track: err.trackIndex + 1,
+              size,
+            })
+          : i18n.t('errors.audio.outOfMemory', { name: asset.file.name, size });
+      useStore.getState().setError(message);
+    } catch {
+      /* the reporter must never be the thing that breaks a decode */
+    }
+  })();
+}
+
 async function decodeFullAudio(
   asset: MediaAsset,
   audioTrackIndex?: number,
@@ -272,7 +352,21 @@ async function decodeFullAudio(
   const sampleRate = track.sampleRate;
   const numberOfChannels = Math.max(1, track.numberOfChannels);
   const totalFrames = Math.ceil((asset.durationMs / 1000) * sampleRate) + sampleRate;
-  const target = new AudioBuffer({ length: totalFrames, numberOfChannels, sampleRate });
+  // The whole track in one object: this is the allocation that fails, and the
+  // only place where the browser's refusal can still be attributed to a file
+  // and a track rather than surfacing as a bare RangeError from nowhere.
+  let target: AudioBuffer;
+  try {
+    target = new AudioBuffer({ length: totalFrames, numberOfChannels, sampleRate });
+  } catch (err) {
+    if (!isAllocationFailure(err)) throw err;
+    throw new AudioMemoryError(
+      asset.file.name,
+      audioTrackIndex,
+      totalFrames * numberOfChannels * 4,
+      { cause: err },
+    );
+  }
 
   for await (const wrapped of sink.buffers()) {
     const offset = Math.round(wrapped.timestamp * sampleRate);
@@ -308,16 +402,30 @@ function queueWarm(asset: MediaAsset, audioTrackIndex?: number): void {
   }, () => {});
 }
 
+/**
+ * Whether a track is small enough to decode on speculation.
+ *
+ * Over the cap, a decode is one allocation large enough to be the reason the
+ * next one fails, and warming is speculation by definition - the user has not
+ * asked for this track yet. Putting the clip on the timeline is the moment they
+ * do, and `getAudioBuffer` still decodes it then: this only declines to spend
+ * the memory before being asked. The import path warns with the same numbers,
+ * so what is announced and what happens are the same decision.
+ */
+function warmable(asset: MediaAsset, track?: { sampleRate?: number; channels?: number }): boolean {
+  return decodedTrackBytes(asset.durationMs, track ?? {}) <= trackDecodeCapBytes(currentBudget());
+}
+
 /** Kick off background audio decoding (every playable audio track) right after import. */
 export function warmAudio(asset: MediaAsset): void {
   if (asset.audioTracks.length === 0) {
-    if (asset.hasAudio) queueWarm(asset);
+    if (asset.hasAudio && warmable(asset)) queueWarm(asset);
     return;
   }
   // Undecodable tracks would only decode to null: they wait for an explicit
   // transcode, which fills the cache through setTranscodedAudio.
   for (const track of asset.audioTracks) {
-    if (isTrackPlayable(track)) queueWarm(asset, track.index);
+    if (isTrackPlayable(track) && warmable(asset, track)) queueWarm(asset, track.index);
   }
 }
 
