@@ -20,6 +20,10 @@ const { strings, code } = Astro.props;
       <a class="btn btn-primary big" href="/app/">{strings['hero.cta']}</a>
       <span class="note">{strings['hero.note']}</span>
     </div>
+    {/* Stated before the click, not after it: WebCodecs is a real gate, and a
+        visitor whose browser lacks it should read that here rather than meet
+        the editor's explanation screen. */}
+    <p class="req">{strings['hero.req']}</p>
   </div>
 
   {/* The editor runs off the right edge of the viewport: what is on screen is
@@ -68,6 +72,11 @@ const { strings, code } = Astro.props;
   .note {
     color: var(--faint);
     font-size: 0.9375rem;
+  }
+  .req {
+    margin-top: 0.85rem;
+    color: var(--faint);
+    font-size: 0.875rem;
   }
 
   .stage {

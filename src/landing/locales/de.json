@@ -14,6 +14,7 @@
   "hero.lead": "Ein Tab genügt. Material hineinziehen, schneiden, untertiteln, im richtigen Format exportieren. Deine Dateien verlassen dein Gerät nie.",
   "hero.cta": "Mit dem Schnitt beginnen",
   "hero.note": "Kostenlos · Ohne Konto · Ohne Installation",
+  "hero.req": "Benötigt Chrome, Edge oder Safari 16.4+ (WebCodecs)",
 
   "proof.title": "Was der Schnitt auf dem eigenen Rechner dich schneiden lässt",
   "proof.1.title": "Material, das hier nicht wegkann",
@@ -75,8 +76,10 @@
   "faq.a3": "MP4 in 16:9 für YouTube, MP4 in 9:16 für TikTok, Reels und Shorts, und MP3, wenn du nur den Ton behalten willst.",
   "faq.q4": "Funktioniert SelfCut auf dem Handy?",
   "faq.a4": "Ja. Auf dem Handy schneidest du mit Touch-Gesten, wie bei CapCut. Am Computer bekommst du eine präzise Zeitleiste und die Tastenkürzel von Premiere oder Vegas.",
-  "faq.q5": "Werden meine Projekte gespeichert?",
-  "faq.a5": "Ja, automatisch, auf deinem Gerät. Öffne SelfCut im selben Browser erneut, und dein Schnitt ist da, wo du ihn verlassen hast.",
+  "faq.q5": "In welchen Browsern läuft SelfCut?",
+  "faq.a5": "Ein aktuelles Chrome, Edge oder Safari 16.4+. SelfCut dekodiert und kodiert Video auf deinem eigenen Gerät über die WebCodecs-API; ein Browser, der sie nicht bereitstellt, bekommt einen kurzen Erklärbildschirm statt eines kaputten Editors.",
+  "faq.q6": "Werden meine Projekte gespeichert?",
+  "faq.a6": "Ja, automatisch, auf deinem Gerät. Öffne SelfCut im selben Browser erneut, und dein Schnitt ist da, wo du ihn verlassen hast.",
 
   "closing.title": "Dein nächstes Video beginnt hier",
   "closing.cta": "SelfCut öffnen",

@@ -37,5 +37,6 @@ export function faqEntries(strings: LandingStrings): { question: string; answer:
     { question: strings['faq.q3'], answer: strings['faq.a3'] },
     { question: strings['faq.q4'], answer: strings['faq.a4'] },
     { question: strings['faq.q5'], answer: strings['faq.a5'] },
+    { question: strings['faq.q6'], answer: strings['faq.a6'] },
   ];
 }

@@ -14,6 +14,7 @@
   "hero.lead": "Basta con una pestaña. Suelta tu material, córtalo, subtitúlalo y expórtalo en el formato correcto. Tus archivos nunca salen de tu dispositivo.",
   "hero.cta": "Empezar a editar",
   "hero.note": "Gratis · Sin cuenta · Sin instalar nada",
+  "hero.req": "Requiere Chrome, Edge o Safari 16.4+ (WebCodecs)",
 
   "proof.title": "Lo que editar en tu propia máquina te permite editar",
   "proof.1.title": "Material que no puede salir de aquí",
@@ -75,8 +76,10 @@
   "faq.a3": "MP4 en 16:9 para YouTube, MP4 en 9:16 para TikTok, Reels y Shorts, y MP3 si solo quieres el sonido.",
   "faq.q4": "¿SelfCut funciona en el móvil?",
   "faq.a4": "Sí. En el móvil editas con gestos táctiles, como en CapCut. En el ordenador tienes una línea de tiempo precisa y los atajos de teclado de Premiere o Vegas.",
-  "faq.q5": "¿Se guardan mis proyectos?",
-  "faq.a5": "Sí, automáticamente, en tu dispositivo. Vuelve a abrir SelfCut en el mismo navegador y tu edición estará donde la dejaste.",
+  "faq.q5": "¿En qué navegadores funciona SelfCut?",
+  "faq.a5": "Chrome, Edge o Safari 16.4+ actualizados. SelfCut descodifica y codifica el vídeo en tu propio dispositivo con la API WebCodecs; un navegador que no la expone recibe una pantalla explicativa en vez de un editor roto.",
+  "faq.q6": "¿Se guardan mis proyectos?",
+  "faq.a6": "Sí, automáticamente, en tu dispositivo. Vuelve a abrir SelfCut en el mismo navegador y tu edición estará donde la dejaste.",
 
   "closing.title": "Tu próximo vídeo empieza aquí",
   "closing.cta": "Abrir SelfCut",

@@ -14,6 +14,7 @@
   "hero.lead": "Déposez vos rushes, coupez, sous-titrez, exportez au bon format. Vos fichiers ne quittent jamais votre appareil.",
   "hero.cta": "Commencer un montage",
   "hero.note": "Gratuit · Sans compte · Rien à installer",
+  "hero.req": "Nécessite Chrome, Edge ou Safari 16.4+ (WebCodecs)",
 
   "proof.title": "Ce que le montage sur votre machine vous permet de monter",
   "proof.1.title": "Des rushes qui ne peuvent pas sortir d'ici",
@@ -75,8 +76,10 @@
   "faq.a3": "MP4 en 16:9 pour YouTube, MP4 en 9:16 pour TikTok, Reels et Shorts, et MP3 si vous ne voulez garder que le son.",
   "faq.q4": "SelfCut fonctionne-t-il sur téléphone ?",
   "faq.a4": "Oui. Sur téléphone, vous montez avec des gestes tactiles, comme sur CapCut. Sur ordinateur, vous retrouvez une timeline précise et les raccourcis clavier de Premiere ou Vegas.",
-  "faq.q5": "Mes projets sont-ils sauvegardés ?",
-  "faq.a5": "Oui, automatiquement, sur votre appareil. Rouvrez SelfCut dans le même navigateur et votre montage est là où vous l'aviez laissé.",
+  "faq.q5": "Sur quels navigateurs SelfCut fonctionne-t-il ?",
+  "faq.a5": "Chrome, Edge ou Safari 16.4+ à jour. SelfCut décode et encode la vidéo sur votre appareil via l'API WebCodecs ; un navigateur qui ne l'expose pas reçoit un écran d'explication plutôt qu'un éditeur cassé.",
+  "faq.q6": "Mes projets sont-ils sauvegardés ?",
+  "faq.a6": "Oui, automatiquement, sur votre appareil. Rouvrez SelfCut dans le même navigateur et votre montage est là où vous l'aviez laissé.",
 
   "closing.title": "Votre prochaine vidéo commence ici",
   "closing.cta": "Ouvrir SelfCut",
