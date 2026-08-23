@@ -78,8 +78,8 @@
   "faq.a4": "Sim. No celular você edita com gestos de toque, como no CapCut. No computador você tem uma linha do tempo precisa e os atalhos de teclado do Premiere ou do Vegas.",
   "faq.q5": "Em quais navegadores o SelfCut funciona?",
   "faq.a5": "Chrome, Edge ou Safari 16.4+ atualizados. O SelfCut decodifica e codifica o vídeo no seu próprio aparelho pela API WebCodecs; um navegador que não a expõe recebe uma tela de explicação em vez de um editor quebrado.",
-  "faq.q6": "Meus projetos ficam salvos?",
-  "faq.a6": "Sim, automaticamente, no seu aparelho. Abra o SelfCut de novo no mesmo navegador e sua edição estará onde você parou.",
+  "faq.q6": "Meus projetos ficam salvos, e posso levar um para outro computador?",
+  "faq.a6": "Sim, automaticamente, no navegador do seu aparelho: reabra o SelfCut e sua edição está onde você parou. Uma ressalva: limpar os dados do site apaga o projeto junto. Para deixar uma edição a salvo, ou levá-la para outra máquina, salve um arquivo .selfcut. Ele guarda a linha do tempo e os dados das mídias, não os vídeos, o que o mantém leve; o SelfCut pede para você reconectar os arquivos de origem ao reabrir e os reencontra pelo nome, então basta apontar a pasta.",
 
   "closing.title": "Seu próximo vídeo começa aqui",
   "closing.cta": "Abrir o SelfCut",

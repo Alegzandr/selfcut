@@ -78,8 +78,8 @@
   "faq.a4": "Yes. On a phone you edit with touch gestures, like CapCut. On a computer you get a precise timeline and the keyboard shortcuts of Premiere or Vegas.",
   "faq.q5": "Which browsers does SelfCut work in?",
   "faq.a5": "A recent Chrome, Edge, or Safari 16.4+. SelfCut decodes and encodes video on your own device through the WebCodecs API, and a browser that does not expose it gets a short explanation screen instead of a broken editor.",
-  "faq.q6": "Are my projects saved?",
-  "faq.a6": "Yes, automatically, on your device. Reopen SelfCut in the same browser and your edit is where you left it.",
+  "faq.q6": "Are my projects saved, and can I move one to another computer?",
+  "faq.a6": "Yes, automatically, in the browser on your device: reopen SelfCut and your edit is where you left it. One caveat: clearing the site's data clears the project with it. To put an edit somewhere safe, or carry it to another machine, save a .selfcut file. It holds the timeline and the asset details, not the video itself, which keeps it small; SelfCut asks you to reconnect the source files when you reopen it, matching them back by name, so pointing it at the folder is enough.",
 
   "closing.title": "Your next video starts here",
   "closing.cta": "Open SelfCut",

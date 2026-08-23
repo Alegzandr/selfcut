@@ -78,8 +78,8 @@
   "faq.a4": "Ja. Auf dem Handy schneidest du mit Touch-Gesten, wie bei CapCut. Am Computer bekommst du eine präzise Zeitleiste und die Tastenkürzel von Premiere oder Vegas.",
   "faq.q5": "In welchen Browsern läuft SelfCut?",
   "faq.a5": "Ein aktuelles Chrome, Edge oder Safari 16.4+. SelfCut dekodiert und kodiert Video auf deinem eigenen Gerät über die WebCodecs-API; ein Browser, der sie nicht bereitstellt, bekommt einen kurzen Erklärbildschirm statt eines kaputten Editors.",
-  "faq.q6": "Werden meine Projekte gespeichert?",
-  "faq.a6": "Ja, automatisch, auf deinem Gerät. Öffne SelfCut im selben Browser erneut, und dein Schnitt ist da, wo du ihn verlassen hast.",
+  "faq.q6": "Werden meine Projekte gespeichert, und kann ich eines mitnehmen?",
+  "faq.a6": "Ja, automatisch, im Browser auf deinem Gerät: SelfCut wieder öffnen und der Schnitt ist da, wo du ihn gelassen hast. Ein Vorbehalt: Wer die Websitedaten löscht, löscht das Projekt mit. Um einen Schnitt in Sicherheit zu bringen oder auf einen anderen Rechner mitzunehmen, speicherst du eine .selfcut-Datei. Sie enthält die Zeitleiste und die Angaben zu den Medien, nicht die Videos selbst, und bleibt damit klein; SelfCut bittet dich beim Öffnen, die Quelldateien neu zu verbinden, und findet sie über ihren Namen wieder, sodass der Ordner genügt.",
 
   "closing.title": "Dein nächstes Video beginnt hier",
   "closing.cta": "SelfCut öffnen",

@@ -78,8 +78,8 @@
   "faq.a4": "Oui. Sur téléphone, vous montez avec des gestes tactiles, comme sur CapCut. Sur ordinateur, vous retrouvez une timeline précise et les raccourcis clavier de Premiere ou Vegas.",
   "faq.q5": "Sur quels navigateurs SelfCut fonctionne-t-il ?",
   "faq.a5": "Chrome, Edge ou Safari 16.4+ à jour. SelfCut décode et encode la vidéo sur votre appareil via l'API WebCodecs ; un navigateur qui ne l'expose pas reçoit un écran d'explication plutôt qu'un éditeur cassé.",
-  "faq.q6": "Mes projets sont-ils sauvegardés ?",
-  "faq.a6": "Oui, automatiquement, sur votre appareil. Rouvrez SelfCut dans le même navigateur et votre montage est là où vous l'aviez laissé.",
+  "faq.q6": "Mes projets sont-ils sauvegardés, et puis-je en emporter un ailleurs ?",
+  "faq.a6": "Oui, automatiquement, dans le navigateur, sur votre appareil : rouvrez SelfCut et votre montage est là où vous l'aviez laissé. Une réserve : vider les données du site efface le projet avec elles. Pour mettre un montage à l'abri, ou l'emporter sur une autre machine, enregistrez un fichier .selfcut. Il contient la timeline et le détail des médias, pas les vidéos elles-mêmes, ce qui le garde léger ; SelfCut vous demande de reconnecter les fichiers sources à la réouverture, en les retrouvant par leur nom, si bien que désigner le dossier suffit.",
 
   "closing.title": "Votre prochaine vidéo commence ici",
   "closing.cta": "Ouvrir SelfCut",
