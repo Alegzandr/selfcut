@@ -214,10 +214,14 @@ src/
   gone they render nothing (all asset lookups are guarded).
 - **A/V linking**: linked clips move, trim, split, delete and duplicate
   together; the video side delegates its audio to the linked clip so the source
-  is never doubled. Split gives each half a fresh shared link; copy/paste drops
-  the link. **Unlink** breaks the pair and mutes the video side (volume 0).
-  **Link** re-forms one: select a video and an audio clip on opposite tracks,
-  or select just one and it auto-pairs with the same-source clip.
+  is never doubled. A link group is generic - any number of clips across video
+  and audio tracks, no master side. Split gives each half a fresh shared link;
+  copy/paste drops the link. **Unlink** breaks the group and silences the video
+  side (volume 0) *only if the group was delegating its sound*: unlinking video
+  clips that never delegated must not mute anything. **Link** re-forms a group:
+  select a video and an audio clip on opposite tracks, or select just one and it
+  auto-pairs with the same-source clip. A selection straddling two existing
+  groups is refused rather than silently merged.
 - **Overlaps are allowed** within a track; at a given time the latest-starting
   clip wins, and the overlap is where a transition renders. Permissive beats
   fighting the user mid-drag.
@@ -244,8 +248,11 @@ src/
   asset metadata, thumbnails and waveform peaks, so a 4 GB shoot saves in a few
   hundred kilobytes and reopens showing the edit; the sources are relinked by
   name through the same path a moved file uses.
-- **Wheel = pan, Ctrl/Cmd+wheel = zoom** on the timeline (zoom anchored at the
-  cursor, Vegas-style). Pinch zoom on touch.
+- **Wheel = pan, Ctrl/Cmd+wheel = zoom** on the timeline; on a coarse pointer a
+  plain wheel zooms too, since there is no modifier to hold. Timeline zoom is
+  anchored at the **playhead** (the viewport centre when it is scrolled out of
+  sight), so the frame you are working on keeps its place on screen. The
+  *preview* zoom is the one anchored at the cursor. Pinch zoom on touch.
 - **Variable preview resolution** · the monitor composites at a fraction of the
   export size (Full / ½ / ¼ / ⅛, default ½), picked from the quality menu. We
   chose a manual pick over an adaptive auto so sharpness never pumps
