@@ -1,0 +1,84 @@
+---
+import type { LandingStrings } from '../../landing/strings';
+
+interface Props {
+  strings: LandingStrings;
+}
+
+const { strings } = Astro.props;
+
+// Three cues, drawn the way the subtitle list draws them: a timecode and the
+// line. Not a screenshot - the section is about text, and text is what the
+// page can render itself in all five languages.
+const CUES = [
+  { time: '00:04', text: strings['captions.cue.1'] },
+  { time: '00:07', text: strings['captions.cue.2'] },
+  { time: '00:11', text: strings['captions.cue.3'] },
+];
+---
+
+<section id="captions" aria-labelledby="captions-title">
+  <div class="head">
+    <h2 id="captions-title">{strings['captions.title']}</h2>
+    <p class="lede">{strings['captions.lead']}</p>
+  </div>
+
+  <ol class="cues">
+    {
+      CUES.map((cue) => (
+        <li>
+          <span class="tc">{cue.time}</span>
+          <span class="line">{cue.text}</span>
+        </li>
+      ))
+    }
+  </ol>
+
+  {/* Said here rather than only in the FAQ: someone who reads "your audio does
+      not leave" and then watches a model download should have been told. */}
+  <p class="note">{strings['captions.note']}</p>
+</section>
+
+<style>
+  .head {
+    max-width: 46rem;
+  }
+
+  .cues {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: clamp(1.75rem, 3vw, 2.5rem);
+    max-width: 34rem;
+    padding: 0;
+    list-style: none;
+  }
+  .cues li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.9rem;
+    padding: 0.7rem 0.9rem;
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent);
+    border-radius: 0.4rem;
+    background: var(--panel);
+  }
+  .tc {
+    flex: none;
+    color: var(--faint);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .line {
+    font-size: 0.9375rem;
+    text-wrap: pretty;
+  }
+
+  .note {
+    margin-top: 1.5rem;
+    max-width: var(--measure);
+    color: var(--faint);
+    font-size: 0.9375rem;
+    text-wrap: pretty;
+  }
+</style>
