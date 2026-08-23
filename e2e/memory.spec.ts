@@ -94,14 +94,16 @@ test('decoded audio is held under a budget, not forever', async ({ page }) => {
   const state = await page.evaluate(async (mod) => {
     const cache = (await import(mod)) as {
       cachedAudioBytes: () => number;
-      audioCacheBudgetBytes: (gb?: number) => number;
+      audioBudgetBytes: () => number;
     };
     // The warm pass runs behind the import; give it a moment to land.
     for (let i = 0; i < 60 && cache.cachedAudioBytes() === 0; i++) {
       await new Promise((r) => setTimeout(r, 100));
     }
-    const memory = (globalThis as { navigator?: { deviceMemory?: number } }).navigator?.deviceMemory;
-    return { bytes: cache.cachedAudioBytes(), budget: cache.audioCacheBudgetBytes(memory) };
+    // The budget the cache is enforcing, not one re-derived here: this machine's
+    // heap limit and reported RAM are the cache's business, and a second copy of
+    // that derivation would be a test asserting against its own arithmetic.
+    return { bytes: cache.cachedAudioBytes(), budget: cache.audioBudgetBytes() };
   }, await appModuleUrl(page, CACHE_MODULE));
 
   // Wired up: the track really is in the cache and really is MEASURED. An
