@@ -1,4 +1,4 @@
-import { CAPTION_MODELS, DEFAULT_CAPTION_MODEL } from "./captionsModel";
+import { CAPTION_MODELS, DEFAULT_CAPTION_MODEL } from './captionsModel';
 
 /**
  * The two choices a caption run needs beyond the clips themselves: which model
@@ -8,9 +8,9 @@ import { CAPTION_MODELS, DEFAULT_CAPTION_MODEL } from "./captionsModel";
  * asking it for a model it cannot run.
  */
 
-const MODEL_KEY = "selfcut.captions.model";
-const LANGUAGE_KEY = "selfcut.captions.language";
-const ENHANCE_KEY = "selfcut.captions.enhance";
+const MODEL_KEY = 'selfcut.captions.model';
+const LANGUAGE_KEY = 'selfcut.captions.language';
+const ENHANCE_KEY = 'selfcut.captions.enhance';
 
 /**
  * Sentinel for "let Whisper work it out from the audio".
@@ -20,7 +20,7 @@ const ENHANCE_KEY = "selfcut.captions.enhance";
  * asked Whisper for French words that were never spoken - which it duly
  * invented. Detection is right far more often than the UI language is.
  */
-export const AUTO_LANGUAGE = "auto";
+export const AUTO_LANGUAGE = 'auto';
 
 /**
  * Spoken languages offered explicitly. Whisper knows around a hundred; this is
@@ -28,26 +28,26 @@ export const AUTO_LANGUAGE = "auto";
  * detection handling the rest. Codes are what Whisper expects (ISO 639-1).
  */
 export const CAPTION_LANGUAGES = [
-  "en",
-  "fr",
-  "es",
-  "pt",
-  "de",
-  "it",
-  "nl",
-  "pl",
-  "ru",
-  "uk",
-  "tr",
-  "ar",
-  "hi",
-  "ja",
-  "ko",
-  "zh",
-  "id",
-  "vi",
-  "sv",
-  "da",
+  'en',
+  'fr',
+  'es',
+  'pt',
+  'de',
+  'it',
+  'nl',
+  'pl',
+  'ru',
+  'uk',
+  'tr',
+  'ar',
+  'hi',
+  'ja',
+  'ko',
+  'zh',
+  'id',
+  'vi',
+  'sv',
+  'da',
 ];
 
 function read(key: string): string | null {
@@ -105,15 +105,22 @@ export function setStoredCaptionLanguage(lang: string): void {
 
 /**
  * Whether to run the clip's sound through the speech chain before Whisper sees
- * it. On by default: the footage this is aimed at is a stream recording, where
- * the voice shares the track with music, alerts and game audio.
+ * it.
+ *
+ * OFF by default, against the intuition it was built on. Benchmarked against
+ * the untouched audio, the chain made the transcript worse on every model that
+ * produced one: the largest went from 57% to 67% word error, the mid-size one
+ * from 80% to 96%. Whisper is trained on unprocessed audio, and a mix already
+ * sitting at the loudness it expects has nothing to gain from being levelled
+ * again. It stays available because a genuinely quiet or boomy recording is a
+ * different case, and that case is the one the chain was written for.
  */
 export function storedCaptionEnhance(): boolean {
-  return read(ENHANCE_KEY) !== "off";
+  return read(ENHANCE_KEY) === 'on';
 }
 
 export function setStoredCaptionEnhance(on: boolean): void {
-  write(ENHANCE_KEY, on ? "on" : "off");
+  write(ENHANCE_KEY, on ? 'on' : 'off');
 }
 
 /** What to send the worker: a code, or nothing at all for auto-detection. */
@@ -129,7 +136,7 @@ export function whisperLanguage(lang: string): string | undefined {
 export function languageName(code: string, uiLanguage: string): string {
   try {
     return (
-      new Intl.DisplayNames([uiLanguage], { type: "language" }).of(code) ?? code
+      new Intl.DisplayNames([uiLanguage], { type: 'language' }).of(code) ?? code
     );
   } catch {
     return code;

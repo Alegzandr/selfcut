@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore } from 'react';
 import {
   DEFAULT_CAPTION_MODEL,
   AUTO_LANGUAGE,
@@ -6,7 +6,7 @@ import {
   storedCaptionLanguage,
   storedCaptionModel,
   subscribeCaptionPrefs,
-} from "./captionsPrefs";
+} from './captionsPrefs';
 
 /**
  * The caption preferences as React state.

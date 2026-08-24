@@ -1,12 +1,12 @@
-import { Clip, MediaAsset } from "../types";
-import type { SubtitleCue } from "../lib/subtitles";
-import { clipDurationMs, clipEndMs } from "../model";
-import { getAudioBuffer } from "./mediaCache";
+import { Clip, MediaAsset } from '../types';
+import type { SubtitleCue } from '../lib/subtitles';
+import { clipDurationMs, clipEndMs } from '../model';
+import { getAudioBuffer } from './mediaCache';
 import type {
   CaptionReply,
   CaptionRequest,
   CaptionSegment,
-} from "./captionsProtocol";
+} from './captionsProtocol';
 
 /**
  * Local auto-captions (desktop only): transcribe a clip's audio with Whisper (in
@@ -17,7 +17,7 @@ import type {
 
 export interface CaptionProgress {
   /** 'model' while the weights download (first run), 'transcribe' while running. */
-  stage: "model" | "transcribe";
+  stage: 'model' | 'transcribe';
   /** 0..1 for the model download; 1 (indeterminate) while transcribing. */
   value: number;
   /** Which clip of a multi-clip run this is, 1-based. Absent on a single clip. */
@@ -44,8 +44,8 @@ export interface CaptionOptions {
 
 let worker: Worker | null = null;
 function newWorker(): Worker {
-  return new Worker(new URL("./captionsWorker.ts", import.meta.url), {
-    type: "module",
+  return new Worker(new URL('./captionsWorker.ts', import.meta.url), {
+    type: 'module',
   });
 }
 function ensureWorker(): Worker {
@@ -89,7 +89,7 @@ export function normalizeSpeech(samples: Float32Array): Float32Array {
  * context, which resamples and downmixes to one channel in one pass.
  *
  * With `enhance`, the render also runs the speech chain. It is off by default:
- * measured against a real stream recording it cost accuracy rather than buying
+ * benchmarked against the untouched audio it cost accuracy rather than buying
  * any (see `storedCaptionEnhance`). What it is kept for is the recording that
  * is genuinely quiet or boomy, where Whisper is being handed audio far from
  * anything it was trained on.
@@ -115,7 +115,7 @@ async function extractMono16k(
   src.buffer = buffer;
   if (enhance) {
     const hp = ctx.createBiquadFilter();
-    hp.type = "highpass";
+    hp.type = 'highpass';
     hp.frequency.value = 80;
     hp.Q.value = 0.7;
     const comp = ctx.createDynamicsCompressor();
@@ -188,16 +188,16 @@ export async function generateCaptions(
   const w = ensureWorker();
   return new Promise<SubtitleCue[] | null>((resolve, reject) => {
     const cleanup = () => {
-      w.removeEventListener("message", onMessage);
-      signal?.removeEventListener("abort", onAbort);
+      w.removeEventListener('message', onMessage);
+      signal?.removeEventListener('abort', onAbort);
     };
     const onMessage = (e: MessageEvent<CaptionReply>) => {
       const m = e.data;
-      if (m.type === "progress") onProgress({ stage: m.stage, value: m.value });
-      else if (m.type === "result") {
+      if (m.type === 'progress') onProgress({ stage: m.stage, value: m.value });
+      else if (m.type === 'result') {
         cleanup();
         resolve(segmentsToCues(m.segments, clip));
-      } else if (m.type === "error") {
+      } else if (m.type === 'error') {
         cleanup();
         reject(new Error(m.message));
       }
@@ -210,10 +210,10 @@ export async function generateCaptions(
       worker = null;
       resolve(null);
     };
-    w.addEventListener("message", onMessage);
-    signal?.addEventListener("abort", onAbort);
+    w.addEventListener('message', onMessage);
+    signal?.addEventListener('abort', onAbort);
     const req: CaptionRequest = {
-      type: "transcribe",
+      type: 'transcribe',
       audio,
       model: opts.model,
       language: opts.language,
@@ -253,11 +253,11 @@ export async function generateCaptionsForClips(
       if (cues) all.push(...cues);
     } catch (err) {
       failures++;
-      console.warn("[captions] clip failed:", err);
+      console.warn('[captions] clip failed:', err);
     }
   }
   if (failures > 0 && failures === clips.length)
-    throw new Error("every clip failed to transcribe");
+    throw new Error('every clip failed to transcribe');
   if (signal?.aborted) return null;
   return all.sort((a, b) => a.startMs - b.startMs);
 }
@@ -277,18 +277,18 @@ export function prefetchCaptionModel(
   return new Promise<void>((resolve, reject) => {
     const done = (fn: () => void) => {
       w.terminate();
-      signal?.removeEventListener("abort", onAbort);
+      signal?.removeEventListener('abort', onAbort);
       fn();
     };
     const onAbort = () => done(resolve);
-    w.addEventListener("message", (e: MessageEvent<CaptionReply>) => {
+    w.addEventListener('message', (e: MessageEvent<CaptionReply>) => {
       const m = e.data;
-      if (m.type === "progress" && m.stage === "model") onProgress(m.value);
-      else if (m.type === "ready") done(resolve);
-      else if (m.type === "error") done(() => reject(new Error(m.message)));
+      if (m.type === 'progress' && m.stage === 'model') onProgress(m.value);
+      else if (m.type === 'ready') done(resolve);
+      else if (m.type === 'error') done(() => reject(new Error(m.message)));
     });
-    signal?.addEventListener("abort", onAbort);
-    const req: CaptionRequest = { type: "prefetch", model };
+    signal?.addEventListener('abort', onAbort);
+    const req: CaptionRequest = { type: 'prefetch', model };
     w.postMessage(req);
   });
 }

@@ -1,14 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { normalizeSpeech, segmentsToCues } from "./captions";
-import type { CaptionSegment } from "./captionsProtocol";
-import type { MediaClip } from "../types";
+import { describe, expect, it } from 'vitest';
+import { normalizeSpeech, segmentsToCues } from './captions';
+import type { CaptionSegment } from './captionsProtocol';
+import type { MediaClip } from '../types';
 
 function clip(over: Partial<MediaClip> = {}): MediaClip {
   return {
-    kind: "media",
-    id: "c1",
-    assetId: "a1",
-    trackId: "t1",
+    kind: 'media',
+    id: 'c1',
+    assetId: 'a1',
+    trackId: 't1',
     timelineStartMs: 1000,
     sourceInMs: 0,
     sourceOutMs: 5000,
@@ -26,34 +26,34 @@ const seg = (
   text: string,
 ): CaptionSegment => ({ startSec, endSec, text });
 
-describe("segmentsToCues", () => {
-  it("offsets segment times by the clip start on the timeline", () => {
+describe('segmentsToCues', () => {
+  it('offsets segment times by the clip start on the timeline', () => {
     const cues = segmentsToCues(
-      [seg(0, 1, "hello"), seg(1, 2, "world")],
+      [seg(0, 1, 'hello'), seg(1, 2, 'world')],
       clip(),
     );
     expect(cues).toEqual([
-      { startMs: 1000, endMs: 2000, text: "hello" },
-      { startMs: 2000, endMs: 3000, text: "world" },
+      { startMs: 1000, endMs: 2000, text: 'hello' },
+      { startMs: 2000, endMs: 3000, text: 'world' },
     ]);
   });
 
-  it("compresses times by the clip speed", () => {
+  it('compresses times by the clip speed', () => {
     // speed 2 → the clip is 2500 ms long on the timeline (source 5000 / 2).
-    const cues = segmentsToCues([seg(1, 2, "x")], clip({ speed: 2 }));
+    const cues = segmentsToCues([seg(1, 2, 'x')], clip({ speed: 2 }));
     expect(cues[0]!.startMs).toBe(1000 + 500);
     expect(cues[0]!.endMs).toBe(1000 + 1000);
   });
 
-  it("borrows the next start when a segment has no end", () => {
-    const cues = segmentsToCues([seg(0, null, "a"), seg(1.5, 2, "b")], clip());
+  it('borrows the next start when a segment has no end', () => {
+    const cues = segmentsToCues([seg(0, null, 'a'), seg(1.5, 2, 'b')], clip());
     expect(cues[0]!.endMs).toBe(1000 + 1500);
   });
 
-  it("clamps to the clip end and drops segments beyond it", () => {
+  it('clamps to the clip end and drops segments beyond it', () => {
     // Clip ends at 1000 + 5000 = 6000 ms.
     const cues = segmentsToCues(
-      [seg(4.5, 10, "tail"), seg(6, 7, "gone")],
+      [seg(4.5, 10, 'tail'), seg(6, 7, 'gone')],
       clip(),
     );
     expect(cues).toHaveLength(1);
@@ -76,18 +76,18 @@ function tone(amplitude: number, n = 4000): Float32Array {
   );
 }
 
-describe("normalizeSpeech", () => {
-  it("lifts a quiet take towards the level Whisper expects", () => {
+describe('normalizeSpeech', () => {
+  it('lifts a quiet take towards the level Whisper expects', () => {
     const quiet = tone(0.02);
     expect(rms(normalizeSpeech(quiet))).toBeCloseTo(0.1, 2);
   });
 
-  it("pulls a hot take back down instead of leaving it hot", () => {
+  it('pulls a hot take back down instead of leaving it hot', () => {
     const loud = tone(0.9);
     expect(rms(normalizeSpeech(loud))).toBeCloseTo(0.1, 2);
   });
 
-  it("never clips, even when the level target asks for more gain", () => {
+  it('never clips, even when the level target asks for more gain', () => {
     // A near-silent voice with one transient: chasing the RMS target blindly
     // would send that transient past full scale.
     const samples = tone(0.001);
@@ -96,14 +96,14 @@ describe("normalizeSpeech", () => {
     expect(peak).toBeLessThanOrEqual(1);
   });
 
-  it("caps the boost so silence is not amplified into noise", () => {
+  it('caps the boost so silence is not amplified into noise', () => {
     const silent = new Float32Array(1000).fill(1e-6);
     normalizeSpeech(silent);
     // 12x the original, the cap - not the 100000x the RMS target would ask for.
     expect(silent[0]!).toBeCloseTo(1.2e-5, 7);
   });
 
-  it("leaves digital silence exactly as it found it", () => {
+  it('leaves digital silence exactly as it found it', () => {
     const silence = new Float32Array(100);
     expect([...normalizeSpeech(silence)].every((v) => v === 0)).toBe(true);
   });

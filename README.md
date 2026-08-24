@@ -302,23 +302,24 @@ src/
   second caption lane.
 - **Voice focus is off by default, because it was measured.** A high-pass, a
   compressor and RMS levelling to the loudness Whisper was trained on
-  (`normalizeSpeech`) sounded like the obvious answer for stream footage. On a
-  real 29 s stream recording - French, music and game audio under the voice -
-  the chain made every transcript worse: large-v3-turbo went from 57% to 67%
-  word error, small from 80% to 96%. Whisper is trained on unprocessed audio,
+  (`normalizeSpeech`) sounded like the obvious answer for noisy footage.
+  Benchmarked against the untouched audio, the chain made every transcript
+  worse: large-v3-turbo went from 57% to 67% word error, small from 80% to 96%.
+  Whisper is trained on unprocessed audio,
   and a mix already at the loudness it expects gains nothing from being levelled
   twice. The option stays for a recording that is genuinely quiet or boomy.
 - **The decoder blocks repeated 3-grams** (`no_repeat_ngram_size: 3`). Whisper's
   failure mode on hard audio is a loop: the same token to the end of the chunk.
-  On that same recording the base model scored 912% word error - a wall of
-  "ah ah ah" - and 94% with the guard, while turbo and small were unchanged.
-- **Model size is the whole ballgame, and quantisation is not.** Same clip,
+  On the same benchmark the base model scored 912% word error - a wall of one
+  repeated syllable - and 94% with the guard, turbo and small unchanged.
+- **Model size is the whole ballgame, and quantisation is not.** Same audio,
   same settings: tiny 104%, base 94%, small 80%, large-v3-turbo 57%. That last
   one at q8; the fp32 build of the same model scored 69%, so the quantised
   weights the app ships are not what is costing accuracy.
-- **Detection is the default, but it is not free.** On that recording, letting
-  Whisper detect the language made it hear English and write English words over
-  French speech (94% error against 57% with French pinned). Detection still
+- **Detection is the default, but it is not free.** On that benchmark, letting
+  Whisper detect the language made it pick the wrong one and write the
+  transcript in it (94% error against 57% with the language pinned). Detection
+  still
   beats forcing the interface language, which is what it replaced; on difficult
   audio, picking the language by hand is worth the two seconds.
 
