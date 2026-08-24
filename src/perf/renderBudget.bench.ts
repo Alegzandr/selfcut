@@ -53,25 +53,44 @@ function linearClipsAt(clips: Clip[], tMs: number): Clip[] {
 }
 
 /**
- * The fastest of several measured passes.
+ * A pass shorter than this cannot be told apart from the noise around it: a
+ * scheduler slice on a shared runner is itself about a millisecond.
+ */
+const MIN_PASS_MS = 5;
+
+/**
+ * The fastest of several measured passes, each repeated until it is long
+ * enough to measure.
  *
  * Interference on a shared runner - a GC pause, a scheduler slice, a noisy
  * neighbour - only ever ADDS time to a pass, so the minimum of several is the
- * closest available estimate of what the code itself costs. It matters here
- * because the passes are short: one pass of the indexed lookup takes about a
- * tenth of a millisecond, small enough that a single stall inflated it
- * twenty-fold and failed a ratio that holds by 15x when it is measured
- * cleanly.
+ * closest available estimate of what the code itself costs. But the minimum
+ * only helps when a clean pass exists to be found, and some of the things
+ * measured here are far too fast for that: one pass of the indexed lookup
+ * takes about a tenth of a millisecond, so a single stall lands on EVERY rep
+ * and inflated the measured cost seven-fold on CI - enough to fail a ratio
+ * that holds by 12x when it is measured cleanly. So the pass is batched up to
+ * `MIN_PASS_MS` first, which puts the stall back in proportion, and the result
+ * is divided back down to the cost of one pass.
  */
 function time(fn: () => void, reps = 7): number {
   // One warm pass so the comparison is between two optimized functions, not
   // between an optimized one and one the JIT has never seen.
   fn();
+  let batch = 1;
+  // 1024 is a backstop for a `fn` too cheap to ever reach the floor; nothing
+  // measured here comes close to needing it.
+  while (batch < 1024) {
+    const t0 = performance.now();
+    for (let i = 0; i < batch; i++) fn();
+    if (performance.now() - t0 >= MIN_PASS_MS) break;
+    batch *= 2;
+  }
   let best = Infinity;
   for (let i = 0; i < reps; i++) {
     const t0 = performance.now();
-    fn();
-    best = Math.min(best, performance.now() - t0);
+    for (let j = 0; j < batch; j++) fn();
+    best = Math.min(best, (performance.now() - t0) / batch);
   }
   return best;
 }
