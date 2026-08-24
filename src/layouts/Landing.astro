@@ -12,7 +12,7 @@ import Icons from '../components/landing/Icons.astro';
 import Proof from '../components/landing/Proof.astro';
 import Spec from '../components/landing/Spec.astro';
 import { ALTERNATES, DEFAULT_LANG, LANGS, ORIGIN, langByCode, urlOf } from '../landing/langs';
-import { faqPage, softwareApplication } from '../landing/schema';
+import { faqPage, softwareApplication, webSite } from '../landing/schema';
 import { stringsFor } from '../landing/strings';
 import type { LangCode } from '../landing/langs';
 
@@ -38,6 +38,7 @@ const isDefault = lang === DEFAULT_LANG;
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link
       rel="preload"
@@ -85,6 +86,7 @@ const isDefault = lang === DEFAULT_LANG;
     <meta name="twitter:image" content={`${ORIGIN}/og-image.jpg`} />
     <meta name="twitter:image:alt" content={strings['og.imageAlt']} />
 
+    <script type="application/ld+json" set:html={JSON.stringify(webSite(strings))} />
     <script type="application/ld+json" set:html={JSON.stringify(softwareApplication(strings))} />
     <script type="application/ld+json" set:html={JSON.stringify(faqPage(strings))} />
 

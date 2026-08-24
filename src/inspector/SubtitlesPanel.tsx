@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Cross2Icon,
   FilePlusIcon,
@@ -7,30 +7,46 @@ import {
   MixerHorizontalIcon,
   TextIcon,
   TrashIcon,
-} from '@radix-ui/react-icons';
-import { useStore } from '../store/store';
-import { Tooltip } from '../ui/Tooltip';
-import { openSubtitlePicker } from '../ui/mediaPicker';
-import { useImport } from '../ui/useImport';
-import { CaptionModelDialog } from '../ui/CaptionModelDialog';
-import { clipEndMs, isTextClip, supersededCueIds } from '../model';
-import { generateCaptionsForClips, type CaptionProgress } from '../media/captions';
-import { captionModel } from '../media/captionsModel';
-import { captionCapabilities, bestDefaultModel } from '../media/captionsCapabilities';
+} from "@radix-ui/react-icons";
+import { useStore } from "../store/store";
+import { Tooltip } from "../ui/Tooltip";
+import { openSubtitlePicker } from "../ui/mediaPicker";
+import { useImport } from "../ui/useImport";
+import { CaptionModelDialog } from "../ui/CaptionModelDialog";
+import { clipEndMs, isTextClip, supersededCueIds } from "../model";
+import {
+  generateCaptionsForClips,
+  type CaptionProgress,
+} from "../media/captions";
+import { captionModel } from "../media/captionsModel";
+import {
+  captionCapabilities,
+  bestDefaultModel,
+} from "../media/captionsCapabilities";
 import {
   AUTO_LANGUAGE,
   CAPTION_LANGUAGES,
   DEFAULT_CAPTION_MODEL,
   languageName,
+  setStoredCaptionEnhance,
   setStoredCaptionLanguage,
   setStoredCaptionModel,
-  storedCaptionLanguage,
   storedCaptionModel,
   whisperLanguage,
-} from '../media/captionsPrefs';
-import { useIsCoarsePointer } from '../lib/device';
-import { formatTime } from '../lib/time';
-import { isTrackPlayable, type Clip, type MediaAsset, type TextClip } from '../types';
+} from "../media/captionsPrefs";
+import {
+  useCaptionEnhancePref,
+  useCaptionLanguagePref,
+  useCaptionModelPref,
+} from "../media/useCaptionPrefs";
+import { useIsCoarsePointer } from "../lib/device";
+import { formatTime } from "../lib/time";
+import {
+  isTrackPlayable,
+  type Clip,
+  type MediaAsset,
+  type TextClip,
+} from "../types";
 
 /**
  * Cue list: every text clip in the project, in timeline order, editable as
@@ -62,24 +78,33 @@ function CaptionProgressBar({
 }) {
   const { t } = useTranslation();
   const label =
-    progress.stage === 'model'
-      ? t('subtitles.downloadingModel', { pct: Math.round(progress.value * 100) })
+    progress.stage === "model"
+      ? t("subtitles.downloadingModel", {
+          pct: Math.round(progress.value * 100),
+        })
       : progress.clip
-        ? t('subtitles.transcribingClip', { index: progress.clip.index, total: progress.clip.total })
-        : t('subtitles.transcribing');
+        ? t("subtitles.transcribingClip", {
+            index: progress.clip.index,
+            total: progress.clip.total,
+          })
+        : t("subtitles.transcribing");
   return (
     <div className="flex w-full items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
         <div
-          className={`h-full rounded-full bg-sky-500 ${progress.stage === 'transcribe' ? 'w-full animate-pulse' : 'transition-[width]'}`}
-          style={progress.stage === 'model' ? { width: `${Math.round(progress.value * 100)}%` } : undefined}
+          className={`h-full rounded-full bg-sky-500 ${progress.stage === "transcribe" ? "w-full animate-pulse" : "transition-[width]"}`}
+          style={
+            progress.stage === "model"
+              ? { width: `${Math.round(progress.value * 100)}%` }
+              : undefined
+          }
         />
       </div>
       <span className="whitespace-nowrap text-2xs text-zinc-400">{label}</span>
       <button
         type="button"
         onClick={onCancel}
-        aria-label={t('confirm.cancel')}
+        aria-label={t("confirm.cancel")}
         className="touch-hit rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
       >
         <Cross2Icon className="h-3.5 w-3.5" />
@@ -102,7 +127,9 @@ function Field({
 }) {
   return (
     <label className="flex min-w-0 flex-1 flex-col gap-1">
-      <span className="text-2xs uppercase tracking-wide text-zinc-500">{label}</span>
+      <span className="text-2xs uppercase tracking-wide text-zinc-500">
+        {label}
+      </span>
       <select
         className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200 hover:border-zinc-600 focus:border-sky-500 focus:outline-none"
         value={value}
@@ -124,9 +151,15 @@ function Field({
  */
 function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
   const { t, i18n } = useTranslation();
-  const [model, setModel] = useState(() => storedCaptionModel() ?? DEFAULT_CAPTION_MODEL);
-  const [language, setLanguage] = useState(storedCaptionLanguage);
-  const [audioTrack, setAudioTrack] = useState<string>('clip');
+  // Model, language and voice focus are machine preferences, shared with the
+  // Preferences dialog: read through the prefs hooks so a change made there
+  // shows up here (and vice versa) without a reload.
+  const storedModel = useCaptionModelPref();
+  const language = useCaptionLanguagePref();
+  const enhance = useCaptionEnhancePref();
+  const [probedModel, setProbedModel] = useState(DEFAULT_CAPTION_MODEL);
+  const model = storedModel ?? probedModel;
+  const [audioTrack, setAudioTrack] = useState<string>("clip");
   const [modelsOpen, setModelsOpen] = useState(false);
   const [progress, setProgress] = useState<CaptionProgress | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -137,7 +170,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
     if (storedCaptionModel()) return;
     let live = true;
     void captionCapabilities().then((caps) => {
-      if (live) setModel(bestDefaultModel(caps));
+      if (live) setProbedModel(bestDefaultModel(caps));
     });
     return () => {
       live = false;
@@ -148,20 +181,14 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
   // selection comes from one source: two clips from two files have no shared
   // track numbering to pick from.
   const sharedAsset =
-    targets.length > 0 && targets.every((x) => x.asset.id === targets[0]!.asset.id)
+    targets.length > 0 &&
+    targets.every((x) => x.asset.id === targets[0]!.asset.id)
       ? targets[0]!.asset
       : null;
-  const pickableTracks = (sharedAsset?.audioTracks ?? []).filter(isTrackPlayable);
+  const pickableTracks = (sharedAsset?.audioTracks ?? []).filter(
+    isTrackPlayable,
+  );
   const showTrackPicker = pickableTracks.length > 1;
-
-  const chooseModel = (id: string) => {
-    setModel(id);
-    setStoredCaptionModel(id);
-  };
-  const chooseLanguage = (lang: string) => {
-    setLanguage(lang);
-    setStoredCaptionLanguage(lang);
-  };
 
   const run = () => {
     if (targets.length === 0 || progress) return;
@@ -172,23 +199,26 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
       const superseded = supersededCueIds(st.project, from, to);
       if (superseded.length > 0) {
         const ok = await st.requestConfirm({
-          title: t('subtitles.replace.title'),
-          message: t('subtitles.replace.message', { count: superseded.length }),
-          confirmLabel: t('subtitles.replace.confirm'),
+          title: t("subtitles.replace.title"),
+          message: t("subtitles.replace.message", { count: superseded.length }),
+          confirmLabel: t("subtitles.replace.confirm"),
           danger: true,
         });
         if (!ok) return;
       }
       const ac = new AbortController();
       abortRef.current = ac;
-      setProgress({ stage: 'model', value: 0 });
+      setProgress({ stage: "model", value: 0 });
       try {
         const cues = await generateCaptionsForClips(
           targets,
           {
             model,
             language: whisperLanguage(language),
-            ...(audioTrack === 'clip' ? {} : { audioTrackIndex: Number(audioTrack) }),
+            enhanceVoice: enhance,
+            ...(audioTrack === "clip"
+              ? {}
+              : { audioTrackIndex: Number(audioTrack) }),
           },
           (p) => setProgress(p),
           ac.signal,
@@ -199,11 +229,11 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
           // lands right above its footage - only meaningful for a single source.
           st.addSubtitleClips(cues, sharedAsset?.id, superseded);
         } else if (cues) {
-          st.setNotice(t('subtitles.noSpeech'));
+          st.setNotice(t("subtitles.noSpeech"));
         }
       } catch (err) {
-        console.warn('[captions] failed:', err);
-        st.setError(t('errors.captions.failed'));
+        console.warn("[captions] failed:", err);
+        st.setError(t("errors.captions.failed"));
       } finally {
         setProgress(null);
         abortRef.current = null;
@@ -214,31 +244,37 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
   const info = captionModel(model);
   const scope =
     targets.length === 0
-      ? t('subtitles.generate.needsAudio')
+      ? t("subtitles.generate.needsAudio")
       : targets.length === 1
-        ? t('subtitles.scope.one')
-        : t('subtitles.scope.many', { count: targets.length });
+        ? t("subtitles.scope.one")
+        : t("subtitles.scope.many", { count: targets.length });
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
       <div className="flex items-center gap-2">
         <MagicWandIcon className="h-3.5 w-3.5 flex-none text-sky-400" />
-        <span className="flex-1 text-xs font-medium text-zinc-100">{t('subtitles.auto')}</span>
-        <Tooltip label={t('captions.models.title')}>
+        <span className="flex-1 text-xs font-medium text-zinc-100">
+          {t("subtitles.auto")}
+        </span>
+        <Tooltip label={t("captions.models.title")}>
           <button
             type="button"
             onClick={() => setModelsOpen(true)}
             className="touch-hit flex items-center gap-1 rounded-md border border-zinc-700 px-1.5 py-0.5 text-2xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
           >
             <MixerHorizontalIcon className="h-3 w-3" />
-            {info.name.replace(/^Whisper /, '')}
+            {info.name.replace(/^Whisper /, "")}
           </button>
         </Tooltip>
       </div>
 
       <div className="mt-2 flex gap-2">
-        <Field label={t('subtitles.language')} value={language} onChange={chooseLanguage}>
-          <option value={AUTO_LANGUAGE}>{t('subtitles.language.auto')}</option>
+        <Field
+          label={t("subtitles.language")}
+          value={language}
+          onChange={setStoredCaptionLanguage}
+        >
+          <option value={AUTO_LANGUAGE}>{t("subtitles.language.auto")}</option>
           {CAPTION_LANGUAGES.map((code) => (
             <option key={code} value={code}>
               {languageName(code, i18n.language)}
@@ -246,8 +282,12 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
           ))}
         </Field>
         {showTrackPicker && (
-          <Field label={t('subtitles.audioTrack')} value={audioTrack} onChange={setAudioTrack}>
-            <option value="clip">{t('subtitles.audioTrack.clip')}</option>
+          <Field
+            label={t("subtitles.audioTrack")}
+            value={audioTrack}
+            onChange={setAudioTrack}
+          >
+            <option value="clip">{t("subtitles.audioTrack.clip")}</option>
             {pickableTracks.map((track) => (
               <option key={track.index} value={String(track.index)}>
                 {track.label ?? track.language ?? `#${track.index + 1}`}
@@ -257,9 +297,26 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
         )}
       </div>
 
+      {/* The one control that changes what Whisper hears rather than what it is
+          asked for, so it sits with the run button and not behind the models. */}
+      <Tooltip label={t("subtitles.enhance.hint")}>
+        <label className="mt-2 flex w-fit cursor-pointer items-center gap-1.5 text-2xs text-zinc-400 hover:text-zinc-200">
+          <input
+            type="checkbox"
+            className="h-3 w-3 accent-sky-500"
+            checked={enhance}
+            onChange={(e) => setStoredCaptionEnhance(e.target.checked)}
+          />
+          {t("subtitles.enhance")}
+        </label>
+      </Tooltip>
+
       <div className="mt-2.5">
         {progress ? (
-          <CaptionProgressBar progress={progress} onCancel={() => abortRef.current?.abort()} />
+          <CaptionProgressBar
+            progress={progress}
+            onCancel={() => abortRef.current?.abort()}
+          />
         ) : (
           <button
             type="button"
@@ -268,16 +325,18 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
             className="flex w-full items-center justify-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-40"
           >
             <MagicWandIcon className="h-3.5 w-3.5" />
-            {t('subtitles.generate')}
+            {t("subtitles.generate")}
           </button>
         )}
       </div>
-      {!progress && <p className="mt-1.5 text-center text-2xs text-zinc-500">{scope}</p>}
+      {!progress && (
+        <p className="mt-1.5 text-center text-2xs text-zinc-500">{scope}</p>
+      )}
 
       <CaptionModelDialog
         open={modelsOpen}
         model={model}
-        onPick={chooseModel}
+        onPick={setStoredCaptionModel}
         onClose={() => setModelsOpen(false)}
       />
     </div>
@@ -314,13 +373,14 @@ export function SubtitlesPanel() {
     const ids = new Set(selectedClipIds);
     return project.tracks
       .flatMap((track) => track.clips)
-      .filter((clip) => ids.has(clip.id) && clip.kind === 'media')
+      .filter((clip) => ids.has(clip.id) && clip.kind === "media")
       .map((clip) => ({ clip, asset: assets[clip.assetId] }))
       .filter((x): x is CaptionTarget => !!x.asset?.hasAudio)
       .sort((a, b) => a.clip.timelineStartMs - b.clip.timelineStartMs);
   }, [project, selectedClipIds, assets]);
 
-  const importSubtitles = () => openSubtitlePicker((files) => void importFiles(files));
+  const importSubtitles = () =>
+    openSubtitlePicker((files) => void importFiles(files));
 
   const importButton = (
     <button
@@ -328,7 +388,7 @@ export function SubtitlesPanel() {
       onClick={importSubtitles}
     >
       <FilePlusIcon className="h-3.5 w-3.5" />
-      {t('subtitles.import')}
+      {t("subtitles.import")}
     </button>
   );
 
@@ -338,9 +398,13 @@ export function SubtitlesPanel() {
         {captionsAvailable && <CaptionGenerator targets={targets} />}
         <div className="flex flex-col items-center gap-3 px-2 py-4 text-center">
           <TextIcon className="h-7 w-7 text-zinc-600" />
-          <p className="text-xs leading-relaxed text-zinc-400">{t('subtitles.empty')}</p>
+          <p className="text-xs leading-relaxed text-zinc-400">
+            {t("subtitles.empty")}
+          </p>
           {importButton}
-          <p className="text-2xs text-zinc-500">{t('subtitles.empty.formats')}</p>
+          <p className="text-2xs text-zinc-500">
+            {t("subtitles.empty.formats")}
+          </p>
         </div>
       </div>
     );
@@ -351,9 +415,9 @@ export function SubtitlesPanel() {
       {captionsAvailable && <CaptionGenerator targets={targets} />}
       <div className="flex items-center gap-2">
         <span className="flex-1 text-xs text-zinc-400">
-          {t('subtitles.count', { count: cues.length })}
+          {t("subtitles.count", { count: cues.length })}
         </span>
-        <Tooltip label={t('subtitles.import')}>
+        <Tooltip label={t("subtitles.import")}>
           <button
             className="touch-hit rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
             onClick={importSubtitles}
@@ -364,7 +428,11 @@ export function SubtitlesPanel() {
       </div>
       <ul className="space-y-1">
         {cues.map((clip) => (
-          <CueRow key={clip.id} clip={clip} selected={clip.id === selectedClipId} />
+          <CueRow
+            key={clip.id}
+            clip={clip}
+            selected={clip.id === selectedClipId}
+          />
         ))}
       </ul>
     </div>
@@ -373,8 +441,14 @@ export function SubtitlesPanel() {
 
 function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
   const { t } = useTranslation();
-  const { updateClip, deleteClips, selectClip, seek, beginGesture, endGesture } =
-    useStore.getState();
+  const {
+    updateClip,
+    deleteClips,
+    selectClip,
+    seek,
+    beginGesture,
+    endGesture,
+  } = useStore.getState();
 
   /**
    * Selecting also parks the playhead on the cue: the point of clicking a row is
@@ -389,13 +463,15 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
   return (
     <li
       className={`rounded-md border px-2 py-1.5 ${
-        selected ? 'border-sky-500/70 bg-sky-500/10' : 'border-zinc-800 bg-zinc-900/60'
+        selected
+          ? "border-sky-500/70 bg-sky-500/10"
+          : "border-zinc-800 bg-zinc-900/60"
       }`}
     >
       <div className="flex items-center gap-2">
         <button
           className="font-mono text-2xs tabular-nums text-zinc-400 hover:text-sky-400"
-          title={t('subtitles.goto')}
+          title={t("subtitles.goto")}
           onClick={focusCue}
         >
           {/* Tenths, not whole seconds: cues are timed to fractions of one, and
@@ -403,7 +479,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
           {formatTime(clip.timelineStartMs)} · {formatTime(clipEndMs(clip))}
         </button>
         <span className="flex-1" />
-        <Tooltip label={t('subtitles.delete')}>
+        <Tooltip label={t("subtitles.delete")}>
           <button
             className="touch-hit rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-400"
             onClick={() => deleteClips([clip.id], false)}
@@ -415,7 +491,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
       <textarea
         value={clip.text.content}
         rows={1}
-        aria-label={t('a11y.subtitles.cue')}
+        aria-label={t("a11y.subtitles.cue")}
         className="mt-1 w-full resize-y rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-zinc-100 outline-none hover:border-zinc-700 focus:border-sky-500 focus:bg-zinc-800"
         // The gesture snapshots the text as it was on entry, so a whole retype
         // undoes in one step instead of one entry per keystroke.
@@ -423,7 +499,11 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
           focusCue();
           beginGesture();
         }}
-        onChange={(e) => updateClip(clip.id, { text: { ...clip.text, content: e.target.value } })}
+        onChange={(e) =>
+          updateClip(clip.id, {
+            text: { ...clip.text, content: e.target.value },
+          })
+        }
         onBlur={endGesture}
       />
     </li>

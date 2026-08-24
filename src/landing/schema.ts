@@ -2,10 +2,31 @@ import { LANGS, ORIGIN } from './langs';
 import { faqEntries, type LandingStrings } from './strings';
 
 /**
- * The two structured-data blocks every landing page carries: what the app is,
- * and the FAQ it displays. Serialized into <script type="application/ld+json">
- * by the layout.
+ * The structured-data blocks every landing page carries: who the site is, what
+ * the app is, and the FAQ it displays. Serialized into
+ * <script type="application/ld+json"> by the layout.
  */
+
+/**
+ * Names the site itself. Without it, search engines fall back to the bare
+ * domain and label the result "alegzandr.com" instead of "SelfCut".
+ */
+export function webSite(strings: LandingStrings): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'SelfCut',
+    url: `${ORIGIN}/`,
+    inLanguage: LANGS.map((lang) => lang.code),
+    description: strings['meta.description'],
+    publisher: {
+      '@type': 'Organization',
+      name: 'SelfCut',
+      url: `${ORIGIN}/`,
+      logo: `${ORIGIN}/icon-512.png`,
+    },
+  };
+}
 
 export function softwareApplication(strings: LandingStrings): Record<string, unknown> {
   return {

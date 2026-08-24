@@ -1,5 +1,6 @@
 import {
   BookmarkIcon,
+  ChatBubbleIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   EyeOpenIcon,
@@ -10,14 +11,14 @@ import {
   SpeakerLoudIcon,
   SpeakerModerateIcon,
   TrashIcon,
-} from '@radix-ui/react-icons';
-import { useTranslation } from 'react-i18next';
-import { useStore, getLinkTargets } from '../../store/store';
-import { audioKey } from '../../media/mediaCache';
-import type { ContextTarget } from '../../store/editorState';
-import { reconnectAssetViaPicker } from '../MediaLibrary';
-import { useEditorCommands, type Command } from '../commands';
-import type { MenuEntry } from './MenuList';
+} from "@radix-ui/react-icons";
+import { useTranslation } from "react-i18next";
+import { useStore, getLinkTargets } from "../../store/store";
+import { audioKey } from "../../media/mediaCache";
+import type { ContextTarget } from "../../store/editorState";
+import { reconnectAssetViaPicker } from "../MediaLibrary";
+import { useEditorCommands, type Command } from "../commands";
+import type { MenuEntry } from "./MenuList";
 
 /**
  * Resolve a right-click target into the rows the context menu shows. Two kinds
@@ -43,71 +44,75 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
   /** Map global command ids (and separators) to rows, dropping unknown ids. */
   const resolve = (ids: string[]): MenuEntry[] =>
     ids
-      .map((id): MenuEntry | null => (id === '---' ? '---' : commands[id] ?? null))
+      .map((id): MenuEntry | null =>
+        id === "---" ? "---" : (commands[id] ?? null),
+      )
       .filter((e): e is MenuEntry => e !== null);
 
   switch (target.kind) {
-    case 'clip': {
-      const clip = tracks.flatMap((tr) => tr.clips).find((c) => c.id === target.clipId);
+    case "clip": {
+      const clip = tracks
+        .flatMap((tr) => tr.clips)
+        .find((c) => c.id === target.clipId);
       const linked = clip?.linkId != null;
       // A clip whose source carries sound the browser cannot decode: offer to
       // convert it right here, so a muted clip is fixable without a detour
       // through the media library.
-      const asset = clip?.kind === 'media' ? assets[clip.assetId] : undefined;
+      const asset = clip?.kind === "media" ? assets[clip.assetId] : undefined;
       const convertible = (asset?.audioTracks ?? []).filter(
         (tr) => tr.undecodable && !tr.transcoded,
       );
       const transcodeRows: MenuEntry[] = convertible.map((tr) => ({
         id: `clip.activateAudio.${tr.index}`,
-        labelKey: 'clip.activateAudio',
-        label: `${t('clip.activateAudio')} · ${tr.label ?? tr.language ?? tr.codec ?? '?'}`,
+        labelKey: "clip.activateAudio",
+        label: `${t("clip.activateAudio")} · ${tr.label ?? tr.language ?? tr.codec ?? "?"}`,
         icon: SpeakerModerateIcon,
         disabled: audioKey(asset!.id, tr.index) in transcodes,
         onClick: () => void st().transcodeAudioTrack(asset!.id, tr.index),
       }));
       return resolve([
-        'edit.cut',
-        'edit.copy',
-        'clip.duplicate',
-        '---',
-        'clip.split',
-        'clip.punchIn',
-        'clip.stream',
-        'clip.blurRegion',
-        'clip.captions',
-        'clip.adjust',
+        "edit.cut",
+        "edit.copy",
+        "clip.duplicate",
+        "---",
+        "clip.split",
+        "clip.punchIn",
+        "clip.stream",
+        "clip.blurRegion",
+        "clip.captions",
+        "clip.adjust",
         // Link when the selection joins into a pair; unlink on an already-linked clip.
-        ...(canLink ? ['clip.link'] : []),
-        ...(linked ? ['clip.unlink'] : []),
+        ...(canLink ? ["clip.link"] : []),
+        ...(linked ? ["clip.unlink"] : []),
         // The one preset row that is about *this* clip. Touch has no menu bar,
         // so without it saving a look would be desktop-only.
-        '---',
-        'file.savePreset',
-        '---',
-        'clip.delete',
-        'clip.rippleDelete',
-      ]).concat(transcodeRows.length > 0 ? ['---', ...transcodeRows] : []);
+        "---",
+        "file.savePreset",
+        "---",
+        "clip.delete",
+        "clip.rippleDelete",
+      ]).concat(transcodeRows.length > 0 ? ["---", ...transcodeRows] : []);
     }
 
-    case 'timeline':
+    case "timeline":
       return resolve([
-        'edit.paste',
-        '---',
-        'insert.text',
-        'insert.color',
-        'insert.gradient',
-        '---',
-        'insert.marker',
-        '---',
-        'edit.selectAll',
+        "edit.paste",
+        "---",
+        "insert.text",
+        "insert.color",
+        "insert.gradient",
+        "---",
+        "insert.marker",
+        "---",
+        "edit.selectAll",
       ]);
 
-    case 'marker': {
+    case "marker": {
       const id = target.markerId;
       return [
         {
-          id: 'ctx.marker.goto',
-          labelKey: 'ctx.marker.goto',
+          id: "ctx.marker.goto",
+          labelKey: "ctx.marker.goto",
           icon: BookmarkIcon,
           onClick: () => {
             const marker = st().project.markers.find((m) => m.id === id);
@@ -115,15 +120,15 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
           },
         },
         {
-          id: 'ctx.marker.rename',
-          labelKey: 'ctx.marker.rename',
+          id: "ctx.marker.rename",
+          labelKey: "ctx.marker.rename",
           icon: Pencil2Icon,
           onClick: () => st().setRenamingMarker(id),
         },
-        '---',
+        "---",
         {
-          id: 'ctx.marker.delete',
-          labelKey: 'ctx.marker.delete',
+          id: "ctx.marker.delete",
+          labelKey: "ctx.marker.delete",
           icon: TrashIcon,
           danger: true,
           onClick: () => st().removeMarker(id),
@@ -131,57 +136,77 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
       ];
     }
 
-    case 'track': {
+    case "track": {
       const id = target.trackId;
       const track = tracks.find((tr) => tr.id === id);
       const items: MenuEntry[] = [
         {
-          id: 'ctx.track.mute',
+          id: "ctx.track.mute",
           // The label states what a click will do, like play/pause does. The
           // icon is unconditional: `checked` swaps it for a checkmark, so a
           // state-dependent icon here could never render in the state it means.
-          labelKey: track?.muted ? 'track.unmute' : 'track.mute',
+          labelKey: track?.muted ? "track.unmute" : "track.mute",
           icon: SpeakerLoudIcon,
           checked: track?.muted,
           onClick: () => st().toggleTrackMuted(id),
         },
       ];
-      if (track?.kind === 'video') {
+      if (track?.kind === "video") {
         items.push({
-          id: 'ctx.track.hide',
-          labelKey: track.hidden ? 'track.show' : 'track.hide',
+          id: "ctx.track.hide",
+          labelKey: track.hidden ? "track.show" : "track.hide",
           icon: EyeOpenIcon,
           checked: track.hidden,
           onClick: () => st().toggleTrackHidden(id),
         });
       }
+      items.push({
+        id: "ctx.track.lock",
+        labelKey: track?.locked ? "track.unlock" : "track.lock",
+        icon: LockOpen1Icon,
+        checked: track?.locked,
+        onClick: () => st().toggleTrackLocked(id),
+      });
+      // Auto-captions, offered where a whole lane of talking heads is the thing
+      // being pointed at. It selects the lane's clips and opens the subtitles
+      // pane rather than transcribing on the spot: the model, the language and
+      // the voice focus are choices, and a right-click is not the place to
+      // commit to them silently.
+      const audible = (track?.clips ?? []).filter(
+        (clip) => clip.kind === "media" && assets[clip.assetId]?.hasAudio,
+      );
+      if (audible.length > 0) {
+        items.push("---", {
+          id: "ctx.track.captions",
+          labelKey: "ctx.track.captions",
+          icon: ChatBubbleIcon,
+          onClick: () => {
+            st().setSelectedClips(audible.map((clip) => clip.id));
+            st().setInspectorTab("subtitles");
+            st().setInspectorOpen(true);
+          },
+        });
+      }
       items.push(
+        "---",
         {
-          id: 'ctx.track.lock',
-          labelKey: track?.locked ? 'track.unlock' : 'track.lock',
-          icon: LockOpen1Icon,
-          checked: track?.locked,
-          onClick: () => st().toggleTrackLocked(id),
-        },
-        '---',
-        {
-          id: 'ctx.track.moveUp',
-          labelKey: 'track.moveUp',
+          id: "ctx.track.moveUp",
+          labelKey: "track.moveUp",
           icon: ChevronUpIcon,
           onClick: () => st().moveTrack(id, -1),
         },
         {
-          id: 'ctx.track.moveDown',
-          labelKey: 'track.moveDown',
+          id: "ctx.track.moveDown",
+          labelKey: "track.moveDown",
           icon: ChevronDownIcon,
           onClick: () => st().moveTrack(id, 1),
         },
-        '---',
-        ...resolve(['insert.videoTrack', 'insert.audioTrack']),
-        '---',
+        "---",
+        ...resolve(["insert.videoTrack", "insert.audioTrack"]),
+        "---",
         {
-          id: 'ctx.track.delete',
-          labelKey: 'track.delete',
+          id: "ctx.track.delete",
+          labelKey: "track.delete",
           icon: TrashIcon,
           danger: true,
           onClick: () => st().removeTrack(id),
@@ -190,13 +215,13 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
       return items;
     }
 
-    case 'asset': {
+    case "asset": {
       const id = target.assetId;
       const asset = assets[id];
       const items: MenuEntry[] = [
         {
-          id: 'ctx.asset.add',
-          labelKey: 'library.add',
+          id: "ctx.asset.add",
+          labelKey: "library.add",
           icon: PlusIcon,
           disabled: asset?.disconnected,
           onClick: () => st().addClipFromAsset(id),
@@ -205,14 +230,16 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
       // Same action either way: reconnecting a lost file and pointing a healthy
       // asset at another take are the same operation, only the intent differs.
       items.push({
-        id: asset?.disconnected ? 'ctx.asset.reconnect' : 'ctx.asset.replace',
-        labelKey: asset?.disconnected ? 'library.reconnect' : 'library.replaceSource',
+        id: asset?.disconnected ? "ctx.asset.reconnect" : "ctx.asset.replace",
+        labelKey: asset?.disconnected
+          ? "library.reconnect"
+          : "library.replaceSource",
         icon: LinkBreak1Icon,
         onClick: () => reconnectAssetViaPicker(id),
       });
-      items.push('---', {
-        id: 'ctx.asset.remove',
-        labelKey: 'library.remove',
+      items.push("---", {
+        id: "ctx.asset.remove",
+        labelKey: "library.remove",
         icon: TrashIcon,
         danger: true,
         onClick: () => st().removeAsset(id),

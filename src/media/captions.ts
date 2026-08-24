@@ -1,8 +1,12 @@
-import { Clip, MediaAsset } from '../types';
-import type { SubtitleCue } from '../lib/subtitles';
-import { clipDurationMs, clipEndMs } from '../model';
-import { getAudioBuffer } from './mediaCache';
-import type { CaptionReply, CaptionRequest, CaptionSegment } from './captionsProtocol';
+import { Clip, MediaAsset } from "../types";
+import type { SubtitleCue } from "../lib/subtitles";
+import { clipDurationMs, clipEndMs } from "../model";
+import { getAudioBuffer } from "./mediaCache";
+import type {
+  CaptionReply,
+  CaptionRequest,
+  CaptionSegment,
+} from "./captionsProtocol";
 
 /**
  * Local auto-captions (desktop only): transcribe a clip's audio with Whisper (in
@@ -13,7 +17,7 @@ import type { CaptionReply, CaptionRequest, CaptionSegment } from './captionsPro
 
 export interface CaptionProgress {
   /** 'model' while the weights download (first run), 'transcribe' while running. */
-  stage: 'model' | 'transcribe';
+  stage: "model" | "transcribe";
   /** 0..1 for the model download; 1 (indeterminate) while transcribing. */
   value: number;
   /** Which clip of a multi-clip run this is, 1-based. Absent on a single clip. */
@@ -26,6 +30,11 @@ export interface CaptionOptions {
   /** Whisper language code ('en', 'fr'...); omit to let Whisper detect it. */
   language?: string;
   /**
+   * Run the speech chain (high-pass, compression, levelling) before Whisper
+   * sees the audio. Default on; see `extractMono16k`.
+   */
+  enhanceVoice?: boolean;
+  /**
    * Which audio track of the source to listen to, overriding the one the clip
    * plays. A dubbed export carries the original and the dub side by side, and
    * the captions wanted are not always the ones being monitored.
@@ -35,28 +44,93 @@ export interface CaptionOptions {
 
 let worker: Worker | null = null;
 function newWorker(): Worker {
-  return new Worker(new URL('./captionsWorker.ts', import.meta.url), { type: 'module' });
+  return new Worker(new URL("./captionsWorker.ts", import.meta.url), {
+    type: "module",
+  });
 }
 function ensureWorker(): Worker {
   worker ??= newWorker();
   return worker;
 }
 
-/** Whisper wants mono 16 kHz: render the clip's source span through an offline
- * context, which resamples and downmixes to one channel in one pass. */
+/**
+ * Loudness Whisper was trained on. Speech corpora sit around -20 dBFS RMS, and
+ * a transcript degrades noticeably on a track recorded far below that.
+ */
+const TARGET_RMS = 0.1;
+
+/**
+ * Bring a mono speech buffer to a predictable level, in place.
+ *
+ * Aims at an RMS target rather than at the peak, because peak normalisation is
+ * hostage to a single stray transient - one door slam and the voice underneath
+ * stays as quiet as it was. The peak still acts as a ceiling (no clipping), and
+ * the boost is capped so a near-silent take is not turned into amplified room
+ * noise that Whisper then hallucinates words out of.
+ */
+export function normalizeSpeech(samples: Float32Array): Float32Array {
+  let peak = 0;
+  let sum = 0;
+  for (const v of samples) {
+    const a = Math.abs(v);
+    if (a > peak) peak = a;
+    sum += v * v;
+  }
+  if (peak === 0) return samples;
+  const rms = Math.sqrt(sum / samples.length);
+  const gain = Math.min(TARGET_RMS / (rms || 1e-9), 0.97 / peak, 12);
+  if (Math.abs(gain - 1) < 0.01) return samples;
+  for (let i = 0; i < samples.length; i++) samples[i]! *= gain;
+  return samples;
+}
+
+/**
+ * Whisper wants mono 16 kHz: render the clip's source span through an offline
+ * context, which resamples and downmixes to one channel in one pass.
+ *
+ * With `enhance`, the render also runs the speech chain. Stream footage is the
+ * case this is for: the voice shares its track with music, game audio and alert
+ * sounds, and Whisper does measurably worse on a quiet voice buried under a
+ * loud bed than on the same voice brought forward.
+ *  - high-pass at 80 Hz: rumble, desk thumps and mains hum carry no speech, but
+ *    they do eat headroom that the levelling below would otherwise hand them;
+ *  - compression: a gentle 4:1 closes the gap between a shouted reaction and a
+ *    mumbled aside, so one pass of levelling suits the whole clip;
+ *  - normalisation: see `normalizeSpeech`.
+ *
+ * Deliberately NOT here: source separation (a second model download, and it
+ * costs more than it gains once the voice is levelled) and noise gating (it
+ * clips word onsets, and a swallowed first syllable is worse than a noisy one).
+ */
 async function extractMono16k(
   buffer: AudioBuffer,
   startSec: number,
   durationSec: number,
+  enhance: boolean,
 ): Promise<Float32Array> {
   const frames = Math.max(1, Math.ceil(durationSec * 16000));
   const ctx = new OfflineAudioContext(1, frames, 16000);
   const src = ctx.createBufferSource();
   src.buffer = buffer;
-  src.connect(ctx.destination);
+  if (enhance) {
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 80;
+    hp.Q.value = 0.7;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -24;
+    comp.knee.value = 12;
+    comp.ratio.value = 4;
+    comp.attack.value = 0.005;
+    comp.release.value = 0.15;
+    src.connect(hp).connect(comp).connect(ctx.destination);
+  } else {
+    src.connect(ctx.destination);
+  }
   src.start(0, Math.max(0, startSec), durationSec);
   const rendered = await ctx.startRendering();
-  return rendered.getChannelData(0).slice();
+  const mono = rendered.getChannelData(0).slice();
+  return enhance ? normalizeSpeech(mono) : mono;
 }
 
 /**
@@ -64,7 +138,10 @@ async function extractMono16k(
  * accounting for its speed and clamping to its span. A segment with no end time
  * borrows the next one's start (or a short default on the last).
  */
-export function segmentsToCues(segments: CaptionSegment[], clip: Clip): SubtitleCue[] {
+export function segmentsToCues(
+  segments: CaptionSegment[],
+  clip: Clip,
+): SubtitleCue[] {
   const speed = clip.speed || 1;
   const end = clipEndMs(clip);
   const cues: SubtitleCue[] = [];
@@ -103,22 +180,23 @@ export async function generateCaptions(
     buffer,
     clip.sourceInMs / 1000,
     (clip.sourceOutMs - clip.sourceInMs) / 1000,
+    opts.enhanceVoice !== false,
   );
   if (signal?.aborted) return null;
 
   const w = ensureWorker();
   return new Promise<SubtitleCue[] | null>((resolve, reject) => {
     const cleanup = () => {
-      w.removeEventListener('message', onMessage);
-      signal?.removeEventListener('abort', onAbort);
+      w.removeEventListener("message", onMessage);
+      signal?.removeEventListener("abort", onAbort);
     };
     const onMessage = (e: MessageEvent<CaptionReply>) => {
       const m = e.data;
-      if (m.type === 'progress') onProgress({ stage: m.stage, value: m.value });
-      else if (m.type === 'result') {
+      if (m.type === "progress") onProgress({ stage: m.stage, value: m.value });
+      else if (m.type === "result") {
         cleanup();
         resolve(segmentsToCues(m.segments, clip));
-      } else if (m.type === 'error') {
+      } else if (m.type === "error") {
         cleanup();
         reject(new Error(m.message));
       }
@@ -131,10 +209,10 @@ export async function generateCaptions(
       worker = null;
       resolve(null);
     };
-    w.addEventListener('message', onMessage);
-    signal?.addEventListener('abort', onAbort);
+    w.addEventListener("message", onMessage);
+    signal?.addEventListener("abort", onAbort);
     const req: CaptionRequest = {
-      type: 'transcribe',
+      type: "transcribe",
       audio,
       model: opts.model,
       language: opts.language,
@@ -174,10 +252,11 @@ export async function generateCaptionsForClips(
       if (cues) all.push(...cues);
     } catch (err) {
       failures++;
-      console.warn('[captions] clip failed:', err);
+      console.warn("[captions] clip failed:", err);
     }
   }
-  if (failures > 0 && failures === clips.length) throw new Error('every clip failed to transcribe');
+  if (failures > 0 && failures === clips.length)
+    throw new Error("every clip failed to transcribe");
   if (signal?.aborted) return null;
   return all.sort((a, b) => a.startMs - b.startMs);
 }
@@ -197,18 +276,18 @@ export function prefetchCaptionModel(
   return new Promise<void>((resolve, reject) => {
     const done = (fn: () => void) => {
       w.terminate();
-      signal?.removeEventListener('abort', onAbort);
+      signal?.removeEventListener("abort", onAbort);
       fn();
     };
     const onAbort = () => done(resolve);
-    w.addEventListener('message', (e: MessageEvent<CaptionReply>) => {
+    w.addEventListener("message", (e: MessageEvent<CaptionReply>) => {
       const m = e.data;
-      if (m.type === 'progress' && m.stage === 'model') onProgress(m.value);
-      else if (m.type === 'ready') done(resolve);
-      else if (m.type === 'error') done(() => reject(new Error(m.message)));
+      if (m.type === "progress" && m.stage === "model") onProgress(m.value);
+      else if (m.type === "ready") done(resolve);
+      else if (m.type === "error") done(() => reject(new Error(m.message)));
     });
-    signal?.addEventListener('abort', onAbort);
-    const req: CaptionRequest = { type: 'prefetch', model };
+    signal?.addEventListener("abort", onAbort);
+    const req: CaptionRequest = { type: "prefetch", model };
     w.postMessage(req);
   });
 }

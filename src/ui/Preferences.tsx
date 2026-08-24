@@ -1,30 +1,66 @@
-import { useEffect, type ReactNode } from 'react';
-import type { ParseKeys } from 'i18next';
-import { useTranslation } from 'react-i18next';
-import { AnimatePresence, m } from 'framer-motion';
-import { Cross2Icon } from '@radix-ui/react-icons';
-import i18n, { LOCALES, type Locale } from '../i18n';
-import { useStore } from '../store/store';
-import { Tooltip } from './Tooltip';
-import type { TimeFormat } from '../lib/time';
-import { PREVIEW_BACKGROUNDS } from '../lib/palette';
+import { useEffect, useState, type ReactNode } from "react";
+import type { ParseKeys } from "i18next";
+import { useTranslation } from "react-i18next";
+import { AnimatePresence, m } from "framer-motion";
+import { Cross2Icon, MixerHorizontalIcon } from "@radix-ui/react-icons";
+import i18n, { LOCALES, type Locale } from "../i18n";
+import { useStore } from "../store/store";
+import { Tooltip } from "./Tooltip";
+import type { TimeFormat } from "../lib/time";
+import { PREVIEW_BACKGROUNDS } from "../lib/palette";
+import { CaptionModelDialog } from "./CaptionModelDialog";
+import { captionModel } from "../media/captionsModel";
+import {
+  bestDefaultModel,
+  captionCapabilities,
+} from "../media/captionsCapabilities";
+import {
+  AUTO_LANGUAGE,
+  CAPTION_LANGUAGES,
+  DEFAULT_CAPTION_MODEL,
+  languageName,
+  setStoredCaptionEnhance,
+  setStoredCaptionLanguage,
+  setStoredCaptionModel,
+} from "../media/captionsPrefs";
+import {
+  useCaptionEnhancePref,
+  useCaptionLanguagePref,
+  useCaptionModelPref,
+} from "../media/useCaptionPrefs";
+import { useIsCoarsePointer } from "../lib/device";
 
 const TIME_FORMATS: readonly { value: TimeFormat; labelKey: ParseKeys }[] = [
-  { value: 'timecode', labelKey: 'preferences.timeFormat.timecode' },
-  { value: 'decimal', labelKey: 'preferences.timeFormat.decimal' },
+  { value: "timecode", labelKey: "preferences.timeFormat.timecode" },
+  { value: "decimal", labelKey: "preferences.timeFormat.decimal" },
 ];
 
 /** The one-click surrounds, darkest to lightest. Any other colour goes through the picker. */
 const BACKGROUNDS: readonly { value: string; labelKey: ParseKeys }[] = [
-  { value: PREVIEW_BACKGROUNDS.black, labelKey: 'preferences.previewBackground.black' },
-  { value: PREVIEW_BACKGROUNDS.charcoal, labelKey: 'preferences.previewBackground.charcoal' },
-  { value: PREVIEW_BACKGROUNDS.grey, labelKey: 'preferences.previewBackground.grey' },
-  { value: PREVIEW_BACKGROUNDS.neutral, labelKey: 'preferences.previewBackground.neutral' },
-  { value: PREVIEW_BACKGROUNDS.white, labelKey: 'preferences.previewBackground.white' },
+  {
+    value: PREVIEW_BACKGROUNDS.black,
+    labelKey: "preferences.previewBackground.black",
+  },
+  {
+    value: PREVIEW_BACKGROUNDS.charcoal,
+    labelKey: "preferences.previewBackground.charcoal",
+  },
+  {
+    value: PREVIEW_BACKGROUNDS.grey,
+    labelKey: "preferences.previewBackground.grey",
+  },
+  {
+    value: PREVIEW_BACKGROUNDS.neutral,
+    labelKey: "preferences.previewBackground.neutral",
+  },
+  {
+    value: PREVIEW_BACKGROUNDS.white,
+    labelKey: "preferences.previewBackground.white",
+  },
 ];
 
 const SELECT_CLASS =
-  'min-w-44 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-sky-500';
+  "min-w-44 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-sky-500";
 
 /** One labelled preference row: description on the left, control on the right. */
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -33,6 +69,88 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
       <span className="text-xs text-zinc-300">{label}</span>
       {children}
     </div>
+  );
+}
+
+/**
+ * The auto-caption settings, as preference rows.
+ *
+ * They also sit on the captions card in the subtitles pane, next to the button
+ * that uses them - that is where they are needed mid-edit. They are duplicated
+ * here because "which model does this thing run" is the question people bring
+ * to Preferences, and the model manager (a several-hundred-megabyte download
+ * with a delete button) is not something to make anyone select a clip to reach.
+ * Both surfaces read the same stored values, so neither can drift.
+ */
+function CaptionRows() {
+  const { t, i18n: i18next } = useTranslation();
+  const storedModel = useCaptionModelPref();
+  const language = useCaptionLanguagePref();
+  const enhance = useCaptionEnhancePref();
+  const [probedModel, setProbedModel] = useState(DEFAULT_CAPTION_MODEL);
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const model = storedModel ?? probedModel;
+
+  useEffect(() => {
+    if (storedModel) return;
+    let live = true;
+    void captionCapabilities().then((caps) => {
+      if (live) setProbedModel(bestDefaultModel(caps));
+    });
+    return () => {
+      live = false;
+    };
+  }, [storedModel]);
+
+  return (
+    <>
+      <Row label={t("preferences.captions.model")}>
+        <button
+          type="button"
+          onClick={() => setModelsOpen(true)}
+          className="flex min-w-44 items-center justify-between gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 hover:border-zinc-600"
+        >
+          {captionModel(model).name}
+          <MixerHorizontalIcon className="h-3.5 w-3.5 text-zinc-400" />
+        </button>
+      </Row>
+
+      <Row label={t("preferences.captions.language")}>
+        <select
+          className={SELECT_CLASS}
+          value={language}
+          onChange={(e) => setStoredCaptionLanguage(e.target.value)}
+        >
+          <option value={AUTO_LANGUAGE}>{t("subtitles.language.auto")}</option>
+          {CAPTION_LANGUAGES.map((code) => (
+            <option key={code} value={code}>
+              {languageName(code, i18next.language)}
+            </option>
+          ))}
+        </select>
+      </Row>
+
+      <Row label={t("subtitles.enhance")}>
+        <label className="flex min-w-44 cursor-pointer items-center justify-end gap-2 text-xs text-zinc-400">
+          <span className="text-2xs text-zinc-500">
+            {t("subtitles.enhance.hint")}
+          </span>
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 accent-sky-500"
+            checked={enhance}
+            onChange={(e) => setStoredCaptionEnhance(e.target.checked)}
+          />
+        </label>
+      </Row>
+
+      <CaptionModelDialog
+        open={modelsOpen}
+        model={model}
+        onPick={setStoredCaptionModel}
+        onClose={() => setModelsOpen(false)}
+      />
+    </>
   );
 }
 
@@ -47,20 +165,25 @@ export function Preferences() {
   const open = useStore((s) => s.preferencesOpen);
   const timeFormat = useStore((s) => s.timeFormat);
   const previewBackground = useStore((s) => s.previewBackground);
-  const { setPreferencesOpen, setTimeFormat, setPreviewBackground } = useStore.getState();
-  const currentLang = (i18n.resolvedLanguage ?? 'en') as Locale;
+  const { setPreferencesOpen, setTimeFormat, setPreviewBackground } =
+    useStore.getState();
+  // Same rule the subtitles pane applies: Whisper is desktop-only here, so a
+  // touch device is not offered settings for a feature it cannot run.
+  const captionsAvailable = !useIsCoarsePointer();
+  const currentLang = (i18n.resolvedLanguage ?? "en") as Locale;
 
   // Escape closes the dialog (the tooltip advertises it); capture phase so the
   // global editor hotkeys never see the keystroke.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== "Escape") return;
       e.stopPropagation();
       setPreferencesOpen(false);
     };
-    window.addEventListener('keydown', onKey, { capture: true });
-    return () => window.removeEventListener('keydown', onKey, { capture: true });
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", onKey, { capture: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -80,13 +203,15 @@ export function Preferences() {
             exit={{ scale: 0.96, y: 8 }}
             role="dialog"
             aria-modal="true"
-            aria-label={t('preferences.title')}
-            className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl shadow-black"
+            aria-label={t("preferences.title")}
+            className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl shadow-black"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-1 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-zinc-100">{t('preferences.title')}</h2>
-              <Tooltip label={t('preferences.close')} shortcut="Esc">
+              <h2 className="text-sm font-semibold text-zinc-100">
+                {t("preferences.title")}
+              </h2>
+              <Tooltip label={t("preferences.close")} shortcut="Esc">
                 <button
                   className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800"
                   onClick={() => setPreferencesOpen(false)}
@@ -97,10 +222,10 @@ export function Preferences() {
             </div>
 
             <div className="divide-y divide-zinc-800">
-              <Row label={t('topbar.language')}>
+              <Row label={t("topbar.language")}>
                 <select
                   className={SELECT_CLASS}
-                  aria-label={t('a11y.preferences.language')}
+                  aria-label={t("a11y.preferences.language")}
                   value={currentLang}
                   onChange={(e) => void i18n.changeLanguage(e.target.value)}
                 >
@@ -112,10 +237,10 @@ export function Preferences() {
                 </select>
               </Row>
 
-              <Row label={t('preferences.timeFormat')}>
+              <Row label={t("preferences.timeFormat")}>
                 <select
                   className={SELECT_CLASS}
-                  aria-label={t('a11y.preferences.timeFormat')}
+                  aria-label={t("a11y.preferences.timeFormat")}
                   value={timeFormat}
                   onChange={(e) => setTimeFormat(e.target.value as TimeFormat)}
                 >
@@ -127,7 +252,7 @@ export function Preferences() {
                 </select>
               </Row>
 
-              <Row label={t('preferences.previewBackground')}>
+              <Row label={t("preferences.previewBackground")}>
                 <div className="flex min-w-44 items-center justify-end gap-1.5">
                   {BACKGROUNDS.map(({ value, labelKey }) => (
                     <Tooltip key={value} label={t(labelKey)}>
@@ -137,8 +262,8 @@ export function Preferences() {
                         onClick={() => setPreviewBackground(value)}
                         className={`h-6 w-6 rounded-md border ${
                           previewBackground === value
-                            ? 'border-sky-500 ring-1 ring-sky-500'
-                            : 'border-zinc-700 hover:border-zinc-500'
+                            ? "border-sky-500 ring-1 ring-sky-500"
+                            : "border-zinc-700 hover:border-zinc-500"
                         }`}
                         style={{ backgroundColor: value }}
                       />
@@ -146,10 +271,10 @@ export function Preferences() {
                   ))}
                   {/* Anything the swatches do not cover - a match for the room, a
                       client's brand colour behind a mock-up. */}
-                  <Tooltip label={t('preferences.previewBackground.custom')}>
+                  <Tooltip label={t("preferences.previewBackground.custom")}>
                     <input
                       type="color"
-                      aria-label={t('a11y.preferences.previewBackground')}
+                      aria-label={t("a11y.preferences.previewBackground")}
                       className="h-6 w-8 cursor-pointer rounded-md border border-zinc-700 bg-zinc-800"
                       value={previewBackground}
                       onChange={(e) => setPreviewBackground(e.target.value)}
@@ -157,6 +282,8 @@ export function Preferences() {
                   </Tooltip>
                 </div>
               </Row>
+
+              {captionsAvailable && <CaptionRows />}
             </div>
           </m.div>
         </m.div>
