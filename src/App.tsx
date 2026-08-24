@@ -1,49 +1,48 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { useTranslation } from 'react-i18next';
-import { AnimatePresence, m } from 'framer-motion';
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useTranslation } from "react-i18next";
+import { AnimatePresence, m } from "framer-motion";
 import {
   Cross2Icon,
   DownloadIcon,
   LightningBoltIcon,
   LinkBreak1Icon,
   UploadIcon,
-} from '@radix-ui/react-icons';
-import { useStore } from './store/store';
-import { initPersistence } from './lib/persistence';
-import { saveProjectFile, unbindProjectFile } from './lib/projectFile';
-import { HEALTHY, getSaveHealth, subscribeSaveHealth } from './lib/saveHealth';
-import { openFolderPicker, openMediaPicker } from './ui/mediaPicker';
-import { MenuBar } from './ui/MenuBar';
-import { TopBar } from './ui/TopBar';
-import { Transport } from './ui/Transport';
-import { Toast } from './ui/Toast';
-import { UnsupportedScreen, isSupported } from './ui/UnsupportedScreen';
-import { PreviewCanvas } from './preview/PreviewCanvas';
-import { PreviewQualityMenu } from './preview/PreviewQualityMenu';
-import { PreviewToolbar } from './preview/PreviewToolbar';
-import { Scopes } from './preview/ScopesPanel';
-import { ScopesMenu } from './preview/ScopesMenu';
-import { Timeline } from './timeline/Timeline';
-import { Inspector } from './inspector/Inspector';
-import { ExportSheet } from './export/ExportSheet';
-import { useImport } from './ui/useImport';
-import { MediaLibrary } from './ui/MediaLibrary';
-import { MobileBottomBar } from './ui/MobileBottomBar';
-import { ShortcutsHelp } from './ui/ShortcutsHelp';
-import { Preferences } from './ui/Preferences';
-import { About } from './ui/About';
-import { ConfirmDialog } from './ui/ConfirmDialog';
-import { ProjectLibrary } from './ui/ProjectLibrary';
-import { confirmDiscardProject } from './ui/projectActions';
-import { ContextMenu } from './ui/menu/ContextMenu';
-import { A11yAnnouncer } from './ui/A11yAnnouncer';
-import { useEditorHotkeys } from './ui/useEditorHotkeys';
-import { useFileDragOverlay } from './ui/useFileDragOverlay';
-import { useIsCoarsePointer } from './lib/device';
-import { isSoftwareRendering } from './lib/gpu';
-import { PerfOverlay } from './perf/PerfOverlay';
+} from "@radix-ui/react-icons";
+import { useStore } from "./store/store";
+import { initPersistence } from "./lib/persistence";
+import { saveProjectFile, unbindProjectFile } from "./lib/projectFile";
+import { HEALTHY, getSaveHealth, subscribeSaveHealth } from "./lib/saveHealth";
+import { openFolderPicker, openMediaPicker } from "./ui/mediaPicker";
+import { MenuBar } from "./ui/MenuBar";
+import { TopBar } from "./ui/TopBar";
+import { Transport } from "./ui/Transport";
+import { Toast } from "./ui/Toast";
+import { UnsupportedScreen, isSupported } from "./ui/UnsupportedScreen";
+import { PreviewCanvas } from "./preview/PreviewCanvas";
+import { PreviewToolbar } from "./preview/PreviewToolbar";
+import { Scopes } from "./preview/ScopesPanel";
+import { ScopesMenu } from "./preview/ScopesMenu";
+import { Timeline } from "./timeline/Timeline";
+import { Inspector } from "./inspector/Inspector";
+import { ExportSheet } from "./export/ExportSheet";
+import { useImport } from "./ui/useImport";
+import { MediaLibrary } from "./ui/MediaLibrary";
+import { MobileBottomBar } from "./ui/MobileBottomBar";
+import { ShortcutsHelp } from "./ui/ShortcutsHelp";
+import { Preferences } from "./ui/Preferences";
+import { About } from "./ui/About";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { ProjectLibrary } from "./ui/ProjectLibrary";
+import { confirmDiscardProject } from "./ui/projectActions";
+import { ContextMenu } from "./ui/menu/ContextMenu";
+import { A11yAnnouncer } from "./ui/A11yAnnouncer";
+import { useEditorHotkeys } from "./ui/useEditorHotkeys";
+import { useFileDragOverlay } from "./ui/useFileDragOverlay";
+import { useIsCoarsePointer } from "./lib/device";
+import { isSoftwareRendering } from "./lib/gpu";
+import { PerfOverlay } from "./perf/PerfOverlay";
 
-const PREVIEW_FRAC_KEY = 'selfcut.previewFrac';
+const PREVIEW_FRAC_KEY = "selfcut.previewFrac";
 const DEFAULT_PREVIEW_FRAC = 0.42;
 
 /** Draggable horizontal divider: resize the preview/timeline split (desktop). */
@@ -53,7 +52,7 @@ function SplitHandle({ onFrac }: { onFrac: (frac: number) => void }) {
   return (
     <div
       className="group relative z-10 -my-1 h-2 flex-none cursor-row-resize touch-none"
-      title={t('app.split.handle')}
+      title={t("app.split.handle")}
       onPointerDown={(e) => {
         dragging.current = true;
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -106,8 +105,8 @@ export default function App() {
       if (target?.closest('input, textarea, [contenteditable="true"]')) return;
       e.preventDefault();
     };
-    document.addEventListener('contextmenu', onContextMenu);
-    return () => document.removeEventListener('contextmenu', onContextMenu);
+    document.addEventListener("contextmenu", onContextMenu);
+    return () => document.removeEventListener("contextmenu", onContextMenu);
   }, []);
 
   if (!supported) return <UnsupportedScreen />;
@@ -138,7 +137,7 @@ export default function App() {
       <DisconnectedBanner />
       <div
         className="flex flex-none border-b border-zinc-800"
-        style={{ height: coarse ? '34dvh' : `${previewFrac * 100}dvh` }}
+        style={{ height: coarse ? "34dvh" : `${previewFrac * 100}dvh` }}
       >
         <MediaLibrary />
         <div className="relative min-w-0 flex-1">
@@ -147,7 +146,6 @@ export default function App() {
           <ImportingBadge />
           <Scopes />
           <ScopesMenu />
-          <PreviewQualityMenu />
           <PerfOverlay />
         </div>
         {!coarse && <Inspector />}
@@ -177,7 +175,9 @@ export default function App() {
             className="pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 border-4 border-dashed border-sky-500 bg-sky-500/10 backdrop-blur-sm"
           >
             <UploadIcon className="h-12 w-12 text-sky-400" />
-            <p className="text-sm font-medium text-sky-200">{t('app.drop.title')}</p>
+            <p className="text-sm font-medium text-sky-200">
+              {t("app.drop.title")}
+            </p>
           </m.div>
         )}
       </AnimatePresence>
@@ -185,7 +185,7 @@ export default function App() {
   );
 }
 
-const GPU_WARNING_KEY = 'selfcut.gpuWarningDismissed';
+const GPU_WARNING_KEY = "selfcut.gpuWarningDismissed";
 
 /**
  * Performance warning: shown when the browser is compositing in software.
@@ -197,7 +197,7 @@ function SoftwareRenderingBanner() {
   const { t } = useTranslation();
   // Probed once per session: the renderer cannot change while the page lives.
   const [software] = useState(() => {
-    if (localStorage.getItem(GPU_WARNING_KEY) === '1') return false;
+    if (localStorage.getItem(GPU_WARNING_KEY) === "1") return false;
     return isSoftwareRendering();
   });
   const [dismissed, setDismissed] = useState(false);
@@ -206,13 +206,13 @@ function SoftwareRenderingBanner() {
   return (
     <div className="flex flex-none items-center gap-x-3 gap-y-1.5 border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
       <LightningBoltIcon className="h-4 w-4 flex-none text-amber-300" />
-      <span className="min-w-0 flex-1">{t('gpu.softwareRendering')}</span>
+      <span className="min-w-0 flex-1">{t("gpu.softwareRendering")}</span>
       <button
         className="touch-hit flex-none rounded p-1 text-amber-200/80 hover:bg-amber-400/10 hover:text-amber-100"
-        title={t('gpu.dismiss')}
-        aria-label={t('gpu.dismiss')}
+        title={t("gpu.dismiss")}
+        aria-label={t("gpu.dismiss")}
         onClick={() => {
-          localStorage.setItem(GPU_WARNING_KEY, '1');
+          localStorage.setItem(GPU_WARNING_KEY, "1");
           setDismissed(true);
         }}
       >
@@ -232,7 +232,11 @@ function SoftwareRenderingBanner() {
  */
 function SaveFailureBanner() {
   const { t } = useTranslation();
-  const health = useSyncExternalStore(subscribeSaveHealth, getSaveHealth, () => HEALTHY);
+  const health = useSyncExternalStore(
+    subscribeSaveHealth,
+    getSaveHealth,
+    () => HEALTHY,
+  );
   if (!health.failing) return null;
 
   return (
@@ -240,8 +244,11 @@ function SaveFailureBanner() {
       role="status"
       className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100"
     >
-      <DownloadIcon className="h-4 w-4 flex-none text-rose-300" aria-hidden="true" />
-      <span className="min-w-0 flex-1">{t('save.failing.message')}</span>
+      <DownloadIcon
+        className="h-4 w-4 flex-none text-rose-300"
+        aria-hidden="true"
+      />
+      <span className="min-w-0 flex-1">{t("save.failing.message")}</span>
       <button
         className="flex-none rounded bg-rose-400/20 px-2.5 py-1 font-medium text-rose-100 hover:bg-rose-400/30"
         onClick={() => {
@@ -251,7 +258,7 @@ function SaveFailureBanner() {
           });
         }}
       >
-        {t('save.failing.action')}
+        {t("save.failing.action")}
       </button>
     </div>
   );
@@ -289,20 +296,20 @@ function DisconnectedBanner() {
     <div className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
       <LinkBreak1Icon className="h-4 w-4 flex-none text-amber-300" />
       <span className="min-w-0 flex-1">
-        {t('restore.disconnected', { count: disconnected.length })}
+        {t("restore.disconnected", { count: disconnected.length })}
       </span>
       <button
         className="flex-none rounded bg-amber-400/20 px-2.5 py-1 font-medium text-amber-100 hover:bg-amber-400/30"
         onClick={reconnectFrom(openMediaPicker)}
       >
-        {t('restore.reconnect')}
+        {t("restore.reconnect")}
       </button>
       <button
         className="flex-none rounded bg-amber-400/20 px-2.5 py-1 font-medium text-amber-100 hover:bg-amber-400/30"
         onClick={reconnectFrom(openFolderPicker)}
-        title={t('restore.reconnectFolderHint')}
+        title={t("restore.reconnectFolderHint")}
       >
-        {t('restore.reconnectFolder')}
+        {t("restore.reconnectFolder")}
       </button>
       <button
         className="flex-none rounded px-2.5 py-1 font-medium text-amber-200/80 hover:bg-amber-400/10 hover:text-amber-100"
@@ -316,7 +323,7 @@ function DisconnectedBanner() {
           });
         }}
       >
-        {t('restore.startNew')}
+        {t("restore.startNew")}
       </button>
     </div>
   );
@@ -338,7 +345,7 @@ function ImportingBadge() {
           className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 rounded-full bg-zinc-800/90 px-3 py-1.5 text-xs text-zinc-200 shadow-lg"
         >
           <span className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
-          {importStatus ?? t('app.importing')}
+          {importStatus ?? t("app.importing")}
         </m.div>
       )}
     </AnimatePresence>

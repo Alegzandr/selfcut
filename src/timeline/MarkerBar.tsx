@@ -57,6 +57,9 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
   const renamingMarkerId = useStore((s) => s.renamingMarkerId);
   const coarse = useIsCoarsePointer();
   const drag = useRef<Drag | null>(null);
+  // A click on a marker cues the playhead, but a double-click means "rename" -
+  // so the second click rewinds the cue the first one performed.
+  const seekUndo = useRef<{ id: string; fromMs: number } | null>(null);
 
   const markers = useMemo(() => [...markerList].sort((a, b) => a.timeMs - b.timeMs), [markerList]);
   // Inline label editor: which marker (if any) has it open lives in the store, so
@@ -105,15 +108,19 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
     else s.moveMarker(d.id, at);
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d) return;
     drag.current = null;
     const s = useStore.getState();
     if (d.kind === 'marker') {
       s.endGesture();
-      // A marker pressed but not dragged is a cue: jump to it.
-      if (!d.moved) s.seek(s.project.markers.find((m) => m.id === d.id)?.timeMs ?? s.currentTimeMs);
+      // A marker pressed but not dragged is a cue: jump to it. The closing click
+      // of a double-click is left alone, so the rename can undo the first cue.
+      if (!d.moved && e.detail < 2) {
+        seekUndo.current = { id: d.id, fromMs: s.currentTimeMs };
+        s.seek(s.project.markers.find((m) => m.id === d.id)?.timeMs ?? s.currentTimeMs);
+      }
       return;
     }
     // A press on the bar that never moved is a click: it clears the selection.
@@ -216,6 +223,9 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
             onPointerCancel={onPointerUp}
             onDoubleClick={(e) => {
               e.stopPropagation();
+              const undo = seekUndo.current;
+              seekUndo.current = null;
+              if (undo?.id === marker.id) useStore.getState().seek(undo.fromMs);
               useStore.getState().setRenamingMarker(marker.id);
             }}
             onContextMenu={(e) => {

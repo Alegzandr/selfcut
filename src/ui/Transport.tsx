@@ -1,13 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { LoopIcon, PauseIcon, PlayIcon, TrackPreviousIcon } from '@radix-ui/react-icons';
-import { useStore, projectDurationMs } from '../store/store';
-import { Tooltip } from './Tooltip';
-import { useEditorCommands } from './commands';
-import { TrackHeightMenu } from './TrackHeightMenu';
-import { PreviewZoomMenu } from '../preview/PreviewZoomMenu';
-import { useIsCoarsePointer } from '../lib/device';
-import { formatClock, formatClockParts, parseClock } from '../lib/time';
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  LoopIcon,
+  PauseIcon,
+  PlayIcon,
+  TrackPreviousIcon,
+} from "@radix-ui/react-icons";
+import { useStore, projectDurationMs } from "../store/store";
+import { Tooltip } from "./Tooltip";
+import { useEditorCommands } from "./commands";
+import { TrackHeightMenu } from "./TrackHeightMenu";
+import { PreviewZoomMenu } from "../preview/PreviewZoomMenu";
+import { PreviewQualityMenu } from "../preview/PreviewQualityMenu";
+import { useIsCoarsePointer } from "../lib/device";
+import { formatClock, formatClockParts, parseClock } from "../lib/time";
 
 /**
  * Timecode updated 60×/sec during playback - written straight to the DOM from
@@ -33,15 +39,22 @@ function TimeReadout() {
     const apply = () => {
       const s = useStore.getState();
       const durationMs = projectDurationMs(s.project);
-      const cur = formatClockParts(s.currentTimeMs, s.project.fps, s.timeFormat);
+      const cur = formatClockParts(
+        s.currentTimeMs,
+        s.project.fps,
+        s.timeFormat,
+      );
       const rightMs = remainingRef.current
         ? Math.max(0, durationMs - s.currentTimeMs)
         : durationMs;
       const right = formatClockParts(rightMs, s.project.fps, s.timeFormat);
       if (currentRef.current) currentRef.current.textContent = cur.main;
-      if (framesRef.current) framesRef.current.textContent = cur.frames ? `.${cur.frames}` : '';
+      if (framesRef.current)
+        framesRef.current.textContent = cur.frames ? `.${cur.frames}` : "";
       if (totalRef.current)
-        totalRef.current.textContent = remainingRef.current ? `-${right.main}` : right.main;
+        totalRef.current.textContent = remainingRef.current
+          ? `-${right.main}`
+          : right.main;
     };
     apply();
     return useStore.subscribe((s, prev) => {
@@ -61,14 +74,18 @@ function TimeReadout() {
    */
   const startEditing = () => {
     const s = useStore.getState();
-    const { main, frames } = formatClockParts(s.currentTimeMs, s.project.fps, s.timeFormat);
+    const { main, frames } = formatClockParts(
+      s.currentTimeMs,
+      s.project.fps,
+      s.timeFormat,
+    );
     setDraft(frames ? `${main}.${frames}` : main);
     setInvalid(false);
   };
 
   const commit = () => {
     const s = useStore.getState();
-    const ms = parseClock(draft ?? '', s.project.fps, s.timeFormat);
+    const ms = parseClock(draft ?? "", s.project.fps, s.timeFormat);
     // Unparseable input keeps the field open instead of jumping somewhere
     // arbitrary - the user gets to fix the typo.
     if (ms === null) {
@@ -85,9 +102,9 @@ function TimeReadout() {
         <input
           autoFocus
           onFocus={(e) => e.currentTarget.select()}
-          aria-label={t('transport.timecode.goto')}
+          aria-label={t("transport.timecode.goto")}
           className={`w-[62px] rounded border bg-zinc-950 px-1 text-center font-mono text-xs tabular-nums text-zinc-100 outline-none ${
-            invalid ? 'border-red-500' : 'border-sky-500'
+            invalid ? "border-red-500" : "border-sky-500"
           }`}
           value={draft}
           onChange={(e) => {
@@ -96,22 +113,27 @@ function TimeReadout() {
           }}
           // Hotkeys ignore inputs, but stop the bubble so nothing else claims Enter/Escape.
           onKeyDown={(e) => {
-            if (e.key === 'Enter') commit();
-            else if (e.key === 'Escape') setDraft(null);
+            if (e.key === "Enter") commit();
+            else if (e.key === "Escape") setDraft(null);
             e.stopPropagation();
           }}
           onBlur={() => setDraft(null)}
         />
       ) : (
-        <Tooltip label={t('transport.timecode.goto')}>
-          <button className="rounded px-0.5 hover:bg-zinc-800/70 active:bg-zinc-800" onClick={startEditing}>
+        <Tooltip label={t("transport.timecode.goto")}>
+          <button
+            className="rounded px-0.5 hover:bg-zinc-800/70 active:bg-zinc-800"
+            onClick={startEditing}
+          >
             <span ref={currentRef} className="text-zinc-100" />
             <span ref={framesRef} className="text-3xs text-zinc-400" />
           </button>
         </Tooltip>
-      )}{' '}
-      /{' '}
-      <Tooltip label={showRemaining ? t('transport.remaining') : t('transport.total')}>
+      )}{" "}
+      /{" "}
+      <Tooltip
+        label={showRemaining ? t("transport.remaining") : t("transport.total")}
+      >
         <button
           className="rounded px-0.5 hover:bg-zinc-800/70 active:bg-zinc-800"
           onClick={() => setShowRemaining((v) => !v)}
@@ -140,11 +162,11 @@ function ViewToolButton({ id }: { id: string }) {
     <Tooltip
       label={command.hintKey ? t(command.hintKey) : t(command.labelKey)}
       // Snapping states its own key inside the hint, so the chip would repeat it.
-      shortcut={id === 'view.snap' ? undefined : command.shortcut}
+      shortcut={id === "view.snap" ? undefined : command.shortcut}
     >
       <button
         className={`touch-hit rounded-lg p-2 hover:bg-zinc-800/70 active:bg-zinc-800 ${
-          command.checked ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400'
+          command.checked ? "bg-sky-500/20 text-sky-300" : "text-zinc-400"
         }`}
         aria-pressed={command.checked}
         onClick={command.onClick}
@@ -189,7 +211,8 @@ export function Transport() {
   const loopEnabled = useStore((s) => s.loopEnabled);
   const timeFormat = useStore((s) => s.timeFormat);
   const fps = useStore((s) => s.project.fps);
-  const { setPlaying, seek, toggleLoopEnabled, setLoopRegion } = useStore.getState();
+  const { setPlaying, seek, toggleLoopEnabled, setLoopRegion } =
+    useStore.getState();
 
   return (
     <div className="flex h-11 flex-none items-center justify-center border-y border-zinc-800 bg-zinc-900 px-2">
@@ -201,62 +224,69 @@ export function Transport() {
         </div>
       )}
       <div className="flex flex-none items-center gap-1">
-      <Tooltip label={t('transport.backToStart')}>
-        <button
-          className="touch-hit rounded-lg p-2 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
-          onClick={() => seek(0)}
-        >
-          <TrackPreviousIcon className="h-4 w-4" />
-        </button>
-      </Tooltip>
-      <Tooltip label={playing ? t('transport.pause') : t('transport.play')}>
-      <button
-        className="touch-hit relative rounded-full bg-zinc-300 p-2.5 text-zinc-950 hover:bg-zinc-100 active:bg-zinc-200"
-        onClick={() => setPlaying(!playing)}
-      >
-        {playing ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4 translate-x-px" />}
-        {/* Shuttle badge: visible while J/L drive playback at a non-1× rate. */}
-        {playing && playbackRate !== 1 && (
-          <span className="absolute -right-1.5 -top-1.5 rounded-full bg-sky-500 px-1 text-4xs font-bold leading-4 text-white">
-            {playbackRate < 1 ? playbackRate.toFixed(2).replace(/0$/, '') : playbackRate}×
-          </span>
-        )}
-      </button>
-      </Tooltip>
-      <TimeReadout />
-
-      <div className="mx-1 h-5 w-px bg-zinc-800" />
-
-      <Tooltip label={t('transport.loop')}>
-        <button
-          className={`touch-hit rounded-lg p-2 ${loopEnabled ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400'} hover:bg-zinc-800/70 active:bg-zinc-800`}
-          aria-pressed={loopEnabled}
-          onClick={toggleLoopEnabled}
-        >
-          <LoopIcon className="h-4 w-4" />
-        </button>
-      </Tooltip>
-
-      {/* Selection readout: clicking it clears the region (like clicking the empty bar). */}
-      {region && (
-        <Tooltip label={t('transport.region.clear')}>
+        <Tooltip label={t("transport.backToStart")}>
           <button
-            className="touch-hit rounded-lg px-2 py-1 font-mono text-2xs tabular-nums text-amber-300 hover:bg-zinc-800/70 active:bg-zinc-800"
-            onClick={() => setLoopRegion(null)}
+            className="touch-hit rounded-lg p-2 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
+            onClick={() => seek(0)}
           >
-            {formatClock(region.startMs, fps, timeFormat)} →{' '}
-            {formatClock(region.endMs, fps, timeFormat)}
+            <TrackPreviousIcon className="h-4 w-4" />
           </button>
         </Tooltip>
-      )}
+        <Tooltip label={playing ? t("transport.pause") : t("transport.play")}>
+          <button
+            className="touch-hit relative rounded-full bg-zinc-300 p-2.5 text-zinc-950 hover:bg-zinc-100 active:bg-zinc-200"
+            onClick={() => setPlaying(!playing)}
+          >
+            {playing ? (
+              <PauseIcon className="h-4 w-4" />
+            ) : (
+              <PlayIcon className="h-4 w-4 translate-x-px" />
+            )}
+            {/* Shuttle badge: visible while J/L drive playback at a non-1× rate. */}
+            {playing && playbackRate !== 1 && (
+              <span className="absolute -right-1.5 -top-1.5 rounded-full bg-sky-500 px-1 text-4xs font-bold leading-4 text-white">
+                {playbackRate < 1
+                  ? playbackRate.toFixed(2).replace(/0$/, "")
+                  : playbackRate}
+                ×
+              </span>
+            )}
+          </button>
+        </Tooltip>
+        <TimeReadout />
+
+        <div className="mx-1 h-5 w-px bg-zinc-800" />
+
+        <Tooltip label={t("transport.loop")}>
+          <button
+            className={`touch-hit rounded-lg p-2 ${loopEnabled ? "bg-amber-500/20 text-amber-300" : "text-zinc-400"} hover:bg-zinc-800/70 active:bg-zinc-800`}
+            aria-pressed={loopEnabled}
+            onClick={toggleLoopEnabled}
+          >
+            <LoopIcon className="h-4 w-4" />
+          </button>
+        </Tooltip>
+
+        {/* Selection readout: clicking it clears the region (like clicking the empty bar). */}
+        {region && (
+          <Tooltip label={t("transport.region.clear")}>
+            <button
+              className="touch-hit rounded-lg px-2 py-1 font-mono text-2xs tabular-nums text-amber-300 hover:bg-zinc-800/70 active:bg-zinc-800"
+              onClick={() => setLoopRegion(null)}
+            >
+              {formatClock(region.startMs, fps, timeFormat)} →{" "}
+              {formatClock(region.endMs, fps, timeFormat)}
+            </button>
+          </Tooltip>
+        )}
       </div>
 
-      {/* The monitor's own scale, on the monitor's side of the bar. */}
-      {!coarse && (
-        <div className="flex min-w-0 flex-1 justify-end">
-          <PreviewZoomMenu />
-        </div>
-      )}
+      {/* The monitor's own settings - playback resolution and scale - side by
+          side on the monitor's side of the bar. */}
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-0.5">
+        <PreviewQualityMenu />
+        {!coarse && <PreviewZoomMenu />}
+      </div>
     </div>
   );
 }
