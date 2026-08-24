@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canFanOut,
   MAX_SEGMENT_BYTES,
   MAX_SEGMENT_WORKERS,
   MIN_SEGMENT_SECONDS,
@@ -129,5 +130,37 @@ describe('planSegments', () => {
     const { segments } = planSegments({ totalFrames: 196 * 120, ...FOUR_K_120, cores: 16 });
     const minFrames = Math.ceil(MIN_SEGMENT_SECONDS * FOUR_K_120.fps);
     for (const s of segments) expect(s.frameCount).toBeGreaterThanOrEqual(minFrames);
+  });
+});
+
+/**
+ * Geometry from the real preset table (`TIERS` and the smooth120 family in
+ * `presets.ts`), not invented: the gate is only meaningful if the presets the
+ * app actually ships fall on the side of it they are supposed to.
+ */
+describe('canFanOut', () => {
+  it('refuses the geometry that killed the media process', () => {
+    // 4K 120, landscape and vertical alike: ~995 Mpx/s, two sessions of it at
+    // once. The export a tester lost at 22%, with two slice-worker crashes 22 s
+    // apart and a GPU crash count still at zero.
+    expect(canFanOut({ width: 3840, height: 2160, fps: 120 })).toBe(false);
+    expect(canFanOut({ width: 2160, height: 3840, fps: 120 })).toBe(false);
+  });
+
+  it('still fans out everything below it', () => {
+    // The heaviest rungs that stay parallel, and the ordinary ones.
+    expect(canFanOut({ width: 3840, height: 2160, fps: 60 })).toBe(true); // 497 Mpx/s
+    expect(canFanOut({ width: 2560, height: 1440, fps: 120 })).toBe(true); // 442 Mpx/s
+    expect(canFanOut({ width: 1920, height: 1080, fps: 120 })).toBe(true); // 249 Mpx/s
+    expect(canFanOut({ width: 1920, height: 1080, fps: 60 })).toBe(true); // 124 Mpx/s
+    expect(canFanOut({ width: 1280, height: 720, fps: 60 })).toBe(true); //  55 Mpx/s
+  });
+
+  it('reads the same either way up', () => {
+    // Vertical is the app's default aspect ratio and mirrors the pixel count of
+    // its landscape rung, so the gate must not depend on which side is longer.
+    expect(canFanOut({ width: 1440, height: 2560, fps: 120 })).toBe(
+      canFanOut({ width: 2560, height: 1440, fps: 120 }),
+    );
   });
 });

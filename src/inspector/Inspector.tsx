@@ -95,6 +95,15 @@ export function Inspector() {
   // on every set(), and the playback engine writes the current time 60 times a
   // second, so this track scan used to run once per frame during playback.
   const project = useStore((s) => s.project);
+  // Which lane the clip sits on: the audio half of a linked pair shares the
+  // video asset of its partner, so `asset.kind` alone would hand it the picture
+  // sections (transform, colour, blur) for a waveform.
+  const onVideoTrack = useMemo(
+    () =>
+      !clip ||
+      project.tracks.find((tr) => tr.clips.some((c) => c.id === clip.id))?.kind !== 'audio',
+    [project, clip],
+  );
   const audioClip = useMemo(() => {
     if (!clip?.linkId) return clip;
     for (const track of project.tracks) {
@@ -138,7 +147,7 @@ export function Inspector() {
               <InspectorBody
                 clip={clip}
                 audioClip={audioClip ?? clip}
-                isVideo={!!asset && asset.kind !== 'audio'}
+                isVideo={onVideoTrack && !!asset && asset.kind !== 'audio'}
                 hasAudio={asset?.hasAudio ?? false}
                 name={clipDisplayName(clip, asset, t)}
               />
@@ -169,7 +178,7 @@ export function Inspector() {
               <InspectorBody
                 clip={clip}
                 audioClip={audioClip ?? clip}
-                isVideo={!!asset && asset.kind !== 'audio'}
+                isVideo={onVideoTrack && !!asset && asset.kind !== 'audio'}
                 hasAudio={asset?.hasAudio ?? false}
                 name={clipDisplayName(clip, asset, t)}
               />

@@ -49,7 +49,7 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from '@radix-ui/react-icons';
-import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
+import { useStore, getSelectedClip, getSelectedTrackKind, getLinkTargets } from '../store/store';
 import { defaultRedaction } from '../model';
 import type { LibraryTab } from '../store/editorState';
 import { useImport } from './useImport';
@@ -111,12 +111,20 @@ export function useEditorCommands(): Record<string, Command> {
   const previewFitted = useStore((s) => isViewReset(s.previewView));
   const loopEnabled = useStore((s) => s.loopEnabled);
   const selectedClip = useStore(getSelectedClip);
+  // The lane the clip sits on: the audio half of a linked pair carries the same
+  // (video) asset as its partner, so the asset kind alone cannot tell a picture
+  // from a waveform.
+  const selectedTrackKind = useStore(getSelectedTrackKind);
+  const onVideoTrack = selectedTrackKind !== 'audio';
   // Stream layout only makes sense on a real media clip (not text/solid overlays).
-  const canStream = selectedClip !== null && selectedClip.assetId !== '';
+  const canStream = selectedClip !== null && selectedClip.assetId !== '' && onVideoTrack;
   // Blurring a region needs a picture to blur: every generated clip has one, a
   // media clip only when its asset is not pure audio.
   const selectedAssetKind = useStore((s) => (selectedClip ? s.assets[selectedClip.assetId]?.kind : undefined));
-  const canRedact = selectedClip !== null && (selectedClip.kind !== 'media' || selectedAssetKind === 'video' || selectedAssetKind === 'image');
+  const canRedact =
+    selectedClip !== null &&
+    onVideoTrack &&
+    (selectedClip.kind !== 'media' || selectedAssetKind === 'video' || selectedAssetKind === 'image');
   const isLinked = selectedClip !== null && selectedClip.linkId != null;
   // Link is offered when the selection resolves to a joinable A/V pair (two
   // clips on opposite tracks, or one clip with an obvious partner from the same
@@ -230,7 +238,7 @@ export function useEditorCommands(): Record<string, Command> {
     // C (Premiere) and B (Resolve) also split - see useEditorHotkeys. Only S is
     // advertised here: a menu row listing three keys reads as a puzzle.
     { id: 'clip.duplicate', labelKey: 'menu.clip.duplicate', icon: CardStackPlusIcon, shortcut: 'Ctrl+D', disabled: !hasSelection, onClick: () => st().duplicateClips(st().selectedClipIds) },
-    { id: 'clip.punchIn', labelKey: 'menu.clip.punchIn', icon: TargetIcon, shortcut: 'P', disabled: !selectedId, onClick: () => st().punchZoomSelected() },
+    { id: 'clip.punchIn', labelKey: 'menu.clip.punchIn', icon: TargetIcon, shortcut: 'P', disabled: !selectedId || !onVideoTrack, onClick: () => st().punchZoomSelected() },
     { id: 'clip.stream', labelKey: 'menu.clip.stream', icon: ViewHorizontalIcon, disabled: !canStream, onClick: () => selectedId && st().applyStreamLayout(selectedId) },
     // Blur a face, a plate, a screen. Adds the region and opens it for editing
     // rather than dropping an invisible one on the clip: the whole point is that

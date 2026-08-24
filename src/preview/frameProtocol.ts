@@ -49,4 +49,21 @@ export interface FrameMessage {
   squarePixelHeight: number;
 }
 
-export type PreviewWorkerResponse = FrameMessage;
+/**
+ * A decode threw for this cursor.
+ *
+ * Distinct from "found nothing": a seek past the end simply yields no sample
+ * and is silent. Reaching here means the DECODER failed, which most often
+ * means the browser's media process died under it - and that leaves the worker
+ * itself alive, holding decoders that will never produce another frame. Nothing
+ * observed that before this message existed: the preview went black and stayed
+ * black, with the rAF loop still posting requests into a void.
+ */
+export interface DecodeFailedMessage {
+  type: 'decodeFailed';
+  cursorId: string;
+  /** The underlying failure, for the console line that explains the recovery. */
+  detail: string;
+}
+
+export type PreviewWorkerResponse = FrameMessage | DecodeFailedMessage;

@@ -5,6 +5,7 @@ import { drawClip, forEachVisibleVideoClip, invalidateResampling } from '../prev
 import { syncLuts } from '../preview/colorPass';
 import { loadFonts } from '../lib/fonts';
 import { StillFrame, type DrawableFrame } from '../media/stillImage';
+import { FONT_STALL_MS, withDeadline } from './stallGuard';
 import { ClipReader } from './clipReader';
 import { endSpan, span } from '../perf/probe';
 
@@ -94,11 +95,19 @@ export class FrameRenderer {
    * metrics from the very first frame.
    */
   async ready(): Promise<void> {
-    await loadFonts(
+    const fonts = loadFonts(
       this.opts.project.tracks.flatMap((track) =>
         track.clips.filter(isTextClip).map((clip) => clip.text.font),
       ),
     );
+    // Deadlined, and then swallowed: this await sits before the first frame of
+    // the render, so a face that never arrives holds the whole export at zero
+    // with nothing on the bar to say why. A missing face is cosmetic - the
+    // canvas falls back through `fontStack` - and an export that never starts
+    // is not. See FONT_STALL_MS.
+    await withDeadline(fonts, FONT_STALL_MS, 'font loading').catch((err: unknown) => {
+      console.warn('[export] fonts did not load in time, rendering with fallbacks:', err);
+    });
   }
 
   private getInput(assetId: string): Input | null {

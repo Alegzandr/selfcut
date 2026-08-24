@@ -137,6 +137,26 @@ export const FONT_STALL_MS = 30_000;
 export const TEARDOWN_STALL_MS = 15_000;
 
 /**
+ * How long the lead worker of a fanned-out render waits to hear ANYTHING from
+ * ANY of its slice workers.
+ *
+ * Every deadline above is armed inside a slice worker, which makes them all
+ * useless against the one failure that takes the worker itself: a slice worker
+ * whose thread is gone reports no stall, because reporting the stall was its
+ * job. The lead then waits on a message that is never coming, with nothing
+ * counting - which is the bug this whole file exists to end, reappearing one
+ * level up.
+ *
+ * Deliberately the longest figure here, and derived rather than chosen: a slice
+ * worker that is merely slow can legitimately go quiet for one frame's decode
+ * (`FRAME_STALL_MS`) plus the teardown that follows it, so anything shorter
+ * would abort renders that were going to finish. It is a backstop, not the
+ * thing that makes a stalled export end quickly - the slice worker's own
+ * `ENCODE_STALL_MS` is, once it can report.
+ */
+export const SEGMENT_SILENCE_MS = FRAME_STALL_MS + TEARDOWN_STALL_MS + 15_000;
+
+/**
  * How long a `canEncodeVideo` / `canEncodeAudio` support query may take.
  *
  * These are the first thing an export does, and they answer from a table in

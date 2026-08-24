@@ -3,7 +3,7 @@ import type { ParseKeys } from 'i18next';
 import { AnimatePresence, m } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { TrashIcon, UploadIcon } from '@radix-ui/react-icons';
-import { useStore, getSelectedClip, getLinkTargets } from '../store/store';
+import { useStore, getSelectedClip, getSelectedTrackKind, getLinkTargets } from '../store/store';
 import { useIsCoarsePointer } from '../lib/device';
 import { useEditorCommands } from './commands';
 
@@ -29,6 +29,8 @@ type Tile = {
   danger?: boolean;
   /** Clip rail only: hide the tile unless the selected clip is real media. */
   mediaOnly?: boolean;
+  /** Clip rail only: hide the tile unless the clip sits on a video track. */
+  pictureOnly?: boolean;
   /** Clip rail only: hide the tile unless the selected clip is A/V-linked. */
   linkedOnly?: boolean;
   /** Clip rail only: hide the tile unless the selection can be A/V-linked. */
@@ -57,9 +59,9 @@ const CLIP_TILES: readonly Tile[] = [
   { cmd: 'edit.copy', labelKey: 'clipbar.copy' },
   { cmd: 'edit.paste', labelKey: 'clipbar.paste' },
   { cmd: 'clip.duplicate', labelKey: 'clipbar.duplicate' },
-  { cmd: 'clip.punchIn', labelKey: 'clipbar.punchIn' },
-  { cmd: 'clip.stream', labelKey: 'clipbar.stream', mediaOnly: true },
-  { cmd: 'clip.blurRegion', labelKey: 'clipbar.blurRegion' },
+  { cmd: 'clip.punchIn', labelKey: 'clipbar.punchIn', pictureOnly: true },
+  { cmd: 'clip.stream', labelKey: 'clipbar.stream', mediaOnly: true, pictureOnly: true },
+  { cmd: 'clip.blurRegion', labelKey: 'clipbar.blurRegion', pictureOnly: true },
   { cmd: 'clip.adjust', labelKey: 'clipbar.adjust' },
   { cmd: 'clip.link', labelKey: 'clipbar.link', linkableOnly: true },
   { cmd: 'clip.unlink', labelKey: 'clipbar.unlink', linkedOnly: true },
@@ -105,6 +107,9 @@ export function MobileBottomBar() {
   const coarse = useIsCoarsePointer();
   const clip = useStore(getSelectedClip);
   const canLink = useStore((s) => getLinkTargets(s) !== null);
+  // Blur and reframing need a picture: the audio half of a linked pair carries
+  // a video asset, so the lane is what settles it.
+  const onVideoTrack = useStore(getSelectedTrackKind) !== 'audio';
   const inspectorOpen = useStore((s) => s.inspectorOpen);
   if (!coarse) return null;
 
@@ -115,6 +120,7 @@ export function MobileBottomBar() {
     ? CLIP_TILES.filter(
         (tile) =>
           (!tile.mediaOnly || clip.assetId !== '') &&
+          (!tile.pictureOnly || onVideoTrack) &&
           (!tile.linkedOnly || clip.linkId != null) &&
           (!tile.linkableOnly || canLink),
       )

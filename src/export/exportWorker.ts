@@ -20,7 +20,7 @@ import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
 import { FrameRenderer } from './frameRenderer';
 import { RenderPreviewTap } from './renderPreview';
 import { chooseEncoderSetup, type EncoderSetup, type ProbeResult } from './encoderSetup';
-import { planSegments, type SegmentPlan } from './segmentPlan';
+import { canFanOut, planSegments, type SegmentPlan } from './segmentPlan';
 import type { SegmentReply, SegmentRequest } from './segmentProtocol';
 import type { ExportVideoCodec, Mp4Preset } from './presets';
 import { endFrame, endSpan, mergeSnapshots, type PerfSnapshot, setPerfEnabled, snapshot, span } from '../perf/probe';
@@ -30,8 +30,10 @@ import {
   FIRST_ENCODE_STALL_MS,
   FRAME_STALL_MS,
   PROBE_STALL_MS,
+  SEGMENT_SILENCE_MS,
   StalledError,
   SUPPORT_PROBE_MS,
+  TEARDOWN_STALL_MS,
   withDeadline,
 } from './stallGuard';
 import {
@@ -490,7 +492,13 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
 
   const totalFrames = Math.max(1, Math.ceil((durationMs / 1000) * preset.fps));
 
-  const plan = req.noParallel
+  // Two reasons to keep the whole render on one worker, and they are not the
+  // same reason. `noParallel` is the caller's choice - the retry after a slice
+  // mismatch, the perf suite comparing the two paths. `canFanOut` is the
+  // machine's: past a certain pixel rate a second concurrent encoder session
+  // does not make the render faster, it kills the media process that both of
+  // them live in. See MAX_PARALLEL_PIXELS_PER_SECOND.
+  const plan = req.noParallel || !canFanOut(preset)
     ? { segments: [{ firstFrame: 0, frameCount: totalFrames }], workers: 1 }
     : planSegments({
         totalFrames,
@@ -608,7 +616,18 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
     }
     postDone(target, 'video/mp4');
   } finally {
-    await renderer?.dispose();
+    // Deadlined for the same reason `output.cancel()` below is: closing the
+    // readers runs through the decoders, and when those are what stopped
+    // responding this is where the export hangs on its way out - swallowing
+    // the failure that was being reported and leaving the user's file locked,
+    // because the release below never runs.
+    await withDeadline(
+      renderer?.dispose() ?? Promise.resolve(),
+      TEARDOWN_STALL_MS,
+      'renderer teardown',
+    ).catch(() => {
+      /* abandoned: this worker is about to be terminated regardless */
+    });
     if (!finished) {
       // Release the destination file: without this the writable stays open and
       // the user is left with a locked, half-written file.
@@ -619,7 +638,7 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
       // file left locked is a worse outcome than a file left open, so this
       // waits - it just does not wait for ever.
       try {
-        await withDeadline(output.cancel(), ENCODE_STALL_MS, 'output teardown');
+        await withDeadline(output.cancel(), TEARDOWN_STALL_MS, 'output teardown');
       } catch {
         /* already torn down, or torn down by an encoder that stopped answering */
       }
@@ -735,6 +754,7 @@ async function renderParallel(
   const workers: Worker[] = [];
   /** Workers with nothing to do, waiting for `pump` to find them a slice. */
   const idle: Worker[] = [];
+
   /** Resolves when every slice has been muxed, or the first failure. */
   let settle: () => void = () => {};
   let fail: (e: Error) => void = () => {};
@@ -742,6 +762,31 @@ async function renderParallel(
     settle = resolve;
     fail = reject;
   });
+
+  /**
+   * Backstop for a slice worker that stops speaking altogether.
+   *
+   * Every deadline a slice render carries is armed INSIDE the slice worker,
+   * which is what makes them blind to the one failure that takes the worker
+   * itself - a thread killed with the browser's media process, say. Nothing
+   * then reports the stall, because reporting it was that worker's job, and
+   * this function waits on a `segmentDone` that is never coming: the bar
+   * freezes and the export has to be killed with the tab.
+   *
+   * Reported as `encoderStalled` rather than as a crash because it is the same
+   * situation from the outside and wants the same answer: the main thread
+   * re-runs the whole render on the software encoder, which does not go through
+   * the process that just died.
+   */
+  let silence: ReturnType<typeof setTimeout> | undefined;
+  const heard = (): void => {
+    clearTimeout(silence);
+    if (failure || appended === plan.segments.length) return;
+    silence = setTimeout(() => {
+      failure = new ExportError('encoderStalled');
+      fail(failure);
+    }, SEGMENT_SILENCE_MS);
+  };
 
   /**
    * Frames rendered so far, counting a finished slice in full.
@@ -864,6 +909,12 @@ async function renderParallel(
       workers.push(w);
       w.onmessage = (e: MessageEvent<SegmentReply>) => {
         const msg = e.data;
+        // Any message at all, of any kind, is proof the slice workers are
+        // alive; the deadline only elapses when every one of them has gone
+        // quiet. Re-armed here rather than per worker: a render is stalled when
+        // NOTHING is moving, and one worker labouring over a heavy slice while
+        // another has died is still a render that will finish.
+        heard();
         if (msg.type === 'segmentProgress') {
           progress.set(msg.index, msg.frames);
           reportProgress();
@@ -924,10 +975,12 @@ async function renderParallel(
       };
     }
     idle.push(...workers);
+    heard();
     pump();
     await allDone;
     return segmentPerf;
   } finally {
+    clearTimeout(silence);
     for (const w of workers) w.terminate();
   }
 }
@@ -1030,7 +1083,7 @@ async function exportMp3(req: ExportRequest): Promise<void> {
   } finally {
     if (!finished) {
       try {
-        await withDeadline(output.cancel(), ENCODE_STALL_MS, 'output teardown');
+        await withDeadline(output.cancel(), TEARDOWN_STALL_MS, 'output teardown');
       } catch {
         /* already torn down, or torn down by an encoder that stopped answering */
       }

@@ -100,6 +100,47 @@ export const MAX_SEGMENT_BYTES = 64 * 1024 * 1024;
  */
 export const MAX_SEGMENT_WORKERS = 2;
 
+/**
+ * Pixel rate above which a render encodes on ONE worker, however many cores
+ * the machine has.
+ *
+ * Fanning out does not just spend more CPU: each slice worker holds its own
+ * hardware encoder session AND its own decoders, and those are not per-thread
+ * resources - they are sessions on one fixed-function block with a throughput
+ * budget of its own. Ask for more than it can carry and it does not slow down,
+ * it dies, taking the sandboxed media process with it. Every decoder and
+ * encoder in the tab goes with it, and because that process is not the GPU
+ * process, nothing in `chrome://gpu` even counts the crash.
+ *
+ * That is the 4K 120 export a tester lost at 22 %: `chrome://crashes` held two
+ * crashes 22 s apart - one per slice worker - while the GPU crash count stayed
+ * at zero. Two 4K 120 sessions is 2.0 Gpx/s of encode plus the decode of the
+ * source underneath it, against a block sized for a small multiple of 4K 60.
+ *
+ * The figure below is a guard, not a measurement: it is one crash report's
+ * worth of evidence, chosen to sit above 4K 60 (497 Mpx/s) and 1440p 120
+ * (442 Mpx/s), which are attested, and below 4K 120 (995 Mpx/s), which is not.
+ * It should be moved by measuring, not by argument.
+ *
+ * The probe in `chooseEncoderSetup` cannot stand in for this. It encodes ONE
+ * frame before the render starts, on one encoder, and a block that dies after
+ * twenty seconds of sustained load answers that probe perfectly.
+ */
+export const MAX_PARALLEL_PIXELS_PER_SECOND = 500_000_000;
+
+/**
+ * Whether this geometry may be encoded by more than one worker at a time.
+ *
+ * Deliberately not folded into `planSegments`: that function is slice
+ * arithmetic - how long a slice may be, how many of them cover the render - and
+ * this is a question about the machine, answered before any of that arithmetic
+ * is worth doing. Keeping them apart is what lets each be read, and tested, on
+ * its own terms.
+ */
+export function canFanOut(geometry: { width: number; height: number; fps: number }): boolean {
+  return geometry.width * geometry.height * geometry.fps <= MAX_PARALLEL_PIXELS_PER_SECOND;
+}
+
 export function planSegments(options: {
   totalFrames: number;
   fps: number;

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { produce, setAutoFreeze } from 'immer';
-import { Clip, LoopRegion, Marker, Project } from '../types';
+import { Clip, LoopRegion, Marker, Project, Track } from '../types';
 import { clipDurationMs, clipEndMs, projectDurationMs, sortedMarkers } from '../model';
 import { createEmptyProject, linkableSelection, resolveOverlaps } from './projectOps';
 import { editTargets } from './editTargets';
@@ -328,6 +328,36 @@ export function getSelectedClip(state: EditorState): Clip | null {
   }
   selectedClipCache = { project, id: selectedClipId, clip };
   return clip;
+}
+
+let selectedTrackCache: { project: Project; id: string | null; kind: Track['kind'] | null } | null = null;
+
+/**
+ * Selector: the kind of the track holding the selected clip (or null).
+ * The clip alone cannot answer it: the audio half of a linked A/V pair comes
+ * from a video asset, so anything picture-only ("blur a region", the colour
+ * sections) must key off the lane the clip actually sits on.
+ */
+export function getSelectedTrackKind(state: EditorState): Track['kind'] | null {
+  const { project, selectedClipId } = state;
+  if (
+    selectedTrackCache &&
+    selectedTrackCache.project === project &&
+    selectedTrackCache.id === selectedClipId
+  ) {
+    return selectedTrackCache.kind;
+  }
+  let kind: Track['kind'] | null = null;
+  if (selectedClipId) {
+    for (const track of project.tracks) {
+      if (track.clips.some((c) => c.id === selectedClipId)) {
+        kind = track.kind;
+        break;
+      }
+    }
+  }
+  selectedTrackCache = { project, id: selectedClipId, kind };
+  return kind;
 }
 
 let linkTargetsCache: {

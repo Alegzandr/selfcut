@@ -7,6 +7,7 @@ import {
   FIRST_ENCODE_STALL_MS,
   FRAME_STALL_MS,
   StalledError,
+  TEARDOWN_STALL_MS,
   withDeadline,
 } from './stallGuard';
 import type { SegmentReply, SegmentRequest } from './segmentProtocol';
@@ -175,6 +176,24 @@ async function render(req: SegmentRequest): Promise<void> {
     void output.cancel().catch(() => {});
     throw err;
   } finally {
-    await renderer.dispose();
+    // Deadlined, for exactly the reason `output.cancel()` above is not awaited
+    // at all: closing a reader runs through the very decoder that may be what
+    // stopped responding. Without a deadline this hangs on the way out of a
+    // failure and takes the `throw` above with it - `segmentFailed` never
+    // reaches the lead, and the render the watchdog had just escaped from
+    // stalls anyway, for ever. That is the shape of the 4K 120 hang reported
+    // with two slice workers and a media process that died under them.
+    //
+    // Swallowed rather than rethrown: on the failure path the real failure is
+    // already in flight and must be the one that arrives, and on the success
+    // path the slice has been posted and this worker is finished with either
+    // way - the lead terminates it.
+    await withDeadline(
+      renderer.dispose(),
+      TEARDOWN_STALL_MS,
+      `segment ${req.index} teardown`,
+    ).catch(() => {
+      /* abandoned: this worker is about to be terminated regardless */
+    });
   }
 }

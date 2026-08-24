@@ -51,10 +51,13 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
 
   switch (target.kind) {
     case 'clip': {
-      const clip = tracks
-        .flatMap((tr) => tr.clips)
-        .find((c) => c.id === target.clipId);
+      const track = tracks.find((tr) => tr.clips.some((c) => c.id === target.clipId));
+      const clip = track?.clips.find((c) => c.id === target.clipId);
       const linked = clip?.linkId != null;
+      // Picture-only rows are dropped, not greyed out, on an audio lane: the
+      // audio half of a linked pair still points at a video asset, and offering
+      // to blur or reframe a waveform reads as a bug.
+      const picture = track?.kind !== 'audio';
       // A clip whose source carries sound the browser cannot decode: offer to
       // convert it right here, so a muted clip is fixable without a detour
       // through the media library.
@@ -76,9 +79,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         'clip.duplicate',
         '---',
         'clip.split',
-        'clip.punchIn',
-        'clip.stream',
-        'clip.blurRegion',
+        ...(picture ? ['clip.punchIn', 'clip.stream', 'clip.blurRegion'] : []),
         'clip.captions',
         'clip.adjust',
         // Link when the selection joins into a pair; unlink on an already-linked clip.

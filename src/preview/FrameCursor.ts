@@ -41,6 +41,22 @@ export function liveCursorCount(): number {
  */
 const MAX_WORKER_RESTARTS = 3;
 let workerRestarts = 0;
+
+/**
+ * Times a single cursor rebuilds itself on the SAME worker before the failure
+ * is escalated to the worker as a whole.
+ *
+ * The cheap recovery first: re-opening a cursor builds a fresh demuxer and a
+ * fresh decoder for that clip, which is the whole fix when what failed was that
+ * clip - a corrupt GOP, a seek the decoder choked on. Only when a rebuilt
+ * cursor fails again is the decoder STACK the suspect rather than the clip, and
+ * only a new worker replaces that.
+ *
+ * Two, because the first rebuild is the diagnosis and the second is the
+ * confirmation; more would just be more seconds of black picture before the
+ * recovery that actually works.
+ */
+const MAX_CURSOR_REOPENS = 2;
 /** True once restarting has been given up on, so `send` stops trying. */
 let decodingDead = false;
 
@@ -56,6 +72,10 @@ function ensureWorker(): Worker | null {
     worker.onmessage = (event: MessageEvent<PreviewWorkerResponse>) => {
       const msg = event.data;
       const proxy = proxies.get(msg.cursorId);
+      if (msg.type === 'decodeFailed') {
+        proxy?.decodeFailed(msg.detail);
+        return;
+      }
       // A frame for a cursor disposed while the message was in flight must
       // still be closed, or its GPU memory lingers until GC.
       if (proxy) proxy.receive(msg);
@@ -198,6 +218,18 @@ export class FrameCursor {
   private disposed = false;
   /** Last requested time, to skip re-posting the identical paused request every rAF. */
   private lastSentSec = NaN;
+  /**
+   * Whether this cursor has ever decoded anything.
+   *
+   * The whole difference between a bad file and a dead decoder. A cursor that
+   * has never produced a frame is reading a source the browser cannot decode,
+   * and taking the entire preview down over one such file would be absurd; a
+   * cursor that WAS producing frames and then started failing is the decoder
+   * stack going away underneath it, which is exactly what wants escalating.
+   */
+  private produced = false;
+  /** Rebuilds attempted on the current worker. Reset by any frame that arrives. */
+  private reopens = 0;
 
   /** Everything needed to re-open this cursor on a restarted worker. */
   private readonly open: { assetId: string; file: File };
@@ -257,7 +289,35 @@ export class FrameCursor {
     }
     this.current?.close();
     this.current = new RemoteFrame(msg);
+    // A picture arrived: whatever went wrong before is over, and the next
+    // failure deserves the same full ladder of recovery this one got.
+    this.produced = true;
+    this.reopens = 0;
     this.onFrame?.();
+  }
+
+  /**
+   * A decode failed in the worker. Rebuild, and escalate if rebuilding does not
+   * bring the picture back.
+   *
+   * Routed by the shared worker message handler; not part of the public surface.
+   */
+  decodeFailed(detail: string): void {
+    if (this.disposed) return;
+    if (this.reopens < MAX_CURSOR_REOPENS) {
+      this.reopens++;
+      this.reopen();
+      return;
+    }
+    // A source that never decoded at all is simply not decodable here: the
+    // clip stays blank, the rest of the preview carries on. Restarting the
+    // worker would not read the file any better, and after three of those the
+    // whole preview would be marked dead over one bad import.
+    if (!this.produced) return;
+    // It WAS decoding and now cannot, twice over on a rebuilt cursor: the
+    // decoders in this worker are gone (a media process killed under them takes
+    // every one of them), and only a fresh worker builds new ones.
+    restartWorker(`preview decode failed after ${this.reopens} cursor rebuilds: ${detail}`);
   }
 
   get sample(): DrawableFrame | null {

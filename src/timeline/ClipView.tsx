@@ -6,7 +6,7 @@
  */
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link2Icon, SpeakerLoudIcon, TextIcon } from '@radix-ui/react-icons';
+import { ImageIcon, Link2Icon, SpeakerLoudIcon, TextIcon, VideoIcon } from '@radix-ui/react-icons';
 import { Clip } from '../types';
 import { audioTrackForClip, clipDurationMs } from '../model';
 import { useStore } from '../store/store';
@@ -204,8 +204,21 @@ export const ClipView = memo(function ClipView({
       ) : isVideo && asset?.thumbnails.length ? (
         /* A video clip's audio lives on its own linked audio track, so the
            filmstrip stays picture-only - no waveform overlay here. */
-        <div className="pointer-events-none h-full w-full">
+        <div className="pointer-events-none relative h-full w-full">
           <Filmstrip asset={asset} clip={clip} widthPx={width} clipLeftPx={left} />
+          {/* Source name over the filmstrip: the thumbnails alone rarely say
+              WHICH take a clip is, so every video clip carries its file name
+              the way a pro NLE labels its clips. */}
+          <div className="absolute left-0 top-0 flex max-w-[calc(100%-2.5rem)] items-center gap-1 rounded-br-md rounded-tl-md bg-black/60 px-1 py-px">
+            {clip.linkId ? (
+              <Link2Icon className="h-2.5 w-2.5 flex-none text-sky-200" />
+            ) : asset.kind === 'image' ? (
+              <ImageIcon className="h-2.5 w-2.5 flex-none text-sky-200" />
+            ) : (
+              <VideoIcon className="h-2.5 w-2.5 flex-none text-sky-200" />
+            )}
+            <span className="truncate text-3xs text-sky-50">{asset.file.name}</span>
+          </div>
         </div>
       ) : (
         <div className="pointer-events-none relative h-full w-full bg-gradient-to-b from-emerald-900/60 to-emerald-950">
@@ -230,8 +243,8 @@ export const ClipView = memo(function ClipView({
         </div>
       )}
 
-      {/* A/V-link badge: this video clip's audio lives on a linked audio clip. */}
-      {isVideo && clip.kind === 'media' && clip.linkId && (
+      {/* A/V-link badge, for the video clips that carry no filmstrip label. */}
+      {isVideo && clip.kind === 'media' && clip.linkId && !asset?.thumbnails.length && (
         <div className="pointer-events-none absolute left-0.5 top-0.5 rounded bg-black/55 p-0.5">
           <Link2Icon className="h-2.5 w-2.5 text-sky-200" />
         </div>

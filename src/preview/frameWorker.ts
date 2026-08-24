@@ -15,7 +15,7 @@ import type { PreviewWorkerRequest, PreviewWorkerResponse } from './frameProtoco
  * FrameCursor); decoded frames travel back as transferred VideoFrames.
  */
 
-function post(message: PreviewWorkerResponse, transfer: Transferable[]): void {
+function post(message: PreviewWorkerResponse, transfer: Transferable[] = []): void {
   (self as unknown as Worker).postMessage(message, transfer);
 }
 
@@ -133,8 +133,20 @@ class WorkerCursor {
         if (sequential) await this.fetchSequential(sink, sourceSec);
         else await this.fetchSeek(sink, sourceSec);
       }
-    } catch {
-      // Decode errors surface as a stale frame; playback keeps going.
+    } catch (err) {
+      // Reported, not swallowed. A decode that THROWS is not a decode that
+      // finds nothing - a seek past the end yields no sample and never lands
+      // here - so this is the decoder itself failing, and the usual cause takes
+      // every decoder in this worker with it. Left silent, the cursor keeps its
+      // last frame (or none at all) for the rest of the session while the main
+      // thread waits for a picture that cannot come. See DecodeFailedMessage.
+      if (!this.disposed) {
+        post({
+          type: 'decodeFailed',
+          cursorId: this.cursorId,
+          detail: err instanceof Error ? err.message : String(err),
+        });
+      }
     } finally {
       this.busy = false;
       if (this.disposed) {
