@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * The heaviest preset the app offers, end to end: "120 fps · 4K".
+ * The heaviest preset the app offers, end to end: "Up to 120 fps · 4K".
  *
  * It was the one preset a tester could not get through at all. Two things stood
  * behind that, and both are size-driven rather than codec-driven, which is why
@@ -66,8 +66,22 @@ test('exports the 120 fps 4K preset without running out of memory', async ({ pag
   // quality reads "4K".
   await sheet.getByRole('button', { name: '120 fps · 4K' }).click();
 
+  // The fixture is 30 fps and the preset's cadence is a CEILING, so left alone
+  // this spec would quietly encode 30 fps and pass - having stopped exercising
+  // the heaviest path it exists for, and having stopped meaning anything by the
+  // size bound below, which was measured at 120. Ticking the override is what
+  // keeps the name of the test true.
+  await sheet.getByRole('checkbox', { name: /Force 120 fps/ }).check();
+
   const downloadPromise = page.waitForEvent('download', { timeout: 210_000 });
-  await sheet.getByRole('button', { name: /^Export 120 fps · 4K/ }).click();
+  // Matched on the cadence and the rung, not on the whole sentence. The label
+  // in front of them is prose and it moves: it read "120 fps" until the preset
+  // stopped promising to invent frames the footage cannot supply and became
+  // "Up to 120 fps". An anchored `/^Export 120 fps/` silently stopped matching
+  // there, and what that looks like from CI is not a renamed button - it is
+  // this spec burning its full 210 s download budget and reporting that the 4K
+  // export ran out of memory.
+  await sheet.getByRole('button', { name: /^Export.*120 fps · 4K$/ }).click();
   const download = await downloadPromise;
 
   expect(download.suggestedFilename()).toMatch(/smooth120-4k.*\.mp4$/);
