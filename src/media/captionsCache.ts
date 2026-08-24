@@ -91,3 +91,20 @@ export async function deleteCachedModel(model: CaptionModelInfo): Promise<void> 
     requests.filter((r) => belongsTo(r.url, model)).map((r) => cache.delete(r)),
   );
 }
+
+/**
+ * Drop the whole bucket: every model, plus the shared onnxruntime binaries.
+ *
+ * Deliberately coarser than `deleteCachedModel`. This is the "erase everything"
+ * path, where leaving a few hundred megabytes of runtime behind because no model
+ * claims them would make the reported result a lie. All of it is re-fetched on
+ * the next transcription.
+ */
+export async function deleteCaptionCache(): Promise<void> {
+  if (!captionCacheAvailable()) return;
+  try {
+    await caches.delete(CACHE_NAME);
+  } catch {
+    /* storage denied - nothing was cached in the first place */
+  }
+}

@@ -5,7 +5,7 @@ import { drawClip, forEachVisibleVideoClip, invalidateResampling } from '../prev
 import { syncLuts } from '../preview/colorPass';
 import { loadFonts } from '../lib/fonts';
 import { StillFrame, type DrawableFrame } from '../media/stillImage';
-import { FONT_STALL_MS, withDeadline } from './stallGuard';
+import { FONT_STALL_MS, TEARDOWN_STALL_MS, withDeadline } from './stallGuard';
 import { ClipReader } from './clipReader';
 import { endSpan, span } from '../perf/probe';
 
@@ -208,22 +208,12 @@ export class FrameRenderer {
     for (const [clipId, reader] of [...this.readers]) {
       if (visible.has(clipId)) continue;
       this.readers.delete(clipId);
-      try {
-        await reader.close();
-      } catch {
-        /* already released */
-      }
+      await closeReader(reader);
     }
   }
 
   async dispose(): Promise<void> {
-    for (const reader of this.readers.values()) {
-      try {
-        await reader.close();
-      } catch {
-        /* already released */
-      }
-    }
+    for (const reader of this.readers.values()) await closeReader(reader);
     this.readers.clear();
     for (const still of this.stills.values()) {
       try {
@@ -235,5 +225,28 @@ export class FrameRenderer {
     this.stills.clear();
     for (const input of this.inputs.values()) input.dispose();
     this.inputs.clear();
+  }
+}
+
+/**
+ * Close one reader, and give up on it rather than wait for ever.
+ *
+ * Closing a reader runs through its `VideoDecoder`, so it inherits every way a
+ * decoder can stop answering - and this is called from INSIDE the frame loop,
+ * once per frame, not only on the way out. Left un-deadlined it is a place a
+ * render can stop with nothing counting: no error, no console line, the bar
+ * simply frozen mid-loop while the app stays responsive. Every other await in
+ * that loop already carries a deadline; this one was the exception.
+ *
+ * Swallowed either way. The reader has already been dropped from the map by the
+ * time this runs, so the render is done with it whether it closes or not - and
+ * a decoder abandoned here is freed when the worker ends, which for the frame
+ * loop's caller is soon.
+ */
+async function closeReader(reader: ClipReader): Promise<void> {
+  try {
+    await withDeadline(reader.close(), TEARDOWN_STALL_MS, 'reader close');
+  } catch {
+    /* already released, or stopped answering - neither is the render's problem */
   }
 }

@@ -76,3 +76,19 @@ export async function openExportScratch(
 export async function readExportScratch(handle: FileSystemFileHandle): Promise<File> {
   return handle.getFile();
 }
+
+/**
+ * Remove the scratch directory itself, not just its contents.
+ *
+ * Only the full data erase needs this: everywhere else the directory is worth
+ * keeping, because the next export recreates it anyway. Best effort, like the
+ * sweep - a directory that refuses to go holds no user data once it is empty.
+ */
+export async function removeExportScratch(): Promise<void> {
+  try {
+    const root = await navigator.storage?.getDirectory?.();
+    await root?.removeEntry(SCRATCH_DIR, { recursive: true });
+  } catch {
+    /* no OPFS, or nothing there to remove */
+  }
+}

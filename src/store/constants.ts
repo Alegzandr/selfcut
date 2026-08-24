@@ -1,6 +1,26 @@
 /** How many past states the undo stack retains. */
 export const HISTORY_LIMIT = 50;
 
+/**
+ * The namespace every localStorage key of the app lives under.
+ *
+ * Not decoration: the data erase deletes by this prefix, so a preference stored
+ * outside it survives a wipe the user was told was total. Keep new keys here,
+ * and keep them prefixed.
+ */
+export const STORAGE_PREFIX = 'selfcut.';
+
+/**
+ * The app's own keys, out of everything the origin holds.
+ *
+ * Pure and separate from the erase itself so the rule is testable without a
+ * browser. The origin is the editor's alone today, but the landing page shares
+ * it, so the prefix is the contract rather than "clear() and hope".
+ */
+export function selfcutStorageKeys(keys: readonly string[]): string[] {
+  return keys.filter((k) => k.startsWith(STORAGE_PREFIX));
+}
+
 /** localStorage key for the persisted transport time format preference. */
 export const TIME_FORMAT_KEY = 'selfcut.timeFormat';
 export const TRACK_HEIGHT_KEY = 'selfcut.trackHeight';

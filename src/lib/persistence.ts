@@ -346,8 +346,28 @@ export async function restoreTranscodedTracks(assets: MediaAsset[]): Promise<voi
 let saveTimer: number | null = null;
 /** When the oldest change waiting to be written was made (see nextSaveDelay). */
 let oldestPendingAt = 0;
+let suspended = false;
+
+/**
+ * Stop writing to disk, permanently for this page.
+ *
+ * The data erase deletes the database and then reloads, and every writer here is
+ * racing that: a debounced save can be mid-flight, `pagehide` flushes one more on
+ * the way out, and an asset sync fires on the store update that empties the
+ * library. Any one of them would recreate the database the erase just removed and
+ * leave a "cleared" app holding a project again. There is no resume, by design -
+ * the only thing that follows a suspend is the reload.
+ */
+export function suspendPersistence(): void {
+  suspended = true;
+  if (saveTimer !== null) {
+    window.clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+}
 
 function scheduleProjectSave(project: Project): void {
+  if (suspended) return;
   const now = Date.now();
   if (saveTimer !== null) window.clearTimeout(saveTimer);
   else oldestPendingAt = now;
@@ -364,6 +384,7 @@ function scheduleProjectSave(project: Project): void {
  * nothing is pending.
  */
 export function flushProjectSave(): void {
+  if (suspended) return;
   if (saveTimer === null) return;
   window.clearTimeout(saveTimer);
   saveTimer = null;
@@ -383,6 +404,7 @@ function pickCurrentProjectId(metas: ProjectSummary[]): string | null {
 }
 
 async function writeProject(project: Project): Promise<void> {
+  if (suspended) return;
   try {
     const d = await db();
     const tx = d.transaction(PROJECT_STORE, 'readwrite');
@@ -402,6 +424,7 @@ async function syncAssets(
   prev: Record<string, MediaAsset>,
   project: Project,
 ): Promise<void> {
+  if (suspended) return;
   const projectId = project.id;
   // An import changes the library and nothing else, so the debounced project
   // save is never scheduled - and a library whose owner is not on disk is

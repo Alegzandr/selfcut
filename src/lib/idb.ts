@@ -6,7 +6,7 @@
  * on the same name would block on the first one's upgrade and deadlock startup.
  */
 
-const DB_NAME = 'selfcut';
+export const DB_NAME = 'selfcut';
 const DB_VERSION = 4;
 
 export const PROJECT_STORE = 'project';
@@ -70,6 +70,25 @@ export function db(): Promise<IDBDatabase> {
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
+}
+
+/**
+ * Drop the shared connection so the database can be deleted.
+ *
+ * `indexedDB.deleteDatabase` blocks for as long as any connection is open, and
+ * this module deliberately keeps exactly one for the lifetime of the tab. The
+ * memoised promise is cleared too, so a later call to `db()` reopens rather
+ * than handing back a handle to a database that no longer exists.
+ */
+export async function closeDb(): Promise<void> {
+  const pending = dbPromise;
+  if (!pending) return;
+  dbPromise = null;
+  try {
+    (await pending).close();
+  } catch {
+    /* never opened, or already gone - either way there is nothing to close */
+  }
 }
 
 export function requestDone<T>(req: IDBRequest<T>): Promise<T> {

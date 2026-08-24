@@ -64,15 +64,41 @@ import {
  */
 
 /**
- * How many encodes may be outstanding at once in the serial path.
+ * How many encodes may be outstanding at once.
  *
- * Each one is a `VideoFrame` the encoder holds until it has produced a packet,
- * so this is a memory cost as much as a throughput one: at 4K that is ~12 MB
- * apiece. Four is deep enough to keep a hardware encoder fed across the jitter
- * of a decode-heavy frame, and shallow enough that the queue is never the thing
- * that runs the browser out of frames.
+ * One. Not a typo, and not caution - the measurement below is the whole reason
+ * this file's heaviest preset was unusable.
+ *
+ * This was four, on the reasoning that a deeper queue keeps a hardware encoder
+ * fed across the jitter of a decode-heavy frame, and that the memory it costs
+ * is four frames - "~12 MB apiece at 4K". Both halves were wrong.
+ *
+ * `CanvasSource.add` resolves when the encoder has ACCEPTED the frame, not when
+ * it has produced a packet. At a cadence the encoder cannot sustain, every slot
+ * of depth is one more frame the render loop may run ahead - and the frames it
+ * runs ahead by do not sit in this worker, they sit in the browser's GPU
+ * process, where nothing this code can see accounts for them. mediabunny's own
+ * `encodeQueueSize >= 4` throttle does not bind either, because a hardware
+ * encoder reports a queue it has already swallowed.
+ *
+ * Same machine, same 31 s of 1440p120, exported by "120 fps - 4K":
+ *
+ *   depth 4   152 s   GPU process 25.9 GB resident, 91.8 GB committed
+ *   depth 2    61 s   GPU process 24.1 GB resident, 62.3 GB committed
+ *   depth 1    28 s   GPU process  0.5 GB resident,  2.2 GB committed
+ *
+ * Tens of gigabytes, released only when `finalize` drains the encoder - which
+ * is a tester's Chrome dying halfway through a 4K 120 render, and it did.
+ *
+ * The depth was not even buying throughput: it is 5.4x FASTER at one, because
+ * what the queue was really doing was starving the machine it ran on. It is a
+ * cliff and not a slope - depth 2 already runs away - so there is no useful
+ * middle to tune, and no reason to scale it with the geometry: 31 s of 1080p60
+ * measures 11 s at depth 1 and 11 s at depth 4, identical.
+ *
+ * Should this ever be raised again, raise it against these numbers.
  */
-const ENCODE_QUEUE_DEPTH = 4;
+const ENCODE_QUEUE_DEPTH = 1;
 
 /**
  * How many finished-but-not-yet-muxed slices the lead will hold before it stops

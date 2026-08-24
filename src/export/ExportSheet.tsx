@@ -10,7 +10,28 @@ import {
 } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { formatTime } from '../lib/time';
-import { presetSectionsForAspect, resolveMp4Preset, ExportPreset, PresetGroup } from './presets';
+import {
+  fpsCapBinds,
+  presetSectionsForAspect,
+  projectSourceFps,
+  resolveMp4Preset,
+  ExportPreset,
+  type ExportVideoCodec,
+  PresetGroup,
+} from './presets';
+
+/**
+ * How each codec is named in the row that describes what will be encoded.
+ *
+ * Not translated: these are the codecs' own names, and "H.265" is "H.265" in
+ * every locale. The row used to say "H.264" for all three, so the HEVC and AV1
+ * presets described themselves as the codec they exist to avoid.
+ */
+const CODEC_LABELS: Record<ExportVideoCodec, string> = {
+  avc: 'H.264',
+  hevc: 'H.265',
+  av1: 'AV1',
+};
 import {
   startExport,
   downloadBlob,
@@ -101,6 +122,12 @@ export function ExportSheet() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [group, setGroup] = useState<PresetGroup>('social');
   const [regionOnly, setRegionOnly] = useState(true);
+  /**
+   * Off by default, and deliberately not remembered between exports: the extra
+   * frames are duplicates of what was filmed, so paying for them has to be a
+   * choice made about THIS render rather than one made once and forgotten.
+   */
+  const [forceMaxFps, setForceMaxFps] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const handleRef = useRef<ExportHandle | null>(null);
   // Set when the user cancels: the promise then rejects with "canceled", which
@@ -154,6 +181,7 @@ export function ExportSheet() {
         setPhase((p) => (p.kind === 'rendering' ? { ...p, kind: 'rendering', progress } : p)),
       exportedRegion,
       {
+        forceMaxFps,
         onFallback: (fallback) =>
           setPhase((p) => (p.kind === 'rendering' ? { ...p, fallback } : p)),
       },
@@ -253,7 +281,9 @@ export function ExportSheet() {
                     // can pin its own frame rate (and with it, its bitrate), so
                     // only the resolved values describe what this row encodes.
                     const resolved =
-                      preset.kind === 'mp4' ? resolveMp4Preset(preset, project, assets) : null;
+                      preset.kind === 'mp4'
+                        ? resolveMp4Preset(preset, project, assets, { forceMaxFps })
+                        : null;
                     return (
                       <button
                         key={preset.id}
@@ -269,7 +299,9 @@ export function ExportSheet() {
                                 fps: resolved.fps,
                                 width: resolved.width,
                                 height: resolved.height,
+                                codec: CODEC_LABELS[resolved.codec ?? 'avc'],
                                 bitrate: Math.round(resolved.videoBitrate / 1_000_000),
+                                audioBitrate: Math.round(resolved.audioBitrate / 1_000),
                               })
                             : t(preset.descriptionKey, {
                                 bitrate: Math.round(preset.audioBitrate / 1_000),
@@ -282,6 +314,28 @@ export function ExportSheet() {
                     );
                   })}
                 </div>
+
+                {/* Only where it changes the outcome: over 120 fps rushes a
+                    120 fps preset already encodes at 120, and asking would be a
+                    question with one answer. */}
+                {selected.kind === 'mp4' && fpsCapBinds(selected, project, assets) && (
+                  <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-xs text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={forceMaxFps}
+                      onChange={(e) => setForceMaxFps(e.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 accent-sky-400"
+                    />
+                    <span>
+                      {t('export.forceMaxFps', { fps: selected.fps })}
+                      <span className="mt-0.5 block text-2xs text-zinc-500">
+                        {t('export.forceMaxFps.hint', {
+                          source: projectSourceFps(project, assets),
+                        })}
+                      </span>
+                    </span>
+                  </label>
+                )}
 
                 {region && (
                   <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs text-zinc-300">

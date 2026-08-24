@@ -23,6 +23,7 @@ import {
   type CachedModel,
 } from '../media/captionsCache';
 import { prefetchCaptionModel } from '../media/captions';
+import { formatBytes } from '../lib/bytes';
 
 /**
  * The caption model manager: which Whisper model transcribes, what it costs on
@@ -42,11 +43,6 @@ const FIT_STYLE: Record<CaptionFit, string> = {
   slow: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
   unsupported: 'border-zinc-700 bg-zinc-800/40 text-zinc-500',
 };
-
-function formatSize(bytes: number): string {
-  const mb = bytes / (1024 * 1024);
-  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
-}
 
 /** Four segments, filled to the model's rank: a size in MB does not say "better". */
 function QualityBars({ level }: { level: number }) {
@@ -118,7 +114,7 @@ function ModelRow({
                 <CheckCircledIcon className="h-3 w-3 flex-none text-emerald-400" />
                 {/* Measured, not advertised: the estimate is what the row shows
                     before a download, and the truth once there is one. */}
-                <span>{t('captions.models.downloaded', { size: formatSize(cached.bytes) })}</span>
+                <span>{t('captions.models.downloaded', { size: formatBytes(cached.bytes) })}</span>
               </>
             ) : unsupported ? (
               // Quoting a download size for a model this machine cannot run

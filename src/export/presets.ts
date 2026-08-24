@@ -1,4 +1,5 @@
 import { AspectRatio, MediaAsset, Project } from '../types';
+import { audioTrackForClip } from '../model';
 import { APP_NAME, PROJECT_FPS } from '../app/config';
 import type { ParseKeys } from 'i18next';
 
@@ -50,7 +51,23 @@ export type ExportVideoCodec = 'avc' | 'hevc' | 'av1';
 export type FpsMode =
   /** Follow the footage: the fastest source rate on the timeline (see projectExportFps). */
   | 'source'
-  /** Pinned by the preset whatever the footage - the whole point of a 120 fps or a 24p export. */
+  /**
+   * The preset's rate is a CEILING, and the footage decides below it.
+   *
+   * For the delivery presets - the 120 fps family, the masters - whose whole
+   * point is a high cadence, but which have no business inventing one the
+   * timeline cannot supply. A 1080p60 source exported by "120 fps - 4K" was
+   * encoding every frame twice: twice the frames, twice the encode, twice the
+   * bytes, and not one additional instant of what was filmed.
+   *
+   * It is not free. Keyframed motion - a zoom animation, a moving text - IS
+   * sampled at output time, so it genuinely is smoother at 120 than at 60 even
+   * over 60 fps rushes. What that buys is judged not to be worth doubling the
+   * cost of every render whose footage cannot use it; a preset that must have
+   * its cadence regardless says `fixed`.
+   */
+  | 'capped'
+  /** Pinned by the preset whatever the footage - the whole point of a 24p export. */
   | 'fixed';
 
 /** A video export: carries the frame geometry and bitrate the worker needs. */
@@ -173,8 +190,15 @@ interface CustomFormat {
   bitrateScale: number;
   /** Codec for this format; absent means H.264. */
   codec?: ExportVideoCodec;
-  /** Pinned frame rate, or null to follow the footage like the social presets. */
+  /** Pinned or ceiling frame rate, or null to follow the footage like the social presets. */
   fps: number | null;
+  /**
+   * How `fps` is meant. Omitted means `capped` whenever a rate is given: a
+   * delivery preset names the cadence it is FOR, and inventing frames the
+   * footage does not have was never part of that. Only a preset whose cadence
+   * is the point regardless of the rushes - 24p - says `fixed`.
+   */
+  fpsMode?: FpsMode;
 }
 
 const CUSTOM_FORMATS: readonly CustomFormat[] = [
@@ -207,10 +231,13 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
   },
   {
     // ~1.35x YouTube's top 4K figure: past the point a platform asks for, which
-    // is exactly what a master meant for re-grading or archiving wants. Pinned
-    // at the full project rate for the same reason: a master is the copy every
-    // later export is cut from, so it holds the highest cadence the timeline
-    // can carry rather than the one this particular set of rushes implies.
+    // is exactly what a master meant for re-grading or archiving wants.
+    //
+    // The cadence is a CEILING at the full project rate, not a pin. A master is
+    // the copy every later export is cut from, so it asks for the highest
+    // cadence the timeline can carry - but "can carry" is the operative half:
+    // over 24 fps rushes, the 60 fps it used to pin wrote every frame between
+    // two and a half copies of a frame that was already there.
     id: 'ultra4k',
     labelKey: 'export.preset.ultra4k.label',
     hintKey: 'export.preset.ultra4k.hint',
@@ -221,7 +248,7 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
   {
     // 3x an upload's 1080p bitrate: generational loss stops being visible, so
     // the file can be re-cut or re-encoded later without stacking artefacts.
-    // Same pinned rate as the 4K master, for the same reason.
+    // Same ceiling as the 4K master, for the same reason.
     id: 'master1080',
     labelKey: 'export.preset.master1080.label',
     hintKey: 'export.preset.master1080.hint',
@@ -230,9 +257,12 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
     fps: PROJECT_FPS,
   },
   // The 120 fps family: a hand-off, not a final cut. Above the export ladder on
-  // purpose (source frames only exist at 120 fps for high-rate footage or slowed
-  // clips, but keyframed motion is sampled at output time, so it does get
-  // smoother), and offered at three rungs because the file is meant to leave the
+  // purpose - but as a ceiling, since 120 fps of source only exists for
+  // high-rate footage or slowed clips. Keyframed motion IS sampled at output
+  // time and so is genuinely smoother at 120 even over 60 fps rushes; that is
+  // real, and it is not judged worth doubling the encode and the file size of
+  // every render whose footage cannot use it (see the `capped` FpsMode).
+  // Offered at three rungs because the file is meant to leave the
   // app and be re-cut - the editor receiving it picks the resolution, and a
   // single 1080p row forced everyone through the smallest one.
   //
@@ -281,6 +311,10 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
     tier: '1080',
     bitrateScale: 2,
     fps: 24,
+    // The one rate that is a LOOK rather than a ceiling. 24p is what the preset
+    // is for, and it is below every source rate anyway, so capping would never
+    // fire - saying so is what keeps the next reader from "tidying" it away.
+    fpsMode: 'fixed',
   },
   {
     // Full resolution at a fraction of the bitrate: stays sharp on a phone and
@@ -323,6 +357,7 @@ export const PRESETS: ExportPreset[] = [
         tier: format.tier,
         bitrateScale: format.bitrateScale,
         fps: format.fps,
+        fpsMode: format.fpsMode,
         codec: format.codec,
       }),
     ),
@@ -346,6 +381,7 @@ function videoPreset(spec: {
   tier: VideoTier;
   bitrateScale: number;
   fps: number | null;
+  fpsMode?: FpsMode;
   codec?: ExportVideoCodec;
 }): Mp4Preset {
   const { width, height, videoBitrate } = TIERS[spec.aspect][spec.tier];
@@ -361,7 +397,7 @@ function videoPreset(spec: {
     width,
     height,
     fps: spec.fps ?? PROJECT_FPS,
-    fpsMode: spec.fps === null ? 'source' : 'fixed',
+    fpsMode: spec.fps === null ? 'source' : (spec.fpsMode ?? 'capped'),
     videoBitrate: Math.round(videoBitrate * spec.bitrateScale),
     ...(spec.codec ? { codec: spec.codec } : {}),
     // 384 kbps AAC-LC stereo @ 48 kHz — YouTube's recommended audio spec, high
@@ -462,6 +498,24 @@ export function normalizeExportFps(sourceFps: number): number {
  * imported before frame-rate probing).
  */
 export function projectExportFps(project: Project, assets: Record<string, MediaAsset>): number {
+  const fastest = projectSourceFps(project, assets);
+  return fastest > 0 ? normalizeExportFps(fastest) : PROJECT_FPS;
+}
+
+/**
+ * The fastest MEASURED source frame rate on the timeline, or 0 when nothing on
+ * it states one (a generated-only project, or assets imported before frame-rate
+ * probing).
+ *
+ * Raw, unsnapped and uncapped, unlike `projectExportFps`: the ladder that
+ * function applies tops out at the project rate, which is the right answer for
+ * a preset following the footage and the wrong one for a ceiling. A 120 fps
+ * source under a 120 fps ceiling has to be able to come back as 120.
+ *
+ * Zero is a real answer and not an error: it means "unknown", and every caller
+ * treats it as "do not adapt" rather than as a rate.
+ */
+export function projectSourceFps(project: Project, assets: Record<string, MediaAsset>): number {
   let fastest = 0;
   for (const track of project.tracks) {
     if (track.kind !== 'video') continue;
@@ -471,7 +525,79 @@ export function projectExportFps(project: Project, assets: Record<string, MediaA
       if (fps && fps > fastest) fastest = fps;
     }
   }
-  return fastest > 0 ? normalizeExportFps(fastest) : PROJECT_FPS;
+  return fastest;
+}
+
+/**
+ * Rates a CEILING preset may settle on.
+ *
+ * The adaptive ladder plus the two high-cadence rungs, because this one is
+ * bounded by the preset rather than by the project rate: a 120 fps ceiling over
+ * 120 fps footage must be able to answer 120, which `EXPORT_FPS_LADDER` cannot
+ * express. Snapping still matters for the same reason it does there - 119.88
+ * is 120, and encoding it as 119.88 helps nobody.
+ */
+const CAPPED_FPS_LADDER = [24, 25, 30, 50, 60, 100, 120] as const;
+
+/** Snap a measured source rate to the nearest rate a ceiling preset exports at. */
+function snapCappedFps(sourceFps: number): number {
+  return CAPPED_FPS_LADDER.reduce((best, rate) =>
+    Math.abs(rate - sourceFps) < Math.abs(best - sourceFps) ? rate : best,
+  );
+}
+
+/**
+ * The rate this preset will actually encode at on this timeline.
+ *
+ * Three modes, three answers: follow the footage, honour the preset, or take
+ * the lower of the two. The ceiling case falls back to the preset's own rate
+ * when nothing on the timeline states a frame rate - an unknown source is not
+ * evidence of a slow one, and guessing low would quietly downgrade a delivery
+ * export over missing metadata.
+ */
+export function resolveExportFps(
+  preset: Mp4Preset,
+  project: Project,
+  assets: Record<string, MediaAsset>,
+  opts?: ResolveOptions,
+): number {
+  if (preset.fpsMode === 'fixed') return preset.fps;
+  if (preset.fpsMode === 'source') return projectExportFps(project, assets);
+  if (opts?.forceMaxFps) return preset.fps;
+  const source = projectSourceFps(project, assets);
+  if (source <= 0) return preset.fps;
+  return Math.min(preset.fps, snapCappedFps(source));
+}
+
+/** Choices the user made in the export sheet that change how a preset resolves. */
+export interface ResolveOptions {
+  /**
+   * Encode at the preset's full cadence even where the footage cannot fill it.
+   *
+   * The escape hatch for the one thing the cap genuinely costs: keyframed
+   * motion - a zoom, a moving title - is sampled at OUTPUT time, so it really
+   * is smoother at 120 fps over 60 fps rushes. Everything else about those
+   * extra frames is duplication, which is why this is a checkbox and not the
+   * default.
+   *
+   * Only ever offered where it changes something (see `fpsCapBinds`).
+   */
+  forceMaxFps?: boolean;
+}
+
+/**
+ * Whether this preset's cadence ceiling is actually holding this project back.
+ *
+ * What the export sheet asks before offering to override it: a checkbox that
+ * cannot change the outcome is a question the user has to read, answer and be
+ * wrong about for nothing.
+ */
+export function fpsCapBinds(
+  preset: Mp4Preset,
+  project: Project,
+  assets: Record<string, MediaAsset>,
+): boolean {
+  return preset.fpsMode === 'capped' && resolveExportFps(preset, project, assets) < preset.fps;
 }
 
 /**
@@ -499,9 +625,75 @@ export function resolveMp4Preset(
   preset: Mp4Preset,
   project: Project,
   assets: Record<string, MediaAsset>,
+  opts?: ResolveOptions,
 ): Mp4Preset {
-  const fps = preset.fpsMode === 'fixed' ? preset.fps : projectExportFps(project, assets);
-  return { ...preset, fps, videoBitrate: videoBitrateForFps(preset, fps) };
+  const fps = resolveExportFps(preset, project, assets, opts);
+  return {
+    ...preset,
+    fps,
+    videoBitrate: videoBitrateForFps(preset, fps),
+    audioBitrate: audioBitrateForProject(preset.audioBitrate, project, assets),
+  };
+}
+
+/**
+ * What a stereo AAC target is worth once the mix is known to be mono.
+ *
+ * Not a half. Joint stereo already codes two identical channels far more
+ * cheaply than two different ones, so the honest saving is the difference
+ * between a genuine stereo image and none - the usual published figure for
+ * equal quality is around 60%, and erring high costs a few bytes where erring
+ * low costs audible quality.
+ */
+const MONO_AUDIO_SCALE = 0.6;
+
+/**
+ * The audio bitrate to encode this timeline at, never above what the preset
+ * asks for.
+ *
+ * The preset's figure describes the best case its destination wants - 384 kbps
+ * stereo, YouTube's recommendation - and spending it on a mix that cannot carry
+ * a stereo image is spending it on nothing. Only ONE conclusion is drawn here,
+ * and only when it is certain: every audible clip is mono at the source or
+ * downmixed to mono, and none of them is panned, so the two output channels are
+ * bit-identical.
+ *
+ * Deliberately conservative in the other direction. The mix itself stays stereo
+ * (`prepareAudioMix` renders two channels whatever this returns), a source
+ * without stated channels counts as stereo, and anything uncertain keeps the
+ * preset's figure: a file that is slightly larger than it needed to be is a
+ * non-event, and one that is quietly worse than the preset promised is not.
+ *
+ * What is NOT adapted, for lack of evidence rather than lack of will: the
+ * source's own bitrate. `AudioTrackInfo` records channels and sample rate at
+ * probe time and not the rate the track was encoded at, so there is nothing
+ * here to tell a 96 kbps podcast from a 320 kbps master.
+ */
+export function audioBitrateForProject(
+  presetBitrate: number,
+  project: Project,
+  assets: Record<string, MediaAsset>,
+): number {
+  let audible = false;
+  for (const track of project.tracks) {
+    if (track.muted) continue;
+    for (const clip of track.clips) {
+      if (clip.kind !== 'media' || clip.volume <= 0) continue;
+      const asset = assets[clip.assetId];
+      if (!asset?.hasAudio) continue;
+      audible = true;
+      // Panned: the channels differ however mono the source was.
+      if (clip.pan) return presetBitrate;
+      if (clip.mono) continue;
+      // Through the shared helper, never a hand-rolled lookup: it is what the
+      // mix itself resolves a clip's track with, and a preset that disagreed
+      // would describe a different track than the one being encoded.
+      const source = audioTrackForClip(asset, clip);
+      // Unknown track, or more than one channel: assume a real stereo image.
+      if (!source || source.channels > 1) return presetBitrate;
+    }
+  }
+  return audible ? Math.round(presetBitrate * MONO_AUDIO_SCALE) : presetBitrate;
 }
 
 export function exportFileName(preset: ExportPreset): string {

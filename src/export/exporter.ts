@@ -48,6 +48,11 @@ export interface ExportOptions {
    * lets the UI explain a bar that just went backwards.
    */
   onFallback?: (reason: ExportFallback) => void;
+  /**
+   * Encode at the preset's full cadence even where the footage cannot fill it.
+   * The sheet's checkbox; see `ResolveOptions` in `presets`.
+   */
+  forceMaxFps?: boolean;
 }
 
 export interface ExportHandle {
@@ -266,7 +271,9 @@ export function startExport(
     // Adapt frame rate (and, with it, bitrate) to the project's source footage
     // right before encoding, so the worker receives the exact settings to use.
     const resolvedPreset =
-      preset.kind === 'mp4' ? resolveMp4Preset(preset, project, assets) : preset;
+      preset.kind === 'mp4'
+        ? resolveMp4Preset(preset, project, assets, { forceMaxFps: options?.forceMaxFps })
+        : preset;
 
     // Only the video path needs source files and rasterized stills; an mp3
     // export renders entirely from the already-mixed audio, so gathering (and

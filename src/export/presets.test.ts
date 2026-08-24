@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
   PRESETS,
-  presetsForAspect,
-  presetSectionsForAspect,
   exportFileName,
+  fpsCapBinds,
   normalizeExportFps,
-  videoBitrateForFps,
+  presetSectionsForAspect,
+  presetsForAspect,
   projectExportFps,
   resolveMp4Preset,
+  videoBitrateForFps,
 } from './presets';
 import type { Mp4Preset } from './presets';
 import type { AspectRatio, Clip, MediaAsset, Project } from '../types';
@@ -228,12 +229,8 @@ describe('adaptive export frame rate', () => {
     const project = projectOf(mediaClip('a'));
     const assets = { a: asset('a', 30) };
 
-    const smooth = mp4('smooth120-1080-16x9');
-    expect(smooth.fpsMode).toBe('fixed');
-    // Above the ladder on purpose: 120 fps is what the user picked the preset for.
-    expect(resolveMp4Preset(smooth, project, assets).fps).toBe(120);
-
     const cinema = mp4('cinema24-16x9');
+    expect(cinema.fpsMode).toBe('fixed');
     const resolved = resolveMp4Preset(cinema, project, assets);
     expect(resolved.fps).toBe(24);
     // videoBitrate keeps one meaning everywhere: the HFR figure, scaled down at
@@ -241,17 +238,61 @@ describe('adaptive export frame rate', () => {
     expect(resolved.videoBitrate).toBe(Math.round((cinema.videoBitrate * 2) / 3));
   });
 
-  it('the masters export at 60 fps even from slower footage', () => {
+  /**
+   * These three used to be `fixed`, and this file used to assert that they held
+   * their cadence "whatever the footage". They no longer do, and the reason is
+   * not a relaxed test: a 1080p60 source exported by "120 fps - 4K" encoded
+   * every frame twice, for twice the encode and twice the bytes and not one
+   * additional instant of what was filmed. The cadence they name is what they
+   * are FOR, so it stays the ceiling - it just stopped being a promise to
+   * invent frames the timeline cannot supply.
+   */
+  it('a capped preset comes down to the footage', () => {
     const project = projectOf(mediaClip('a'));
-    const assets = { a: asset('a', 24) };
+
+    const smooth = mp4('smooth120-1080-16x9');
+    expect(smooth.fpsMode).toBe('capped');
+    expect(resolveMp4Preset(smooth, project, { a: asset('a', 60) }).fps).toBe(60);
+    expect(resolveMp4Preset(smooth, project, { a: asset('a', 30) }).fps).toBe(30);
+
     for (const id of ['ultra4k-16x9', 'master1080-16x9']) {
       const master = mp4(id);
-      expect(master.fpsMode).toBe('fixed');
-      const resolved = resolveMp4Preset(master, project, assets);
-      expect(resolved.fps).toBe(60);
-      // 60 fps is high-frame-rate, so a master always carries its full bitrate.
-      expect(resolved.videoBitrate).toBe(master.videoBitrate);
+      expect(master.fpsMode).toBe('capped');
+      expect(resolveMp4Preset(master, project, { a: asset('a', 24) }).fps).toBe(24);
     }
+  });
+
+  it('a capped preset still honours its ceiling when the footage can reach it', () => {
+    const project = projectOf(mediaClip('a'));
+    const smooth = mp4('smooth120-1080-16x9');
+    // 120 fps rushes under a 120 fps ceiling: the whole point of the preset, and
+    // the case `EXPORT_FPS_LADDER` cannot express (it tops out at 60).
+    expect(resolveMp4Preset(smooth, project, { a: asset('a', 120) }).fps).toBe(120);
+    // NTSC neighbours snap, here as on the adaptive ladder.
+    expect(resolveMp4Preset(smooth, project, { a: asset('a', 119.88) }).fps).toBe(120);
+    // Never ABOVE the ceiling, however fast the rushes.
+    expect(resolveMp4Preset(smooth, project, { a: asset('a', 240) }).fps).toBe(120);
+  });
+
+  it('a capped preset keeps its ceiling when no source rate is known', () => {
+    // An unmeasured source is not evidence of a slow one. Guessing low here
+    // would quietly downgrade a delivery export over missing metadata.
+    const project = projectOf(mediaClip('a'));
+    const smooth = mp4('smooth120-1080-16x9');
+    expect(resolveMp4Preset(smooth, project, { a: asset('a', undefined) }).fps).toBe(120);
+  });
+
+  it('scales the bitrate to the rate it settled on', () => {
+    const project = projectOf(mediaClip('a'));
+    const smooth = mp4('smooth120-1080-16x9');
+    // Capped to 60: the file must carry the 60 fps budget, not the 1.6x
+    // surcharge that only a 120 fps file needs.
+    expect(resolveMp4Preset(smooth, project, { a: asset('a', 60) }).videoBitrate).toBe(
+      smooth.videoBitrate,
+    );
+    expect(resolveMp4Preset(smooth, project, { a: asset('a', 120) }).videoBitrate).toBe(
+      Math.round(smooth.videoBitrate * 1.6),
+    );
   });
 });
 
@@ -309,5 +350,137 @@ describe('codec presets', () => {
       expect(p.width).toBe(h264.width);
       expect(p.height).toBe(h264.height);
     }
+  });
+});
+
+describe('audio bitrate adapted to the timeline', () => {
+  const mp4 = (id: string) => PRESETS.find((p) => p.id === id) as Mp4Preset;
+
+  const audioAsset = (id: string, channels: number): MediaAsset =>
+    ({
+      id,
+      kind: 'video',
+      fps: 60,
+      hasAudio: true,
+      audioTracks: [{ index: 0, channels }],
+    } as MediaAsset);
+
+  const clipOf = (assetId: string, extra: Partial<Clip> = {}): Clip =>
+    ({ id: `clip-${assetId}`, kind: 'media', assetId, volume: 1, ...extra } as Clip);
+
+  const timeline = (clips: Clip[], muted = false): Project =>
+    ({
+      id: 'p',
+      aspectRatio: '16:9',
+      fps: 60,
+      markers: [],
+      tracks: [{ id: 'a', kind: 'audio', clips, muted }],
+    } as unknown as Project);
+
+  const preset = () => mp4('light1080-16x9');
+  const resolvedAudio = (project: Project, assets: Record<string, MediaAsset>) =>
+    resolveMp4Preset(preset(), project, assets).audioBitrate;
+
+  it('drops to the mono figure when every audible source is mono', () => {
+    const project = timeline([clipOf('a')]);
+    expect(resolvedAudio(project, { a: audioAsset('a', 1) })).toBe(
+      Math.round(preset().audioBitrate * 0.6),
+    );
+  });
+
+  it('keeps the full figure for a stereo source', () => {
+    const project = timeline([clipOf('a')]);
+    expect(resolvedAudio(project, { a: audioAsset('a', 2) })).toBe(preset().audioBitrate);
+  });
+
+  it('keeps the full figure when a mono clip is panned', () => {
+    // Panned, the two output channels differ however mono the source was - the
+    // stereo image is made on the timeline, not in the file.
+    const project = timeline([clipOf('a', { pan: -0.5 })]);
+    expect(resolvedAudio(project, { a: audioAsset('a', 1) })).toBe(preset().audioBitrate);
+  });
+
+  it('counts a stereo source downmixed to mono as mono', () => {
+    const project = timeline([clipOf('a', { mono: true })]);
+    expect(resolvedAudio(project, { a: audioAsset('a', 2) })).toBe(
+      Math.round(preset().audioBitrate * 0.6),
+    );
+  });
+
+  it('one stereo clip anywhere keeps the whole mix at the full figure', () => {
+    const project = timeline([clipOf('a'), clipOf('b')]);
+    expect(resolvedAudio(project, { a: audioAsset('a', 1), b: audioAsset('b', 2) })).toBe(
+      preset().audioBitrate,
+    );
+  });
+
+  it('ignores silenced clips and muted tracks', () => {
+    // A stereo clip at zero volume is not in the mix, so it cannot be the reason
+    // the file carries a stereo budget.
+    const silenced = timeline([clipOf('a'), clipOf('b', { volume: 0 })]);
+    expect(resolvedAudio(silenced, { a: audioAsset('a', 1), b: audioAsset('b', 2) })).toBe(
+      Math.round(preset().audioBitrate * 0.6),
+    );
+    const muted = timeline([clipOf('b')], true);
+    expect(resolvedAudio(muted, { b: audioAsset('b', 2) })).toBe(preset().audioBitrate);
+  });
+
+  it('leaves a silent timeline alone', () => {
+    // Nothing audible: there is no mix to describe, and exportMp4 writes no
+    // audio track at all. Reporting a reduced figure would be a claim about
+    // something that does not exist.
+    expect(resolvedAudio(timeline([]), {})).toBe(preset().audioBitrate);
+  });
+
+  it('assumes stereo when the source states no channel count', () => {
+    const unknown = { a: { id: 'a', kind: 'video', hasAudio: true, audioTracks: [] } as unknown as MediaAsset };
+    expect(resolvedAudio(timeline([clipOf('a')]), unknown)).toBe(preset().audioBitrate);
+  });
+});
+
+describe('forcing the full cadence', () => {
+  const mp4 = (id: string) => PRESETS.find((p) => p.id === id) as Mp4Preset;
+  const project = {
+    id: 'p',
+    aspectRatio: '16:9',
+    fps: 60,
+    markers: [],
+    tracks: [{ id: 'v', kind: 'video', clips: [{ id: 'c', kind: 'media', assetId: 'a' }] }],
+  } as unknown as Project;
+  const at = (fps?: number) => ({ a: { id: 'a', kind: 'video', fps } as MediaAsset });
+
+  it('encodes the ceiling instead of the footage when asked', () => {
+    const smooth = mp4('smooth120-1080-16x9');
+    expect(resolveMp4Preset(smooth, project, at(60)).fps).toBe(60);
+    expect(resolveMp4Preset(smooth, project, at(60), { forceMaxFps: true }).fps).toBe(120);
+  });
+
+  it('carries the bitrate the forced cadence needs', () => {
+    // Otherwise a forced 120 fps file would spread a 60 fps budget over twice
+    // the frames and arrive visibly softer than the same preset at 60.
+    const smooth = mp4('smooth120-1080-16x9');
+    const forced = resolveMp4Preset(smooth, project, at(60), { forceMaxFps: true });
+    expect(forced.videoBitrate).toBe(Math.round(smooth.videoBitrate * 1.6));
+  });
+
+  it('changes nothing for a source-rate or fixed preset', () => {
+    // The checkbox is only ever offered for a ceiling, but the option must be
+    // inert rather than surprising if it reaches anything else.
+    const light = mp4('light1080-16x9');
+    expect(resolveMp4Preset(light, project, at(25), { forceMaxFps: true }).fps).toBe(25);
+    const cinema = mp4('cinema24-16x9');
+    expect(resolveMp4Preset(cinema, project, at(60), { forceMaxFps: true }).fps).toBe(24);
+  });
+
+  it('is only offered where the ceiling actually binds', () => {
+    const smooth = mp4('smooth120-1080-16x9');
+    expect(fpsCapBinds(smooth, project, at(60))).toBe(true);
+    // Already at the ceiling: the checkbox would be a question with one answer.
+    expect(fpsCapBinds(smooth, project, at(120))).toBe(false);
+    // Unknown source rate keeps the ceiling, so there is nothing to override.
+    expect(fpsCapBinds(smooth, project, at(undefined))).toBe(false);
+    // Not a ceiling at all.
+    expect(fpsCapBinds(mp4('cinema24-16x9'), project, at(60))).toBe(false);
+    expect(fpsCapBinds(mp4('light1080-16x9'), project, at(25))).toBe(false);
   });
 });

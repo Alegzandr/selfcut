@@ -35,8 +35,12 @@ const worker = self as unknown as {
   onmessage: ((e: MessageEvent<SegmentRequest>) => void) | null;
 };
 
-/** How many encodes may be outstanding at once. See ENCODE_QUEUE_DEPTH in exportWorker. */
-const ENCODE_QUEUE_DEPTH = 4;
+/**
+ * How many encodes may be outstanding at once. See ENCODE_QUEUE_DEPTH in
+ * exportWorker for the measurement - a slice worker queues into the same GPU
+ * process as the serial path, and there are several of it.
+ */
+const ENCODE_QUEUE_DEPTH = 1;
 /** Frames between progress reports: often enough to be smooth, rare enough to be free. */
 const PROGRESS_EVERY = 15;
 

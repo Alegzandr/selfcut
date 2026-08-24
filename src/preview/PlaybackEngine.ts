@@ -66,6 +66,27 @@ const SCOPE_MIN_INTERVAL_MS = 1000 / 20;
 const PREWARM_LEAD_MS = 1000;
 
 /**
+ * First and longest gap between two attempts at a frame a paused preview is
+ * still waiting for.
+ *
+ * A paused preview draws once and then idles: the only thing that repaints it
+ * for a video clip is a frame arriving. So a first decode that never lands -
+ * a request lost with a worker that restarted under it, a decode that failed
+ * before the cursor ever produced anything, a sink that resolved after the one
+ * draw that asked - leaves the monitor black with nothing left to ask again,
+ * until the user happens to move the playhead. Which is exactly what "reload,
+ * black picture, press back-to-start, picture" was.
+ *
+ * The retry backs off to a request every two seconds and then keeps going: a
+ * clip whose source genuinely has no frame at that time (trimmed past the end
+ * of its media) costs one seek every two seconds while it is on screen, which
+ * is nothing, and giving up entirely is what left the picture black for the
+ * rest of the session.
+ */
+const FRAME_RETRY_MS = 250;
+const FRAME_RETRY_MAX_MS = 2000;
+
+/**
  * How many upcoming clips may hold a warm decoder at once.
  *
  * Two: the next cut on a single track, or the pair a stacked layout cuts to at
@@ -156,6 +177,12 @@ export class PlaybackEngine {
 
   /** `performance.now()` of the last scope publish, for the rate cap. */
   private lastScopeAt = 0;
+
+  /** A video clip drew with no decoded frame this pass (see FRAME_RETRY_MS). */
+  private awaitingFrame = false;
+  /** `performance.now()` of the last retry, and how many have been made since the last frame. */
+  private lastFrameRetryAt = 0;
+  private frameRetries = 0;
 
   /** Reused buffer of prewarm candidates, so the per-frame array is not garbage. */
   private prewarmScratch: { clip: MediaClip; asset: MediaAsset }[] = [];
@@ -386,6 +413,19 @@ export class PlaybackEngine {
     const renderScale =
       !this.wasPlaying && now - this.lastFrameChangeAt > PREVIEW_PAUSE_SETTLE_MS ? 1 : rung;
 
+    // Still waiting on the first frame of a clip that is on screen: ask again.
+    // Paused, nothing else will - the request that would have brought the
+    // picture back is the one the repaint itself issues.
+    const retryWait = Math.min(
+      FRAME_RETRY_MAX_MS,
+      FRAME_RETRY_MS * 2 ** Math.min(this.frameRetries, 8),
+    );
+    if (!this.wasPlaying && this.awaitingFrame && now - this.lastFrameRetryAt > retryWait) {
+      this.lastFrameRetryAt = now;
+      this.frameRetries++;
+      this.videoDirty = true;
+    }
+
     // Repaint on a new frame, an edit, OR a resolution change (same frame, new rung).
     if (this.videoDirty || t !== this.lastDrawnMs || renderScale !== this.lastRenderScale) {
       if (perfEnabled() && this.wasPlaying && this.lastDrawnMs >= 0) {
@@ -395,7 +435,12 @@ export class PlaybackEngine {
         const skipped = Math.round((t - this.lastDrawnMs) / FRAME_MS) - 1;
         if (skipped > 0) count('droppedFrames', skipped);
       }
-      if (t !== this.lastDrawnMs) this.lastFrameChangeAt = now;
+      if (t !== this.lastDrawnMs) {
+        this.lastFrameChangeAt = now;
+        // A new frame time is a new decode to wait for: the previous one's
+        // budget of retries says nothing about this one.
+        this.frameRetries = 0;
+      }
       this.videoDirty = false;
       this.lastDrawnMs = t;
       this.lastRenderScale = renderScale;
@@ -461,6 +506,9 @@ export class PlaybackEngine {
     // cut that is about to happen. Never eviction candidates, however long ago
     // the last one was created (see trimCursors).
     const liveClipIds = new Set<string>();
+    // Re-measured every pass: a clip that has no decoded frame yet is what
+    // keeps the retry above alive, and it must stop the moment one lands.
+    this.awaitingFrame = false;
     const tracks = state.project.tracks;
     for (let t = tracks.length - 1; t >= 0; t--) {
       const track = tracks[t]!;
@@ -478,6 +526,7 @@ export class PlaybackEngine {
             if (!cursor) {
               cursor = new FrameCursor(asset, () => {
                 this.videoDirty = true;
+                this.frameRetries = 0;
               });
             } else {
               // Delete before re-inserting: a Map keeps insertion order, so
@@ -488,6 +537,7 @@ export class PlaybackEngine {
             liveClipIds.add(clip.id);
             cursor.request(timelineToSourceMs(clip, tMs) / 1000, this.wasPlaying);
             sample = cursor.sample;
+            if (!sample) this.awaitingFrame = true;
             // What the pool's memory cap is actually measured against. Taken
             // from the decoded frame rather than from the asset's declared
             // size, so a source that decodes to something unexpected is still
@@ -602,6 +652,7 @@ export class PlaybackEngine {
       if (!cursor) {
         cursor = new FrameCursor(asset, () => {
           this.videoDirty = true;
+          this.frameRetries = 0;
         });
         // Inserted without the delete/re-insert the drawn clips do: a warming
         // cursor is the youngest entry once, and `live` keeps it safe after.

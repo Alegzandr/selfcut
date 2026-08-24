@@ -8,14 +8,30 @@ function series(samples: ProgressSample[]): ProgressSample[] {
 }
 
 describe('pushSample', () => {
-  it('drops readings that do not move forward', () => {
+  it('drops a repeated reading', () => {
     const got = series([
       { atMs: 0, progress: 0 },
       { atMs: 500, progress: 0.1 },
       { atMs: 900, progress: 0.1 },
-      { atMs: 1200, progress: 0.05 },
     ]);
     expect(got.map((s) => s.atMs)).toEqual([0, 500]);
+  });
+
+  /**
+   * This case used to be folded in with the one above, on the reading that both
+   * are "progress that did not move forward". They are not the same event: a
+   * repeated value is the worker throttling its callbacks, and a value that
+   * DROPS is the exporter putting the bar back to the start of a new attempt
+   * after the encoder stalled. Treating the second as the first left the
+   * abandoned attempt in the window - see the restart tests below.
+   */
+  it('restarts the history when progress drops', () => {
+    const got = series([
+      { atMs: 0, progress: 0 },
+      { atMs: 500, progress: 0.1 },
+      { atMs: 1200, progress: 0.05 },
+    ]);
+    expect(got).toEqual([{ atMs: 1200, progress: 0.05 }]);
   });
 
   it('forgets samples older than the window', () => {
@@ -129,5 +145,35 @@ describe('formatRemaining', () => {
     expect(formatRemaining(1)).toBe('0:01');
     expect(formatRemaining(7_400)).toBe('0:08');
     expect(formatRemaining(0)).toBe('0:00');
+  });
+});
+
+describe('pushSample across a restart', () => {
+  /**
+   * The encoder stalled, the render started over on the software one, and the
+   * exporter put the bar back to where that attempt begins. Everything measured
+   * before that describes a render that no longer exists.
+   */
+  it('forgets the abandoned attempt when progress goes backwards', () => {
+    let samples = pushSample([], { atMs: 0, progress: 0 });
+    samples = pushSample(samples, { atMs: 2_000, progress: 0.4 });
+    samples = pushSample(samples, { atMs: 4_000, progress: 0.6 });
+    samples = pushSample(samples, { atMs: 130_000, progress: 0.1 });
+    expect(samples).toEqual([{ atMs: 130_000, progress: 0.1 }]);
+  });
+
+  it('recovers a real estimate from the new attempt alone', () => {
+    let samples = pushSample([], { atMs: 0, progress: 0.6 });
+    samples = pushSample(samples, { atMs: 1_000, progress: 0.1 });
+    samples = pushSample(samples, { atMs: 3_000, progress: 0.2 });
+    // 10% in 2 s, 80% to go: 16 s. Without the reset the window still held the
+    // 0.6 reading and no honest estimate was possible at all.
+    expect(estimateRemainingMs(samples, 3_000)).toBeCloseTo(16_000, -2);
+  });
+
+  it('still ignores a repeated reading', () => {
+    let samples = pushSample([], { atMs: 0, progress: 0.2 });
+    samples = pushSample(samples, { atMs: 500, progress: 0.2 });
+    expect(samples).toHaveLength(1);
   });
 });

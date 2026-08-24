@@ -25,15 +25,24 @@ const MIN_SPAN_MS = 1_200;
  * A render that reports less often than the window is wide falls back to its
  * last two points, so there is always something to measure between.
  *
- * Readings that don't move forward are ignored: the worker throttles its
- * callbacks, and a repeated value would shrink the window for nothing.
+ * Repeated readings are ignored: the worker throttles its callbacks, and a
+ * value that has not moved would shrink the window for nothing.
+ *
+ * A reading that moves BACKWARD is something else entirely - the render gave up
+ * and started over on a slower encoder - and it clears the history rather than
+ * being ignored. Kept, the abandoned attempt's samples would go on being
+ * measured against the new attempt's progress, which reads as an estimate the
+ * render has already outlived: the readout sits on "estimating" for as long as
+ * it takes the new attempt to climb past where the old one died, which is
+ * exactly the stretch where the user most needs to be told it is working.
  */
 export function pushSample(
   samples: readonly ProgressSample[],
   sample: ProgressSample,
 ): ProgressSample[] {
   const last = samples[samples.length - 1];
-  if (last && sample.progress <= last.progress) return [...samples];
+  if (last && sample.progress < last.progress) return [sample];
+  if (last && sample.progress === last.progress) return [...samples];
   const next = [...samples, sample];
   const cutoff = sample.atMs - WINDOW_MS;
   const inWindow = next.filter((s) => s.atMs >= cutoff);
