@@ -59,9 +59,8 @@ Auto-captions transcribe the selected clips locally with Whisper (desktop only;
 the model downloads once and the audio never leaves the browser). Pick the
 spoken language or let it be detected, aim the pass at any audio track of the
 source, and choose the model in front of what this machine can actually run -
-downloads are listed and deletable. Voice focus (on by default) filters the
-rumble out and evens the voice up before Whisper hears it, which is what stream
-footage needs when music and game audio share the track.
+downloads are listed and deletable. Voice focus, off by default, filters
+the rumble out and evens the voice up for a recording that needs it.
 
 **Watch it live.** Real-time preview with synced audio, decoded in a worker;
 the picture sharpens to full resolution as soon as you stop scrubbing.
@@ -301,12 +300,27 @@ src/
   rated against a real WebGPU probe (`src/media/captionsCapabilities.ts`), and
   regenerating over existing cues offers to replace them rather than stacking a
   second caption lane.
-- **Voice focus levels the audio, it does not separate it.** A high-pass, a
-  gentle compressor and RMS levelling to the loudness Whisper was trained on
-  (`normalizeSpeech`) cost one offline render that already had to happen for the
-  resample. Source separation would mean a second model download for a gain
-  Whisper's own robustness mostly already provides, and a noise gate eats word
-  onsets - a swallowed first syllable is worse than a noisy one.
+- **Voice focus is off by default, because it was measured.** A high-pass, a
+  compressor and RMS levelling to the loudness Whisper was trained on
+  (`normalizeSpeech`) sounded like the obvious answer for stream footage. On a
+  real 29 s stream recording - French, music and game audio under the voice -
+  the chain made every transcript worse: large-v3-turbo went from 57% to 67%
+  word error, small from 80% to 96%. Whisper is trained on unprocessed audio,
+  and a mix already at the loudness it expects gains nothing from being levelled
+  twice. The option stays for a recording that is genuinely quiet or boomy.
+- **The decoder blocks repeated 3-grams** (`no_repeat_ngram_size: 3`). Whisper's
+  failure mode on hard audio is a loop: the same token to the end of the chunk.
+  On that same recording the base model scored 912% word error - a wall of
+  "ah ah ah" - and 94% with the guard, while turbo and small were unchanged.
+- **Model size is the whole ballgame, and quantisation is not.** Same clip,
+  same settings: tiny 104%, base 94%, small 80%, large-v3-turbo 57%. That last
+  one at q8; the fp32 build of the same model scored 69%, so the quantised
+  weights the app ships are not what is costing accuracy.
+- **Detection is the default, but it is not free.** On that recording, letting
+  Whisper detect the language made it hear English and write English words over
+  French speech (94% error against 57% with French pinned). Detection still
+  beats forcing the interface language, which is what it replaced; on difficult
+  audio, picking the language by hand is worth the two seconds.
 
 ## Measuring
 

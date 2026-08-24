@@ -605,7 +605,7 @@
   "subtitles.empty.formats": "SRT · WebVTT · ASS/SSA",
   "subtitles.auto": "AI 자막",
   "subtitles.enhance": "음성 포커스",
-  "subtitles.enhance.hint": "전사 전에 저역을 걸러내고 목소리를 고르게 만듭니다 : 음악이나 게임 소리가 같은 트랙에 있을 때 유용합니다",
+  "subtitles.enhance.hint": "너무 작거나 웅웅거리는 녹음을 위한 옵션입니다. 이미 균형 잡힌 믹스에서는 대개 정확도가 떨어집니다",
   "subtitles.language": "언어",
   "subtitles.language.auto": "자동으로 감지",
   "subtitles.audioTrack": "오디오 트랙",

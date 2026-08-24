@@ -605,7 +605,7 @@
   "subtitles.empty.formats": "SRT · WebVTT · ASS/SSA",
   "subtitles.auto": "Sous-titres IA",
   "subtitles.enhance": "Focus voix",
-  "subtitles.enhance.hint": "Filtre les infra-graves et égalise la voix avant la transcription : utile quand la musique ou le son du jeu partage la piste",
+  "subtitles.enhance.hint": "Pour une prise trop faible ou trop sourde. Sur un mix déjà équilibré, ça coûte en général de la précision.",
   "subtitles.language": "Langue",
   "subtitles.language.auto": "Détection automatique",
   "subtitles.audioTrack": "Piste audio",

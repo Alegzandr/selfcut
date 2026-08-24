@@ -605,7 +605,7 @@
   "subtitles.empty.formats": "SRT · WebVTT · ASS/SSA",
   "subtitles.auto": "AI字幕",
   "subtitles.enhance": "音声フォーカス",
-  "subtitles.enhance.hint": "文字起こしの前に低音を除去して声のレベルを整えます。音楽やゲーム音が同じトラックにあるときに有効です",
+  "subtitles.enhance.hint": "音量が小さすぎる、または低音がこもった録音向けです。すでに整ったミックスでは精度が下がることが多くあります",
   "subtitles.language": "言語",
   "subtitles.language.auto": "自動で判別",
   "subtitles.audioTrack": "音声トラック",

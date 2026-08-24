@@ -605,7 +605,7 @@
   "subtitles.empty.formats": "SRT · WebVTT · ASS/SSA",
   "subtitles.auto": "KI-Untertitel",
   "subtitles.enhance": "Sprachfokus",
-  "subtitles.enhance.hint": "Filtert Rumpeln und pegelt die Stimme vor der Transkription : hilft, wenn Musik oder Spielton dieselbe Spur teilen",
+  "subtitles.enhance.hint": "Für eine zu leise oder zu dumpfe Aufnahme. Bei einer bereits ausgewogenen Mischung kostet es meist Genauigkeit.",
   "subtitles.language": "Sprache",
   "subtitles.language.auto": "Automatisch erkennen",
   "subtitles.audioTrack": "Tonspur",

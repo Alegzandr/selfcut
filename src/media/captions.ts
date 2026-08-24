@@ -31,7 +31,7 @@ export interface CaptionOptions {
   language?: string;
   /**
    * Run the speech chain (high-pass, compression, levelling) before Whisper
-   * sees the audio. Default on; see `extractMono16k`.
+   * sees the audio. Default off; see `extractMono16k` and `storedCaptionEnhance`.
    */
   enhanceVoice?: boolean;
   /**
@@ -88,10 +88,11 @@ export function normalizeSpeech(samples: Float32Array): Float32Array {
  * Whisper wants mono 16 kHz: render the clip's source span through an offline
  * context, which resamples and downmixes to one channel in one pass.
  *
- * With `enhance`, the render also runs the speech chain. Stream footage is the
- * case this is for: the voice shares its track with music, game audio and alert
- * sounds, and Whisper does measurably worse on a quiet voice buried under a
- * loud bed than on the same voice brought forward.
+ * With `enhance`, the render also runs the speech chain. It is off by default:
+ * measured against a real stream recording it cost accuracy rather than buying
+ * any (see `storedCaptionEnhance`). What it is kept for is the recording that
+ * is genuinely quiet or boomy, where Whisper is being handed audio far from
+ * anything it was trained on.
  *  - high-pass at 80 Hz: rumble, desk thumps and mains hum carry no speech, but
  *    they do eat headroom that the levelling below would otherwise hand them;
  *  - compression: a gentle 4:1 closes the gap between a shouted reaction and a
@@ -180,7 +181,7 @@ export async function generateCaptions(
     buffer,
     clip.sourceInMs / 1000,
     (clip.sourceOutMs - clip.sourceInMs) / 1000,
-    opts.enhanceVoice !== false,
+    opts.enhanceVoice === true,
   );
   if (signal?.aborted) return null;
 

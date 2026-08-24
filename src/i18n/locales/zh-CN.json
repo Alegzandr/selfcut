@@ -605,7 +605,7 @@
   "subtitles.empty.formats": "SRT · WebVTT · ASS/SSA",
   "subtitles.auto": "AI 字幕",
   "subtitles.enhance": "人声聚焦",
-  "subtitles.enhance.hint": "转写前滤除低频并均衡人声：当音乐或游戏声与人声同轨时很有用",
+  "subtitles.enhance.hint": "适用于过轻或过闷的录音。对已经均衡的混音，通常会降低准确度",
   "subtitles.language": "语言",
   "subtitles.language.auto": "自动识别",
   "subtitles.audioTrack": "音频轨",

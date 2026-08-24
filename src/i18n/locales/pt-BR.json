@@ -605,7 +605,7 @@
   "subtitles.empty.formats": "SRT · WebVTT · ASS/SSA",
   "subtitles.auto": "Legendas com IA",
   "subtitles.enhance": "Foco na voz",
-  "subtitles.enhance.hint": "Filtra os graves e nivela a voz antes de transcrever : ajuda quando a música ou o áudio do jogo dividem a faixa",
+  "subtitles.enhance.hint": "Para uma gravação baixa demais ou abafada. Em uma mixagem já equilibrada, costuma custar precisão.",
   "subtitles.language": "Idioma",
   "subtitles.language.auto": "Detectar automaticamente",
   "subtitles.audioTrack": "Faixa de áudio",

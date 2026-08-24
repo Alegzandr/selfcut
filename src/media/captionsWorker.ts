@@ -98,6 +98,13 @@ self.onmessage = async (e: MessageEvent<CaptionRequest>) => {
       // pinned, the translation task would silently rewrite the captions into
       // another tongue.
       task: 'transcribe',
+      // Whisper's degenerate mode: on hard audio the decoder falls into a loop
+      // and emits the same token until the chunk ends. Measured on a stream
+      // recording (29 s, French, music and game audio under the voice), the
+      // base model went from 912% word error - a wall of "ah ah ah" - to 94%
+      // with 3-grams blocked, while turbo and small were unchanged. It costs
+      // nothing when the decoding is healthy and saves the run when it is not.
+      no_repeat_ngram_size: 3,
       ...(req.language ? { language: req.language } : {}),
     });
     const segments: CaptionSegment[] = (out.chunks ?? [])

@@ -605,7 +605,7 @@
   "subtitles.empty.formats": "SRT · WebVTT · ASS/SSA",
   "subtitles.auto": "AI captions",
   "subtitles.enhance": "Voice focus",
-  "subtitles.enhance.hint": "Filters rumble and evens out the voice before transcribing : helps when music or game audio shares the track",
+  "subtitles.enhance.hint": "For a recording that is too quiet or too boomy. On an already balanced mix it usually costs accuracy.",
   "subtitles.language": "Language",
   "subtitles.language.auto": "Detect automatically",
   "subtitles.audioTrack": "Audio track",
