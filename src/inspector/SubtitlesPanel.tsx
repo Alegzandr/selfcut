@@ -4,7 +4,6 @@ import {
   Cross2Icon,
   FilePlusIcon,
   MagicWandIcon,
-  MixerHorizontalIcon,
   TextIcon,
   TrashIcon,
 } from "@radix-ui/react-icons";
@@ -12,13 +11,16 @@ import { useStore } from "../store/store";
 import { Tooltip } from "../ui/Tooltip";
 import { openSubtitlePicker } from "../ui/mediaPicker";
 import { useImport } from "../ui/useImport";
-import { CaptionModelDialog } from "../ui/CaptionModelDialog";
-import { clipEndMs, isTextClip, supersededCueIds } from "../model";
+import {
+  audioTrackForClip,
+  clipEndMs,
+  isTextClip,
+  supersededCueIds,
+} from "../model";
 import {
   generateCaptionsForClips,
   type CaptionProgress,
 } from "../media/captions";
-import { captionModel } from "../media/captionsModel";
 import {
   captionCapabilities,
   bestDefaultModel,
@@ -30,7 +32,6 @@ import {
   languageName,
   setStoredCaptionEnhance,
   setStoredCaptionLanguage,
-  setStoredCaptionModel,
   storedCaptionModel,
   whisperLanguage,
 } from "../media/captionsPrefs";
@@ -159,8 +160,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
   const enhance = useCaptionEnhancePref();
   const [probedModel, setProbedModel] = useState(DEFAULT_CAPTION_MODEL);
   const model = storedModel ?? probedModel;
-  const [audioTrack, setAudioTrack] = useState<string>("clip");
-  const [modelsOpen, setModelsOpen] = useState(false);
+  const [pickedTrack, setPickedTrack] = useState<string | null>(null);
   const [progress, setProgress] = useState<CaptionProgress | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -189,6 +189,29 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
     isTrackPlayable,
   );
   const showTrackPicker = pickableTracks.length > 1;
+
+  // The clips already say which track they play - a clip dropped from the
+  // library's second audio stream is pinned to it, and the timeline draws that
+  // stream's waveform. So the picker opens on that track instead of on a
+  // generic "the clip's own", which read as "not the one you pointed at" when
+  // the pane was opened by right-clicking exactly that lane.
+  const clipTrack = useMemo(() => {
+    if (!sharedAsset) return null;
+    const indices = new Set(
+      targets.map((x) => audioTrackForClip(sharedAsset, x.clip)?.index),
+    );
+    const [only] = [...indices];
+    // Only a track the picker actually lists: a clip pinned to an undecodable
+    // stream must not leave the select showing an option that is not there.
+    return indices.size === 1 &&
+      only != null &&
+      pickableTracks.some((track) => track.index === only)
+      ? String(only)
+      : null;
+  }, [sharedAsset, targets, pickableTracks]);
+  // A choice made by hand survives until the selection points somewhere else.
+  useEffect(() => setPickedTrack(null), [clipTrack]);
+  const audioTrack = pickedTrack ?? clipTrack ?? "clip";
 
   const run = () => {
     if (targets.length === 0 || progress) return;
@@ -241,7 +264,6 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
     })();
   };
 
-  const info = captionModel(model);
   const scope =
     targets.length === 0
       ? t("subtitles.generate.needsAudio")
@@ -256,16 +278,6 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
         <span className="flex-1 text-xs font-medium text-zinc-100">
           {t("subtitles.auto")}
         </span>
-        <Tooltip label={t("captions.models.title")}>
-          <button
-            type="button"
-            onClick={() => setModelsOpen(true)}
-            className="touch-hit flex items-center gap-1 rounded-md border border-zinc-700 px-1.5 py-0.5 text-2xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
-          >
-            <MixerHorizontalIcon className="h-3 w-3" />
-            {info.name.replace(/^Whisper /, "")}
-          </button>
-        </Tooltip>
       </div>
 
       <div className="mt-2 flex gap-2">
@@ -285,7 +297,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
           <Field
             label={t("subtitles.audioTrack")}
             value={audioTrack}
-            onChange={setAudioTrack}
+            onChange={setPickedTrack}
           >
             <option value="clip">{t("subtitles.audioTrack.clip")}</option>
             {pickableTracks.map((track) => (
@@ -332,13 +344,6 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
       {!progress && (
         <p className="mt-1.5 text-center text-2xs text-zinc-500">{scope}</p>
       )}
-
-      <CaptionModelDialog
-        open={modelsOpen}
-        model={model}
-        onPick={setStoredCaptionModel}
-        onClose={() => setModelsOpen(false)}
-      />
     </div>
   );
 }

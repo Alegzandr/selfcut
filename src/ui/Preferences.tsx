@@ -15,19 +15,10 @@ import {
   captionCapabilities,
 } from "../media/captionsCapabilities";
 import {
-  AUTO_LANGUAGE,
-  CAPTION_LANGUAGES,
   DEFAULT_CAPTION_MODEL,
-  languageName,
-  setStoredCaptionEnhance,
-  setStoredCaptionLanguage,
   setStoredCaptionModel,
 } from "../media/captionsPrefs";
-import {
-  useCaptionEnhancePref,
-  useCaptionLanguagePref,
-  useCaptionModelPref,
-} from "../media/useCaptionPrefs";
+import { useCaptionModelPref } from "../media/useCaptionPrefs";
 import { useIsCoarsePointer } from "../lib/device";
 
 const TIME_FORMATS: readonly { value: TimeFormat; labelKey: ParseKeys }[] = [
@@ -73,20 +64,18 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * The auto-caption settings, as preference rows.
+ * The transcription model, as a preference row.
  *
- * They also sit on the captions card in the subtitles pane, next to the button
- * that uses them - that is where they are needed mid-edit. They are duplicated
- * here because "which model does this thing run" is the question people bring
- * to Preferences, and the model manager (a several-hundred-megabyte download
- * with a delete button) is not something to make anyone select a clip to reach.
- * Both surfaces read the same stored values, so neither can drift.
+ * This is the only caption setting that belongs here: "which model does this
+ * thing run" is the question people bring to Preferences, and the model manager
+ * (a several-hundred-megabyte download with a delete button) is not something
+ * to make anyone select a clip to reach. The language and the voice focus are
+ * per-run choices, so they live on the captions card next to the button that
+ * uses them - repeating them here only made the same setting look like two.
  */
 function CaptionRows() {
-  const { t, i18n: i18next } = useTranslation();
+  const { t } = useTranslation();
   const storedModel = useCaptionModelPref();
-  const language = useCaptionLanguagePref();
-  const enhance = useCaptionEnhancePref();
   const [probedModel, setProbedModel] = useState(DEFAULT_CAPTION_MODEL);
   const [modelsOpen, setModelsOpen] = useState(false);
   const model = storedModel ?? probedModel;
@@ -113,35 +102,6 @@ function CaptionRows() {
           {captionModel(model).name}
           <MixerHorizontalIcon className="h-3.5 w-3.5 text-zinc-400" />
         </button>
-      </Row>
-
-      <Row label={t("preferences.captions.language")}>
-        <select
-          className={SELECT_CLASS}
-          value={language}
-          onChange={(e) => setStoredCaptionLanguage(e.target.value)}
-        >
-          <option value={AUTO_LANGUAGE}>{t("subtitles.language.auto")}</option>
-          {CAPTION_LANGUAGES.map((code) => (
-            <option key={code} value={code}>
-              {languageName(code, i18next.language)}
-            </option>
-          ))}
-        </select>
-      </Row>
-
-      <Row label={t("subtitles.enhance")}>
-        <label className="flex min-w-44 cursor-pointer items-center justify-end gap-2 text-xs text-zinc-400">
-          <span className="text-2xs text-zinc-500">
-            {t("subtitles.enhance.hint")}
-          </span>
-          <input
-            type="checkbox"
-            className="h-3.5 w-3.5 accent-sky-500"
-            checked={enhance}
-            onChange={(e) => setStoredCaptionEnhance(e.target.checked)}
-          />
-        </label>
       </Row>
 
       <CaptionModelDialog

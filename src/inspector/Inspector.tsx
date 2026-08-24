@@ -123,7 +123,11 @@ export function Inspector() {
           side="start"
         />
         <div
-          className="flex-none space-y-3 overflow-x-hidden overflow-y-auto border-l border-zinc-800 bg-zinc-900/60 p-3"
+          // The gutter is reserved whether or not the pane scrolls: the clip
+          // tab overflows and the subtitles tab often does not, and without it
+          // every switch between the two shifted the whole column sideways by
+          // the width of the scrollbar.
+          className="flex-none space-y-3 overflow-x-hidden overflow-y-auto border-l border-zinc-800 bg-zinc-900/60 p-3 [scrollbar-gutter:stable]"
           style={{ width: inspectorWidthPx }}
         >
           <InspectorTabs cueCount={cueCount} />
@@ -155,7 +159,7 @@ export function Inspector() {
           animate={{ y: 0 }}
           exit={{ y: '110%' }}
           transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-          className="fixed inset-x-0 bottom-0 z-40 max-h-[55dvh] space-y-3 overflow-x-hidden overflow-y-auto rounded-t-2xl border-t border-zinc-800 bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black"
+          className="fixed inset-x-0 bottom-0 z-40 max-h-[55dvh] space-y-3 overflow-x-hidden overflow-y-auto rounded-t-2xl [scrollbar-gutter:stable] border-t border-zinc-800 bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black"
         >
           <InspectorTabs cueCount={cueCount} />
           {showSubtitles ? (
