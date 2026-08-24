@@ -45,10 +45,16 @@ function InspectorTabs({ cueCount }: { cueCount: number }) {
     { id: 'subtitles', label: t('inspector.tab.subtitles'), badge: cueCount || undefined },
   ];
   return (
-    <div className="flex gap-1 rounded-lg bg-zinc-800/60 p-0.5">
+    // Real ARIA tabs, not buttons that look like tabs. Assistive tech gets the
+    // "1 of 2" it needs, and the menu bar keeps sole ownership of the button
+    // role for its own "Clip" menu - two controls with the same name and the
+    // same role is ambiguous to a screen reader before it is ambiguous to a test.
+    <div role="tablist" aria-label={t('inspector.tabs')} className="flex gap-1 rounded-lg bg-zinc-800/60 p-0.5">
       {tabs.map(({ id, label, badge }) => (
         <button
           key={id}
+          role="tab"
+          aria-selected={tab === id}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ${
             tab === id ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'
           }`}

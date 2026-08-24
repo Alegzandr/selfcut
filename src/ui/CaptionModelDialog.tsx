@@ -237,8 +237,8 @@ export function CaptionModelDialog({
       });
   };
 
-  const remove = (m: CaptionModelInfo) => {
-    void deleteCachedModel(m).then(refreshCache);
+  const remove = (info: CaptionModelInfo) => {
+    void deleteCachedModel(info).then(refreshCache);
   };
 
   const backend = caps
@@ -293,17 +293,17 @@ export function CaptionModelDialog({
             </div>
 
             <ul className="-mr-2 mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-2">
-              {CAPTION_MODELS.map((m) => (
+              {CAPTION_MODELS.map((info) => (
                 <ModelRow
-                  key={m.id}
-                  model={m}
+                  key={info.id}
+                  model={info}
                   caps={caps}
-                  cached={cache?.get(m.id)}
-                  active={m.id === model}
-                  downloading={downloading?.id === m.id ? downloading.value : null}
-                  onSelect={() => onPick(m.id)}
-                  onDownload={() => download(m.id)}
-                  onDelete={() => remove(m)}
+                  cached={cache?.get(info.id)}
+                  active={info.id === model}
+                  downloading={downloading?.id === info.id ? downloading.value : null}
+                  onSelect={() => onPick(info.id)}
+                  onDownload={() => download(info.id)}
+                  onDelete={() => remove(info)}
                 />
               ))}
             </ul>

@@ -588,6 +588,7 @@
   "inspector.textWidth.hint": "文本框的宽度：过长的行会自动换到下一行",
   "inspector.tab.clip": "片段",
   "inspector.tab.subtitles": "字幕",
+  "inspector.tabs": "检查器面板",
   "subtitles.count_one": "{{count}} 条字幕",
   "subtitles.count_other": "{{count}} 条字幕",
   "subtitles.import": "导入字幕",

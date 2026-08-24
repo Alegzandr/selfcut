@@ -588,6 +588,7 @@
   "inspector.textWidth.hint": "Largura do bloco de texto : linhas longas quebram para a próxima",
   "inspector.tab.clip": "Clipe",
   "inspector.tab.subtitles": "Legendas",
+  "inspector.tabs": "Painéis do inspetor",
   "subtitles.count_one": "{{count}} fala",
   "subtitles.count_other": "{{count}} falas",
   "subtitles.import": "Importar legendas",

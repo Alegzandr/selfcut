@@ -588,6 +588,7 @@
   "inspector.textWidth.hint": "텍스트 상자의 너비 : 길어진 줄은 다음 줄로 넘어갑니다",
   "inspector.tab.clip": "클립",
   "inspector.tab.subtitles": "자막",
+  "inspector.tabs": "검사기 패널",
   "subtitles.count_one": "자막 {{count}}개",
   "subtitles.count_other": "자막 {{count}}개",
   "subtitles.import": "자막 가져오기",

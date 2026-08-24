@@ -588,6 +588,7 @@
   "inspector.textWidth.hint": "Largeur du bloc de texte : les lignes trop longues passent à la ligne",
   "inspector.tab.clip": "Clip",
   "inspector.tab.subtitles": "Sous-titres",
+  "inspector.tabs": "Volets de l'inspecteur",
   "subtitles.count_one": "{{count}} réplique",
   "subtitles.count_other": "{{count}} répliques",
   "subtitles.import": "Importer des sous-titres",

@@ -588,6 +588,7 @@
   "inspector.textWidth.hint": "Breite des Textblocks : zu lange Zeilen brechen um",
   "inspector.tab.clip": "Clip",
   "inspector.tab.subtitles": "Untertitel",
+  "inspector.tabs": "Inspektor-Bereiche",
   "subtitles.count_one": "{{count}} Einblendung",
   "subtitles.count_other": "{{count}} Einblendungen",
   "subtitles.import": "Untertitel importieren",

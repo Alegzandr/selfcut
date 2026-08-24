@@ -588,6 +588,7 @@
   "inspector.textWidth.hint": "テキストボックスの幅：はみ出した行は次の行へ折り返します",
   "inspector.tab.clip": "クリップ",
   "inspector.tab.subtitles": "字幕",
+  "inspector.tabs": "インスペクターのペイン",
   "subtitles.count_one": "{{count}} 件のキュー",
   "subtitles.count_other": "{{count}} 件のキュー",
   "subtitles.import": "字幕を読み込む",

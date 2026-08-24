@@ -588,6 +588,7 @@
   "inspector.textWidth.hint": "Anchura del bloque de texto : las líneas largas pasan a la línea siguiente",
   "inspector.tab.clip": "Clip",
   "inspector.tab.subtitles": "Subtítulos",
+  "inspector.tabs": "Paneles del inspector",
   "subtitles.count_one": "{{count}} línea",
   "subtitles.count_other": "{{count}} líneas",
   "subtitles.import": "Importar subtítulos",

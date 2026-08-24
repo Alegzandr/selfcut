@@ -588,6 +588,7 @@
   "inspector.textWidth.hint": "Width of the text box : longer lines wrap onto the next line",
   "inspector.tab.clip": "Clip",
   "inspector.tab.subtitles": "Subtitles",
+  "inspector.tabs": "Inspector panes",
   "subtitles.count_one": "{{count}} cue",
   "subtitles.count_other": "{{count}} cues",
   "subtitles.import": "Import subtitles",
