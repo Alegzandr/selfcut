@@ -1196,9 +1196,26 @@ export function createClipsSlice(
       }
     },
 
-    addSubtitleClips: (cues, anchorAssetId) => {
+    addSubtitleClips: (cues, anchorAssetId, replaceClipIds) => {
       if (cues.length === 0) return;
       withHistory((p) => {
+        // Out with the previous pass first, so a regenerated track replaces the
+        // old cues instead of stacking a second lane of them on top.
+        if (replaceClipIds?.length) {
+          const doomed = new Set(replaceClipIds);
+          const emptied = new Set<string>();
+          for (const track of p.tracks) {
+            const kept = track.clips.filter((c) => !doomed.has(c.id));
+            if (kept.length === track.clips.length) continue;
+            track.clips = kept;
+            if (kept.length === 0) emptied.add(track.id);
+          }
+          // A caption lane emptied by that filter has nothing left to say: drop
+          // it rather than leave a bare track header behind. Only lanes this
+          // replacement emptied - an empty lane the user just added by hand is
+          // theirs, not ours to collect.
+          p.tracks = p.tracks.filter((track) => !emptied.has(track.id));
+        }
         // Captions always live on their own dedicated video track, composited
         // above any footage. Z-order = array order the way the timeline shows
         // it: index 0 is the top lane and paints last, so the caption track is

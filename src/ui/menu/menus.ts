@@ -74,6 +74,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         'clip.punchIn',
         'clip.stream',
         'clip.blurRegion',
+        'clip.captions',
         'clip.adjust',
         // Link when the selection joins into a pair; unlink on an already-linked clip.
         ...(canLink ? ['clip.link'] : []),

@@ -7,6 +7,7 @@ import type { InspectorTab } from '../store/editorState';
 import { SubtitlesPanel } from './SubtitlesPanel';
 import { Tooltip } from '../ui/Tooltip';
 import { Clip } from '../types';
+import { isTextClip } from '../model';
 import { useIsCoarsePointer } from '../lib/device';
 import { ResizeHandle } from '../ui/ResizeHandle';
 import { INSPECTOR_WIDTH_PX } from '../app/config';
@@ -27,29 +28,38 @@ import { TransitionSection } from './sections/TransitionSection';
 import { clipDisplayName } from '../ui/clipName';
 
 /**
- * Tab strip of the inspector column. Only shown once the cue list has been
- * asked for: a single-pane inspector must not grow a tab bar for a pane the
- * user never opened.
+ * Tab strip of the inspector column, shown whenever the column is up.
+ *
+ * It used to appear only once the cue list had been asked for, which made
+ * subtitles - and with them auto-captions - reachable exclusively through a
+ * View menu entry nobody thinks to open. A pane that cannot be found is a
+ * feature that does not exist, and one extra row of tabs is a small price for
+ * the whole of it becoming visible.
  */
-function InspectorTabs() {
+function InspectorTabs({ cueCount }: { cueCount: number }) {
   const { t } = useTranslation();
   const tab = useStore((s) => s.inspectorTab);
   const setInspectorTab = useStore.getState().setInspectorTab;
-  const tabs: { id: InspectorTab; label: string }[] = [
+  const tabs: { id: InspectorTab; label: string; badge?: number }[] = [
     { id: 'clip', label: t('inspector.tab.clip') },
-    { id: 'subtitles', label: t('inspector.tab.subtitles') },
+    { id: 'subtitles', label: t('inspector.tab.subtitles'), badge: cueCount || undefined },
   ];
   return (
     <div className="flex gap-1 rounded-lg bg-zinc-800/60 p-0.5">
-      {tabs.map(({ id, label }) => (
+      {tabs.map(({ id, label, badge }) => (
         <button
           key={id}
-          className={`flex-1 rounded-md px-2 py-1 text-xs font-medium ${
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ${
             tab === id ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'
           }`}
           onClick={() => setInspectorTab(id)}
         >
           {label}
+          {badge != null && (
+            <span className="rounded-full bg-zinc-700/80 px-1.5 text-2xs tabular-nums text-zinc-300">
+              {badge}
+            </span>
+          )}
         </button>
       ))}
     </div>
@@ -65,6 +75,13 @@ export function Inspector() {
   const tab = useStore((s) => s.inspectorTab);
   const inspectorWidthPx = useStore((s) => s.inspectorWidthPx);
   const showSubtitles = tab === 'subtitles';
+  // Counted here rather than in the panel: the tab badge has to state how many
+  // cues the project holds even while the clip pane is the one on screen.
+  const tracks = useStore((s) => s.project.tracks);
+  const cueCount = useMemo(
+    () => tracks.reduce((n, track) => n + track.clips.filter(isTextClip).length, 0),
+    [tracks],
+  );
   // A linked video clip delegates its sound to the audio clip on the lane
   // below (it is silent in the mix): audio edits must target that partner,
   // otherwise the volume/balance controls are dead knobs.
@@ -103,7 +120,7 @@ export function Inspector() {
           className="flex-none space-y-3 overflow-x-hidden overflow-y-auto border-l border-zinc-800 bg-zinc-900/60 p-3"
           style={{ width: inspectorWidthPx }}
         >
-          {showSubtitles && <InspectorTabs />}
+          <InspectorTabs cueCount={cueCount} />
           {showSubtitles ? (
             <SubtitlesPanel />
           ) : (
@@ -134,7 +151,7 @@ export function Inspector() {
           transition={{ type: 'spring', damping: 28, stiffness: 320 }}
           className="fixed inset-x-0 bottom-0 z-40 max-h-[55dvh] space-y-3 overflow-x-hidden overflow-y-auto rounded-t-2xl border-t border-zinc-800 bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black"
         >
-          {showSubtitles && <InspectorTabs />}
+          <InspectorTabs cueCount={cueCount} />
           {showSubtitles ? (
             <SubtitlesPanel />
           ) : (

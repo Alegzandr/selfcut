@@ -389,4 +389,40 @@ describe('addSubtitleClips', () => {
 
     for (const c of captions()) expect(c.linkId).toBeUndefined();
   });
+
+  it('replaces a previous pass instead of stacking a second caption lane', () => {
+    importWithCaptions();
+    const first = captions().map((c) => c.id);
+    const lanes = s().project.tracks.length;
+
+    s().addSubtitleClips([{ startMs: 0, endMs: 500, text: 'again' }], 'v', first);
+
+    expect(captions().map((c) => c.text.content)).toEqual(['again']);
+    // The emptied lane went with its clips: one lane in, one lane out.
+    expect(s().project.tracks).toHaveLength(lanes);
+  });
+
+  it('undoes a regeneration in one step', () => {
+    // Delete-then-add as two history entries would let an undo land on the
+    // state where the old cues are gone and the new ones are not there yet.
+    importWithCaptions();
+    const first = captions().map((c) => c.id);
+    s().addSubtitleClips([{ startMs: 0, endMs: 500, text: 'again' }], 'v', first);
+    s().undo();
+
+    expect(captions().map((c) => c.text.content)).toEqual(['one', 'two']);
+  });
+
+  it('keeps an empty lane the replacement did not empty', () => {
+    importWithCaptions();
+    s().addTrack('video');
+    const before = s().project.tracks.length;
+
+    s().addSubtitleClips([{ startMs: 0, endMs: 500, text: 'again' }], 'v', captions().map((c) => c.id));
+
+    // One lane removed (the emptied caption one), one added (the new cues):
+    // the hand-added empty lane is untouched.
+    expect(s().project.tracks).toHaveLength(before);
+    expect(s().project.tracks.some((t) => t.clips.length === 0)).toBe(true);
+  });
 });

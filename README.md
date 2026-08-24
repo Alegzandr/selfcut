@@ -55,8 +55,11 @@ slides, wipe, zoom.
 
 **Mix.** Per-clip volume envelopes and audio effects - leveler, voice, bass,
 reverb, echo - all native Web Audio, so preview and export sound identical.
-Auto-captions transcribe a clip locally with Whisper (desktop only; the model
-downloads once and the audio never leaves the browser).
+Auto-captions transcribe the selected clips locally with Whisper (desktop only;
+the model downloads once and the audio never leaves the browser). Pick the
+spoken language or let it be detected, aim the pass at any audio track of the
+source, and choose the model in front of what this machine can actually run -
+downloads are listed and deletable.
 
 **Watch it live.** Real-time preview with synced audio, decoded in a worker;
 the picture sharpens to full resolution as soon as you stop scrubbing.
@@ -71,8 +74,8 @@ custom presets: H.264, HEVC or AV1, 720p to 4K, a 120 fps cadence, 24p cinema, a
 light file for email, or MP3 for the audio mix alone. The frame rate follows the
 footage unless the preset pins it.
 
-Interface available in English, French, German, Spanish and Brazilian
-Portuguese.
+Interface available in English, French, German, Spanish, Brazilian
+Portuguese, Japanese, Simplified Chinese and Korean.
 
 ## Requirements
 
@@ -289,6 +292,13 @@ src/
   Animated GIFs import as a still of their first frame.
 - **Auto-captions are desktop-only**, by decision: Whisper needs a capable
   machine and a model download, which is not what a phone visit should meet.
+- **The caption language defaults to detection, not to the interface
+  language.** Forcing the UI language was the single largest source of bad
+  transcriptions: a French interface over English audio asked Whisper for
+  French words nobody said, and it obliged. The model is a per-machine choice
+  rated against a real WebGPU probe (`src/media/captionsCapabilities.ts`), and
+  regenerating over existing cues offers to replace them rather than stacking a
+  second caption lane.
 
 ## Measuring
 

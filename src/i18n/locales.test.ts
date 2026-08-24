@@ -3,7 +3,10 @@ import de from './locales/de.json';
 import en from './locales/en.json';
 import es from './locales/es.json';
 import fr from './locales/fr.json';
+import ja from './locales/ja.json';
+import ko from './locales/ko.json';
 import ptBR from './locales/pt-BR.json';
+import zhCN from './locales/zh-CN.json';
 
 /**
  * English is the pivot locale and the typed key set. TypeScript catches a key
@@ -15,7 +18,7 @@ import ptBR from './locales/pt-BR.json';
  * i18n module's own comment and did not exist, which is the exact failure mode
  * a check that runs by hand always ends at. This runs with the unit suite.
  */
-const LOCALES: Record<string, Record<string, string>> = { fr, es, de, 'pt-BR': ptBR };
+const LOCALES: Record<string, Record<string, string>> = { fr, es, de, 'pt-BR': ptBR, ja, 'zh-CN': zhCN, ko };
 const enKeys = Object.keys(en as Record<string, string>);
 
 describe('locale dictionaries', () => {

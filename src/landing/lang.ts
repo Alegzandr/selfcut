@@ -2,7 +2,7 @@
 // pages. Shares the `selfcut.lang` localStorage key with the editor, so
 // picking a language here also switches the app, and vice versa. The key is
 // spelled out rather than imported from `src/i18n`, which would boot i18next
-// and its five dictionaries into a page that has no use for them.
+// and its eight dictionaries into a page that has no use for them.
 
 import { LANGS, type LangCode } from './langs';
 
@@ -17,6 +17,7 @@ function resolve(tag: string | null | undefined): LangCode | null {
   if (exact) return exact.code;
   const base = tag.toLowerCase().split('-')[0];
   if (base === 'pt') return 'pt-BR';
+  if (base === 'zh') return 'zh-CN';
   return LANGS.find((lang) => lang.code.toLowerCase() === base)?.code ?? null;
 }
 

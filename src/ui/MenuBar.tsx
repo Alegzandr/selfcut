@@ -45,7 +45,7 @@ const MENUS: readonly Menu[] = [
   },
   {
     titleKey: 'menu.clip',
-    items: ['clip.split', 'clip.duplicate', '---', 'clip.punchIn', 'clip.stream', 'clip.blurRegion', 'clip.link', 'clip.unlink', '---', 'clip.delete', 'clip.rippleDelete'],
+    items: ['clip.split', 'clip.duplicate', '---', 'clip.punchIn', 'clip.stream', 'clip.blurRegion', 'clip.captions', 'clip.link', 'clip.unlink', '---', 'clip.delete', 'clip.rippleDelete'],
   },
   {
     titleKey: 'menu.view',

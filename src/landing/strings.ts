@@ -4,7 +4,10 @@ import de from './locales/de.json';
 import en from './locales/en.json';
 import es from './locales/es.json';
 import fr from './locales/fr.json';
+import ja from './locales/ja.json';
+import ko from './locales/ko.json';
 import ptBR from './locales/pt-BR.json';
+import zhCN from './locales/zh-CN.json';
 
 /**
  * The landing copy, one dictionary per language.
@@ -22,6 +25,9 @@ export const STRINGS = {
   es,
   de,
   'pt-BR': ptBR,
+  ja,
+  'zh-CN': zhCN,
+  ko,
 } satisfies Record<LangCode, LandingStrings>;
 
 export const stringsFor = (code: LangCode): LandingStrings => STRINGS[code];

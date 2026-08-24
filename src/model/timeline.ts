@@ -1,5 +1,5 @@
 import { AspectRatio, Clip, Marker, Project } from '../types';
-import { clipDurationMs, clipEndMs } from './clip';
+import { clipDurationMs, clipEndMs, isTextClip } from './clip';
 
 /**
  * Timeline/project-level model math: total duration, output geometry, marker
@@ -108,4 +108,25 @@ export function outputDimensions(aspect: AspectRatio): { width: number; height: 
     case '4:5':
       return { width: 1080, height: 1350 };
   }
+}
+
+/**
+ * Text clips a new caption pass would supersede: those on lanes carrying
+ * nothing but text, overlapping [`fromMs`, `toMs`).
+ *
+ * Regenerating captions used to stack a second lane of cues on top of the first
+ * one, twice over on a third run, with nothing said about it. Finding what the
+ * new pass makes redundant is what lets the editor offer to replace it.
+ *
+ * The whole-lane test is what keeps a title card out of the set in practice: a
+ * title generally shares a lane with the footage it titles, while a caption pass
+ * gets a lane of its own. It stays a heuristic, so callers state the count and
+ * ask - replacing is offered, never done silently.
+ */
+export function supersededCueIds(project: Project, fromMs: number, toMs: number): string[] {
+  return project.tracks
+    .filter((track) => track.clips.length > 0 && track.clips.every(isTextClip))
+    .flatMap((track) => track.clips)
+    .filter((clip) => clip.timelineStartMs < toMs && clipEndMs(clip) > fromMs)
+    .map((clip) => clip.id);
 }

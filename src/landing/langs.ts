@@ -24,6 +24,9 @@ export const LANGS = [
   { code: 'es', name: 'Español', ogLocale: 'es_ES', path: 'es/' },
   { code: 'de', name: 'Deutsch', ogLocale: 'de_DE', path: 'de/' },
   { code: 'pt-BR', name: 'Português (BR)', ogLocale: 'pt_BR', path: 'pt-BR/' },
+  { code: 'ja', name: '日本語', ogLocale: 'ja_JP', path: 'ja/' },
+  { code: 'zh-CN', name: '简体中文', ogLocale: 'zh_CN', path: 'zh-CN/' },
+  { code: 'ko', name: '한국어', ogLocale: 'ko_KR', path: 'ko/' },
 ] as const satisfies readonly Lang[];
 
 export type LangCode = (typeof LANGS)[number]['code'];

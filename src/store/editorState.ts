@@ -479,8 +479,13 @@ export interface EditorState {
    * dedicated video track, one undo step for the whole file. The track lands
    * directly above the lane carrying `anchorAssetId` when the cues came out of
    * a container, and above every video lane otherwise.
+   *
+   * `replaceClipIds` are dropped in the SAME step: regenerating captions over a
+   * clip that already has some is one action to the user, and it must be one
+   * action to undo - a delete and an add as two entries would let an undo strand
+   * the shot with no captions at all.
    */
-  addSubtitleClips: (cues: SubtitleCue[], anchorAssetId?: string) => void;
+  addSubtitleClips: (cues: SubtitleCue[], anchorAssetId?: string, replaceClipIds?: string[]) => void;
   /**
    * Stream-clip layout: split the selected clip into a facecam band (top 30%,
    * cropped to the source's top-left corner by default) over a gameplay band

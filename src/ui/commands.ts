@@ -123,6 +123,12 @@ export function useEditorCommands(): Record<string, Command> {
   // source). Subscribe to the boolean only - the pair is resolved in onClick.
   const canLink = useStore((s) => getLinkTargets(s) !== null);
   const inspectorTab = useStore((s) => s.inspectorTab);
+  // Captioning needs a selected clip whose source actually carries sound: the
+  // pane can state why it is greyed out, a menu row cannot.
+  const canCaption = useStore((s) => {
+    const clip = getSelectedClip(s);
+    return clip?.kind === 'media' && !!s.assets[clip.assetId]?.hasAudio;
+  });
   const libraryTab = useStore((s) => s.libraryTab);
 
   const st = useStore.getState;
@@ -239,6 +245,22 @@ export function useEditorCommands(): Record<string, Command> {
         if (!selectedId) return;
         const id = st().addClipRedaction(selectedId, defaultRedaction());
         st().setSelectedRedactionId(id);
+        st().setInspectorOpen(true);
+      },
+    },
+    // Auto-captions live in the subtitles pane, and the pane is where the
+    // language, the model and the audio track are chosen - so this opens it on
+    // the selected clip rather than firing a transcription blind. The row is
+    // here because a clip with sound is the thing people right-click when they
+    // want it captioned; the View menu entry alone was a place nobody looked.
+    {
+      id: 'clip.captions',
+      labelKey: 'menu.clip.captions',
+      hintKey: 'menu.clip.captions.hint',
+      icon: ChatBubbleIcon,
+      disabled: !canCaption,
+      onClick: () => {
+        st().setInspectorTab('subtitles');
         st().setInspectorOpen(true);
       },
     },

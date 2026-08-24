@@ -9,8 +9,8 @@ import en from './locales/en.json';
  * truth for the key set (see `I18nKeys` below - a missing or unknown key is a
  * TypeScript error, not a runtime "topbar.export" leaking into the UI).
  *
- * English is bundled; the other four are fetched on demand. Five dictionaries of
- * 666 keys is a real fraction of the editor's initial download, and four fifths
+ * English is bundled; the other seven are fetched on demand. Eight dictionaries of
+ * 729 keys is a real fraction of the editor's initial download, and seven eighths
  * of it is always for languages this visitor does not read. `ensureLocale` is
  * awaited before the React root mounts, so nothing flashes untranslated - the
  * cost is one small parallel request, not a repaint.
@@ -25,6 +25,9 @@ export const LOCALES = {
   es: 'Español',
   de: 'Deutsch',
   'pt-BR': 'Português (BR)',
+  ja: '日本語',
+  'zh-CN': '简体中文',
+  ko: '한국어',
 } as const;
 
 export type Locale = keyof typeof LOCALES;
@@ -44,6 +47,8 @@ void i18n
       // A browser reporting plain "pt" gets the Brazilian dictionary rather
       // than falling straight through to English.
       pt: ['pt-BR', 'en'],
+      // Likewise for a plain "zh": Simplified is the only Chinese we ship.
+      zh: ['zh-CN', 'en'],
       default: ['en'],
     },
     // "fr-CA" / "de-AT" resolve to "fr" / "de" instead of the fallback.
@@ -72,6 +77,9 @@ const LOADERS: Record<string, () => Promise<{ default: Record<string, string> }>
   es: () => import('./locales/es.json'),
   de: () => import('./locales/de.json'),
   'pt-BR': () => import('./locales/pt-BR.json'),
+  ja: () => import('./locales/ja.json'),
+  'zh-CN': () => import('./locales/zh-CN.json'),
+  ko: () => import('./locales/ko.json'),
 };
 
 /**

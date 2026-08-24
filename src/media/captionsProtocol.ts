@@ -12,14 +12,23 @@ export interface CaptionSegment {
   text: string;
 }
 
-export type CaptionRequest = {
-  type: 'transcribe';
-  audio: Float32Array;
-  /** Whisper language code (e.g. 'en', 'fr'); omit to auto-detect. */
-  language?: string;
-};
+export type CaptionRequest =
+  | {
+      type: 'transcribe';
+      audio: Float32Array;
+      /** Model id from the catalogue (`captionsModel`), not a repo path. */
+      model: string;
+      /** Whisper language code (e.g. 'en', 'fr'); omit to auto-detect. */
+      language?: string;
+    }
+  | {
+      /** Fetch a model's weights without transcribing, for the model manager. */
+      type: 'prefetch';
+      model: string;
+    };
 
 export type CaptionReply =
   | { type: 'progress'; stage: 'model' | 'transcribe'; value: number }
   | { type: 'result'; segments: CaptionSegment[] }
+  | { type: 'ready' }
   | { type: 'error'; message: string };
