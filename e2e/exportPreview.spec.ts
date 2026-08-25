@@ -126,14 +126,30 @@ test('the preview shows the frame being rendered, then hands the monitor back', 
       // Sampled off a timer rather than off the bus: what is being checked is
       // what a user looking at the panel would see, which is the canvas after
       // the engine's next repaint, not the moment a snapshot landed.
+      // A snapshot lands between the engine's ticks, so at the instant one
+      // becomes readable the canvas still carries the composite from before it:
+      // reading its width right there measures the frame the snapshot REPLACED,
+      // which is the one comparison this spec makes. So wait for the repaint -
+      // and drop the sample if the render finished while waiting, since the
+      // monitor is then back on the playhead and describes no snapshot at all.
+      let pending = false;
       const sampler = window.setInterval(() => {
+        if (pending) return;
         const frame = renderPreviewFrame();
         if (!frame) return;
-        samples.push({
-          timeMs: frame.timeMs,
-          canvasWidth: el.width,
-          badge: document.querySelector('[data-render-badge]') !== null,
-        });
+        pending = true;
+        const timeMs = frame.timeMs;
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            pending = false;
+            if (!renderPreviewFrame()) return;
+            samples.push({
+              timeMs,
+              canvasWidth: el.width,
+              badge: document.querySelector('[data-render-badge]') !== null,
+            });
+          }),
+        );
       }, 100);
 
       let error: string | null = null;
