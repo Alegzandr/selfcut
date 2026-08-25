@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { writeFileSync } from 'node:fs';
 
 /**
  * What bitrate does a real export of a real capture actually come out at?

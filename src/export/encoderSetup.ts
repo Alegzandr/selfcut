@@ -38,7 +38,7 @@
  * what dropping it costs, and the 86 Mbps row above for what it buys - ten
  * times the file for six tenths of a decibel.
  */
-export const EXPORT_BITRATE_MODE = 'variable' as const;
+export const EXPORT_BITRATE_MODE = 'constant' as const;
 
 export interface EncoderSetup {
   /**

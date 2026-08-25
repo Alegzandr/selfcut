@@ -103,8 +103,10 @@ test('rate control at 1080p120 on a real capture', async ({ page }, testInfo) =>
   await page.setInputFiles('#rc-source', SOURCE!);
 
   const results = await page.evaluate(
-    async ({ mediabunnyUrl, variants, WIDTH, HEIGHT, FPS, SECONDS, wantFiles }) => {
-      const mb = (await import(/* @vite-ignore */ mediabunnyUrl)) as typeof import('mediabunny');
+    async (arg) => {
+      const { variants, wantFiles } = arg;
+      const { WIDTH: width, HEIGHT: height, FPS: fps, SECONDS: seconds } = arg;
+      const mb = (await import(/* @vite-ignore */ arg.mediabunnyUrl)) as typeof import('mediabunny');
       const file = (document.getElementById('rc-source') as HTMLInputElement).files![0];
 
       const openSink = async () => {
@@ -114,7 +116,7 @@ test('rate control at 1080p120 on a real capture', async ({ page }, testInfo) =>
         return new mb.VideoSampleSink(track);
       };
 
-      const canvas = new OffscreenCanvas(WIDTH, HEIGHT);
+      const canvas = new OffscreenCanvas(width, height);
       const ctx = canvas.getContext('2d')!;
       // Base64 rather than a number array: a 40 MB file crossing the bridge as
       // 40 million JS numbers is what makes the test runner run out of heap.
@@ -126,7 +128,7 @@ test('rate control at 1080p120 on a real capture', async ({ page }, testInfo) =>
         return btoa(binary);
       };
       const out: { result: RunResult; bytes?: string }[] = [];
-      const wanted = Math.round(SECONDS * FPS);
+      const wanted = Math.round(seconds * fps);
 
       // Decoded once per variant rather than held as bitmaps: eight seconds of
       // 1440p120 is a thousand frames, and keeping them is gigabytes. Every
@@ -147,30 +149,30 @@ test('rate control at 1080p120 on a real capture', async ({ page }, testInfo) =>
           keyFrameInterval: 2,
           hardwareAcceleration: variant.hardwareAcceleration,
         });
-        output.addVideoTrack(source, variant.frameRate ? { frameRate: FPS } : undefined);
+        output.addVideoTrack(source, variant.frameRate ? { frameRate: fps } : undefined);
         await output.start();
         let count = 0;
-        for await (const sample of sink.samples(0, SECONDS)) {
+        for await (const sample of sink.samples(0, seconds)) {
           if (count >= wanted) {
             sample.close();
             break;
           }
-          ctx.drawImage(sample.toCanvasImageSource(), 0, 0, WIDTH, HEIGHT);
+          ctx.drawImage(sample.toCanvasImageSource(), 0, 0, width, height);
           sample.close();
-          await source.add(count / FPS, 1 / FPS);
+          await source.add(count / fps, 1 / fps);
           count++;
         }
         source.close();
         await output.finalize();
         const buffer = (output.target as InstanceType<typeof mb.BufferTarget>).buffer!;
-        const seconds = count / FPS;
+        const encodedSeconds = count / fps;
         out.push({
           result: {
             label: variant.label,
             bytes: buffer.byteLength,
             packets: count,
-            mbps: (buffer.byteLength * 8) / seconds / 1e6,
-            seconds,
+            mbps: (buffer.byteLength * 8) / encodedSeconds / 1e6,
+            seconds: encodedSeconds,
           },
           ...(wantFiles ? { bytes: toBase64(new Uint8Array(buffer)) } : {}),
         });
