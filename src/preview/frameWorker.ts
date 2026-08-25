@@ -87,6 +87,12 @@ class WorkerCursor {
 
   private iterator: AsyncGenerator<VideoSample, void, unknown> | null = null;
   private iteratorDone = false;
+  /**
+   * The iterator was just (re)opened, so the frame it yields first must be
+   * accepted rather than compared against the frame left over from wherever the
+   * playhead was before.
+   */
+  private restarted = false;
   private lookahead: VideoSample | null = null;
   private lastSec = 0;
 
@@ -178,11 +184,20 @@ class WorkerCursor {
     if (!this.iterator) {
       this.iterator = sink.samples(sourceSec);
       this.iteratorDone = false;
+      // The frame this iterator opens on is the answer to THIS request, whatever
+      // is currently on screen. Comparing it against `current` - which a backward
+      // jump leaves seconds ahead of the target - rejects it, and every request
+      // after it, until the playhead crawls back past the midpoint of the jump:
+      // a loop over a 3 s region froze the picture for the first 1.5 s of every
+      // pass. `current` is only a meaningful predecessor while the iterator that
+      // produced it is still running.
+      this.restarted = true;
     }
     // Advance while the next frame is the nearer one to sourceSec; the last one
     // reached is shown. Same rule as the export reader, from the same module:
     // the preview is where the cadence of a render gets judged, so both paths
     // have to land on the same frame.
+    let advanced = false;
     while (!this.iteratorDone) {
       if (!this.lookahead) {
         const { value, done } = await this.iterator.next();
@@ -197,14 +212,24 @@ class WorkerCursor {
         this.lookahead = value.clone();
         value.close();
       }
-      if (this.current && !advancesToNextFrame(this.current.timestamp, this.lookahead.timestamp, sourceSec)) {
+      if (
+        !this.restarted &&
+        this.current &&
+        !advancesToNextFrame(this.current.timestamp, this.lookahead.timestamp, sourceSec)
+      ) {
         break;
       }
+      this.restarted = false;
       this.current?.close();
       this.current = this.lookahead;
       this.lookahead = null;
-      this.emit();
+      advanced = true;
     }
+    // One emit for the frame this request landed on, not one per frame crossed:
+    // a catch-up after a seek walks a whole GOP, and posting every intermediate
+    // picture makes the main thread draw frames nobody will ever see - which is
+    // exactly the work that keeps the catch-up from ending.
+    if (advanced) this.emit();
     this.lastSec = sourceSec;
   }
 
@@ -214,6 +239,7 @@ class WorkerCursor {
     const it = this.iterator;
     this.iterator = null;
     this.iteratorDone = false;
+    this.restarted = false;
     if (it) {
       try {
         await it.return(undefined);

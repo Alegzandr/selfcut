@@ -209,3 +209,114 @@ test('a straight cut never shows the black backdrop', async ({ page }) => {
   // Reported with their positions: a regression should say where it flashed.
   expect({ black: probe.black, at: probe.at }).toEqual({ black: 0, at: [] });
 });
+
+/** What the loop probe collects while the playhead crosses the wrap. */
+interface LoopProbe {
+  /** Timeline position of the first picture that differs from the pre-wrap one. */
+  firstChangeMs: number | null;
+  /** Samples taken, so a run that never looped cannot report a pass. */
+  samples: number;
+  wrapped: boolean;
+  done: boolean;
+}
+
+test('a loop wrap shows the region again instead of holding the last frame', async ({ page }) => {
+  await page.goto(EDITOR_URL);
+  await page.setInputFiles('input[type="file"]', FIXTURE_MP4);
+  await expect(page.locator('[data-clip-id]')).toHaveCount(1);
+
+  // A backward jump used to be measured against the frame still on screen: the
+  // fresh iterator's first sample lost that comparison, and every one after it,
+  // until the playhead passed the MIDPOINT of the jump - here 1.75 s, i.e. half
+  // the loop frozen on the last frame of the previous pass, and 1.5 s of it on
+  // the 3 s region of a 120 fps source this was found on.
+  const IN_MS = 1000;
+  const OUT_MS = 2500;
+  const MIDPOINT_MS = (IN_MS + OUT_MS) / 2;
+
+  await page.evaluate(
+    async ({ mod, inMs, outMs }) => {
+      const g = globalThis as unknown as {
+        requestAnimationFrame: (cb: () => void) => number;
+        document: { querySelector: (selector: string) => CanvasLike | null };
+        loopProbe?: LoopProbe;
+      };
+      const { useStore } = (await import(mod)) as {
+        useStore: {
+          getState: () => {
+            currentTimeMs: number;
+            seek: (ms: number) => void;
+            setLoopRegion: (region: { startMs: number; endMs: number }) => void;
+            toggleLoopEnabled: () => void;
+            loopEnabled: boolean;
+          };
+        };
+      };
+      const s = () => useStore.getState();
+      s().setLoopRegion({ startMs: inMs, endMs: outMs });
+      if (!s().loopEnabled) s().toggleLoopEnabled();
+      s().seek(inMs);
+
+      const canvas = g.document.querySelector('canvas[data-preview-canvas]')!;
+      const ctx = canvas.getContext('2d')!;
+      // A cheap signature of the picture: the fixture paints a different hue on
+      // every frame, so any two frames of it hash apart.
+      const signature = (): number => {
+        const side = Math.min(32, canvas.width, canvas.height);
+        const x = Math.max(0, ((canvas.width - side) / 2) | 0);
+        const y = Math.max(0, ((canvas.height - side) / 2) | 0);
+        const { data } = ctx.getImageData(x, y, side, side);
+        let hash = 0;
+        for (let i = 0; i < data.length; i += 7) hash = (hash * 31 + data[i]!) | 0;
+        return hash;
+      };
+
+      const probe: LoopProbe = { firstChangeMs: null, samples: 0, wrapped: false, done: false };
+      g.loopProbe = probe;
+      // The last picture of the outgoing pass: what the bug left frozen.
+      let lastBeforeWrap = signature();
+      let previousMs = s().currentTimeMs;
+      const tick = (): void => {
+        const at = s().currentTimeMs;
+        if (!probe.wrapped) {
+          // The wrap is the only backward step the playhead takes here.
+          if (at < previousMs - 1) probe.wrapped = true;
+          else lastBeforeWrap = signature();
+        } else {
+          probe.samples++;
+          if (probe.firstChangeMs === null && signature() !== lastBeforeWrap) {
+            probe.firstChangeMs = at;
+          }
+          // Half a pass past the wrap is well past the midpoint the bug waited
+          // for, so a run that gets here with nothing recorded is a failure and
+          // not a test that stopped too early.
+          if (at > (inMs + outMs) / 2 + 200) probe.done = true;
+        }
+        previousMs = at;
+        if (!probe.done) g.requestAnimationFrame(tick);
+      };
+      g.requestAnimationFrame(tick);
+    },
+    { mod: await appModuleUrl(page, STORE_MODULE), inMs: IN_MS, outMs: OUT_MS },
+  );
+
+  await page.keyboard.press('Space');
+  await expect
+    .poll(
+      () => page.evaluate(() => (globalThis as unknown as { loopProbe: LoopProbe }).loopProbe.done),
+      { message: 'playhead past the wrap', timeout: 30_000 },
+    )
+    .toBe(true);
+  await page.keyboard.press('Space');
+  const probe = await page.evaluate(
+    () => (globalThis as unknown as { loopProbe: LoopProbe }).loopProbe,
+  );
+
+  expect(probe.samples).toBeGreaterThan(10);
+  // Structural rather than a millisecond budget: the picture has to come back
+  // while the playhead is still in the first half of the region, which is the
+  // half the stale-comparison bug spent frozen. What is left is the decode of
+  // the GOP the in point sits in, which every machine pays differently.
+  expect(probe.firstChangeMs).not.toBeNull();
+  expect(probe.firstChangeMs!).toBeLessThan(MIDPOINT_MS);
+});
