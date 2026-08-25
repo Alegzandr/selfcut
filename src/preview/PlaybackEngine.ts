@@ -780,7 +780,14 @@ export class PlaybackEngine {
         this.prerolls.delete(clipId);
       }
     }
-    this.parkedAtMs = timelineMs;
+    // Only an instant something is ACTUALLY parked on is remembered. The guard
+    // at the top of this method reads `parkedAtMs` as "this instant is already
+    // covered", and a pass that parked nothing has covered nothing: the very
+    // first tick after an import runs before the clip is on the timeline, finds
+    // no visible video, and would otherwise claim the playhead's instant for
+    // good - so a paused preview at 0 never parked a decoder at all, which is
+    // exactly the frame a first press of play starts from.
+    this.parkedAtMs = this.prerolls.size > 0 ? timelineMs : NaN;
   }
 
   /**
