@@ -61,8 +61,9 @@ async function importAndCut(page: Page): Promise<void> {
 
 test('playback opens the next clip decoder before reaching the cut', async ({ page }) => {
   await importAndCut(page);
-  // Paused on the first clip: one decoder, for what is on screen.
-  await expect.poll(() => liveCursors(page)).toBe(1);
+  // Paused on the first clip: the decoder drawing it, plus the one parked on
+  // the same frame for the playback about to start (see `schedulePrerolls`).
+  await expect.poll(() => liveCursors(page)).toBe(2);
 
   await page.keyboard.press('Space');
   // Read both numbers in the page, mid-first-clip: the playhead has to still be
@@ -319,4 +320,67 @@ test('a loop wrap shows the region again instead of holding the last frame', asy
   // the GOP the in point sits in, which every machine pays differently.
   expect(probe.firstChangeMs).not.toBeNull();
   expect(probe.firstChangeMs!).toBeLessThan(MIDPOINT_MS);
+});
+
+test('a paused preview parks a decoder for the playback that follows', async ({ page }) => {
+  await page.goto(EDITOR_URL);
+  await page.setInputFiles('input[type="file"]', FIXTURE_MP4);
+  await expect(page.locator('[data-clip-id]')).toHaveCount(1);
+
+  // One cursor draws the still; the second is parked on the same frame with its
+  // reader open, which is what turns pressing play into an instant first frame
+  // instead of a seek through the keyframe interval before it.
+  await expect.poll(() => liveCursors(page), { message: 'a decoder parked while paused' }).toBe(2);
+
+  const max = await page.evaluate(async (mod) => {
+    const { MAX_LIVE_CURSORS } = (await import(mod)) as { MAX_LIVE_CURSORS: number };
+    return MAX_LIVE_CURSORS;
+  }, await appModuleUrl(page, POOL_MODULE));
+  expect(await liveCursors(page)).toBeLessThanOrEqual(max);
+});
+
+test('an armed loop opens the in point decoder before the wrap', async ({ page }) => {
+  await page.goto(EDITOR_URL);
+  await page.setInputFiles('input[type="file"]', FIXTURE_MP4);
+  await expect(page.locator('[data-clip-id]')).toHaveCount(1);
+
+  const observed = await page.evaluate(
+    async ({ storeMod, cursorMod }) => {
+      const g = globalThis as unknown as { requestAnimationFrame: (cb: () => void) => number };
+      const { useStore } = (await import(storeMod)) as {
+        useStore: {
+          getState: () => {
+            currentTimeMs: number;
+            loopEnabled: boolean;
+            seek: (ms: number) => void;
+            setLoopRegion: (region: { startMs: number; endMs: number }) => void;
+            setPlaying: (playing: boolean) => void;
+            toggleLoopEnabled: () => void;
+          };
+        };
+      };
+      const s = () => useStore.getState();
+      const { liveCursorCount } = (await import(cursorMod)) as { liveCursorCount: () => number };
+      s().setLoopRegion({ startMs: 1000, endMs: 2500 });
+      if (!s().loopEnabled) s().toggleLoopEnabled();
+      s().seek(1000);
+      s().setPlaying(true);
+      // Inside the lead window and still short of the out point: a second
+      // decoder here is one parked on the in point, not the pool holding the
+      // outgoing clip's after a cut (there is only one clip).
+      while (s().currentTimeMs < 2000) {
+        await new Promise<void>((resolve) => g.requestAnimationFrame(() => resolve()));
+      }
+      const seen = { tMs: s().currentTimeMs, cursors: liveCursorCount() };
+      s().setPlaying(false);
+      return seen;
+    },
+    {
+      storeMod: await appModuleUrl(page, STORE_MODULE),
+      cursorMod: await appModuleUrl(page, CURSOR_MODULE),
+    },
+  );
+
+  expect(observed.tMs).toBeLessThan(2500);
+  expect(observed.cursors).toBeGreaterThanOrEqual(2);
 });

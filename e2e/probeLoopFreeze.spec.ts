@@ -44,15 +44,19 @@ test('loop freeze on supplied footage', async ({ page }) => {
       const canvas = document.querySelector('canvas[data-preview-canvas]') as HTMLCanvasElement;
       const off = new OffscreenCanvas(32, 18);
       const octx = off.getContext('2d', { willReadFrequently: true })!;
-      const samples: { t: number; hash: number; time: number }[] = [];
+      const samples: { t: number; hash: number; time: number; bright: number }[] = [];
       let stop = false;
       const sample = () => {
         if (stop) return;
         octx.drawImage(canvas, 0, 0, 32, 18);
         const d = octx.getImageData(0, 0, 32, 18).data;
         let h = 0;
-        for (let i = 0; i < d.length; i += 7) h = (h * 31 + d[i]!) | 0;
-        samples.push({ t: performance.now(), hash: h, time: s().currentTimeMs });
+        let bright = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          h = (h * 31 + d[i]!) | 0;
+          bright = Math.max(bright, d[i]!, d[i + 1]!, d[i + 2]!);
+        }
+        samples.push({ t: performance.now(), hash: h, time: s().currentTimeMs, bright });
         requestAnimationFrame(sample);
       };
       requestAnimationFrame(sample);
@@ -73,11 +77,23 @@ test('loop freeze on supplied footage', async ({ page }) => {
         }
         prev = cur;
       }
+      // Stretches where the canvas showed the backdrop rather than a picture.
+      const dark: string[] = [];
+      let runStart: { t: number; time: number } | null = null;
+      for (const cur of samples) {
+        if (cur.bright < 12) {
+          runStart ??= { t: cur.t, time: cur.time };
+        } else if (runStart) {
+          dark.push(`${(cur.t - runStart.t).toFixed(0)} ms from t+${(runStart.t - t0).toFixed(0)} (timeline ${runStart.time.toFixed(0)} ms)`);
+          runStart = null;
+        }
+      }
       const worst = [...changes].sort((a, b) => b.gap - a.gap).slice(0, 8);
       return {
         samples: samples.length,
         distinctPictures: changes.length,
         firstPictureAfterPlayMs: changes[0]?.at ?? null,
+        blackStretches: dark,
         worstGaps: worst.map((c) => `${c.gap.toFixed(0)} ms at t+${c.at.toFixed(0)} (timeline ${c.timelineMs.toFixed(0)} ms)`),
       };
     },

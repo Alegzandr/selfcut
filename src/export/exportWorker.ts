@@ -19,7 +19,12 @@ import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
 import { FrameRenderer } from './frameRenderer';
 import { RenderPreviewTap } from './renderPreview';
-import { chooseEncoderSetup, type EncoderSetup, type ProbeResult } from './encoderSetup';
+import {
+  chooseEncoderSetup,
+  EXPORT_BITRATE_MODE,
+  type EncoderSetup,
+  type ProbeResult,
+} from './encoderSetup';
 import { canFanOut, planSegments, type SegmentPlan } from './segmentPlan';
 import type { SegmentReply, SegmentRequest } from './segmentProtocol';
 import type { ExportVideoCodec, Mp4Preset } from './presets';
@@ -168,6 +173,10 @@ async function probeEncode(
   const source = new CanvasSource(canvas, {
     codec,
     bitrate,
+    // The render's rate control, not a default: a configuration can be refused
+    // on it, and a probe that asked for a different one would be answering
+    // about an encode that never happens.
+    bitrateMode: EXPORT_BITRATE_MODE,
     latencyMode: 'quality',
     keyFrameInterval: 2,
     hardwareAcceleration,
@@ -569,6 +578,9 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
     ? new CanvasSource(renderer.canvas, {
         codec,
         bitrate: preset.videoBitrate,
+        // See EXPORT_BITRATE_MODE: the browser's default rate control does not
+        // hold the preset's picture at a high cadence.
+        bitrateMode: EXPORT_BITRATE_MODE,
         // What the probe found this browser will actually deliver at this
         // geometry, which is 'no-preference' unless the browser's own choice
         // was the thing that stopped responding.

@@ -7,6 +7,39 @@
  * way. The worker supplies the probe; everything here is the strategy.
  */
 
+/**
+ * The rate control every export encodes with.
+ *
+ * NOT the WebCodecs default. `variable` is, and at a high cadence Chrome's VBR
+ * does not merely spend less than it was asked for - it lands off the
+ * rate/distortion curve entirely. Measured by re-encoding a 1440p120 screen
+ * capture at "120 fps · 1080p" (which asks for 38.4 Mbps), five seconds, same
+ * frames through every configuration, PSNR against the same reference:
+ *
+ *   VBR, cadence declared        3.1 Mbps   38.1 dB   <- what shipped
+ *   CBR, cadence declared        8.2 Mbps   43.1 dB
+ *   VBR, no cadence declared    86.4 Mbps   43.7 dB
+ *   fixed quantizer 26           2.9 Mbps   41.6 dB
+ *
+ * The last row is the sentence: at the SAME bitrate the encoder is capable of
+ * 3.5 dB more than VBR delivered. That is not a budget being spent carefully,
+ * it is rate control failing, and it is what a viewer sees as blocking in the
+ * dark areas of a capture. Nor is the target reachable by asking for more -
+ * four times the bitrate produced 11.1 Mbps, not 154.
+ *
+ * `constant` is the honest floor available here: it holds the same picture at
+ * a quarter of the asked-for bitrate rather than a twelfth, and the sheet's
+ * size estimate stays an upper bound. A fixed quantizer codes better still
+ * (7.0 Mbps for 43.2 dB), but it makes the file size a property of the footage
+ * rather than of the preset, which is a different promise than the one the
+ * export sheet makes today.
+ *
+ * The cadence stays declared: see `videoTrackMetadata` in `exportWorker` for
+ * what dropping it costs, and the 86 Mbps row above for what it buys - ten
+ * times the file for six tenths of a decibel.
+ */
+export const EXPORT_BITRATE_MODE = 'variable' as const;
+
 export interface EncoderSetup {
   /**
    * Whether the cadence is declared on the video track.

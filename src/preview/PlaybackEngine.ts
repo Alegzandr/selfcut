@@ -98,6 +98,34 @@ const FRAME_RETRY_MAX_MS = 2000;
  */
 const PREWARM_MAX_CLIPS = 2;
 
+/**
+ * How long before a loop's out point the decoder for its in point is opened.
+ *
+ * A wrap is a backward seek, and a seek costs the decode of every frame from
+ * the preceding keyframe: measured at 300-400 ms on 1440p120 footage with the
+ * two-second keyframe interval a screen recorder writes. Paid at the wrap, that
+ * is the picture standing still while the audio has already started the new
+ * pass. Paid before it, on a second decoder parked on the in point, it is
+ * nothing anybody sees - so the lead only has to be longer than the seek it
+ * hides, with room for a machine having a bad moment.
+ */
+const LOOP_PREROLL_LEAD_MS = 900;
+
+/**
+ * How still the playhead must be before a PAUSED preview parks a decoder for
+ * the playback that has not been asked for yet.
+ *
+ * Pressing play pays the same seek: a paused cursor answers from random access
+ * and the frames after it come from an iterator that does not exist yet. Parking
+ * one while the preview idles turns that into an instant start.
+ *
+ * Longer than the full-resolution settle, deliberately. Every re-park is a
+ * decoder opening and a keyframe-to-here decode, and a dragged playhead stops
+ * for a moment at every value it crosses: waiting until the user has really
+ * stopped is what keeps a scrub from opening a decoder per step.
+ */
+const PREROLL_SETTLE_MS = 400;
+
 interface TrackBus {
   /** Summing bus of the track's clips (post clip & track volume). */
   gain: GainNode;
@@ -125,6 +153,15 @@ export class PlaybackEngine {
    * ranking `trimCursors` ranks by. See cursorPool.ts for why it is bounded.
    */
   private cursors = new Map<string, FrameCursor>();
+  /**
+   * Decoders parked on a position playback is about to jump to - the in point
+   * of an armed loop, or where a paused playhead sits - keyed by clip. Promoted
+   * into `cursors` when the jump happens (see `promotePrerollsAt`), which is
+   * what makes the jump show a picture immediately instead of after a seek.
+   */
+  private prerolls = new Map<string, { cursor: FrameCursor; timelineMs: number }>();
+  /** Instant `prerolls` is parked on, so re-arming it every tick costs nothing. */
+  private parkedAtMs = NaN;
   /**
    * Rasterized stills per image asset. `frame: null` marks a decode in flight
    * (or failed) so it is kicked once, not every frame; the File reference
@@ -223,6 +260,7 @@ export class PlaybackEngine {
     this.scheduled = [];
     for (const cursor of this.cursors.values()) cursor.dispose();
     this.cursors.clear();
+    this.dropPrerolls();
     this.trackBuses.clear();
     if (this.metersLive) publishLevels({});
     void this.audioCtx?.close();
@@ -329,12 +367,19 @@ export class PlaybackEngine {
 
     if (state.seekVersion !== this.lastSeekVersion) {
       this.lastSeekVersion = state.seekVersion;
+      // Parked where the playhead no longer is, and a promotion would show that
+      // stale frame for a moment. Re-parked once the new position settles.
+      this.dropPrerolls();
       if (this.wasPlaying) this.restartAt(state, state.currentTimeMs);
     }
 
     if (state.playing && !this.wasPlaying) {
       this.ensureAudio();
       this.wasPlaying = true;
+      // The decoder parked while the preview idled is already sitting on this
+      // frame, with the ones after it queued behind: taking it over here is what
+      // makes the first frame of a playback appear at once.
+      this.promotePrerollsAt(state.currentTimeMs);
       this.restartAt(state, state.currentTimeMs);
     } else if (!state.playing && this.wasPlaying) {
       this.wasPlaying = false;
@@ -378,6 +423,7 @@ export class PlaybackEngine {
       const loopEnd = loop ? Math.min(loop.endMs, duration) : 0;
       if (loop && loopEnd > loop.startMs && t >= loopEnd) {
         t = loop.startMs;
+        this.promotePrerollsAt(t);
         this.restartAt(state, t);
       } else if (t >= duration) {
         t = duration;
@@ -412,6 +458,8 @@ export class PlaybackEngine {
     const now = performance.now();
     const renderScale =
       !this.wasPlaying && now - this.lastFrameChangeAt > PREVIEW_PAUSE_SETTLE_MS ? 1 : rung;
+
+    this.schedulePrerolls(state, t, now);
 
     // Still waiting on the first frame of a clip that is on screen: ask again.
     // Paused, nothing else will - the request that would have brought the
@@ -663,6 +711,109 @@ export class PlaybackEngine {
   }
 
   /**
+   * Keep a decoder parked on the frame playback is about to need.
+   *
+   * Two moments deserve one, and they are the same problem: a jump the transport
+   * is going to make, whose destination no decoder is positioned on. An armed
+   * loop about to wrap, and a paused preview about to be played. What the parked
+   * decoder buys is the seek - the decode of a whole keyframe interval - being
+   * paid before the jump instead of after it, where it is a picture standing
+   * still while the audio has already moved on.
+   */
+  private schedulePrerolls(state: EditorState, tMs: number, now: number): void {
+    if (this.wasPlaying) {
+      const loop = state.loopEnabled ? state.loopRegion : null;
+      const loopEnd = loop ? Math.min(loop.endMs, projectDurationMs(state.project)) : 0;
+      if (!loop || loopEnd <= loop.startMs) {
+        this.dropPrerolls();
+        return;
+      }
+      // Shuttling covers the same lead in less wall-clock time, so the window
+      // grows with the rate - same reasoning as the prewarm window.
+      if (tMs < loopEnd - LOOP_PREROLL_LEAD_MS * Math.max(1, this.rate)) return;
+      this.parkAt(state, loop.startMs);
+      return;
+    }
+    // A trim drag paints an edge rather than the playhead: what playback would
+    // start from is not what is on screen, so there is nothing to park on yet.
+    if (state.previewOverrideMs !== null) return;
+    if (now - this.lastFrameChangeAt < PREROLL_SETTLE_MS) return;
+    this.parkAt(state, tMs);
+  }
+
+  /** Open (or keep) a parked decoder for every video clip visible at `timelineMs`. */
+  private parkAt(state: EditorState, timelineMs: number): void {
+    if (this.parkedAtMs === timelineMs) return;
+    // What is on screen comes first: a preroll may only use the room the pool
+    // has left, and never more clips than the prewarm window allows.
+    const room = Math.min(PREWARM_MAX_CLIPS, this.cursorCap() - this.cursors.size);
+    const wanted = new Set<string>();
+    for (const track of state.project.tracks) {
+      if ((track.opacity ?? 1) <= 0) continue;
+      forEachVisibleVideoClip(track, timelineMs, (clip) => {
+        if (clip.kind !== 'media') return;
+        const asset = state.assets[clip.assetId];
+        // A still is a bitmap in a per-asset cache, not a decoder: nothing to park.
+        if (!asset || asset.kind === 'image') return;
+        wanted.add(clip.id);
+        const parked = this.prerolls.get(clip.id);
+        if (parked) {
+          if (parked.timelineMs === timelineMs) return;
+          parked.cursor.dispose();
+          this.prerolls.delete(clip.id);
+        }
+        if (this.prerolls.size >= room) return;
+        const cursor = new FrameCursor(asset, () => {
+          this.videoDirty = true;
+          this.frameRetries = 0;
+        });
+        // `prewarm`, not `request`: the worker leaves its iterator open on that
+        // frame, so the frames after the jump come from a reader that never has
+        // to seek either.
+        cursor.prewarm(timelineToSourceMs(clip, timelineMs) / 1000);
+        this.prerolls.set(clip.id, { cursor, timelineMs });
+      });
+    }
+    for (const [clipId, parked] of this.prerolls) {
+      if (!wanted.has(clipId)) {
+        parked.cursor.dispose();
+        this.prerolls.delete(clipId);
+      }
+    }
+    this.parkedAtMs = timelineMs;
+  }
+
+  /**
+   * Hand the transport the decoders parked on the instant it just jumped to.
+   *
+   * A parked cursor already holds that frame, so the clip draws it on the very
+   * next pass. Anything parked on a different instant is dropped rather than
+   * promoted: showing a frame from where the playhead used to be, even for one
+   * pass, is the flash this exists to remove.
+   */
+  private promotePrerollsAt(timelineMs: number): void {
+    if (this.prerolls.size === 0) return;
+    for (const [clipId, parked] of this.prerolls) {
+      if (Math.abs(parked.timelineMs - timelineMs) > FRAME_MS / 2) {
+        parked.cursor.dispose();
+        continue;
+      }
+      this.cursors.get(clipId)?.dispose();
+      this.cursors.set(clipId, parked.cursor);
+      this.videoDirty = true;
+    }
+    this.prerolls.clear();
+    this.parkedAtMs = NaN;
+  }
+
+  private dropPrerolls(): void {
+    if (this.prerolls.size === 0 && Number.isNaN(this.parkedAtMs)) return;
+    for (const parked of this.prerolls.values()) parked.cursor.dispose();
+    this.prerolls.clear();
+    this.parkedAtMs = NaN;
+  }
+
+  /**
    * How many decode cursors may be alive at once, right now.
    *
    * The cap is in bytes, not in cursors: eight 4K decoders are ~200 MB of
@@ -777,6 +928,12 @@ export class PlaybackEngine {
       if (!liveIds.has(clipId)) {
         cursor.dispose();
         this.cursors.delete(clipId);
+      }
+    }
+    for (const [clipId, parked] of this.prerolls) {
+      if (!liveIds.has(clipId)) {
+        parked.cursor.dispose();
+        this.prerolls.delete(clipId);
       }
     }
     // Stills of assets no longer on the timeline: drop the lookup entry (the

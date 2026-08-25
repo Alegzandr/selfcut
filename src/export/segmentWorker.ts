@@ -10,6 +10,7 @@ import {
   TEARDOWN_STALL_MS,
   withDeadline,
 } from './stallGuard';
+import { EXPORT_BITRATE_MODE } from './encoderSetup';
 import type { SegmentReply, SegmentRequest } from './segmentProtocol';
 
 /**
@@ -81,6 +82,9 @@ async function render(req: SegmentRequest): Promise<void> {
   const source = new CanvasSource(renderer.canvas, {
     codec: req.codec,
     bitrate: req.videoBitrate,
+    // The same rate control the serial path and the lead's probe encode with:
+    // the slices splice packet for packet. See EXPORT_BITRATE_MODE.
+    bitrateMode: EXPORT_BITRATE_MODE,
     // The lead's answer, like the cadence: the slices splice packet for packet,
     // so they all encode through the same kind of encoder or not at all.
     hardwareAcceleration: req.hardwareAcceleration,
