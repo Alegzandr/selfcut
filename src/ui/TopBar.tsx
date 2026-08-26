@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArchiveIcon, DownloadIcon, FileMinusIcon } from '@radix-ui/react-icons';
+import { ArchiveIcon, DownloadIcon, FileMinusIcon, HamburgerMenuIcon } from '@radix-ui/react-icons';
 import { APP_NAME } from '../app/config';
 // ?url keeps this a plain URL string: Astro otherwise resolves an image
 // import in src/ to an ImageMetadata object, which renders as [object Object].
@@ -13,6 +14,7 @@ import { AspectRatio } from '../types';
 import { useEditorCommands, type Command } from './commands';
 import { useToolbarOverflow } from './useToolbarOverflow';
 import { ToolOverflowMenu } from './ToolOverflowMenu';
+import { MobileMenuSheet } from './MobileMenuSheet';
 import type { MenuEntry } from './menu/MenuList';
 
 const ASPECTS = [
@@ -180,6 +182,7 @@ export function TopBar() {
   const aspectRatio = useStore((s) => s.project.aspectRatio);
   const assetCount = useStore((s) => Object.keys(s.assets).length);
   const coarse = useIsCoarsePointer();
+  const [menuOpen, setMenuOpen] = useState(false);
   const { setAspectRatio, setExportOpen, setLibraryOpen } = useStore.getState();
 
   return (
@@ -198,6 +201,24 @@ export function TopBar() {
       {!coarse && <DesktopTools />}
 
       {/* Mobile: the media library lives in a drawer. */}
+      {/* Touch has no menu bar: this is where the menus live instead. First in
+          the row, where a hamburger is looked for. */}
+      {coarse && (
+        <>
+          <button
+            className="touch-hit flex-none rounded-lg p-2 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
+            onClick={() => setMenuOpen(true)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-label={t('topbar.menu')}
+            title={t('topbar.menu')}
+          >
+            <HamburgerMenuIcon className="h-4 w-4" />
+          </button>
+          <MobileMenuSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
+        </>
+      )}
+
       {coarse && (
         <button
           className="touch-hit relative flex-none rounded-lg p-2 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"

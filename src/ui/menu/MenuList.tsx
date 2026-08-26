@@ -23,7 +23,10 @@ export function MenuItemRow({ command, onRun }: { command: Command; onRun: () =>
       type="button"
       role="menuitem"
       disabled={command.disabled}
-      className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs ${color}`}
+      // Taller rows on touch: the same list is the phone's whole menu surface
+      // (see MobileMenuSheet), where a 26px row is a coin toss between two
+      // commands.
+      className={`touch-hit flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs pointer-coarse:px-2.5 pointer-coarse:py-2.5 ${color}`}
       onClick={() => {
         command.onClick();
         onRun();
@@ -37,8 +40,11 @@ export function MenuItemRow({ command, onRun }: { command: Command; onRun: () =>
         ) : null}
       </span>
       <span className="flex-1 whitespace-nowrap">{command.label ?? t(command.labelKey)}</span>
+      {/* Hidden on a touch-first device: the whole menu set is rendered there
+          (MobileMenuSheet), and a column of Ctrl+ hints on a phone is a column
+          of instructions for a keyboard nobody has. */}
       {command.shortcut && (
-        <span className="flex-none pl-4 text-3xs tracking-tight text-zinc-400">
+        <span className="flex-none pl-4 text-3xs tracking-tight text-zinc-400 pointer-coarse:hidden">
           {command.shortcut}
         </span>
       )}
