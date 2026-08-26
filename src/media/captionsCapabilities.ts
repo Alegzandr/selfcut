@@ -1,4 +1,9 @@
-import { CAPTION_MODELS, type CaptionDevice, type CaptionModelInfo } from './captionsModel';
+import {
+  CAPTION_MODELS,
+  webgpuDtype,
+  type CaptionDevice,
+  type CaptionModelInfo,
+} from './captionsModel';
 
 /**
  * What this machine can actually run captions on, so the model picker states it
@@ -16,6 +21,12 @@ export interface CaptionCapabilities {
   adapter?: string;
   /** Largest single buffer the adapter allows, in bytes - the cap the big models run into. */
   maxBufferBytes?: number;
+  /**
+   * Whether the adapter exposes `shader-f16`, WebGPU's optional half-precision
+   * feature. Always false without WebGPU. It is the one capability difference
+   * between GPUs that changes which weights are downloaded (see `webgpuDtype`).
+   */
+  f16: boolean;
   /** navigator.deviceMemory in GB, when exposed (Chromium only). */
   memoryGb?: number;
 }
@@ -39,6 +50,7 @@ export function captionCapabilities(): Promise<CaptionCapabilities> {
             device: 'webgpu',
             adapter: name || undefined,
             maxBufferBytes: adapter.limits?.maxBufferSize,
+            f16: adapter.features?.has('shader-f16') ?? false,
             memoryGb,
           };
         }
@@ -46,7 +58,7 @@ export function captionCapabilities(): Promise<CaptionCapabilities> {
         // No adapter, or the request threw: wasm it is.
       }
     }
-    return { device: 'wasm', memoryGb };
+    return { device: 'wasm', f16: false, memoryGb };
   })();
   return probe;
 }
@@ -70,10 +82,16 @@ export function captionFit(model: CaptionModelInfo, caps: CaptionCapabilities): 
     if (model.quality >= 3) return 'slow';
     return model.quality === 2 ? 'recommended' : 'usable';
   }
+  const dtype = webgpuDtype(model, caps.f16);
+  // Nothing to load: fp16-only weights on an adapter with no fp16.
+  if (!dtype) return 'unsupported';
   // WebGPU allocates the largest weight tensor as one buffer, so an adapter with
   // a small cap fails at load time rather than running slowly.
   const needBytes = model.sizeMb.webgpu * 1024 * 1024;
   if (caps.maxBufferBytes != null && needBytes > caps.maxBufferBytes * 4) return 'unsupported';
+  // The no-f16 fallback runs, at a precision this project has not measured
+  // against the fp16 path: offer it, do not recommend it.
+  if (dtype !== model.dtype.webgpu) return 'usable';
   if (model.quality === 4) return caps.memoryGb != null && caps.memoryGb < 8 ? 'slow' : 'recommended';
   return model.quality >= 3 ? 'recommended' : 'usable';
 }
