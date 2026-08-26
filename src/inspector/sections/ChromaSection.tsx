@@ -46,7 +46,7 @@ export function ChromaSection({ clip }: { clip: Clip }) {
           type="checkbox"
           checked={enabled}
           onChange={toggle}
-          className="h-3.5 w-3.5 accent-brand-500"
+          className="h-3.5 w-3.5 accent-blue-500"
           aria-label={t('inspector.chroma')}
         />
       </label>

@@ -27,7 +27,7 @@ export function JobProgress({
   return (
     <div>
       <div className="flex items-center gap-1">
-        <span className={`min-w-0 flex-1 truncate ${text} text-brand-300/90`} title={name}>
+        <span className={`min-w-0 flex-1 truncate ${text} text-blue-300/90`} title={name}>
           {dense ? phase : `${name} · ${phase}`}
           {percent != null && ` · ${percent} %`}
         </span>
@@ -56,8 +56,8 @@ export function JobProgress({
             progress.phase === 'queued'
               ? 'w-0'
               : percent == null
-                ? 'w-full bg-brand-500/40'
-                : 'bg-brand-400'
+                ? 'w-full bg-blue-500/40'
+                : 'bg-blue-400'
           }`}
           style={percent == null ? undefined : { width: `${percent}%` }}
         />

@@ -150,7 +150,7 @@ export function TrackPickerDialog({
               // The border lives on the wrapper, so focus has to be shown there
               // too: `outline-none` on the input alone left the field with no
               // visible focus at all.
-              <div className="mt-3 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 focus-within:border-brand-500">
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 focus-within:border-blue-500">
                 <MagnifyingGlassIcon className="h-3.5 w-3.5 flex-none text-zinc-500" />
                 <input
                   className="min-w-0 flex-1 bg-transparent text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
@@ -194,7 +194,7 @@ export function TrackPickerDialog({
                             (multiple ? (
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 flex-none accent-brand-500"
+                                className="h-4 w-4 flex-none accent-blue-500"
                                 checked={picked.includes(track.index)}
                                 aria-label={track.name}
                                 onChange={(e) =>

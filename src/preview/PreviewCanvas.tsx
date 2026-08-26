@@ -757,7 +757,7 @@ function PreviewOverlays({
               handles below are NOT its children, so they can be clamped back
               into the panel independently of where the outline runs off to. */}
           <div
-            className="pointer-events-none absolute rounded-sm ring-2 ring-brand-400/90"
+            className="pointer-events-none absolute rounded-sm ring-2 ring-blue-400/90"
             style={{
               left: `${(selectedRect.dx / outW) * 100}%`,
               top: `${(selectedRect.dy / outH) * 100}%`,
@@ -788,7 +788,7 @@ function PreviewOverlays({
               />
               {/* Painted after the rotation zone, so it wins any overlap. */}
               <div
-                className="pointer-events-auto absolute h-3 w-3 touch-none rounded-sm border border-zinc-900 bg-brand-400 shadow"
+                className="pointer-events-auto absolute h-3 w-3 touch-none rounded-sm border border-zinc-900 bg-blue-400 shadow"
                 style={{ cursor: resizeCursor(h.dirX, h.dirY), transform: 'translate(-50%, -50%)' }}
                 onPointerDown={(e) => onHandleDown(e, selectedRect, selectedClip!)}
                 onPointerMove={onHandleMove}
@@ -813,7 +813,7 @@ function PreviewOverlays({
             ).map((h) => (
               <div
                 key={h.edge}
-                className="pointer-events-auto absolute h-3 w-3 touch-none rounded-full border border-zinc-900 bg-brand-400 shadow"
+                className="pointer-events-auto absolute h-3 w-3 touch-none rounded-full border border-zinc-900 bg-blue-400 shadow"
                 style={{
                   left: `${h.x * 100}%`,
                   top: `${h.y * 100}%`,
@@ -828,7 +828,7 @@ function PreviewOverlays({
             ))}
           {stretchBadge !== null && (
             <span
-              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-2xs font-medium tabular-nums text-brand-200"
+              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-2xs font-medium tabular-nums text-blue-200"
               style={{
                 left: `${((selectedRect.dx + selectedRect.dw / 2) / outW) * 100}%`,
                 top: `${((selectedRect.dy + selectedRect.dh / 2) / outH) * 100}%`,
@@ -840,7 +840,7 @@ function PreviewOverlays({
           )}
           {angleBadge !== null && (
             <span
-              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-2xs font-medium tabular-nums text-brand-200"
+              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-2xs font-medium tabular-nums text-blue-200"
               style={{
                 left: `${((selectedRect.dx + selectedRect.dw / 2) / outW) * 100}%`,
                 top: `${((selectedRect.dy + selectedRect.dh / 2) / outH) * 100}%`,
@@ -1337,7 +1337,7 @@ export function PreviewCanvas() {
             same normalized coordinates the clip will be authored in. */}
         {drawBox && (
           <div
-            className="pointer-events-none absolute z-20 border-2 border-brand-300 bg-brand-400/25"
+            className="pointer-events-none absolute z-20 border-2 border-blue-300 bg-blue-400/25"
             style={{
               left: `${drawBox.x * 100}%`,
               top: `${drawBox.y * 100}%`,
@@ -1370,7 +1370,7 @@ export function PreviewCanvas() {
       {/* Magnifier marquee. Outside the stage, so it is not itself zoomed. */}
       {marquee && (
         <div
-          className="pointer-events-none absolute z-30 border border-brand-300/90 bg-brand-400/15"
+          className="pointer-events-none absolute z-30 border border-blue-300/90 bg-blue-400/15"
           style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }}
         />
       )}

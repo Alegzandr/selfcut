@@ -89,7 +89,7 @@ function InspectorTabs({ cueCount }: { cueCount: number }) {
           {progress !== undefined && (
             <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-600/60">
               <span
-                className={`block h-full bg-brand-400 ${progress == null ? 'w-full opacity-60' : 'transition-[width]'}`}
+                className={`block h-full bg-blue-400 ${progress == null ? 'w-full opacity-60' : 'transition-[width]'}`}
                 style={progress == null ? undefined : { width: `${Math.round(progress * 100)}%` }}
               />
             </span>

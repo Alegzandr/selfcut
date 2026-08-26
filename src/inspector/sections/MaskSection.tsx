@@ -61,7 +61,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
           type="checkbox"
           checked={enabled}
           onChange={toggle}
-          className="h-3.5 w-3.5 accent-brand-500"
+          className="h-3.5 w-3.5 accent-blue-500"
           aria-label={t('inspector.mask')}
         />
       </label>
@@ -165,7 +165,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
               type="checkbox"
               checked={!!mask!.invert}
               onChange={(e) => commit({ invert: e.target.checked })}
-              className="h-3.5 w-3.5 accent-brand-500"
+              className="h-3.5 w-3.5 accent-blue-500"
             />
           </label>
 

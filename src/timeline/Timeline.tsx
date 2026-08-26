@@ -39,7 +39,7 @@ function SnapGuide() {
   if (snapGuideMs === null) return null;
   return (
     <div
-      className="pointer-events-none absolute inset-y-0 z-10 w-px bg-brand-300/90"
+      className="pointer-events-none absolute inset-y-0 z-10 w-px bg-blue-300/90"
       style={{ left: padLeft + snapGuideMs * (pxPerSec / 1000) }}
     />
   );
@@ -453,10 +453,10 @@ export function Timeline() {
                 dropping there creates a fresh track instead of reusing one. */}
             {newTrackDragOver && (
               <div
-                className="pointer-events-none flex items-center border-y border-dashed border-brand-400/60 bg-brand-400/10"
+                className="pointer-events-none flex items-center border-y border-dashed border-blue-400/60 bg-blue-400/10"
                 style={{ height: trackHeightPx }}
               >
-                <span className="sticky left-0 px-3 text-2xs font-medium text-brand-300">
+                <span className="sticky left-0 px-3 text-2xs font-medium text-blue-300">
                   {t('timeline.dropNewTrack')}
                 </span>
               </div>
@@ -494,7 +494,7 @@ export function Timeline() {
         {/* Marquee box: viewport-fixed so it stays put while the timeline scrolls. */}
         {marquee && (
           <div
-            className="pointer-events-none fixed z-40 rounded-sm border border-brand-400/80 bg-brand-400/10"
+            className="pointer-events-none fixed z-40 rounded-sm border border-blue-400/80 bg-blue-400/10"
             style={{
               left: Math.min(marquee.x0, marquee.x1),
               top: Math.min(marquee.y0, marquee.y1),

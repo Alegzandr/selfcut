@@ -31,7 +31,7 @@ export function MenuItemRow({ command, onRun }: { command: Command; onRun: () =>
     >
       <span className="flex h-4 w-4 flex-none items-center justify-center text-zinc-400">
         {command.checked ? (
-          <CheckIcon className="h-3.5 w-3.5 text-brand-400" />
+          <CheckIcon className="h-3.5 w-3.5 text-blue-400" />
         ) : Icon ? (
           <Icon className="h-4 w-4" />
         ) : null}

@@ -55,7 +55,7 @@ function QualityBars({ level }: { level: number }) {
       {[1, 2, 3, 4].map((i) => (
         <span
           key={i}
-          className={`h-2.5 w-1 rounded-full ${i <= level ? 'bg-violet-500' : 'bg-zinc-700'}`}
+          className={`h-2.5 w-1 rounded-full ${i <= level ? 'bg-brand-500' : 'bg-zinc-700'}`}
         />
       ))}
     </span>
@@ -96,14 +96,14 @@ function ModelRow({
       <label
         className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${
           active
-            ? 'border-violet-500/70 bg-violet-500/10'
+            ? 'border-brand-500/70 bg-brand-500/10'
             : 'border-zinc-800 bg-zinc-900/60 hover:border-zinc-700'
         } ${unsupported ? 'cursor-not-allowed opacity-50' : ''}`}
       >
         <input
           type="radio"
           name="caption-model"
-          className="mt-0.5 h-4 w-4 flex-none accent-violet-500"
+          className="mt-0.5 h-4 w-4 flex-none accent-brand-500"
           checked={active}
           disabled={unsupported}
           onChange={onSelect}
@@ -137,7 +137,7 @@ function ModelRow({
             <div className="mt-2 flex items-center gap-2">
               <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-800">
                 <div
-                  className="h-full rounded-full bg-violet-500 transition-[width]"
+                  className="h-full rounded-full bg-brand-500 transition-[width]"
                   style={{ width: `${Math.round(downloading * 100)}%` }}
                 />
               </div>

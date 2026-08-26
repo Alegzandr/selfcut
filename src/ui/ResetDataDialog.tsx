@@ -137,7 +137,7 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
               <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-3.5 w-3.5 flex-none accent-brand-500"
+                  className="mt-0.5 h-3.5 w-3.5 flex-none accent-blue-500"
                   checked={keepModels}
                   onChange={(e) => setKeepModels(e.target.checked)}
                 />

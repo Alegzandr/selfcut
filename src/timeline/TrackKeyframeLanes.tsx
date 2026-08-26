@@ -146,8 +146,8 @@ export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
                   title={`${propLabel} · ${timeLabel}`}
                   className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[1px] border shadow cursor-ew-resize touch-none ${
                     selected
-                      ? 'scale-125 border-brand-200 bg-brand-400'
-                      : 'border-zinc-900 bg-zinc-100 hover:bg-brand-200 active:bg-brand-300'
+                      ? 'scale-125 border-blue-200 bg-blue-400'
+                      : 'border-zinc-900 bg-zinc-100 hover:bg-blue-200 active:bg-blue-300'
                   }`}
                   style={{ left }}
                   onPointerDown={(e) => onDown(e, clip, prop, time)}

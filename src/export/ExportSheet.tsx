@@ -324,7 +324,7 @@ export function ExportSheet() {
                       type="checkbox"
                       checked={forceMaxFps}
                       onChange={(e) => setForceMaxFps(e.target.checked)}
-                      className="mt-0.5 h-3.5 w-3.5 accent-brand-400"
+                      className="mt-0.5 h-3.5 w-3.5 accent-blue-400"
                     />
                     <span>
                       {t('export.forceMaxFps', { fps: selected.fps })}
@@ -353,7 +353,7 @@ export function ExportSheet() {
                 )}
 
                 <button
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-700 py-3 text-sm font-semibold text-white hover:bg-brand-600 active:bg-brand-800"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white hover:bg-brand-500 active:bg-brand-700"
                   onClick={() => run(selected)}
                 >
                   <DownloadIcon className="h-4 w-4" />
@@ -368,7 +368,7 @@ export function ExportSheet() {
             {phase.kind === 'rendering' && (
               <div className="space-y-3 py-2">
                 <div className="flex items-center gap-2 text-sm text-zinc-300">
-                  <UpdateIcon className="h-4 w-4 animate-spin text-brand-400" />
+                  <UpdateIcon className="h-4 w-4 animate-spin text-blue-400" />
                   {t('export.rendering', { pct: Math.round(phase.progress * 100) })}
                 </div>
                 {/* The timings caption the bar, hence the tighter spacing. */}
@@ -382,7 +382,7 @@ export function ExportSheet() {
                     aria-label={t('export.rendering', { pct: Math.round(phase.progress * 100) })}
                   >
                     <div
-                      className="h-full rounded-full bg-brand-500 transition-[width] duration-200"
+                      className="h-full rounded-full bg-blue-500 transition-[width] duration-200"
                       style={{ width: `${phase.progress * 100}%` }}
                     />
                   </div>
@@ -435,7 +435,7 @@ export function ExportSheet() {
                     </button>
                   )}
                   <button
-                    className="flex-1 rounded-xl bg-brand-700 py-2 text-sm font-semibold text-white hover:bg-brand-600 active:bg-brand-800"
+                    className="flex-1 rounded-xl bg-brand-600 py-2 text-sm font-semibold text-white hover:bg-brand-500 active:bg-brand-700"
                     onClick={() => setPhase({ kind: 'idle' })}
                   >
                     {t('export.newExport')}

@@ -336,7 +336,7 @@ const CUT_B = 62;
     gap: 0.375em;
     padding: 0.4em 0.75em;
     border-radius: 0.5em;
-    background: var(--brand-700);
+    background: var(--brand-600);
     color: white;
     font-size: 0.875em;
     font-weight: 500;
@@ -357,8 +357,8 @@ const CUT_B = 62;
   }
   .ratio.on {
     border-radius: 0.35em;
-    background: color-mix(in oklab, var(--brand-500) 20%, transparent);
-    color: var(--brand-300);
+    background: color-mix(in oklab, var(--brand-700) 45%, transparent);
+    color: var(--brand-200);
   }
 
   /* Media panel · monitor · inspector */
@@ -396,8 +396,8 @@ const CUT_B = 62;
     margin-left: auto;
     padding: 0.25em;
     border-radius: 0.25em;
-    background: color-mix(in oklab, var(--brand-500) 15%, transparent);
-    color: var(--brand-300);
+    background: color-mix(in oklab, var(--brand-700) 40%, transparent);
+    color: var(--brand-200);
   }
   .pool {
     display: grid;
@@ -493,8 +493,8 @@ const CUT_B = 62;
     font-variant-numeric: tabular-nums;
   }
   .pills i.on {
-    background: color-mix(in oklab, var(--brand-500) 20%, transparent);
-    color: var(--brand-300);
+    background: color-mix(in oklab, var(--brand-700) 45%, transparent);
+    color: var(--brand-200);
   }
   /* The inspector's slider: a 4px track with a 10px knob, drawn the way
      `.slider-thin` draws it in the app. */
@@ -512,7 +512,14 @@ const CUT_B = 62;
     height: 0.3em;
     translate: 0 -50%;
     border-radius: 999px;
-    background: var(--zinc-700);
+    /* The filled half is the browser's own `accent-color` in the app, which
+       the inspector sets to zinc-300. Drawn here as a hard-stop gradient at
+       the same offset the knob sits on. */
+    background: linear-gradient(
+      to right,
+      var(--zinc-300) var(--at),
+      var(--zinc-700) var(--at)
+    );
   }
   .slider::after {
     content: '';
@@ -523,7 +530,7 @@ const CUT_B = 62;
     height: 0.75em;
     translate: -50% -50%;
     border-radius: 999px;
-    background: var(--brand-400);
+    background: var(--zinc-300);
   }
 
   .insp-section {
@@ -683,26 +690,26 @@ const CUT_B = 62;
     text-overflow: ellipsis;
   }
   .clip.video {
-    background-color: var(--brand-950);
+    background-color: var(--blue-950);
     background-image: var(--strip);
     background-size: auto 100%;
     background-repeat: repeat-x;
-    border-color: var(--brand-900);
+    border-color: var(--blue-900);
   }
   .clip.video b {
     color: white;
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
   }
-  /* Selection: `ring-2 ring-brand-400` plus the two trim handles. */
+  /* Selection: `ring-2 ring-blue-400` plus the two trim handles. */
   .clip.sel {
     border-color: transparent;
-    box-shadow: 0 0 0 2px var(--brand-400);
+    box-shadow: 0 0 0 2px var(--blue-400);
   }
   .grab {
     position: absolute;
     inset-block: 0;
     width: 0.75em;
-    background: color-mix(in oklab, var(--brand-400) 80%, transparent);
+    background: color-mix(in oklab, var(--blue-400) 80%, transparent);
   }
   .grab.left {
     left: 0;
@@ -713,11 +720,11 @@ const CUT_B = 62;
   .clip.text {
     background: linear-gradient(
       to bottom,
-      color-mix(in oklab, oklch(38% 0.189 293.745) 60%, transparent),
-      oklch(28.3% 0.141 291.089)
+      color-mix(in oklab, var(--brand-900) 60%, transparent),
+      var(--brand-950)
     );
-    border-color: oklch(38% 0.189 293.745);
-    color: oklch(81.1% 0.111 293.571);
+    border-color: var(--brand-700);
+    color: var(--brand-300);
   }
   .clip.sound {
     background:

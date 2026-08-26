@@ -112,7 +112,7 @@ function CaptionProgressBar({
     <div className="flex w-full items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
         <div
-          className={`h-full rounded-full bg-violet-500 ${pct == null ? 'w-full animate-pulse' : 'transition-[width]'}`}
+          className={`h-full rounded-full bg-brand-500 ${pct == null ? 'w-full animate-pulse' : 'transition-[width]'}`}
           style={pct == null ? undefined : { width: `${pct}%` }}
         />
       </div>
@@ -286,7 +286,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
       <div className="flex items-center gap-2">
-        <MagicWandIcon className="h-3.5 w-3.5 flex-none text-violet-400" />
+        <MagicWandIcon className="h-3.5 w-3.5 flex-none text-brand-400" />
         <span className="flex-1 text-xs font-medium text-zinc-100">
           {t('subtitles.auto')}
         </span>
@@ -327,7 +327,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
         <label className="mt-2 flex w-fit cursor-pointer items-center gap-1.5 text-2xs text-zinc-400 hover:text-zinc-200">
           <input
             type="checkbox"
-            className="h-3 w-3 accent-violet-500"
+            className="h-3 w-3 accent-brand-500"
             checked={enhance}
             onChange={(e) => setStoredCaptionEnhance(e.target.checked)}
           />
@@ -343,7 +343,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
             type="button"
             onClick={run}
             disabled={targets.length === 0}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-violet-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-600 disabled:opacity-40"
+            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-40"
           >
             <MagicWandIcon className="h-3.5 w-3.5" />
             {t('subtitles.generate')}
@@ -489,13 +489,13 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
     <li
       className={`group rounded-md border px-2.5 py-2 ${
         selected
-          ? 'border-brand-600/80 bg-brand-700/25'
+          ? 'border-blue-600/80 bg-blue-700/25'
           : 'border-zinc-800 bg-zinc-900/60'
       }`}
     >
       <div className="flex items-center gap-2">
         <button
-          className="text-2xs tabular-nums text-zinc-500 hover:text-brand-400"
+          className="text-2xs tabular-nums text-zinc-500 hover:text-blue-400"
           title={t('subtitles.goto')}
           onClick={focusCue}
         >

@@ -81,7 +81,7 @@ export function ShapeToolButton() {
         aria-haspopup="menu"
         aria-expanded={open}
         className={`absolute bottom-0 right-0 rounded-br-md p-0.5 ${
-          active ? 'text-brand-300' : 'text-zinc-300'
+          active ? 'text-blue-300' : 'text-zinc-300'
         }`}
         onClick={() => setOpen((v) => !v)}
       >
@@ -102,7 +102,7 @@ export function ShapeToolButton() {
               role="menuitemradio"
               aria-checked={kind === shapeKind}
               className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-zinc-800 active:bg-zinc-700 ${
-                kind === shapeKind ? 'text-brand-300' : 'text-zinc-300'
+                kind === shapeKind ? 'text-blue-300' : 'text-zinc-300'
               }`}
               onClick={() => {
                 setPreviewShapeKind(kind);

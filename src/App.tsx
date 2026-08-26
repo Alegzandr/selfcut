@@ -174,8 +174,8 @@ export default function App() {
             exit={{ opacity: 0 }}
             className="pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 border-4 border-dashed border-brand-500 bg-brand-500/10 backdrop-blur-sm"
           >
-            <UploadIcon className="h-12 w-12 text-brand-400" />
-            <p className="text-sm font-medium text-brand-200">
+            <UploadIcon className="h-12 w-12 text-blue-400" />
+            <p className="text-sm font-medium text-blue-200">
               {t("app.drop.title")}
             </p>
           </m.div>
@@ -344,7 +344,7 @@ function ImportingBadge() {
           exit={{ opacity: 0, y: -8 }}
           className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 rounded-full bg-zinc-800/90 px-3 py-1.5 text-xs text-zinc-200 shadow-lg"
         >
-          <span className="h-2 w-2 animate-pulse rounded-full bg-brand-400" />
+          <span className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
           {importStatus ?? t("app.importing")}
         </m.div>
       )}

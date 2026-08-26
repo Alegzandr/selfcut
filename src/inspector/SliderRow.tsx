@@ -132,9 +132,9 @@ export function SliderRow({
           title={keyframe.label}
           className={`touch-hit flex-none rounded p-0.5 ${
             keyframe.onKey
-              ? 'text-brand-400'
+              ? 'text-blue-400'
               : keyframe.animated
-                ? 'text-brand-400/50 hover:text-brand-400'
+                ? 'text-blue-400/50 hover:text-blue-400'
                 : 'text-zinc-500 hover:text-zinc-300'
           }`}
         >

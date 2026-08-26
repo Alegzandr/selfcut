@@ -3,24 +3,25 @@
  *
  * Canvas fills, SVG `stroke` attributes and the DOM-driven level meter cannot
  * take a utility class, so they need the literal colour. They are spelled here
- * once rather than at each call site: the editor reads as brand/amber/emerald/red
- * everywhere else, and a hand-typed `#fbbf24` three files away is exactly how
+ * once rather than at each call site: the editor reads as brand/blue/amber/
+ * emerald/red everywhere else, and a hand-typed `#fbbf24` three files away is exactly how
  * that vocabulary drifts apart.
  *
  * The keys mirror the utility-class names so a value can be checked against the
- * class used for the same semantic in neighbouring markup. `brand*` is SelfCut's
- * own ramp (see the `@theme` block in `index.css`); the rest are Tailwind's.
+ * class used for the same semantic in neighbouring markup. `brand*` (violet) and
+ * `blue*` are SelfCut's own ramps (see the `@theme` block in `index.css`); the
+ * rest are Tailwind's.
  */
 const TW = {
-  brand300: '#7dcef7',
-  brand400: '#53bcef',
-  amber400: '#fbbf24',
-  emerald300: '#6ee7b7',
-  emerald400: '#34d399',
-  red400: '#f87171',
-  zinc700: '#3f3f46',
-  zinc900: '#18181b',
-  zinc950: '#09090b',
+  blue300: "#7dcef7",
+  blue400: "#53bcef",
+  amber400: "#fbbf24",
+  emerald300: "#6ee7b7",
+  emerald400: "#34d399",
+  red400: "#f87171",
+  zinc700: "#3f3f46",
+  zinc900: "#18181b",
+  zinc950: "#09090b",
 } as const;
 
 /**
@@ -29,15 +30,15 @@ const TW = {
  */
 function alpha(hex: string, a: number): string {
   const byte = Math.round(Math.min(1, Math.max(0, a)) * 255);
-  return hex + byte.toString(16).padStart(2, '0');
+  return hex + byte.toString(16).padStart(2, "0");
 }
 
 /** Timeline clip decorations drawn as SVG rather than as utility classes. */
 export const CLIP_COLORS = {
   /** Fade in/out ramp line: amber, the same hue as the fade handles. */
   fadeRamp: alpha(TW.amber400, 0.95),
-  /** Crossfade ramp line: brand blue, matching the overlap window's tint. */
-  crossfadeRamp: alpha(TW.brand300, 0.9),
+  /** Crossfade ramp line: blue, matching the overlap window's tint. */
+  crossfadeRamp: alpha(TW.blue300, 0.9),
   /** Waveform inside an audio clip, over its emerald body. */
   audioWaveform: alpha(TW.emerald300, 0.65),
 } as const;
@@ -58,7 +59,7 @@ export const METER_COLORS = {
 /** Preview-stage colours, painted onto the canvas. */
 export const PREVIEW_COLORS = {
   /** Fill of a freshly drawn shape. */
-  shapeFill: TW.brand400,
+  shapeFill: TW.blue400,
   /** Stroke that keeps a light cursor legible over bright footage. */
   cursorOutline: TW.zinc900,
   /** Scrim dimming everything outside the crop rectangle. */
@@ -79,13 +80,13 @@ export const DEFAULT_PREVIEW_BACKGROUND = TW.zinc700;
 /** Named surrounds offered in Preferences, alongside a free colour picker. */
 export const PREVIEW_BACKGROUNDS = {
   /** True black: matches the frame fill, for judging blacks without a reference. */
-  black: '#000000',
+  black: "#000000",
   /** The app chassis' own shade, for a preview that melts into the layout. */
   charcoal: TW.zinc950,
   /** The default: clearly off black, still dark. */
   grey: DEFAULT_PREVIEW_BACKGROUND,
   /** Neutral mid grey, the reference surround for judging exposure. */
-  neutral: '#808080',
+  neutral: "#808080",
   /** Maximum contrast against dark footage, for spotting frame edges. */
-  white: '#ffffff',
+  white: "#ffffff",
 } as const;

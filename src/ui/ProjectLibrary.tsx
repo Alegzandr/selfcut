@@ -132,7 +132,7 @@ export function ProjectLibrary() {
                           )}
                           <div className="mt-0.5 flex items-center gap-1.5 text-2xs text-zinc-500">
                             {isCurrent && (
-                              <span className="inline-flex items-center gap-0.5 text-brand-400">
+                              <span className="inline-flex items-center gap-0.5 text-blue-400">
                                 <CheckIcon className="h-3 w-3" />
                                 {t('projects.currentBadge')}
                               </span>

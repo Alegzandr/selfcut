@@ -190,7 +190,7 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
                   onClick={() => toggleTrackExpanded(track.id)}
                 >
                   {expanded ? (
-                    <ChevronDownIcon className="h-3.5 w-3.5 text-brand-300" />
+                    <ChevronDownIcon className="h-3.5 w-3.5 text-blue-300" />
                   ) : (
                     <ChevronRightIcon className="h-3.5 w-3.5" />
                   )}

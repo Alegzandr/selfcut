@@ -12,8 +12,8 @@ export function useVisualJob(key: string | null): boolean {
 }
 
 interface Props {
-  /** Colour family of the lane it sits in: audio clips are emerald, video brand blue. */
-  tone: 'emerald' | 'brand';
+  /** Colour family of the lane it sits in: audio clips are emerald, video blue. */
+  tone: 'emerald' | 'blue';
   /** What is being read, already translated by the caller's namespace. */
   label: string;
   /** On-screen width of the clip, to drop the label when there is no room. */
@@ -34,7 +34,7 @@ const LABEL_MIN_PX = 110;
 const SCAN_PERIOD_PX = 320;
 const TINT = {
   emerald: 'rgb(110 231 183 / 0.16)',
-  brand: 'rgb(125 206 247 / 0.16)',
+  blue: 'rgb(125 206 247 / 0.16)',
 } as const;
 
 /**
@@ -54,8 +54,8 @@ const TINT = {
  */
 export function ClipLoading({ tone, label, widthPx }: Props) {
   const { t } = useTranslation();
-  const dot = tone === 'emerald' ? 'bg-emerald-300' : 'bg-brand-300';
-  const text = tone === 'emerald' ? 'text-emerald-100/80' : 'text-brand-100/80';
+  const dot = tone === 'emerald' ? 'bg-emerald-300' : 'bg-blue-300';
+  const text = tone === 'emerald' ? 'text-emerald-100/80' : 'text-blue-100/80';
 
   return (
     <div

@@ -78,7 +78,7 @@ function CrashScreen({ error, onRetry }: { error: Error; onRetry: () => void }) 
       </div>
       <div className="flex flex-wrap items-center justify-center gap-3">
         <button
-          className="flex items-center gap-2 rounded bg-brand-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-600"
+          className="flex items-center gap-2 rounded bg-brand-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-500"
           onClick={rescue}
         >
           <DownloadIcon className="h-4 w-4" aria-hidden="true" />

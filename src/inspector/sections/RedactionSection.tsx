@@ -96,7 +96,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                 aria-pressed={open}
                 onClick={() => useStore.getState().setSelectedRedactionId(open ? null : region.id)}
                 className={`touch-hit min-w-0 flex-1 truncate text-left text-xs ${
-                  region.disabled ? 'text-zinc-600 line-through' : open ? 'text-brand-300' : 'text-zinc-300'
+                  region.disabled ? 'text-zinc-600 line-through' : open ? 'text-blue-300' : 'text-zinc-300'
                 }`}
               >
                 {t('inspector.redaction.region', { n: i + 1 })} ·{' '}
@@ -238,7 +238,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                     type="checkbox"
                     checked={!!active.invert}
                     onChange={(e) => commit({ invert: e.target.checked })}
-                    className="h-3.5 w-3.5 accent-brand-500"
+                    className="h-3.5 w-3.5 accent-blue-500"
                   />
                 </label>
 

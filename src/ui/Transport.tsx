@@ -104,7 +104,7 @@ function TimeReadout() {
           onFocus={(e) => e.currentTarget.select()}
           aria-label={t("transport.timecode.goto")}
           className={`w-[62px] rounded border bg-zinc-950 px-1 text-center text-xs tabular-nums text-zinc-100 outline-none ${
-            invalid ? "border-red-500" : "border-brand-500"
+            invalid ? "border-red-500" : "border-blue-500"
           }`}
           value={draft}
           onChange={(e) => {
@@ -244,7 +244,7 @@ export function Transport() {
             )}
             {/* Shuttle badge: visible while J/L drive playback at a non-1× rate. */}
             {playing && playbackRate !== 1 && (
-              <span className="absolute -right-1.5 -top-1.5 rounded-full bg-brand-700 px-1 text-4xs font-bold leading-4 text-white">
+              <span className="absolute -right-1.5 -top-1.5 rounded-full bg-brand-600 px-1 text-4xs font-bold leading-4 text-white">
                 {playbackRate < 1
                   ? playbackRate.toFixed(2).replace(/0$/, "")
                   : playbackRate}

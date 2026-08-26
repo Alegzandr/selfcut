@@ -211,7 +211,7 @@ export function TopBar() {
           {assetCount > 0 && (
             <span
               aria-hidden="true"
-              className="absolute -right-0.5 -top-0.5 rounded-full bg-brand-700 px-1 text-4xs font-bold leading-3.5 text-white"
+              className="absolute -right-0.5 -top-0.5 rounded-full bg-brand-600 px-1 text-4xs font-bold leading-3.5 text-white"
             >
               {assetCount}
             </span>
@@ -236,7 +236,7 @@ export function TopBar() {
             target on every device, not an icon among twenty in the tool row. */}
         <Tooltip label={t('topbar.exportHint')} shortcut="Ctrl+E">
           <button
-            className="touch-hit flex items-center gap-1.5 rounded-lg bg-brand-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 active:bg-brand-800"
+            className="touch-hit flex items-center gap-1.5 rounded-lg bg-brand-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-500 active:bg-brand-700"
             onClick={() => setExportOpen(true)}
           >
             <DownloadIcon className="h-4 w-4" />
