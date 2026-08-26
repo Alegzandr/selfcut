@@ -7,6 +7,20 @@ export function formatTime(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}.${tenths}`;
 }
 
+/**
+ * Format a time in ms → "m:ss.mmm", the whole value with nothing rounded off.
+ *
+ * What an editable time field seeds itself with: `formatTime` shows tenths, so
+ * seeding from it would quietly round a cue that starts at 1.25 s down to 1.2 s
+ * the first time someone opened the field and pressed Enter.
+ */
+export function formatTimePrecise(ms: number): string {
+  const totalMs = Math.max(0, Math.round(ms));
+  const m = Math.floor(totalMs / 60000);
+  const s = Math.floor((totalMs % 60000) / 1000);
+  return `${m}:${s.toString().padStart(2, '0')}.${(totalMs % 1000).toString().padStart(3, '0')}`;
+}
+
 /** Format a time in ms → "m:ss" (for the ruler). */
 export function formatTimeShort(ms: number): string {
   const totalSec = Math.max(0, ms) / 1000;

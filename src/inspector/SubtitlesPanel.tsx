@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import {
   Cross2Icon,
@@ -50,7 +51,7 @@ import {
   useCaptionModelPref,
 } from '../media/useCaptionPrefs';
 import { useCaptionsSupported } from '../media/useCaptionCapabilities';
-import { formatTime } from '../lib/time';
+import { formatTime, formatTimePrecise, parseClock } from '../lib/time';
 import {
   isTrackPlayable,
   type Clip,
@@ -463,6 +464,87 @@ export function SubtitlesPanel() {
   );
 }
 
+/**
+ * One editable end of a cue. Click the number, type a time, Enter.
+ *
+ * Blur commits here, where the transport's readout cancels: that field is a
+ * seek someone can think better of, this one is a value of the cue sitting next
+ * to a text box that saves as it is typed. Unparseable input keeps the field
+ * open and red rather than moving the cue somewhere arbitrary.
+ */
+function CueTime({
+  ms,
+  labelKey,
+  onOpen,
+  onCommit,
+}: {
+  ms: number;
+  labelKey: ParseKeys;
+  onOpen: () => void;
+  onCommit: (ms: number) => void;
+}) {
+  const { t } = useTranslation();
+  const fps = useStore((s) => s.project.fps);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [invalid, setInvalid] = useState(false);
+
+  const commit = (): boolean => {
+    // The row renders decimal seconds whatever the transport is set to, so the
+    // field is read the same way - "1:02.5" is a second and a half, never frames.
+    const parsed = parseClock(draft ?? '', fps, 'decimal');
+    if (parsed === null) {
+      setInvalid(true);
+      return false;
+    }
+    onCommit(parsed);
+    setDraft(null);
+    return true;
+  };
+
+  if (draft === null) {
+    return (
+      <button
+        className="rounded px-0.5 hover:bg-zinc-800 hover:text-blue-400"
+        title={t(labelKey)}
+        aria-label={t(labelKey)}
+        onClick={() => {
+          onOpen();
+          setDraft(formatTimePrecise(ms));
+          setInvalid(false);
+        }}
+      >
+        {formatTime(ms)}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      onFocus={(e) => e.currentTarget.select()}
+      aria-label={t(labelKey)}
+      className={`w-16 rounded border bg-zinc-950 px-1 text-center text-2xs tabular-nums text-zinc-100 outline-none ${
+        invalid ? 'border-red-500' : 'border-blue-500'
+      }`}
+      value={draft}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        setInvalid(false);
+      }}
+      // The editor hotkeys skip inputs, but Enter and Escape still have to stop
+      // here rather than reaching whatever else listens for them.
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+        else if (e.key === 'Escape') setDraft(null);
+        e.stopPropagation();
+      }}
+      onBlur={() => {
+        if (!commit()) setDraft(null);
+      }}
+    />
+  );
+}
+
 function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
   const { t } = useTranslation();
   const {
@@ -485,6 +567,21 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
     seek(clip.timelineStartMs);
   };
 
+  /**
+   * Move one edge of the cue, the timeline's own trim - which keeps the other
+   * edge where it is, holds the minimum duration, and lets a text clip stretch
+   * in either direction since it has no source media to run out of.
+   *
+   * Independent edges, not "start moves the whole cue": that is what every
+   * subtitle editor does with a two-number row, and dragging the clip is
+   * already there for moving one without changing its length.
+   */
+  const retime = (edge: 'left' | 'right', ms: number) => {
+    beginGesture();
+    useStore.getState().trimClip(clip.id, edge, ms);
+    endGesture();
+  };
+
   return (
     <li
       className={`group rounded-md border px-2.5 py-2 ${
@@ -494,15 +591,25 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
       }`}
     >
       <div className="flex items-center gap-2">
-        <button
-          className="text-2xs tabular-nums text-zinc-500 hover:text-blue-400"
-          title={t('subtitles.goto')}
-          onClick={focusCue}
-        >
-          {/* Tenths, not whole seconds: cues are timed to fractions of one, and
-              rounding would show a cue starting at 0.5 s as "0:00". */}
-          {formatTime(clip.timelineStartMs)} · {formatTime(clipEndMs(clip))}
-        </button>
+        {/* Tenths, not whole seconds: cues are timed to fractions of one, and
+            rounding would show a cue starting at 0.5 s as "0:00". The field
+            itself opens on the exact millisecond, so reading a cue's time back
+            is never what re-times it. */}
+        <span className="flex items-center gap-1 text-2xs tabular-nums text-zinc-500">
+          <CueTime
+            ms={clip.timelineStartMs}
+            labelKey="subtitles.cue.start"
+            onOpen={focusCue}
+            onCommit={(ms) => retime('left', ms)}
+          />
+          ·
+          <CueTime
+            ms={clipEndMs(clip)}
+            labelKey="subtitles.cue.end"
+            onOpen={focusCue}
+            onCommit={(ms) => retime('right', ms)}
+          />
+        </span>
         <span className="flex-1" />
         {/* Quiet until the row is under the pointer or holds focus: one delete
             per cue, lit up all at once down a long list, competed with the text
