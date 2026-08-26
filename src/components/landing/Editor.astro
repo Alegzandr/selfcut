@@ -4,7 +4,7 @@
  *
  * Not a decorative impression of one: the chrome is built from the editor's
  * measurements (`h-8` menu bar, `h-12` toolbar, `h-11` transport, `rounded-lg`
- * buttons, `top-1 bottom-1` clips), from its palette (the zinc/sky tokens in
+ * buttons, `top-1 bottom-1` clips), from its palette (the zinc/brand tokens in
  * landing.css, which are the app's Tailwind values spelled out) and from its
  * icons (`landing/icons.ts`, rendered from the same Radix set the app imports).
  * The labels come from the *editor's* dictionaries, so the replica speaks
@@ -336,7 +336,7 @@ const CUT_B = 62;
     gap: 0.375em;
     padding: 0.4em 0.75em;
     border-radius: 0.5em;
-    background: var(--sky-500);
+    background: var(--brand-700);
     color: white;
     font-size: 0.875em;
     font-weight: 500;
@@ -357,8 +357,8 @@ const CUT_B = 62;
   }
   .ratio.on {
     border-radius: 0.35em;
-    background: color-mix(in oklab, var(--sky-500) 20%, transparent);
-    color: var(--sky-300);
+    background: color-mix(in oklab, var(--brand-500) 20%, transparent);
+    color: var(--brand-300);
   }
 
   /* Media panel · monitor · inspector */
@@ -396,8 +396,8 @@ const CUT_B = 62;
     margin-left: auto;
     padding: 0.25em;
     border-radius: 0.25em;
-    background: color-mix(in oklab, var(--sky-500) 15%, transparent);
-    color: var(--sky-300);
+    background: color-mix(in oklab, var(--brand-500) 15%, transparent);
+    color: var(--brand-300);
   }
   .pool {
     display: grid;
@@ -493,8 +493,8 @@ const CUT_B = 62;
     font-variant-numeric: tabular-nums;
   }
   .pills i.on {
-    background: var(--sky-500);
-    color: white;
+    background: color-mix(in oklab, var(--brand-500) 20%, transparent);
+    color: var(--brand-300);
   }
   /* The inspector's slider: a 4px track with a 10px knob, drawn the way
      `.slider-thin` draws it in the app. */
@@ -523,7 +523,7 @@ const CUT_B = 62;
     height: 0.75em;
     translate: -50% -50%;
     border-radius: 999px;
-    background: var(--sky-400);
+    background: var(--brand-400);
   }
 
   .insp-section {
@@ -683,26 +683,26 @@ const CUT_B = 62;
     text-overflow: ellipsis;
   }
   .clip.video {
-    background-color: var(--sky-950);
+    background-color: var(--brand-950);
     background-image: var(--strip);
     background-size: auto 100%;
     background-repeat: repeat-x;
-    border-color: var(--sky-900);
+    border-color: var(--brand-900);
   }
   .clip.video b {
     color: white;
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
   }
-  /* Selection: `ring-2 ring-sky-400` plus the two trim handles. */
+  /* Selection: `ring-2 ring-brand-400` plus the two trim handles. */
   .clip.sel {
     border-color: transparent;
-    box-shadow: 0 0 0 2px var(--sky-400);
+    box-shadow: 0 0 0 2px var(--brand-400);
   }
   .grab {
     position: absolute;
     inset-block: 0;
     width: 0.75em;
-    background: color-mix(in oklab, var(--sky-400) 80%, transparent);
+    background: color-mix(in oklab, var(--brand-400) 80%, transparent);
   }
   .grab.left {
     left: 0;

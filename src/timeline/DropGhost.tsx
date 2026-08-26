@@ -36,8 +36,8 @@ export function DropGhost({ pxPerMs }: { pxPerMs: number }) {
   if (preview.durationMs === null) {
     return (
       <div className="pointer-events-none absolute z-20 flex items-start" style={style}>
-        <div className="h-full w-0.5 rounded-full bg-sky-400" />
-        <span className="ml-1 mt-1 whitespace-nowrap rounded bg-sky-500/90 px-1.5 py-0.5 text-3xs font-medium text-white shadow">
+        <div className="h-full w-0.5 rounded-full bg-brand-400" />
+        <span className="ml-1 mt-1 whitespace-nowrap rounded bg-brand-700/90 px-1.5 py-0.5 text-3xs font-medium text-white shadow">
           {preview.label}
         </span>
       </div>
@@ -46,10 +46,10 @@ export function DropGhost({ pxPerMs }: { pxPerMs: number }) {
 
   return (
     <div
-      className="pointer-events-none absolute z-20 overflow-hidden rounded-md border-2 border-dashed border-sky-400 bg-sky-400/20"
+      className="pointer-events-none absolute z-20 overflow-hidden rounded-md border-2 border-dashed border-brand-400 bg-brand-400/20"
       style={{ ...style, width: Math.max(2, preview.durationMs * pxPerMs) }}
     >
-      <span className="absolute inset-x-0 top-1 truncate px-1.5 text-3xs font-medium text-sky-100">
+      <span className="absolute inset-x-0 top-1 truncate px-1.5 text-3xs font-medium text-brand-100">
         {preview.label}
       </span>
     </div>

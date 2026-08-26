@@ -61,7 +61,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
           type="checkbox"
           checked={enabled}
           onChange={toggle}
-          className="h-3.5 w-3.5 accent-sky-500"
+          className="h-3.5 w-3.5 accent-brand-500"
           aria-label={t('inspector.mask')}
         />
       </label>
@@ -79,7 +79,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                   onClick={() => commit({ shape: s })}
                   className={`touch-hit flex-1 rounded px-2 py-1 text-2xs ${
                     mask!.shape === s
-                      ? 'bg-sky-500/20 text-sky-300'
+                      ? 'bg-brand-500/20 text-brand-300'
                       : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                   }`}
                 >
@@ -94,7 +94,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 onClick={() => useStore.getState().setPreviewTool('pen')}
                 className={`touch-hit flex-1 rounded px-2 py-1 text-2xs ${
                   mask!.shape === 'path'
-                    ? 'bg-sky-500/20 text-sky-300'
+                    ? 'bg-brand-500/20 text-brand-300'
                     : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                 }`}
               >
@@ -165,7 +165,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
               type="checkbox"
               checked={!!mask!.invert}
               onChange={(e) => commit({ invert: e.target.checked })}
-              className="h-3.5 w-3.5 accent-sky-500"
+              className="h-3.5 w-3.5 accent-brand-500"
             />
           </label>
 

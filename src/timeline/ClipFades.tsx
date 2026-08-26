@@ -70,7 +70,7 @@ export function ClipFades({
           ramps together read as the classic crossfade "X". */}
       {xfadeInMs > 0 && (
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 border-r border-sky-300/50 bg-sky-300/10"
+          className="pointer-events-none absolute inset-y-0 left-0 border-r border-brand-300/50 bg-brand-300/10"
           style={{ width: xfadeInMs * pxPerMs }}
         >
           <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -88,7 +88,7 @@ export function ClipFades({
       )}
       {xfadeOutMs > 0 && (
         <div
-          className="pointer-events-none absolute inset-y-0 right-0 border-l border-sky-300/50 bg-sky-300/10"
+          className="pointer-events-none absolute inset-y-0 right-0 border-l border-brand-300/50 bg-brand-300/10"
           style={{ width: xfadeOutMs * pxPerMs }}
         >
           <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">

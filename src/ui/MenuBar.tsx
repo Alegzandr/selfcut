@@ -29,6 +29,7 @@ const MENUS: readonly Menu[] = [
       '---',
       'file.import',
       'file.importSubtitles',
+      'file.exportSubtitles',
       'file.importPreset',
       'file.savePreset',
       '---',

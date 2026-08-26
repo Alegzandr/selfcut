@@ -207,7 +207,7 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
         <path
           d={pathD(live, outW, outH) + (drawing && live.length < 2 ? '' : ' Z')}
           fill="rgba(56,189,248,0.12)"
-          stroke="#38bdf8"
+          stroke="#53bcef"
           strokeWidth={Math.max(1, outH * 0.0025)}
         />
       )}
@@ -223,7 +223,7 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
                 y1={px(pt.y, outH)}
                 x2={px(h.x, outW)}
                 y2={px(h.y, outH)}
-                stroke="#38bdf8"
+                stroke="#53bcef"
                 strokeWidth={Math.max(0.5, outH * 0.0015)}
                 opacity={0.7}
               />
@@ -231,7 +231,7 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
                 cx={px(h.x, outW)}
                 cy={px(h.y, outH)}
                 r={r * 0.85}
-                fill="#0ea5e9"
+                fill="#15a7e3"
                 stroke="#082f49"
                 strokeWidth={outH * 0.0015}
                 style={{ pointerEvents: editable ? 'auto' : 'none', cursor: 'grab' }}

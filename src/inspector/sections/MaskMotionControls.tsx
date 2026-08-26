@@ -148,7 +148,7 @@ export function MaskMotionControls({
           <div className="flex items-center gap-2">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
               <div
-                className="h-full rounded-full bg-sky-500 transition-[width]"
+                className="h-full rounded-full bg-brand-500 transition-[width]"
                 style={{ width: `${Math.round(tracking * 100)}%` }}
               />
             </div>

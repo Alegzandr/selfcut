@@ -1,6 +1,7 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { ClipPatch, EditorState } from '../editorState';
 import {
+  AspectRatio,
   Clip,
   ClipAnimation,
   ClipColor,
@@ -49,8 +50,19 @@ import type { SubtitleVAlign } from '../../lib/subtitles';
  * Where each vertical band puts a caption's centre, as a fraction of the output
  * height. Top and bottom keep a margin off the frame edge - a caption flush
  * against it reads as clipped, and players traditionally leave that room.
+ *
+ * How much room depends on the frame. Landscape follows the broadcast habit of
+ * a tight lower third, near the bottom safe area; vertical and square sit
+ * noticeably higher, because a phone player paints its own controls, caption
+ * button and account handle over the last stretch of the frame and a subtitle
+ * placed by broadcast rules ends up underneath them.
  */
-const CAPTION_Y: Record<SubtitleVAlign, number> = { top: 0.14, middle: 0.5, bottom: 0.82 };
+const CAPTION_Y: Record<AspectRatio, Record<SubtitleVAlign, number>> = {
+  '16:9': { top: 0.1, middle: 0.5, bottom: 0.88 },
+  '9:16': { top: 0.14, middle: 0.5, bottom: 0.82 },
+  '1:1': { top: 0.12, middle: 0.5, bottom: 0.85 },
+  '4:5': { top: 0.13, middle: 0.5, bottom: 0.83 },
+};
 import { t as translate } from '../../i18n';
 
 /**
@@ -1199,6 +1211,7 @@ export function createClipsSlice(
     addSubtitleClips: (cues, anchorAssetId, replaceClipIds) => {
       if (cues.length === 0) return;
       withHistory((p) => {
+        const captionY = CAPTION_Y[p.aspectRatio];
         // Out with the previous pass first, so a regenerated track replaces the
         // old cues instead of stacking a second lane of them on top.
         if (replaceClipIds?.length) {
@@ -1264,7 +1277,7 @@ export function createClipsSlice(
             fadeOutMs: 0,
             // Caption defaults: outlined, slightly smaller than a title, in the
             // band the file asked for (lower third unless it says otherwise).
-            transform: { ...structuredClone(DEFAULT_TRANSFORM), y: CAPTION_Y[cue.vAlign ?? 'bottom'] },
+            transform: { ...structuredClone(DEFAULT_TRANSFORM), y: captionY[cue.vAlign ?? 'bottom'] },
             text: {
               content: cue.text,
               color: '#ffffff',

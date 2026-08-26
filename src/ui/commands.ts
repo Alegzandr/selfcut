@@ -50,10 +50,11 @@ import {
   ZoomOutIcon,
 } from '@radix-ui/react-icons';
 import { useStore, getSelectedClip, getSelectedTrackKind, getLinkTargets } from '../store/store';
-import { defaultRedaction } from '../model';
+import { defaultRedaction, isTextClip } from '../model';
 import type { LibraryTab } from '../store/editorState';
 import { useImport } from './useImport';
 import { openMediaPicker, openSubtitlePicker } from './mediaPicker';
+import { exportSubtitles } from './subtitleActions';
 import { openProject, saveProject } from './projectActions';
 import { createNewProject, refreshProjects } from './projectLibraryActions';
 import { unbindProjectFile } from '../lib/projectFile';
@@ -137,6 +138,11 @@ export function useEditorCommands(): Record<string, Command> {
     const clip = getSelectedClip(s);
     return clip?.kind === 'media' && !!s.assets[clip.assetId]?.hasAudio;
   });
+  // Exporting needs something to write: subscribe to the boolean, not the cue
+  // list, so a typo in one caption does not re-render every menu.
+  const hasCues = useStore((s) =>
+    s.project.tracks.some((track) => track.clips.some(isTextClip)),
+  );
   const libraryTab = useStore((s) => s.libraryTab);
 
   const st = useStore.getState;
@@ -187,6 +193,9 @@ export function useEditorCommands(): Record<string, Command> {
     // Its own entry rather than a note under Import: dropping an .srt on the
     // window has always worked, but nothing on screen ever said so.
     { id: 'file.importSubtitles', labelKey: 'menu.file.importSubtitles', hintKey: 'menu.file.importSubtitles.hint', icon: ChatBubbleIcon, onClick: () => openSubtitlePicker(importFiles) },
+    // The way back out: cues are edited on the timeline, so the file they came
+    // from is stale the moment anything is retimed or rewritten.
+    { id: 'file.exportSubtitles', labelKey: 'menu.file.exportSubtitles', hintKey: 'menu.file.exportSubtitles.hint', icon: ChatBubbleIcon, disabled: !hasCues, onClick: () => exportSubtitles() },
     // Presets are files like a project or a render is, so they belong with the
     // other file actions rather than tucked inside the panel that happens to
     // edit the look. Import both shelves and applies: the file dialog is the

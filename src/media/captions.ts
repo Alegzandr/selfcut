@@ -19,8 +19,12 @@ import type {
 export interface CaptionProgress {
   /** 'model' while the weights download (first run), 'transcribe' while running. */
   stage: 'model' | 'transcribe';
-  /** 0..1 for the model download; 1 (indeterminate) while transcribing. */
-  value: number;
+  /**
+   * 0..1: the model download, then how far into the audio the decoder has got.
+   * Null while transcribing audio the worker cannot place (no streamer), where
+   * the bar has to stay indeterminate.
+   */
+  value: number | null;
   /** Which clip of a multi-clip run this is, 1-based. Absent on a single clip. */
   clip?: { index: number; total: number };
 }

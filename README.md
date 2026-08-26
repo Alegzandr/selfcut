@@ -252,6 +252,13 @@ src/
   asset metadata, thumbnails and waveform peaks, so a 4 GB shoot saves in a few
   hundred kilobytes and reopens showing the edit; the sources are relinked by
   name through the same path a moved file uses.
+- **A clip says when its visuals are still being read.** Waveform peaks and
+  filmstrip thumbnails are computed behind the import, which on an hour-long
+  source takes seconds; the lane drifts a faint highlight and names what is
+  being read (`ClipLoading`) until they land. Informative, never blocking - the
+  clip is trimmable, movable and playable throughout. Driven by a registry of
+  RUNNING passes (`media/visualJobs.ts`) rather than inferred from "there are no
+  peaks yet", so a read that fails or finds nothing ends the indicator too.
 - **Wheel = pan, Ctrl/Cmd+wheel = zoom** on the timeline; on a coarse pointer a
   plain wheel zooms too, since there is no modifier to hold. Timeline zoom is
   anchored at the **playhead** (the viewport centre when it is scrolled out of

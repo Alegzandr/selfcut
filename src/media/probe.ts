@@ -1,3 +1,4 @@
+import { peaksJobKey, thumbnailsJobKey, trackVisualJob } from './visualJobs';
 import type { CanvasSink, Input } from 'mediabunny';
 import { mediabunny } from './mediabunnyModule';
 import { AudioTrackInfo, MediaAsset, isTrackPlayable } from '../types';
@@ -313,14 +314,22 @@ export function ensureAssetVisuals(asset: MediaAsset, sink: AssetVisualsSink): v
     // transcode publishes its own peaks.
     if (!isTrackPlayable(track)) continue;
     if ((track.peaks?.length ?? 0) >= wantBins) continue;
-    void getPeaks(asset, track.index).then((peaks) => {
-      if (peaks) sink.setAssetPeaks(asset.id, track.index, peaks);
-    });
+    // Registered while it runs so the clip can say its waveform is on the way:
+    // on an hour-long source this pass reads the whole audio track.
+    void trackVisualJob(
+      peaksJobKey(asset.id, track.index),
+      getPeaks(asset, track.index).then((peaks) => {
+        if (peaks) sink.setAssetPeaks(asset.id, track.index, peaks);
+      }),
+    );
   }
   if (asset.kind === 'video' && asset.thumbnails.length < targetThumbnailCount(asset.durationMs)) {
-    void extractAssetThumbnails(asset).then((thumbs) => {
-      if (thumbs.length) sink.setAssetThumbnails(asset.id, thumbs);
-    });
+    void trackVisualJob(
+      thumbnailsJobKey(asset.id),
+      extractAssetThumbnails(asset).then((thumbs) => {
+        if (thumbs.length) sink.setAssetThumbnails(asset.id, thumbs);
+      }),
+    );
   }
 }
 

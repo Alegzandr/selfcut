@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSubtitles, isSubtitleFile } from './subtitles';
+import { formatSubtitles, parseSubtitles, isSubtitleFile } from './subtitles';
 
 describe('isSubtitleFile', () => {
   it('matches .srt and .vtt case-insensitively', () => {
@@ -135,5 +135,65 @@ describe('parseSubtitles - SubStation Alpha', () => {
       'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Earlier',
     ].join('\n');
     expect(parseSubtitles(ass).map((c) => c.text)).toEqual(['Earlier', 'Later']);
+  });
+});
+
+
+/**
+ * Writing back out. The exporter's job is that a track imported, edited and
+ * re-exported still says the same thing, so the round trip through the parser
+ * is the real test - the literal-shape assertions only pin what players see.
+ */
+describe('formatSubtitles', () => {
+  const cues = [
+    { startMs: 0, endMs: 1500, text: 'First line' },
+    { startMs: 3_601_050, endMs: 3_602_000, text: 'Two\nlines' },
+  ];
+
+  it('writes SRT with a 1-based counter and comma timestamps', () => {
+    expect(formatSubtitles(cues, 'srt')).toBe(
+      [
+        '1',
+        '00:00:00,000 --> 00:00:01,500',
+        'First line',
+        '',
+        '2',
+        '01:00:01,050 --> 01:00:02,000',
+        'Two',
+        'lines',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('writes WebVTT with its header and dot timestamps', () => {
+    const vtt = formatSubtitles(cues, 'vtt');
+    expect(vtt.startsWith('WEBVTT\n\n')).toBe(true);
+    expect(vtt).toContain('00:00:00.000 --> 00:00:01.500');
+    // No cue counter: VTT numbers nothing, and a stray digit line would read
+    // as a cue identifier.
+    expect(vtt).not.toContain('\n1\n');
+  });
+
+  it('states a placement only when it differs from the caption default', () => {
+    const placed = [
+      { startMs: 0, endMs: 1000, text: 'Top left', align: 'left' as const, vAlign: 'top' as const },
+      { startMs: 1000, endMs: 2000, text: 'Plain' },
+    ];
+    const srt = formatSubtitles(placed, 'srt');
+    expect(srt).toContain('{\\an7}Top left');
+    expect(srt).toContain('\nPlain');
+    const vtt = formatSubtitles(placed, 'vtt');
+    expect(vtt).toContain('--> 00:00:01.000 align:start line:10%');
+    expect(vtt).toContain('00:00:02.000\nPlain');
+  });
+
+  it('round-trips through the parser in both formats', () => {
+    const placed = [
+      { startMs: 250, endMs: 1750, text: 'Hello', align: 'right' as const, vAlign: 'middle' as const },
+      { startMs: 2000, endMs: 4000, text: 'Second\ncue' },
+    ];
+    expect(parseSubtitles(formatSubtitles(placed, 'srt'))).toEqual(placed);
+    expect(parseSubtitles(formatSubtitles(placed, 'vtt'))).toEqual(placed);
   });
 });

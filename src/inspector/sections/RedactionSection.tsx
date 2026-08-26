@@ -87,7 +87,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
           <div
             key={region.id}
             className={`space-y-2 rounded-md border px-2 py-1.5 ${
-              open ? 'border-sky-500/40 bg-sky-500/5' : 'border-zinc-800 bg-zinc-900/40'
+              open ? 'border-brand-500/40 bg-brand-500/5' : 'border-zinc-800 bg-zinc-900/40'
             }`}
           >
             <div className="flex items-center gap-1.5">
@@ -96,7 +96,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                 aria-pressed={open}
                 onClick={() => useStore.getState().setSelectedRedactionId(open ? null : region.id)}
                 className={`touch-hit min-w-0 flex-1 truncate text-left text-xs ${
-                  region.disabled ? 'text-zinc-600 line-through' : open ? 'text-sky-300' : 'text-zinc-300'
+                  region.disabled ? 'text-zinc-600 line-through' : open ? 'text-brand-300' : 'text-zinc-300'
                 }`}
               >
                 {t('inspector.redaction.region', { n: i + 1 })} ·{' '}
@@ -143,7 +143,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                         onClick={() => commit({ mode })}
                         className={`touch-hit flex-1 rounded px-2 py-1 text-2xs ${
                           active.mode === mode
-                            ? 'bg-sky-500/20 text-sky-300'
+                            ? 'bg-brand-500/20 text-brand-300'
                             : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                         }`}
                       >
@@ -177,7 +177,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                         onClick={() => commit({ shape: s })}
                         className={`touch-hit flex-1 rounded px-2 py-1 text-2xs ${
                           active.shape === s
-                            ? 'bg-sky-500/20 text-sky-300'
+                            ? 'bg-brand-500/20 text-brand-300'
                             : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                         }`}
                       >
@@ -192,7 +192,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                       onClick={() => useStore.getState().setPreviewTool('pen')}
                       className={`touch-hit flex-1 rounded px-2 py-1 text-2xs ${
                         active.shape === 'path'
-                          ? 'bg-sky-500/20 text-sky-300'
+                          ? 'bg-brand-500/20 text-brand-300'
                           : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                       }`}
                     >
@@ -238,7 +238,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                     type="checkbox"
                     checked={!!active.invert}
                     onChange={(e) => commit({ invert: e.target.checked })}
-                    className="h-3.5 w-3.5 accent-sky-500"
+                    className="h-3.5 w-3.5 accent-brand-500"
                   />
                 </label>
 

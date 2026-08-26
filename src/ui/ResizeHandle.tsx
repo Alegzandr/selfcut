@@ -47,7 +47,7 @@ export function ResizeHandle({ width, onWidth, defaultWidth, side = 'end' }: Pro
       onPointerCancel={() => (drag.current = null)}
       onDoubleClick={() => onWidth(defaultWidth)}
     >
-      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-transparent transition-colors group-hover:w-1 group-hover:bg-sky-500/60" />
+      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-transparent transition-colors group-hover:w-1 group-hover:bg-brand-500/60" />
     </div>
   );
 }

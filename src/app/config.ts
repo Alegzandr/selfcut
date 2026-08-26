@@ -99,10 +99,11 @@ export const MAX_TRACK_HEIGHT_PX = 160;
 export const TRACK_HEADER_WIDTH_PX = 168;
 export const TRACK_HEADER_WIDTH_COARSE_PX = 44;
 /**
- * Resize bounds for the header pane. MIN still fits the button column plus a
- * usable fader; MAX stops it from eating the timeline on a narrow window.
+ * Resize bounds for the header pane. MIN fits the header's identity line whole
+ * - chevron, name, three toggles, overflow - with a couple of characters left
+ * for the name; MAX stops the pane from eating the timeline on a narrow window.
  */
-export const MIN_TRACK_HEADER_WIDTH_PX = 96;
+export const MIN_TRACK_HEADER_WIDTH_PX = 136;
 export const MAX_TRACK_HEADER_WIDTH_PX = 360;
 
 /** Docked side panels (desktop): default width and resize bounds. */

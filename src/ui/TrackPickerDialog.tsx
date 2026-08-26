@@ -150,7 +150,7 @@ export function TrackPickerDialog({
               // The border lives on the wrapper, so focus has to be shown there
               // too: `outline-none` on the input alone left the field with no
               // visible focus at all.
-              <div className="mt-3 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 focus-within:border-sky-500">
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 focus-within:border-brand-500">
                 <MagnifyingGlassIcon className="h-3.5 w-3.5 flex-none text-zinc-500" />
                 <input
                   className="min-w-0 flex-1 bg-transparent text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
@@ -194,7 +194,7 @@ export function TrackPickerDialog({
                             (multiple ? (
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 flex-none accent-sky-500"
+                                className="h-4 w-4 flex-none accent-brand-500"
                                 checked={picked.includes(track.index)}
                                 aria-label={track.name}
                                 onChange={(e) =>
@@ -208,7 +208,7 @@ export function TrackPickerDialog({
                             ) : (
                               <Tooltip label={actionHint}>
                                 <button
-                                  className="touch-hit flex-none rounded-lg bg-sky-500/15 px-2.5 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30"
+                                  className="touch-hit flex-none rounded-lg bg-brand-500/15 px-2.5 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/25 active:bg-brand-500/30"
                                   onClick={() => onPick([track.index])}
                                 >
                                   {icon}
@@ -234,7 +234,7 @@ export function TrackPickerDialog({
                 </span>
                 <Tooltip label={actionHint}>
                   <button
-                    className="touch-hit flex-none rounded-lg bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-400"
+                    className="touch-hit flex-none rounded-lg bg-brand-500/15 px-3 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/25 active:bg-brand-500/30 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-400"
                     disabled={picked.length === 0}
                     onClick={() => onPick(picked)}
                   >

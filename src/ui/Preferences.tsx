@@ -61,7 +61,7 @@ const BACKGROUNDS: readonly { value: string; labelKey: ParseKeys }[] = [
 ];
 
 const SELECT_CLASS =
-  'min-w-44 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-sky-500';
+  'min-w-44 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-brand-500';
 
 /**
  * The sections, in the order the rail lists them.
@@ -158,7 +158,7 @@ function PreviewTab() {
                 onClick={() => setPreviewBackground(value)}
                 className={`h-6 w-6 rounded-md border ${
                   previewBackground === value
-                    ? 'border-sky-500 ring-1 ring-sky-500'
+                    ? 'border-brand-500 ring-1 ring-brand-500'
                     : 'border-zinc-700 hover:border-zinc-500'
                 }`}
                 style={{ backgroundColor: value }}

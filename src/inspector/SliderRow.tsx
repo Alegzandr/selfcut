@@ -132,9 +132,9 @@ export function SliderRow({
           title={keyframe.label}
           className={`touch-hit flex-none rounded p-0.5 ${
             keyframe.onKey
-              ? 'text-sky-400'
+              ? 'text-brand-400'
               : keyframe.animated
-                ? 'text-sky-400/50 hover:text-sky-400'
+                ? 'text-brand-400/50 hover:text-brand-400'
                 : 'text-zinc-500 hover:text-zinc-300'
           }`}
         >
@@ -198,7 +198,7 @@ export function SliderRow({
             // are keystrokes here, not transport commands.
             e.stopPropagation();
           }}
-          className="ml-1 w-16 flex-none rounded border border-sky-500 bg-zinc-800 px-1 text-right font-mono text-xs tabular-nums text-zinc-100 outline-none"
+          className="ml-1 w-16 flex-none rounded border border-brand-500 bg-zinc-800 px-1 text-right font-mono text-xs tabular-nums text-zinc-100 outline-none"
         />
       )}
     </div>

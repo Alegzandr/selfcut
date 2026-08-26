@@ -28,7 +28,9 @@ export type CaptionRequest =
     };
 
 export type CaptionReply =
-  | { type: 'progress'; stage: 'model' | 'transcribe'; value: number }
+  | { type: 'progress'; stage: 'model'; value: number }
+  /** How far into the audio the decoder is, 0..1 - null when it cannot be placed. */
+  | { type: 'progress'; stage: 'transcribe'; value: number | null }
   | { type: 'result'; segments: CaptionSegment[] }
   | { type: 'ready' }
   | { type: 'error'; message: string };

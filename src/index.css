@@ -1,16 +1,106 @@
 @import 'tailwindcss';
 
-/* Type scale below `text-xs`.
-   The editor chrome runs denser than Tailwind's smallest step: track headers,
-   clip badges and lane labels all sit at 9-11px. Those three sizes were spelled
-   as arbitrary values at ~50 call sites, which made an undeclared scale read as
-   a pile of magic numbers. Declared here, they are the scale.
-   Font size only, no paired line-height: the arbitrary values had none either,
-   and adding one would reflow every label that uses them. */
 @theme {
+  /* SelfCut brand ramps.
+
+     The identity is two gradients: #15a7e3 -> #1650de (blue) and
+     #a345fb -> #7733e5 (violet). Rather than paint those gradients onto
+     surfaces (this is an editor, not a landing page), each one is encoded as a
+     colour ramp: the endpoints are exact at the steps marked below, and the
+     intermediate steps interpolate hue and chroma between them. Picking
+     `brand-500` and `brand-700` for two states of the same control therefore
+     travels the brand gradient without a single `linear-gradient`.
+
+     `brand-*` replaces Tailwind's `sky-*` everywhere in the app chrome: primary
+     actions, selection, focus, active state. `violet-*` overrides Tailwind's
+     own ramp and is reserved for generated content (subtitle clips, the AI
+     captions panel), which is the one place a second hue carries meaning
+     instead of decoration.
+
+     One rule keeps the ramp honest on a dark chassis: the bright end is a
+     signal, the deep end is an action. `brand-400/500` carries what is drawn
+     rather than read (keyframe dots, drag handles, progress fills, thin
+     strokes), where it is brilliant against zinc-950; anything with white
+     label text on it sits at `brand-700`, which clears AA at 6.5:1 where the
+     bright end managed 2.7. State then walks the ramp: 700 at rest, 600 on
+     hover, 800 pressed.
+
+     Lightness climbs in the same steps Tailwind uses, so every contrast pair
+     that held before still holds. */
+  --color-brand-50: oklch(97% 0.018 228);
+  --color-brand-100: oklch(94% 0.036 229);
+  --color-brand-200: oklch(88.5% 0.062 230);
+  --color-brand-300: oklch(81.5% 0.098 231.5);
+  --color-brand-400: oklch(75.5% 0.121 232.5);
+  --color-brand-500: oklch(68.7% 0.14 234); /* #15a7e3 */
+  --color-brand-600: oklch(59.5% 0.181 248);
+  --color-brand-700: oklch(49.6% 0.224 263.5); /* #1650de */
+  --color-brand-800: oklch(41% 0.186 264.5);
+  --color-brand-900: oklch(33% 0.141 265);
+  --color-brand-950: oklch(22% 0.086 264);
+
+  --color-violet-50: oklch(97% 0.017 305);
+  --color-violet-100: oklch(94% 0.035 305);
+  --color-violet-200: oklch(88% 0.07 304);
+  --color-violet-300: oklch(74% 0.15 303.5);
+  --color-violet-400: oklch(60.6% 0.254 302.9); /* #a345fb */
+  --color-violet-500: oklch(56.5% 0.25 298);
+  --color-violet-600: oklch(52.2% 0.245 293.2); /* #7733e5 */
+  --color-violet-700: oklch(44% 0.215 292);
+  --color-violet-800: oklch(36% 0.175 292);
+  --color-violet-900: oklch(28% 0.13 292);
+  --color-violet-950: oklch(18.5% 0.085 293);
+
+  /* Chrome neutrals, retinted.
+
+     Tailwind's zinc sits at hue 286 with almost no chroma, which reads as a
+     dead grey next to the brand blue. These keep every lightness value zinc
+     had (so no contrast pair moves) and only rotate the hue between the two
+     brand hues, with a little more chroma in the deep steps where the panels,
+     toolbars and timeline live. The result is a cool slate that belongs to the
+     same family as the accent instead of sitting beside it. */
+  --color-zinc-50: oklch(98.5% 0.002 258);
+  --color-zinc-100: oklch(96.7% 0.004 258);
+  --color-zinc-200: oklch(92% 0.007 258);
+  --color-zinc-300: oklch(87.1% 0.011 258);
+  --color-zinc-400: oklch(70.5% 0.019 258);
+  --color-zinc-500: oklch(55.2% 0.021 258);
+  --color-zinc-600: oklch(44.2% 0.022 258);
+  --color-zinc-700: oklch(37% 0.021 258);
+  --color-zinc-800: oklch(27.4% 0.019 258);
+  --color-zinc-900: oklch(21% 0.018 258);
+  --color-zinc-950: oklch(14.1% 0.016 258);
+}
+
+@theme {
+  /* Type scale below `text-xs`.
+     The editor chrome runs denser than Tailwind's smallest step: track headers,
+     clip badges and lane labels all sit at 9-11px. Those three sizes were spelled
+     as arbitrary values at ~50 call sites, which made an undeclared scale read as
+     a pile of magic numbers. Declared here, they are the scale.
+     Font size only, no paired line-height: the arbitrary values had none either,
+     and adding one would reflow every label that uses them. */
   --text-2xs: 0.6875rem; /* 11px - secondary labels, list details */
   --text-3xs: 0.625rem; /* 10px - badges, read-outs, menu hints */
   --text-4xs: 0.5625rem; /* 9px - keyframe lane headers, densest chrome */
+
+  /* Highlights drifting along a clip whose waveform or filmstrip is still being
+     read (see ClipLoading). Slow and linear on purpose: it says "being filled
+     in", where anything faster would read as an alarm on a lane the user can
+     already edit.
+     The distance matches the gradient's period exactly, so the loop has no
+     seam, and it is a transform rather than a background-position so the whole
+     thing is one composited layer however wide the clip is. */
+  --animate-clip-scan: clip-scan 2.4s linear infinite;
+
+  @keyframes clip-scan {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-320px);
+    }
+  }
 }
 
 /* The one focus treatment, for every keyboard-reachable control.
@@ -20,10 +110,10 @@
    treatment (the timeline clip, whose ring has to hug the clip rather than sit
    2px outside it) still wins by simply setting `outline-none`.
    Text inputs are deliberately absent: they already say focus by turning their
-   border sky-500, which is the idiom across the inspector and the dialogs. */
+   border brand-500, which is the idiom across the inspector and the dialogs. */
 @layer base {
   :where(button, [role='button'], a, select, summary, [tabindex]):focus-visible {
-    outline: 2px solid var(--color-sky-400);
+    outline: 2px solid var(--color-brand-400);
     outline-offset: 2px;
   }
 }
@@ -137,8 +227,8 @@ textarea {
 }
 /* Same treatment as the base focus rule above; spelled out because a range
    input is not in that selector list (inputs say focus their own way, but this
-   one has no border to turn sky-500). */
+   one has no border to turn brand-500). */
 .slider-thin:focus-visible {
-  outline: 2px solid var(--color-sky-400);
+  outline: 2px solid var(--color-brand-400);
   outline-offset: 2px;
 }

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Cross2Icon,
+  DownloadIcon,
   FilePlusIcon,
   MagicWandIcon,
   TextIcon,
@@ -11,6 +12,8 @@ import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { openSubtitlePicker } from '../ui/mediaPicker';
 import { useImport } from '../ui/useImport';
+import { useAutoGrow } from '../ui/useAutoGrow';
+import { exportSubtitles } from '../ui/subtitleActions';
 import {
   audioTrackForClip,
   clipEndMs,
@@ -21,6 +24,12 @@ import {
   generateCaptionsForClips,
   type CaptionProgress,
 } from '../media/captions';
+import {
+  cancelCaptionJob,
+  isCaptionJobRunning,
+  startCaptionJob,
+  useCaptionJob,
+} from '../media/captionJob';
 import {
   captionCapabilities,
   bestDefaultModel,
@@ -78,27 +87,33 @@ function CaptionProgressBar({
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
+  // Whisper reports where in the audio it is, so the bar is a real percentage
+  // rather than a pulse - except on a run it cannot place, which keeps the
+  // indeterminate look instead of pretending to a number it does not have.
+  const pct = progress.value == null ? null : Math.round(progress.value * 100);
   const label =
     progress.stage === 'model'
-      ? t('subtitles.downloadingModel', {
-          pct: Math.round(progress.value * 100),
-        })
+      ? t('subtitles.downloadingModel', { pct })
       : progress.clip
-        ? t('subtitles.transcribingClip', {
-            index: progress.clip.index,
-            total: progress.clip.total,
-          })
-        : t('subtitles.transcribing');
+        ? pct == null
+          ? t('subtitles.transcribingClip', {
+              index: progress.clip.index,
+              total: progress.clip.total,
+            })
+          : t('subtitles.transcribingClipPct', {
+              index: progress.clip.index,
+              total: progress.clip.total,
+              pct,
+            })
+        : pct == null
+          ? t('subtitles.transcribing')
+          : t('subtitles.transcribingPct', { pct });
   return (
     <div className="flex w-full items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
         <div
-          className={`h-full rounded-full bg-sky-500 ${progress.stage === 'transcribe' ? 'w-full animate-pulse' : 'transition-[width]'}`}
-          style={
-            progress.stage === 'model'
-              ? { width: `${Math.round(progress.value * 100)}%` }
-              : undefined
-          }
+          className={`h-full rounded-full bg-violet-500 ${pct == null ? 'w-full animate-pulse' : 'transition-[width]'}`}
+          style={pct == null ? undefined : { width: `${pct}%` }}
         />
       </div>
       <span className="whitespace-nowrap text-2xs text-zinc-400">{label}</span>
@@ -132,7 +147,7 @@ function Field({
         {label}
       </span>
       <select
-        className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200 hover:border-zinc-600 focus:border-sky-500 focus:outline-none"
+        className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200 hover:border-zinc-600 focus:border-brand-500 focus:outline-none"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -161,8 +176,9 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
   const [probedModel, setProbedModel] = useState(DEFAULT_CAPTION_MODEL);
   const model = storedModel ?? probedModel;
   const [pickedTrack, setPickedTrack] = useState<string | null>(null);
-  const [progress, setProgress] = useState<CaptionProgress | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  // The run outlives this component: switching to the clip tab unmounts the
+  // panel, and the transcription must neither disappear nor be startable twice.
+  const progress = useCaptionJob();
 
   // Nothing stored yet: preselect what this machine can actually run well,
   // rather than leaving everyone on the smallest model by inertia.
@@ -214,7 +230,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
   const audioTrack = pickedTrack ?? clipTrack ?? 'clip';
 
   const run = () => {
-    if (targets.length === 0 || progress) return;
+    if (targets.length === 0 || isCaptionJobRunning()) return;
     const st = useStore.getState();
     void (async () => {
       const from = Math.min(...targets.map((x) => x.clip.timelineStartMs));
@@ -229,38 +245,34 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
         });
         if (!ok) return;
       }
-      const ac = new AbortController();
-      abortRef.current = ac;
-      setProgress({ stage: 'model', value: 0 });
-      try {
-        const cues = await generateCaptionsForClips(
-          targets,
-          {
-            model,
-            language: whisperLanguage(language),
-            enhanceVoice: enhance,
-            ...(audioTrack === 'clip'
-              ? {}
-              : { audioTrackIndex: Number(audioTrack) }),
-          },
-          (p) => setProgress(p),
-          ac.signal,
-        );
-        if (ac.signal.aborted) return;
-        if (cues && cues.length > 0) {
-          // The anchor is the source the captions belong to, so the new lane
-          // lands right above its footage - only meaningful for a single source.
-          st.addSubtitleClips(cues, sharedAsset?.id, superseded);
-        } else if (cues) {
-          st.setNotice(t('subtitles.noSpeech'));
+      startCaptionJob(async (report, signal) => {
+        try {
+          const cues = await generateCaptionsForClips(
+            targets,
+            {
+              model,
+              language: whisperLanguage(language),
+              enhanceVoice: enhance,
+              ...(audioTrack === 'clip'
+                ? {}
+                : { audioTrackIndex: Number(audioTrack) }),
+            },
+            report,
+            signal,
+          );
+          if (signal.aborted) return;
+          if (cues && cues.length > 0) {
+            // The anchor is the source the captions belong to, so the new lane
+            // lands right above its footage - only meaningful for one source.
+            st.addSubtitleClips(cues, sharedAsset?.id, superseded);
+          } else if (cues) {
+            st.setNotice(t('subtitles.noSpeech'));
+          }
+        } catch (err) {
+          console.warn('[captions] failed:', err);
+          st.setError(t('errors.captions.failed'));
         }
-      } catch (err) {
-        console.warn('[captions] failed:', err);
-        st.setError(t('errors.captions.failed'));
-      } finally {
-        setProgress(null);
-        abortRef.current = null;
-      }
+      });
     })();
   };
 
@@ -274,7 +286,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
       <div className="flex items-center gap-2">
-        <MagicWandIcon className="h-3.5 w-3.5 flex-none text-sky-400" />
+        <MagicWandIcon className="h-3.5 w-3.5 flex-none text-violet-400" />
         <span className="flex-1 text-xs font-medium text-zinc-100">
           {t('subtitles.auto')}
         </span>
@@ -315,7 +327,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
         <label className="mt-2 flex w-fit cursor-pointer items-center gap-1.5 text-2xs text-zinc-400 hover:text-zinc-200">
           <input
             type="checkbox"
-            className="h-3 w-3 accent-sky-500"
+            className="h-3 w-3 accent-violet-500"
             checked={enhance}
             onChange={(e) => setStoredCaptionEnhance(e.target.checked)}
           />
@@ -325,16 +337,13 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
 
       <div className="mt-2.5">
         {progress ? (
-          <CaptionProgressBar
-            progress={progress}
-            onCancel={() => abortRef.current?.abort()}
-          />
+          <CaptionProgressBar progress={progress} onCancel={cancelCaptionJob} />
         ) : (
           <button
             type="button"
             onClick={run}
             disabled={targets.length === 0}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-40"
+            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-violet-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-600 disabled:opacity-40"
           >
             <MagicWandIcon className="h-3.5 w-3.5" />
             {t('subtitles.generate')}
@@ -430,6 +439,16 @@ export function SubtitlesPanel() {
             <FilePlusIcon className="h-4 w-4" />
           </button>
         </Tooltip>
+        {/* The cues on the timeline are the working copy: whatever file they
+            came from is stale as soon as one is retimed or rewritten. */}
+        <Tooltip label={t('subtitles.export')}>
+          <button
+            className="touch-hit rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            onClick={exportSubtitles}
+          >
+            <DownloadIcon className="h-4 w-4" />
+          </button>
+        </Tooltip>
       </div>
       <ul className="space-y-1">
         {cues.map((clip) => (
@@ -454,6 +473,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
     beginGesture,
     endGesture,
   } = useStore.getState();
+  const textRef = useAutoGrow<HTMLTextAreaElement>(clip.text.content);
 
   /**
    * Selecting also parks the playhead on the cue: the point of clicking a row is
@@ -467,15 +487,15 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
 
   return (
     <li
-      className={`rounded-md border px-2 py-1.5 ${
+      className={`group rounded-md border px-2.5 py-2 ${
         selected
-          ? 'border-sky-500/70 bg-sky-500/10'
+          ? 'border-brand-500/70 bg-brand-500/10'
           : 'border-zinc-800 bg-zinc-900/60'
       }`}
     >
       <div className="flex items-center gap-2">
         <button
-          className="font-mono text-2xs tabular-nums text-zinc-400 hover:text-sky-400"
+          className="font-mono text-2xs tabular-nums text-zinc-500 hover:text-brand-400"
           title={t('subtitles.goto')}
           onClick={focusCue}
         >
@@ -484,9 +504,13 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
           {formatTime(clip.timelineStartMs)} · {formatTime(clipEndMs(clip))}
         </button>
         <span className="flex-1" />
+        {/* Quiet until the row is under the pointer or holds focus: one delete
+            per cue, lit up all at once down a long list, competed with the text
+            that is the actual content here. Coarse pointers have no hover, so
+            there it stays out. */}
         <Tooltip label={t('subtitles.delete')}>
           <button
-            className="touch-hit rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-400"
+            className="touch-hit rounded p-1 text-zinc-500 opacity-0 transition-opacity duration-150 hover:bg-zinc-800 hover:text-red-400 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100"
             onClick={() => deleteClips([clip.id], false)}
           >
             <TrashIcon className="h-3.5 w-3.5" />
@@ -494,10 +518,13 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
         </Tooltip>
       </div>
       <textarea
+        ref={textRef}
         value={clip.text.content}
         rows={1}
         aria-label={t('a11y.subtitles.cue')}
-        className="mt-1 w-full resize-y rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-zinc-100 outline-none hover:border-zinc-700 focus:border-sky-500 focus:bg-zinc-800"
+        // resize-none + auto-grow: the field is already the size of its cue, so
+        // the native grip had nothing left to do but crowd the row's corner.
+        className="mt-1 block w-full resize-none overflow-hidden rounded border border-transparent bg-transparent px-1 py-0.5 text-xs leading-relaxed text-zinc-100 outline-none hover:border-zinc-700 focus:border-brand-500 focus:bg-zinc-800"
         // The gesture snapshots the text as it was on entry, so a whole retype
         // undoes in one step instead of one entry per keystroke.
         onFocus={() => {

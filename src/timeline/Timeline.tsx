@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { PlusIcon } from '@radix-ui/react-icons';
 import { useStore, projectDurationMs } from '../store/store';
@@ -39,7 +39,7 @@ function SnapGuide() {
   if (snapGuideMs === null) return null;
   return (
     <div
-      className="pointer-events-none absolute inset-y-0 z-10 w-px bg-sky-300/90"
+      className="pointer-events-none absolute inset-y-0 z-10 w-px bg-brand-300/90"
       style={{ left: padLeft + snapGuideMs * (pxPerSec / 1000) }}
     />
   );
@@ -103,6 +103,14 @@ export function Timeline() {
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
   }, [marqueeActive]);
+
+  // "V1" / "A2": every NLE numbers a lane inside its own kind, so a project's
+  // second track can still be its first audio one. Both columns read the same
+  // map, and the header's visible name matches the row's accessible one.
+  const trackOrdinals = useMemo(() => {
+    const seen = { video: 0, audio: 0 };
+    return new Map(project.tracks.map((tr) => [tr.id, (seen[tr.kind] += 1)]));
+  }, [project.tracks]);
 
   const empty = project.tracks.length === 0;
   const pxPerMs = pxPerSec / 1000;
@@ -375,7 +383,11 @@ export function Timeline() {
               no scroll of its own, so the two can never drift apart. */}
           <div ref={headersRef} className="will-change-transform">
             {project.tracks.map((track) => (
-              <TrackHeader key={track.id} track={track} />
+              <TrackHeader
+                key={track.id}
+                track={track}
+                ordinal={trackOrdinals.get(track.id) ?? 1}
+              />
             ))}
           </div>
         </div>
@@ -428,18 +440,23 @@ export function Timeline() {
                 useStore.getState().openContextMenu(e.clientX, e.clientY, { kind: 'timeline' });
               }}
             >
-              {project.tracks.map((track, i) => (
-                <TrackRow key={track.id} track={track} index={i} pxPerMs={pxPerMs} />
+              {project.tracks.map((track) => (
+                <TrackRow
+                  key={track.id}
+                  track={track}
+                  ordinal={trackOrdinals.get(track.id) ?? 1}
+                  pxPerMs={pxPerMs}
+                />
               ))}
             </div>
             {/* Placeholder row while an asset drag hovers below the last track:
                 dropping there creates a fresh track instead of reusing one. */}
             {newTrackDragOver && (
               <div
-                className="pointer-events-none flex items-center border-y border-dashed border-sky-400/60 bg-sky-400/10"
+                className="pointer-events-none flex items-center border-y border-dashed border-brand-400/60 bg-brand-400/10"
                 style={{ height: trackHeightPx }}
               >
-                <span className="sticky left-0 px-3 text-2xs font-medium text-sky-300">
+                <span className="sticky left-0 px-3 text-2xs font-medium text-brand-300">
                   {t('timeline.dropNewTrack')}
                 </span>
               </div>
@@ -477,7 +494,7 @@ export function Timeline() {
         {/* Marquee box: viewport-fixed so it stays put while the timeline scrolls. */}
         {marquee && (
           <div
-            className="pointer-events-none fixed z-40 rounded-sm border border-sky-400/80 bg-sky-400/10"
+            className="pointer-events-none fixed z-40 rounded-sm border border-brand-400/80 bg-brand-400/10"
             style={{
               left: Math.min(marquee.x0, marquee.x1),
               top: Math.min(marquee.y0, marquee.y1),

@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { ImageIcon, Link2Icon, SpeakerLoudIcon, TextIcon, VideoIcon } from '@radix-ui/react-icons';
 import { Clip } from '../types';
 import { audioTrackForClip, clipDurationMs } from '../model';
+import { peaksJobKey, thumbnailsJobKey } from '../media/visualJobs';
 import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { clamp, formatTime } from '../lib/time';
@@ -19,6 +20,7 @@ import { useIsCoarsePointer } from '../lib/device';
 import { focusIsKeyboardDriven } from '../lib/focusModality';
 import { CLIP_COLORS } from '../lib/palette';
 import { Waveform } from './Waveform';
+import { ClipLoading, useVisualJob } from './ClipLoading';
 import { Filmstrip } from './Filmstrip';
 import { ClipFades } from './ClipFades';
 import { ClipKeyframes } from './ClipKeyframes';
@@ -74,6 +76,18 @@ export const ClipView = memo(function ClipView({
   // carries several audio tracks, label the clip with which one it plays.
   const audioInfo = asset ? audioTrackForClip(asset, clip) : undefined;
   const hasPeaks = (audioInfo?.peaks?.length ?? 0) > 0;
+  // Waveform and filmstrip are filled in behind the import, which on an
+  // hour-long source takes seconds. Keyed on the pass actually running, so a
+  // source that has no waveform to read (an undecodable track awaiting its
+  // transcode) shows nothing rather than an indicator that never ends.
+  const peaksLoading = useVisualJob(
+    asset && audioInfo && !hasPeaks ? peaksJobKey(asset.id, audioInfo.index) : null,
+  );
+  const framesLoading = useVisualJob(
+    asset && asset.kind === 'video' && asset.thumbnails.length === 0
+      ? thumbnailsJobKey(asset.id)
+      : null,
+  );
   // Clips whose `volume` actually does something: media with an audio track.
   // Text/solid clips and silent footage get no volume line.
   const hasAudio = clip.kind === 'media' && (audioInfo != null || hasPeaks);
@@ -95,9 +109,9 @@ export const ClipView = memo(function ClipView({
 
   const isVideo = trackKind === 'video';
   const border = selected
-    ? 'ring-2 ring-sky-400 border-transparent'
+    ? 'ring-2 ring-brand-400 border-transparent'
     : isVideo
-      ? 'border-sky-900'
+      ? 'border-brand-900'
       : 'border-emerald-900';
   // Unselected on touch: no touch-action lock, so a horizontal pan scrubs the timeline.
   const touch = coarse && !selected ? '' : 'touch-none';
@@ -138,7 +152,7 @@ export const ClipView = memo(function ClipView({
         e.stopPropagation();
         useStore.getState().selectClip(clip.id);
       }}
-      className={`group absolute top-1 bottom-1 isolate overflow-hidden rounded-md border outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${touch} ${border} ${isVideo ? 'bg-sky-950' : 'bg-emerald-950'}`}
+      className={`group absolute top-1 bottom-1 isolate overflow-hidden rounded-md border outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${touch} ${border} ${isVideo ? 'bg-brand-950' : 'bg-emerald-950'}`}
       style={{ left, width }}
       onPointerDown={(e) => beginDrag(e, 'move')}
       onPointerMove={onPointerMove}
@@ -211,21 +225,38 @@ export const ClipView = memo(function ClipView({
               the way a pro NLE labels its clips. */}
           <div className="absolute left-0 top-0 flex max-w-[calc(100%-2.5rem)] items-center gap-1 rounded-br-md rounded-tl-md bg-black/60 px-1 py-px">
             {clip.linkId ? (
-              <Link2Icon className="h-2.5 w-2.5 flex-none text-sky-200" />
+              <Link2Icon className="h-2.5 w-2.5 flex-none text-brand-200" />
             ) : asset.kind === 'image' ? (
-              <ImageIcon className="h-2.5 w-2.5 flex-none text-sky-200" />
+              <ImageIcon className="h-2.5 w-2.5 flex-none text-brand-200" />
             ) : (
-              <VideoIcon className="h-2.5 w-2.5 flex-none text-sky-200" />
+              <VideoIcon className="h-2.5 w-2.5 flex-none text-brand-200" />
             )}
-            <span className="truncate text-3xs text-sky-50">{asset.file.name}</span>
+            <span className="truncate text-3xs text-brand-50">{asset.file.name}</span>
+          </div>
+        </div>
+      ) : isVideo && framesLoading ? (
+        /* The filmstrip is still being extracted. Shown as the video clip it is
+           rather than falling through to the audio-lane treatment below, so a
+           clip does not change colour once its thumbnails land. */
+        <div className="pointer-events-none relative h-full w-full bg-gradient-to-b from-brand-900/60 to-brand-950">
+          <ClipLoading tone="brand" label={t('timeline.clip.readingFrames')} widthPx={width} />
+          <div className="absolute left-0 top-0 flex max-w-[calc(100%-2.5rem)] items-center gap-1 rounded-br-md rounded-tl-md bg-black/60 px-1 py-px">
+            {clip.linkId ? (
+              <Link2Icon className="h-2.5 w-2.5 flex-none text-brand-200" />
+            ) : (
+              <VideoIcon className="h-2.5 w-2.5 flex-none text-brand-200" />
+            )}
+            <span className="truncate text-3xs text-brand-50">{asset?.file.name}</span>
           </div>
         </div>
       ) : (
         <div className="pointer-events-none relative h-full w-full bg-gradient-to-b from-emerald-900/60 to-emerald-950">
-          {hasPeaks && asset && (
+          {hasPeaks && asset ? (
             <div className="absolute inset-0">
               <Waveform asset={asset} clip={clip} widthPx={width} clipLeftPx={left} color={CLIP_COLORS.audioWaveform} />
             </div>
+          ) : (
+            peaksLoading && <ClipLoading tone="emerald" label={t('timeline.clip.readingWaveform')} widthPx={width} />
           )}
           <div className="absolute left-0 top-0 flex max-w-full items-center gap-1 px-1.5 py-0.5">
             {clip.linkId ? (
@@ -246,7 +277,7 @@ export const ClipView = memo(function ClipView({
       {/* A/V-link badge, for the video clips that carry no filmstrip label. */}
       {isVideo && clip.kind === 'media' && clip.linkId && !asset?.thumbnails.length && (
         <div className="pointer-events-none absolute left-0.5 top-0.5 rounded bg-black/55 p-0.5">
-          <Link2Icon className="h-2.5 w-2.5 text-sky-200" />
+          <Link2Icon className="h-2.5 w-2.5 text-brand-200" />
         </div>
       )}
 
@@ -273,7 +304,7 @@ export const ClipView = memo(function ClipView({
       {(!coarse || selected) && (
         <>
           <div
-            className={`absolute inset-y-0 left-0 cursor-ew-resize touch-none ${coarse ? 'w-6' : 'w-3'} ${selected ? 'bg-sky-400/80' : 'bg-white/10'}`}
+            className={`absolute inset-y-0 left-0 cursor-ew-resize touch-none ${coarse ? 'w-6' : 'w-3'} ${selected ? 'bg-brand-400/80' : 'bg-white/10'}`}
             onPointerDown={(e) => beginDrag(e, 'trim-left')}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -284,7 +315,7 @@ export const ClipView = memo(function ClipView({
             )}
           </div>
           <div
-            className={`absolute inset-y-0 right-0 cursor-ew-resize touch-none ${coarse ? 'w-6' : 'w-3'} ${selected ? 'bg-sky-400/80' : 'bg-white/10'}`}
+            className={`absolute inset-y-0 right-0 cursor-ew-resize touch-none ${coarse ? 'w-6' : 'w-3'} ${selected ? 'bg-brand-400/80' : 'bg-white/10'}`}
             onPointerDown={(e) => beginDrag(e, 'trim-right')}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}

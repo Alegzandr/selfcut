@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
 import {
@@ -22,7 +22,11 @@ import {
   listCachedModels,
   type CachedModel,
 } from '../media/captionsCache';
-import { prefetchCaptionModel } from '../media/captions';
+import {
+  cancelCaptionModelDownload,
+  startCaptionModelDownload,
+  useCaptionModelDownload,
+} from '../media/captionModelJob';
 import { formatBytes } from '../lib/bytes';
 
 /**
@@ -51,7 +55,7 @@ function QualityBars({ level }: { level: number }) {
       {[1, 2, 3, 4].map((i) => (
         <span
           key={i}
-          className={`h-2.5 w-1 rounded-full ${i <= level ? 'bg-sky-500' : 'bg-zinc-700'}`}
+          className={`h-2.5 w-1 rounded-full ${i <= level ? 'bg-violet-500' : 'bg-zinc-700'}`}
         />
       ))}
     </span>
@@ -64,8 +68,10 @@ function ModelRow({
   cached,
   active,
   downloading,
+  busy,
   onSelect,
   onDownload,
+  onCancel,
   onDelete,
 }: {
   model: CaptionModelInfo;
@@ -73,8 +79,11 @@ function ModelRow({
   cached: CachedModel | undefined;
   active: boolean;
   downloading: number | null;
+  /** Another row is downloading: only one model is fetched at a time. */
+  busy: boolean;
   onSelect: () => void;
   onDownload: () => void;
+  onCancel: () => void;
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
@@ -87,14 +96,14 @@ function ModelRow({
       <label
         className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${
           active
-            ? 'border-sky-500/70 bg-sky-500/10'
+            ? 'border-violet-500/70 bg-violet-500/10'
             : 'border-zinc-800 bg-zinc-900/60 hover:border-zinc-700'
         } ${unsupported ? 'cursor-not-allowed opacity-50' : ''}`}
       >
         <input
           type="radio"
           name="caption-model"
-          className="mt-0.5 h-4 w-4 flex-none accent-sky-500"
+          className="mt-0.5 h-4 w-4 flex-none accent-violet-500"
           checked={active}
           disabled={unsupported}
           onChange={onSelect}
@@ -128,13 +137,22 @@ function ModelRow({
             <div className="mt-2 flex items-center gap-2">
               <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-800">
                 <div
-                  className="h-full rounded-full bg-sky-500 transition-[width]"
+                  className="h-full rounded-full bg-violet-500 transition-[width]"
                   style={{ width: `${Math.round(downloading * 100)}%` }}
                 />
               </div>
               <span className="whitespace-nowrap tabular-nums text-2xs text-zinc-400">
                 {Math.round(downloading * 100)} %
               </span>
+              {/* The way out has to be here, on the row: the download no longer
+                  dies when the dialog closes, so closing is not cancelling. */}
+              <button
+                type="button"
+                className="touch-hit flex-none rounded px-1 py-0.5 text-2xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                onClick={onCancel}
+              >
+                {t('library.job.cancel')}
+              </button>
             </div>
           )}
         </div>
@@ -155,7 +173,8 @@ function ModelRow({
               <Tooltip label={t('captions.models.download')}>
                 <button
                   type="button"
-                  className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                  className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 disabled:pointer-events-none disabled:opacity-30"
+                  disabled={busy}
                   onClick={onDownload}
                   aria-label={t('captions.models.download')}
                 >
@@ -184,8 +203,9 @@ export function CaptionModelDialog({
   const { t } = useTranslation();
   const [caps, setCaps] = useState<CaptionCapabilities | null>(null);
   const [cache, setCache] = useState<Map<string, CachedModel> | null>(null);
-  const [downloading, setDownloading] = useState<{ id: string; value: number } | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  // The download outlives this dialog (see `captionModelJob`), so it is read
+  // rather than owned: reopening the manager finds the run still going.
+  const downloading = useCaptionModelDownload();
 
   const refreshCache = useCallback(() => {
     if (!captionCacheAvailable()) return;
@@ -212,25 +232,13 @@ export function CaptionModelDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // A download outlives the dialog being dismissed only if we let it: closing
-  // means the user is done here, and a background fetch of several hundred
-  // megabytes with nowhere to show progress is not something to leave running.
-  useEffect(() => {
-    if (!open) abortRef.current?.abort();
-  }, [open]);
+  // Deliberately no abort on close: a download of several hundred megabytes is
+  // exactly the thing to start and then go back to cutting over. It keeps
+  // running, this dialog picks it back up on reopen, and the row it sits on
+  // carries the cancel button for anyone who does want it stopped.
 
   const download = (id: string) => {
-    if (downloading) return;
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setDownloading({ id, value: 0 });
-    void prefetchCaptionModel(id, (value) => setDownloading({ id, value }), ac.signal)
-      .catch((err) => console.warn('[captions] model download failed:', err))
-      .finally(() => {
-        setDownloading(null);
-        abortRef.current = null;
-        refreshCache();
-      });
+    startCaptionModelDownload(id, refreshCache);
   };
 
   const remove = (info: CaptionModelInfo) => {
@@ -297,8 +305,10 @@ export function CaptionModelDialog({
                   cached={cache?.get(info.id)}
                   active={info.id === model}
                   downloading={downloading?.id === info.id ? downloading.value : null}
+                  busy={downloading != null}
                   onSelect={() => onPick(info.id)}
                   onDownload={() => download(info.id)}
+                  onCancel={cancelCaptionModelDownload}
                   onDelete={() => remove(info)}
                 />
               ))}

@@ -104,7 +104,7 @@ function TimeReadout() {
           onFocus={(e) => e.currentTarget.select()}
           aria-label={t("transport.timecode.goto")}
           className={`w-[62px] rounded border bg-zinc-950 px-1 text-center font-mono text-xs tabular-nums text-zinc-100 outline-none ${
-            invalid ? "border-red-500" : "border-sky-500"
+            invalid ? "border-red-500" : "border-brand-500"
           }`}
           value={draft}
           onChange={(e) => {
@@ -166,7 +166,7 @@ function ViewToolButton({ id }: { id: string }) {
     >
       <button
         className={`touch-hit rounded-lg p-2 hover:bg-zinc-800/70 active:bg-zinc-800 ${
-          command.checked ? "bg-sky-500/20 text-sky-300" : "text-zinc-400"
+          command.checked ? "bg-brand-500/20 text-brand-300" : "text-zinc-400"
         }`}
         aria-pressed={command.checked}
         onClick={command.onClick}
@@ -244,7 +244,7 @@ export function Transport() {
             )}
             {/* Shuttle badge: visible while J/L drive playback at a non-1× rate. */}
             {playing && playbackRate !== 1 && (
-              <span className="absolute -right-1.5 -top-1.5 rounded-full bg-sky-500 px-1 text-4xs font-bold leading-4 text-white">
+              <span className="absolute -right-1.5 -top-1.5 rounded-full bg-brand-700 px-1 text-4xs font-bold leading-4 text-white">
                 {playbackRate < 1
                   ? playbackRate.toFixed(2).replace(/0$/, "")
                   : playbackRate}

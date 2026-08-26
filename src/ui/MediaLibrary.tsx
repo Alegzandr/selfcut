@@ -110,7 +110,7 @@ export function MediaLibrary() {
             import entry point in reach - the timeline dropzone is gone. */}
         <Tooltip label={t('library.import')}>
           <button
-            className="touch-hit ml-auto rounded bg-sky-500/15 p-1 text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 pointer-coarse:p-2"
+            className="touch-hit ml-auto rounded bg-brand-500/15 p-1 text-brand-300 hover:bg-brand-500/25 active:bg-brand-500/30 pointer-coarse:p-2"
             onClick={importHere}
             aria-label={t('library.import')}
           >
@@ -290,7 +290,7 @@ function TrackAction({
       <div className="flex justify-end">
         <Tooltip label={hint}>
           <button
-            className="touch-hit rounded bg-sky-500/15 px-1.5 py-0.5 text-4xs font-medium text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 pointer-coarse:p-2"
+            className="touch-hit rounded bg-brand-500/15 px-1.5 py-0.5 text-4xs font-medium text-brand-300 hover:bg-brand-500/25 active:bg-brand-500/30 pointer-coarse:p-2"
             onClick={onClick}
           >
             {icon}
@@ -413,7 +413,7 @@ function TrackGroup({
  * convert it.
  *
  * Presented as an available option, not a defect: the app can play these tracks,
- * it just has to do the work first. Hence the sky tone shared with the other
+ * it just has to do the work first. Hence the brand tone shared with the other
  * actions rather than the amber the card reserves for a genuinely broken asset
  * (a disconnected file). What does need saying up front is the cost, since the
  * first conversion pulls a 32 MB converter and then reads the whole file.
@@ -627,7 +627,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
         ) : (
           <Tooltip label={t('library.add')}>
             <button
-              className="touch-hit flex-none rounded bg-sky-500/15 p-1 text-sky-300 hover:bg-sky-500/25 active:bg-sky-500/30 pointer-coarse:p-2"
+              className="touch-hit flex-none rounded bg-brand-500/15 p-1 text-brand-300 hover:bg-brand-500/25 active:bg-brand-500/30 pointer-coarse:p-2"
               onClick={() => {
                 addClipFromAsset(asset.id);
                 // Mobile drawer: close it so the freshly placed clip is visible.

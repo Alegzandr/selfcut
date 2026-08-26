@@ -9,8 +9,8 @@ import { trackRowHeightPx } from './trackHeight';
 
 interface Props {
   track: Track;
-  /** Position in the track list (0-based), for the accessible name. */
-  index: number;
+  /** 1-based position among the tracks of its kind, for the accessible name. */
+  ordinal: number;
   pxPerMs: number;
 }
 
@@ -18,7 +18,7 @@ interface Props {
  * The clip lane for one track. Its controls live in {@link TrackHeader}, in the
  * fixed pane to the left, so this row is pure timeline: background + clips.
  */
-export const TrackRow = memo(function TrackRow({ track, index, pxPerMs }: Props) {
+export const TrackRow = memo(function TrackRow({ track, ordinal, pxPerMs }: Props) {
   const { t } = useTranslation();
   const xfades = trackCrossfades(track.clips);
   const baseHeightPx = useStore((s) => s.trackHeightPx);
@@ -28,7 +28,7 @@ export const TrackRow = memo(function TrackRow({ track, index, pxPerMs }: Props)
   // "Video track 2, muted, locked" - the row's name plus its toggled states,
   // so a screen reader hears why the clips inside refuse to change.
   const rowLabel = [
-    t(track.kind === 'video' ? 'a11y.track.video' : 'a11y.track.audio', { n: index + 1 }),
+    t(track.kind === 'video' ? 'a11y.track.video' : 'a11y.track.audio', { n: ordinal }),
     track.muted ? t('a11y.track.state.muted') : null,
     track.hidden ? t('a11y.track.state.hidden') : null,
     track.locked ? t('a11y.track.state.locked') : null,
@@ -75,7 +75,7 @@ export const TrackRow = memo(function TrackRow({ track, index, pxPerMs }: Props)
               key={clip.id}
               clip={clip}
               trackKind={track.kind}
-              trackNumber={index + 1}
+              trackNumber={ordinal}
               pxPerMs={pxPerMs}
               xfadeInMs={xfades.get(clip.id)?.inMs ?? 0}
               xfadeOutMs={xfades.get(clip.id)?.outMs ?? 0}

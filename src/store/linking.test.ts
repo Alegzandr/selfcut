@@ -382,6 +382,25 @@ describe('addSubtitleClips', () => {
     expect(sound().sourceInMs).toBe(picture().sourceInMs);
   });
 
+  it('drops captions lower in landscape than in vertical', () => {
+    // The bottom band is not one fixed fraction: a phone player covers the last
+    // stretch of the frame with its own chrome, so vertical sits higher while
+    // 16:9 follows the tighter broadcast lower third.
+    s().setAspectRatio('16:9');
+    s().addSubtitleClips(cues);
+    const landscape = captions()[0]!.transform!.y;
+
+    s().resetProject();
+    s().setAspectRatio('9:16');
+    s().addSubtitleClips(cues);
+    const vertical = captions()[0]!.transform!.y;
+
+    expect(landscape).toBeGreaterThan(vertical);
+    // Both stay inside the bottom third, which is all a subtitle file can say.
+    for (const y of [landscape, vertical]) expect(y).toBeGreaterThan(0.67);
+    expect(landscape).toBeLessThan(1);
+  });
+
   it('leaves a loose .srt unlinked', () => {
     s().addAsset(videoAsset('v'));
     s().addClipFromAsset('v');

@@ -5,6 +5,7 @@ import { Cross2Icon, TrashIcon } from '@radix-ui/react-icons';
 import { useStore, getSelectedClip } from '../store/store';
 import type { InspectorTab } from '../store/editorState';
 import { SubtitlesPanel } from './SubtitlesPanel';
+import { useCaptionJob } from '../media/captionJob';
 import { Tooltip } from '../ui/Tooltip';
 import { Clip } from '../types';
 import { isTextClip } from '../model';
@@ -40,9 +41,25 @@ function InspectorTabs({ cueCount }: { cueCount: number }) {
   const { t } = useTranslation();
   const tab = useStore((s) => s.inspectorTab);
   const setInspectorTab = useStore.getState().setInspectorTab;
-  const tabs: { id: InspectorTab; label: string; badge?: number }[] = [
+  // A transcription outlives the panel that started it (see `captionJob`), and
+  // the tab strip is the only part of it still on screen once the clip pane
+  // takes over. Without this, leaving the tab looked exactly like nothing
+  // running - which is how someone ends up asking for the job twice.
+  const captions = useCaptionJob();
+  const tabs: {
+    id: InspectorTab;
+    label: string;
+    badge?: number;
+    /** 0..1 of a job running behind this tab; null = running, unmeasurable. */
+    progress?: number | null;
+  }[] = [
     { id: 'clip', label: t('inspector.tab.clip') },
-    { id: 'subtitles', label: t('inspector.tab.subtitles'), badge: cueCount || undefined },
+    {
+      id: 'subtitles',
+      label: t('inspector.tab.subtitles'),
+      badge: cueCount || undefined,
+      ...(captions ? { progress: captions.value } : {}),
+    },
   ];
   return (
     // Real ARIA tabs, not buttons that look like tabs. Assistive tech gets the
@@ -50,12 +67,12 @@ function InspectorTabs({ cueCount }: { cueCount: number }) {
     // role for its own "Clip" menu - two controls with the same name and the
     // same role is ambiguous to a screen reader before it is ambiguous to a test.
     <div role="tablist" aria-label={t('inspector.tabs')} className="flex gap-1 rounded-lg bg-zinc-800/60 p-0.5">
-      {tabs.map(({ id, label, badge }) => (
+      {tabs.map(({ id, label, badge, progress }) => (
         <button
           key={id}
           role="tab"
           aria-selected={tab === id}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ${
+          className={`relative flex flex-1 items-center justify-center gap-1.5 overflow-hidden rounded-md px-2 py-1 text-xs font-medium ${
             tab === id ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'
           }`}
           onClick={() => setInspectorTab(id)}
@@ -64,6 +81,17 @@ function InspectorTabs({ cueCount }: { cueCount: number }) {
           {badge != null && (
             <span className="rounded-full bg-zinc-700/80 px-1.5 text-2xs tabular-nums text-zinc-300">
               {badge}
+            </span>
+          )}
+          {/* A hairline along the tab's own edge rather than a number or a
+              spinner: it says "still going, in here" without competing with the
+              cue count for the two words of room this strip has. */}
+          {progress !== undefined && (
+            <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-600/60">
+              <span
+                className={`block h-full bg-brand-400 ${progress == null ? 'w-full opacity-60' : 'transition-[width]'}`}
+                style={progress == null ? undefined : { width: `${Math.round(progress * 100)}%` }}
+              />
             </span>
           )}
         </button>

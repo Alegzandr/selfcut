@@ -135,8 +135,8 @@ export function RedactionOverlay({ outW, outH }: { outW: number; outH: number })
         const stroke = region.disabled
           ? 'border-zinc-500/50'
           : open
-            ? 'border-sky-300'
-            : 'border-sky-300/45';
+            ? 'border-brand-300'
+            : 'border-brand-300/45';
 
         if (region.shape === 'path') {
           // A drawn path has no box to grab: the pen tool owns its anchors, so
@@ -159,7 +159,7 @@ export function RedactionOverlay({ outW, outH }: { outW: number; outH: number })
                 strokeWidth={open ? 2 : 1.5}
                 strokeDasharray="6 4"
                 vectorEffect="non-scaling-stroke"
-                className={`pointer-events-auto ${open ? 'text-sky-300' : 'text-sky-300/45'}`}
+                className={`pointer-events-auto ${open ? 'text-brand-300' : 'text-brand-300/45'}`}
                 onPointerDown={(e) => {
                   e.stopPropagation();
                   useStore.getState().setSelectedRedactionId(region.id);
@@ -179,7 +179,7 @@ export function RedactionOverlay({ outW, outH }: { outW: number; outH: number })
           <div
             key={region.id}
             className={`pointer-events-auto absolute touch-none border-2 border-dashed ${stroke} ${
-              open ? 'cursor-move bg-sky-400/5' : 'cursor-pointer'
+              open ? 'cursor-move bg-brand-400/5' : 'cursor-pointer'
             } ${region.shape === 'ellipse' ? 'rounded-[50%]' : ''}`}
             style={{
               left: `${(region.x + motion.tx - w / 2) * 100}%`,
@@ -197,7 +197,7 @@ export function RedactionOverlay({ outW, outH }: { outW: number; outH: number })
               (['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
                 <div
                   key={corner}
-                  className={`absolute h-3 w-3 rounded-sm border border-zinc-900 bg-sky-300 shadow ${
+                  className={`absolute h-3 w-3 rounded-sm border border-zinc-900 bg-brand-300 shadow ${
                     corner[0] === 'n' ? '-top-1.5' : '-bottom-1.5'
                   } ${corner[1] === 'w' ? '-left-1.5' : '-right-1.5'} ${
                     corner === 'nw' || corner === 'se' ? 'cursor-nwse-resize' : 'cursor-nesw-resize'

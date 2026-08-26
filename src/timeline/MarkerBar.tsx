@@ -251,10 +251,10 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
             n: markers.findIndex((m) => m.id === editing.id) + 1,
           })}
           aria-label={t('a11y.marker.label')}
-          // Cyan at rest, because the field belongs to a marker; sky on focus,
+          // Cyan at rest, because the field belongs to a marker; brand blue on focus,
           // because focus is an app-wide signal and every other input in the
           // editor says it the same way.
-          className="absolute top-0 z-20 h-full w-32 rounded-sm border border-cyan-400 bg-zinc-950 px-1 text-3xs text-cyan-100 outline-none focus:border-sky-500"
+          className="absolute top-0 z-20 h-full w-32 rounded-sm border border-cyan-400 bg-zinc-950 px-1 text-3xs text-cyan-100 outline-none focus:border-brand-500"
           style={{ left: xOf(editing.timeMs) }}
           onPointerDown={(e) => e.stopPropagation()}
           onBlur={(e) => commitRename(e.target.value)}

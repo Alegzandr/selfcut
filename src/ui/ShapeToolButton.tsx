@@ -57,7 +57,7 @@ export function ShapeToolButton() {
       <Tooltip label={t('preview.tool.shape', { shape: t(current.labelKey) })} shortcut="R">
         <button
           className={`touch-hit relative rounded-md p-1.5 hover:bg-zinc-800/80 ${
-            active ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-300'
+            active ? 'bg-brand-500/20 text-brand-300' : 'text-zinc-300'
           }`}
           aria-pressed={active}
           onClick={() => setPreviewTool('shape')}
@@ -81,7 +81,7 @@ export function ShapeToolButton() {
         aria-haspopup="menu"
         aria-expanded={open}
         className={`absolute bottom-0 right-0 rounded-br-md p-0.5 ${
-          active ? 'text-sky-300' : 'text-zinc-300'
+          active ? 'text-brand-300' : 'text-zinc-300'
         }`}
         onClick={() => setOpen((v) => !v)}
       >
@@ -102,7 +102,7 @@ export function ShapeToolButton() {
               role="menuitemradio"
               aria-checked={kind === shapeKind}
               className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-zinc-800 active:bg-zinc-700 ${
-                kind === shapeKind ? 'text-sky-300' : 'text-zinc-300'
+                kind === shapeKind ? 'text-brand-300' : 'text-zinc-300'
               }`}
               onClick={() => {
                 setPreviewShapeKind(kind);

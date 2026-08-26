@@ -51,7 +51,7 @@ export function ScopesMenu() {
               role="menuitemradio"
               aria-checked={mode === opt}
               className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs ${
-                mode === opt ? 'text-sky-300' : 'text-zinc-300 hover:bg-zinc-800'
+                mode === opt ? 'text-brand-300' : 'text-zinc-300 hover:bg-zinc-800'
               }`}
               onClick={() => {
                 useStore.getState().setScopesMode(opt);
@@ -71,7 +71,7 @@ export function ScopesMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         className={`touch-hit flex items-center gap-1.5 rounded-md border border-zinc-700/70 bg-zinc-900/70 px-2 py-1 text-2xs font-medium backdrop-blur transition-colors hover:bg-zinc-800/80 ${
-          mode !== 'off' ? 'text-sky-300' : 'text-zinc-300'
+          mode !== 'off' ? 'text-brand-300' : 'text-zinc-300'
         }`}
         onClick={() => setOpen((v) => !v)}
       >

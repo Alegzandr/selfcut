@@ -106,7 +106,7 @@ export function ProjectLibrary() {
                       <li
                         key={p.id}
                         className={`group flex items-center gap-2 rounded-lg px-3 py-2 ${
-                          isCurrent ? 'bg-sky-500/10' : 'hover:bg-zinc-800/70'
+                          isCurrent ? 'bg-brand-500/10' : 'hover:bg-zinc-800/70'
                         }`}
                       >
                         <div className="min-w-0 flex-1">
@@ -119,7 +119,7 @@ export function ProjectLibrary() {
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') commitRename();
                               }}
-                              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-sky-500"
+                              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-brand-500"
                             />
                           ) : (
                             <button
@@ -132,7 +132,7 @@ export function ProjectLibrary() {
                           )}
                           <div className="mt-0.5 flex items-center gap-1.5 text-2xs text-zinc-500">
                             {isCurrent && (
-                              <span className="inline-flex items-center gap-0.5 text-sky-400">
+                              <span className="inline-flex items-center gap-0.5 text-brand-400">
                                 <CheckIcon className="h-3 w-3" />
                                 {t('projects.currentBadge')}
                               </span>

@@ -39,6 +39,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
   const transcodes = useStore((s) => s.transcodes);
   const assets = useStore((s) => s.assets);
   const canLink = useStore((s) => getLinkTargets(s) !== null);
+  const expandedTrackIds = useStore((s) => s.expandedTrackIds);
   const st = useStore.getState;
 
   /** Map global command ids (and separators) to rows, dropping unknown ids. */
@@ -161,6 +162,15 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
           onClick: () => st().toggleTrackHidden(id),
         });
       }
+      // Reachable nowhere else on a coarse pointer: the touch header is two
+      // buttons wide and cannot carry the chevron the desktop one does.
+      items.push({
+        id: 'ctx.track.expand',
+        labelKey: expandedTrackIds.includes(id) ? 'track.collapse' : 'track.expand',
+        icon: ChevronDownIcon,
+        checked: expandedTrackIds.includes(id),
+        onClick: () => st().toggleTrackExpanded(id),
+      });
       items.push({
         id: 'ctx.track.lock',
         labelKey: track?.locked ? 'track.unlock' : 'track.lock',

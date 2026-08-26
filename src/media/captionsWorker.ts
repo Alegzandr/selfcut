@@ -14,10 +14,75 @@ import { captionModel } from './captionsModel';
  * than a larger download.
  */
 
-type Asr = (
+type Asr = ((
   audio: Float32Array,
   opts: Record<string, unknown>,
-) => Promise<{ chunks?: Array<{ timestamp: [number, number | null]; text: string }> }>;
+) => Promise<{
+  chunks?: Array<{ timestamp: [number, number | null]; text: string }>;
+}>) & {
+  /** The pipeline's own tokenizer, needed to read timestamp tokens as they stream. */
+  tokenizer: unknown;
+  processor?: { feature_extractor?: { config?: { chunk_length?: number } } };
+  model?: { config?: { max_source_positions?: number } };
+};
+
+/**
+ * The window the pipeline transcribes at a time, and its overlap. Passed to the
+ * call below AND used to place each window on the timeline for progress, so the
+ * two must agree - the pipeline chunks at exactly these numbers.
+ */
+const CHUNK_LENGTH_S = 30;
+const STRIDE_LENGTH_S = 5;
+
+/** Whisper's own sample rate, the only one this worker is fed. */
+const SAMPLE_RATE = 16000;
+
+/**
+ * Report how far into the audio the decoder has got.
+ *
+ * Whisper gives no progress of its own: it is handed a window and answers with
+ * a transcript. What it does emit, token by token, is the timestamp of the
+ * speech it is currently writing - so the position in the audio IS the progress,
+ * and a streamer reading those tokens turns a spinner into a percentage.
+ *
+ * The timestamps are relative to the window, so each finished window advances
+ * the offset by the pipeline's own jump (window minus both strides). Monotonic
+ * on purpose: a window re-reads its overlap with the previous one, and a bar
+ * that walks backwards every 20 seconds reads as a bug.
+ */
+function transcribeStreamer(
+  Streamer: typeof import('@huggingface/transformers').WhisperTextStreamer,
+  asr: Asr,
+  durationSec: number,
+): unknown {
+  const jump = CHUNK_LENGTH_S - 2 * STRIDE_LENGTH_S;
+  let windowIndex = 0;
+  let furthestSec = 0;
+  const at = (time: number) => {
+    const sec = windowIndex * jump + time;
+    if (sec <= furthestSec) return;
+    furthestSec = sec;
+    post({
+      type: 'progress',
+      stage: 'transcribe',
+      value: Math.min(1, sec / durationSec),
+    });
+  };
+  const chunkLength =
+    asr.processor?.feature_extractor?.config?.chunk_length ?? 30;
+  const maxPositions = asr.model?.config?.max_source_positions ?? 1500;
+  return new Streamer(
+    asr.tokenizer as ConstructorParameters<typeof Streamer>[0],
+    {
+      time_precision: chunkLength / maxPositions,
+      on_chunk_start: at,
+      on_chunk_end: at,
+      on_finalize: () => {
+        windowIndex++;
+      },
+    },
+  );
+}
 
 const pipelines = new Map<string, Promise<Asr>>();
 
@@ -89,11 +154,29 @@ self.onmessage = async (e: MessageEvent<CaptionRequest>) => {
     }
     if (req.type !== 'transcribe') return;
     const asr = await getAsr(req.model);
-    post({ type: 'progress', stage: 'transcribe', value: 1 });
+    const durationSec = req.audio.length / SAMPLE_RATE;
+    let streamer: unknown;
+    try {
+      if (durationSec > 0) {
+        const { WhisperTextStreamer } = await import('@huggingface/transformers');
+        streamer = transcribeStreamer(WhisperTextStreamer, asr, durationSec);
+      }
+    } catch (err) {
+      // A model whose tokenizer the streamer cannot read still transcribes; it
+      // just does it without a percentage. Losing the transcript over the
+      // progress bar would be the wrong trade.
+      console.warn('[captions] no progress stream:', err);
+    }
+    post({
+      type: 'progress',
+      stage: 'transcribe',
+      value: streamer ? 0 : null,
+    });
     const out = await asr(req.audio, {
       return_timestamps: true,
-      chunk_length_s: 30,
-      stride_length_s: 5,
+      chunk_length_s: CHUNK_LENGTH_S,
+      stride_length_s: STRIDE_LENGTH_S,
+      ...(streamer ? { streamer } : {}),
       // Transcribe in the spoken language, never translate: with a language
       // pinned, the translation task would silently rewrite the captions into
       // another tongue.

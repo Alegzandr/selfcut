@@ -82,7 +82,7 @@ function ToolButton({ command }: { command: Command | undefined }) {
     >
       <button
         className={`touch-hit rounded-lg p-2 enabled:hover:bg-zinc-800/70 enabled:hover:bg-zinc-800/70 active:bg-zinc-800 disabled:opacity-30 ${
-          command.checked ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400'
+          command.checked ? 'bg-brand-500/20 text-brand-300' : 'text-zinc-400'
         }`}
         disabled={command.disabled}
         aria-pressed={command.checked}
@@ -211,7 +211,7 @@ export function TopBar() {
           {assetCount > 0 && (
             <span
               aria-hidden="true"
-              className="absolute -right-0.5 -top-0.5 rounded-full bg-sky-500 px-1 text-4xs font-bold leading-3.5 text-white"
+              className="absolute -right-0.5 -top-0.5 rounded-full bg-brand-700 px-1 text-4xs font-bold leading-3.5 text-white"
             >
               {assetCount}
             </span>
@@ -236,7 +236,7 @@ export function TopBar() {
             target on every device, not an icon among twenty in the tool row. */}
         <Tooltip label={t('topbar.exportHint')} shortcut="Ctrl+E">
           <button
-            className="touch-hit flex items-center gap-1.5 rounded-lg bg-sky-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-400 active:bg-sky-600"
+            className="touch-hit flex items-center gap-1.5 rounded-lg bg-brand-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 active:bg-brand-800"
             onClick={() => setExportOpen(true)}
           >
             <DownloadIcon className="h-4 w-4" />
@@ -248,7 +248,7 @@ export function TopBar() {
           {ASPECTS.map(({ value, titleKey }) => (
             <Tooltip key={value} label={t(titleKey)}>
               <button
-                className={`touch-hit px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800'}`}
+                className={`touch-hit px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'bg-brand-500/20 text-brand-300' : 'text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800'}`}
                 onClick={() => setAspectRatio(value)}
               >
                 {value}

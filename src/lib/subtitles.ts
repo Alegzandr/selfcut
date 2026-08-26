@@ -198,3 +198,66 @@ export function parseSubtitles(content: string): SubtitleCue[] {
   }
   return cues.sort((a, b) => a.startMs - b.startMs);
 }
+
+/** The two formats the exporter writes back out. */
+export type SubtitleFormat = 'srt' | 'vtt';
+
+/** Numpad `\anN` code for a placement, the notation both SRT and ASS readers know. */
+const AN_CODE: Record<SubtitleVAlign, Record<TextAlign, number>> = {
+  bottom: { left: 1, center: 2, right: 3 },
+  middle: { left: 4, center: 5, right: 6 },
+  top: { left: 7, center: 8, right: 9 },
+};
+
+/** Milliseconds → "HH:MM:SS,mmm" (SRT) or "HH:MM:SS.mmm" (WebVTT). */
+function formatTimestamp(ms: number, sep: ',' | '.'): string {
+  const clamped = Math.max(0, Math.round(ms));
+  const h = Math.floor(clamped / 3_600_000);
+  const m = Math.floor(clamped / 60_000) % 60;
+  const s = Math.floor(clamped / 1000) % 60;
+  const frac = clamped % 1000;
+  const pad = (n: number, width = 2) => String(n).padStart(width, '0');
+  return `${pad(h)}:${pad(m)}:${pad(s)}${sep}${pad(frac, 3)}`;
+}
+
+/**
+ * WebVTT cue settings for a placement, empty when the cue sits where a player
+ * would put it anyway (bottom, centered).
+ *
+ * `line` is written as a percentage rather than a line index because a cue here
+ * knows a band, not a row count: 10/50 land in the top and middle thirds the
+ * parser reads back, whatever the player's line height.
+ */
+function vttSettings({ align, vAlign }: Placement): string {
+  const parts: string[] = [];
+  if (align === 'left') parts.push('align:start');
+  else if (align === 'right') parts.push('align:end');
+  if (vAlign === 'top') parts.push('line:10%');
+  else if (vAlign === 'middle') parts.push('line:50%');
+  return parts.length ? ` ${parts.join(' ')}` : '';
+}
+
+/**
+ * Write cues back out as SRT or WebVTT.
+ *
+ * Placement survives the round trip in each format's own notation: a cue
+ * setting in VTT, an `\an` override tag in SRT — the same tag the parser reads,
+ * and the one players that support positioning at all understand. A cue sitting
+ * at the default (bottom, centered) carries no marker, so an ordinary caption
+ * track exports as an ordinary file.
+ */
+export function formatSubtitles(cues: SubtitleCue[], format: SubtitleFormat): string {
+  const sep = format === 'srt' ? ',' : '.';
+  const blocks = cues.map((cue, i) => {
+    const timing = `${formatTimestamp(cue.startMs, sep)} --> ${formatTimestamp(cue.endMs, sep)}`;
+    if (format === 'vtt') {
+      return `${timing}${vttSettings(cue)}\n${cue.text}`;
+    }
+    const placed = cue.align || cue.vAlign;
+    const tag = placed ? `{\\an${AN_CODE[cue.vAlign ?? 'bottom'][cue.align ?? 'center']}}` : '';
+    // SRT numbers its cues from 1; the counter is part of the format, not a hint.
+    return `${i + 1}\n${timing}\n${tag}${cue.text}`;
+  });
+  const body = blocks.join('\n\n');
+  return format === 'vtt' ? `WEBVTT\n\n${body}\n` : `${body}\n`;
+}

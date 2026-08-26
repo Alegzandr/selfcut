@@ -228,13 +228,19 @@ function RenderPreviewBadge() {
   const frame = useSyncExternalStore(subscribeRenderPreview, renderPreviewFrame);
   if (!frame) return null;
   return (
+    // Burnt into the top of the frame like a slate, not floated over it as a
+    // chip: this is a property of the picture being shown (it is the encoder's
+    // output, not the playhead's), and the monitor's own corner is where an
+    // editor reads that. The scrim spans the frame exactly - the badge sits
+    // inside the stage - so it lands on the image and never on the letterbox.
     <div
       data-render-badge
-      className="pointer-events-none absolute left-2 top-2 z-30 flex items-center gap-1.5 rounded-full bg-zinc-950/85 px-2.5 py-1 text-2xs font-medium text-sky-200 ring-1 ring-sky-400/30"
+      className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-baseline gap-2 bg-gradient-to-b from-black/65 to-transparent px-2 pb-5 pt-1.5 font-mono text-2xs uppercase tracking-widest text-zinc-200"
     >
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400" />
       {t('preview.rendering')}
-      <span className="tabular-nums text-zinc-400">{formatTime(frame.timeMs)}</span>
+      <span className="tabular-nums tracking-normal text-zinc-400">
+        {formatTime(frame.timeMs)}
+      </span>
     </div>
   );
 }
@@ -751,7 +757,7 @@ function PreviewOverlays({
               handles below are NOT its children, so they can be clamped back
               into the panel independently of where the outline runs off to. */}
           <div
-            className="pointer-events-none absolute rounded-sm ring-2 ring-sky-400/90"
+            className="pointer-events-none absolute rounded-sm ring-2 ring-brand-400/90"
             style={{
               left: `${(selectedRect.dx / outW) * 100}%`,
               top: `${(selectedRect.dy / outH) * 100}%`,
@@ -782,7 +788,7 @@ function PreviewOverlays({
               />
               {/* Painted after the rotation zone, so it wins any overlap. */}
               <div
-                className="pointer-events-auto absolute h-3 w-3 touch-none rounded-sm border border-zinc-900 bg-sky-400 shadow"
+                className="pointer-events-auto absolute h-3 w-3 touch-none rounded-sm border border-zinc-900 bg-brand-400 shadow"
                 style={{ cursor: resizeCursor(h.dirX, h.dirY), transform: 'translate(-50%, -50%)' }}
                 onPointerDown={(e) => onHandleDown(e, selectedRect, selectedClip!)}
                 onPointerMove={onHandleMove}
@@ -807,7 +813,7 @@ function PreviewOverlays({
             ).map((h) => (
               <div
                 key={h.edge}
-                className="pointer-events-auto absolute h-3 w-3 touch-none rounded-full border border-zinc-900 bg-sky-400 shadow"
+                className="pointer-events-auto absolute h-3 w-3 touch-none rounded-full border border-zinc-900 bg-brand-400 shadow"
                 style={{
                   left: `${h.x * 100}%`,
                   top: `${h.y * 100}%`,
@@ -822,7 +828,7 @@ function PreviewOverlays({
             ))}
           {stretchBadge !== null && (
             <span
-              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-2xs font-medium tabular-nums text-sky-200"
+              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-2xs font-medium tabular-nums text-brand-200"
               style={{
                 left: `${((selectedRect.dx + selectedRect.dw / 2) / outW) * 100}%`,
                 top: `${((selectedRect.dy + selectedRect.dh / 2) / outH) * 100}%`,
@@ -834,7 +840,7 @@ function PreviewOverlays({
           )}
           {angleBadge !== null && (
             <span
-              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-2xs font-medium tabular-nums text-sky-200"
+              className="pointer-events-none absolute rounded-full bg-zinc-900/90 px-2 py-0.5 text-2xs font-medium tabular-nums text-brand-200"
               style={{
                 left: `${((selectedRect.dx + selectedRect.dw / 2) / outW) * 100}%`,
                 top: `${((selectedRect.dy + selectedRect.dh / 2) / outH) * 100}%`,
@@ -1331,7 +1337,7 @@ export function PreviewCanvas() {
             same normalized coordinates the clip will be authored in. */}
         {drawBox && (
           <div
-            className="pointer-events-none absolute z-20 border-2 border-sky-300 bg-sky-400/25"
+            className="pointer-events-none absolute z-20 border-2 border-brand-300 bg-brand-400/25"
             style={{
               left: `${drawBox.x * 100}%`,
               top: `${drawBox.y * 100}%`,
@@ -1364,7 +1370,7 @@ export function PreviewCanvas() {
       {/* Magnifier marquee. Outside the stage, so it is not itself zoomed. */}
       {marquee && (
         <div
-          className="pointer-events-none absolute z-30 border border-sky-300/90 bg-sky-400/15"
+          className="pointer-events-none absolute z-30 border border-brand-300/90 bg-brand-400/15"
           style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }}
         />
       )}
