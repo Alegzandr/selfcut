@@ -55,6 +55,7 @@
   "track.label.video": "V{{n}}",
   "track.label.audio": "A{{n}}",
   "track.more": "Options de la piste",
+  "track.settings": "Volume et opacité",
   "master.volume": "Volume de la prévisualisation : {{db}}",
   "master.mute": "Couper le son de la prévisualisation",
   "master.unmute": "Rétablir le son de la prévisualisation",

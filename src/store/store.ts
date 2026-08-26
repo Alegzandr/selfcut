@@ -238,6 +238,7 @@ export const useStore = create<EditorState>((set, get) => {
     contextMenu: null,
     confirmDialog: null,
     renamingMarkerId: null,
+    trackSettingsTrackId: null,
     expandedTrackIds: [],
     trackHeightPx: loadTrackHeight(),
     trackHeaderWidthPx: loadWidth(

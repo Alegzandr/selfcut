@@ -55,6 +55,7 @@
   "track.label.video": "V{{n}}",
   "track.label.audio": "A{{n}}",
   "track.more": "轨道选项",
+  "track.settings": "音量与不透明度",
   "master.volume": "预览音量：{{db}}",
   "master.mute": "预览静音",
   "master.unmute": "取消预览静音",

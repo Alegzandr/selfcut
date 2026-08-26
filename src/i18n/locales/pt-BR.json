@@ -55,6 +55,7 @@
   "track.label.video": "V{{n}}",
   "track.label.audio": "A{{n}}",
   "track.more": "Opções da faixa",
+  "track.settings": "Volume e opacidade",
   "master.volume": "Volume da prévia: {{db}}",
   "master.mute": "Silenciar a prévia",
   "master.unmute": "Ativar o som da prévia",

@@ -55,6 +55,7 @@
   "track.label.video": "V{{n}}",
   "track.label.audio": "A{{n}}",
   "track.more": "트랙 옵션",
+  "track.settings": "볼륨 및 불투명도",
   "master.volume": "미리보기 음량: {{db}}",
   "master.mute": "미리보기 음소거",
   "master.unmute": "미리보기 음소거 해제",

@@ -55,6 +55,7 @@
   "track.label.video": "V{{n}}",
   "track.label.audio": "A{{n}}",
   "track.more": "トラックのオプション",
+  "track.settings": "音量と不透明度",
   "master.volume": "プレビューの音量：{{db}}",
   "master.mute": "プレビューをミュート",
   "master.unmute": "プレビューのミュートを解除",

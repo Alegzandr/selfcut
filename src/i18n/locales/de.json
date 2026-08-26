@@ -55,6 +55,7 @@
   "track.label.video": "V{{n}}",
   "track.label.audio": "A{{n}}",
   "track.more": "Spuroptionen",
+  "track.settings": "Lautstärke und Deckkraft",
   "master.volume": "Vorschau-Lautstärke: {{db}}",
   "master.mute": "Vorschau stummschalten",
   "master.unmute": "Stummschaltung der Vorschau aufheben",

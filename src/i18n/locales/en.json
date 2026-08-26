@@ -55,6 +55,7 @@
   "track.label.video": "V{{n}}",
   "track.label.audio": "A{{n}}",
   "track.more": "Track options",
+  "track.settings": "Volume and opacity",
   "master.volume": "Preview volume: {{db}}",
   "master.mute": "Mute preview",
   "master.unmute": "Unmute preview",
