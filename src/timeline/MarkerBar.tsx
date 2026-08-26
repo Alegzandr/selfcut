@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/store';
 import { useIsCoarsePointer } from '../lib/device';
@@ -46,6 +46,9 @@ type Drag = RegionDrag | MarkerDrag;
  * drives loop playback and can restrict the export - while markers are project
  * data (undoable, saved).
  */
+/** Press-and-hold on touch before the marker menu opens - the platform figure. */
+const LONG_PRESS_MS = 500;
+
 export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number }) {
   const { t } = useTranslation();
   const padLeft = useStore((s) => s.timelinePadLeft);
@@ -60,6 +63,13 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
   // A click on a marker cues the playhead, but a double-click means "rename" -
   // so the second click rewinds the cue the first one performed.
   const seekUndo = useRef<{ id: string; fromMs: number } | null>(null);
+  /** Pending long-press timer on touch (see `onMarkerPointerDown`). */
+  const longPress = useRef<number | null>(null);
+  const clearLongPress = () => {
+    if (longPress.current !== null) window.clearTimeout(longPress.current);
+    longPress.current = null;
+  };
+  useEffect(() => clearLongPress, []);
 
   const markers = useMemo(() => [...markerList].sort((a, b) => a.timeMs - b.timeMs), [markerList]);
   // Inline label editor: which marker (if any) has it open lives in the store, so
@@ -101,6 +111,8 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
     const d = drag.current;
     if (!d) return;
     if (!d.moved && Math.abs(e.clientX - d.startX) < 3) return;
+    // A press that turned into a drag is not a long press any more.
+    clearLongPress();
     d.moved = true;
     const s = useStore.getState();
     const at = snapped(e, d);
@@ -109,6 +121,7 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
+    clearLongPress();
     const d = drag.current;
     if (!d) return;
     drag.current = null;
@@ -156,6 +169,22 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
       points: snapPointsExcept(marker.timeMs),
       lastSnap: null,
     };
+    // Touch has no right-click, and the marker menu (go to, rename, delete) was
+    // reachable through nothing else: a phone could drop markers and then never
+    // name or remove one. A long press opens the same menu, and abandons the
+    // drag it interrupts.
+    if (!coarse) return;
+    const { clientX, clientY } = e;
+    clearLongPress();
+    longPress.current = window.setTimeout(() => {
+      longPress.current = null;
+      const d = drag.current;
+      if (!d || d.kind !== 'marker' || d.moved) return;
+      drag.current = null;
+      const s = useStore.getState();
+      s.endGesture();
+      s.openContextMenu(clientX, clientY, { kind: 'marker', markerId: marker.id });
+    }, LONG_PRESS_MS);
   };
 
   const commitRename = (value: string) => {
@@ -209,9 +238,14 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
         <Tooltip
           key={marker.id}
           label={
+            // The hint names the gesture this device actually has: "right-click
+            // for options" on a phone describes a button nobody is holding.
             marker.label
-              ? t('marker.titleLabeled', { n: i + 1, label: marker.label })
-              : t('marker.title', { n: i + 1 })
+              ? t(coarse ? 'marker.titleLabeled.touch' : 'marker.titleLabeled', {
+                  n: i + 1,
+                  label: marker.label,
+                })
+              : t(coarse ? 'marker.title.touch' : 'marker.title', { n: i + 1 })
           }
         >
           <div
@@ -229,7 +263,7 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
               useStore.getState().setRenamingMarker(marker.id);
             }}
             onContextMenu={(e) => {
-              if (coarse) return; // Desktop only.
+              if (coarse) return; // Touch opens the same menu by long press.
               e.preventDefault();
               e.stopPropagation();
               useStore.getState().openContextMenu(e.clientX, e.clientY, {
