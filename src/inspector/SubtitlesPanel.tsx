@@ -49,7 +49,7 @@ import {
   useCaptionLanguagePref,
   useCaptionModelPref,
 } from '../media/useCaptionPrefs';
-import { useIsCoarsePointer } from '../lib/device';
+import { useCaptionsSupported } from '../media/useCaptionCapabilities';
 import { formatTime } from '../lib/time';
 import {
   isTrackPlayable,
@@ -364,12 +364,12 @@ export function SubtitlesPanel() {
   const selectedClipIds = useStore((s) => s.selectedClipIds);
   const assets = useStore((s) => s.assets);
   const importFiles = useImport();
-  const coarse = useIsCoarsePointer();
-
-  // Whisper is a desktop-only tool: it needs a capable machine (WebGPU, or a
-  // slower wasm fallback) and a model download that is not worth pushing onto a
-  // phone. Mobile keeps manual entry and SRT import.
-  const captionsAvailable = !coarse;
+  // Auto-captions are offered wherever the machine can actually run them, which
+  // is a question for the capability probe and not for the pointer type: a phone
+  // with WebGPU transcribes, a laptop without it falls back to the CPU, and the
+  // old touch/no-touch gate got the first of those wrong. Manual entry and SRT
+  // import are there either way.
+  const captionsAvailable = useCaptionsSupported();
 
   // Derived in a memo, not in the selector: a selector runs on every set(), and
   // the playback engine writes the current time 60 times a second.

@@ -29,6 +29,24 @@ export interface CaptionCapabilities {
   f16: boolean;
   /** navigator.deviceMemory in GB, when exposed (Chromium only). */
   memoryGb?: number;
+  /**
+   * A touch-first device (`pointer: coarse`) - a phone or a tablet.
+   *
+   * Not a proxy for "weak": a recent phone runs the small models on its GPU
+   * perfectly well. It changes what a download and a long GPU run COST, which
+   * is what the ratings below are about. Always false off the main thread, where
+   * there is no `matchMedia` to ask - the worker only reads `device` and `f16`.
+   */
+  handheld: boolean;
+}
+
+function coarsePointer(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  try {
+    return window.matchMedia('(pointer: coarse)').matches;
+  } catch {
+    return false;
+  }
 }
 
 let probe: Promise<CaptionCapabilities> | null = null;
@@ -37,6 +55,7 @@ let probe: Promise<CaptionCapabilities> | null = null;
 export function captionCapabilities(): Promise<CaptionCapabilities> {
   probe ??= (async (): Promise<CaptionCapabilities> => {
     const memoryGb = (navigator as unknown as { deviceMemory?: number }).deviceMemory;
+    const handheld = coarsePointer();
     const gpu = (navigator as unknown as { gpu?: GPU }).gpu;
     if (gpu) {
       try {
@@ -52,13 +71,14 @@ export function captionCapabilities(): Promise<CaptionCapabilities> {
             maxBufferBytes: adapter.limits?.maxBufferSize,
             f16: adapter.features?.has('shader-f16') ?? false,
             memoryGb,
+            handheld,
           };
         }
       } catch {
         // No adapter, or the request threw: wasm it is.
       }
     }
-    return { device: 'wasm', f16: false, memoryGb };
+    return { device: 'wasm', f16: false, memoryGb, handheld };
   })();
   return probe;
 }
@@ -92,8 +112,38 @@ export function captionFit(model: CaptionModelInfo, caps: CaptionCapabilities): 
   // The no-f16 fallback runs, at a precision this project has not measured
   // against the fp16 path: offer it, do not recommend it.
   if (dtype !== model.dtype.webgpu) return 'usable';
-  if (model.quality === 4) return caps.memoryGb != null && caps.memoryGb < 8 ? 'slow' : 'recommended';
+  if (caps.handheld) {
+    // A phone GPU transcribes; what it does not have is the room for a
+    // gigabyte of weights, nor the thermal headroom for a long run, nor
+    // usually an unmetered connection to fetch them over.
+    if (model.quality === 4) return 'slow';
+    return model.quality === 3 ? 'usable' : 'recommended';
+  }
+  if (model.quality === 4) {
+    // navigator.deviceMemory is Chromium-only: on Safari and Firefox there is
+    // no RAM figure at all. Saying 'recommended' there would be a promise made
+    // on no evidence, and 'slow' an accusation on the same - an M-series Mac in
+    // Safari is exactly the machine this model is best on. 'usable' is the
+    // honest answer: it runs, and nothing here knows whether it runs well.
+    if (caps.memoryGb == null) return 'usable';
+    return caps.memoryGb < 8 ? 'slow' : 'recommended';
+  }
   return model.quality >= 3 ? 'recommended' : 'usable';
+}
+
+/**
+ * Whether to offer auto-captions on this machine at all.
+ *
+ * The gate used to be the pointer type: touch meant no captions, full stop.
+ * That was a stand-in for the real question, and it got both ends wrong - it
+ * refused a phone with a GPU that transcribes a minute of audio in seconds, and
+ * it would have accepted a laptop with no WebGPU at all. So ask the machine
+ * instead: on a handheld the wasm path is not a slower option but an hour of the
+ * device at full tilt with the screen hot, so there a GPU is the condition;
+ * on a desktop the CPU fallback stays offered, as it always was.
+ */
+export function captionsSupported(caps: CaptionCapabilities): boolean {
+  return caps.device === 'webgpu' || !caps.handheld;
 }
 
 /** The model to preselect on a machine that has never chosen one. */

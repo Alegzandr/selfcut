@@ -28,7 +28,7 @@ import {
   setStoredCaptionModel,
 } from '../media/captionsPrefs';
 import { useCaptionModelPref } from '../media/useCaptionPrefs';
-import { useIsCoarsePointer } from '../lib/device';
+import { useCaptionsSupported } from '../media/useCaptionCapabilities';
 import { formatBytes } from '../lib/bytes';
 
 const TIME_FORMATS: readonly { value: TimeFormat; labelKey: ParseKeys }[] = [
@@ -316,9 +316,10 @@ export function Preferences() {
   const { t } = useTranslation();
   const open = useStore((s) => s.preferencesOpen);
   const { setPreferencesOpen } = useStore.getState();
-  // Same rule the subtitles pane applies: Whisper is desktop-only here, so a
-  // touch device is not offered settings for a feature it cannot run.
-  const captionsAvailable = !useIsCoarsePointer();
+  // Same rule the subtitles pane applies: the tab exists where the machine can
+  // run transcription, phone included, and nowhere else - settings for a feature
+  // this device cannot reach are just a dead end with a title.
+  const captionsAvailable = useCaptionsSupported();
   const tabs = TABS.filter((x) => x.id !== 'captions' || captionsAvailable);
   // Kept across open/close: the section someone was last in is nearly always
   // the one they come back to.
