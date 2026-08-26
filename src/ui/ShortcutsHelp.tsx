@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
 import { Cross2Icon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
+import { PLAYBACK_SKIP_BACK_MS, PLAYBACK_SKIP_FORWARD_MS } from '../app/config';
 import { Kbd } from './Kbd';
 import { Tooltip } from './Tooltip';
 
@@ -40,6 +41,7 @@ const GROUPS: readonly Group[] = [
     title: 'shortcuts.group.navigate',
     rows: [
       ['← / →', 'shortcuts.navigate.frame'],
+      ['← / →', 'shortcuts.navigate.skip'],
       ['{{shift}} + ← / →', 'shortcuts.navigate.second'],
       ['{{ctrl}} + ← / →', 'shortcuts.navigate.cutPoint'],
       ['1 … 9', 'shortcuts.navigate.marker'],
@@ -350,7 +352,16 @@ export function ShortcutsHelp() {
                           <dt className="flex flex-wrap items-center gap-1">
                             {renderKeys(keys, labels)}
                           </dt>
-                          <dd className="leading-5 text-zinc-300">{t(desc)}</dd>
+                          {/* The skip row is the one description carrying
+                              numbers, and they are constants rather than
+                              prose: interpolate them for every row, the rest
+                              simply have no placeholder to fill. */}
+                          <dd className="leading-5 text-zinc-300">
+                            {t(desc, {
+                              back: PLAYBACK_SKIP_BACK_MS / 1000,
+                              fwd: PLAYBACK_SKIP_FORWARD_MS / 1000,
+                            })}
+                          </dd>
                         </div>
                       ))}
                     </dl>

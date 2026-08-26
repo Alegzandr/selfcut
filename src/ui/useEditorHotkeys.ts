@@ -3,6 +3,7 @@ import { useStore, getSelectedClip, projectDurationMs, clipEndMs, sortedMarkers 
 import { zoomAtPlayhead } from '../timeline/zoom';
 import { focusIsKeyboardDriven } from '../lib/focusModality';
 import { openProject, saveProject } from './projectActions';
+import { PLAYBACK_SKIP_BACK_MS, PLAYBACK_SKIP_FORWARD_MS } from '../app/config';
 
 /**
  * Jump to the previous/next edit point (clip edges, markers, region corners,
@@ -226,13 +227,29 @@ export function useEditorHotkeys() {
       }
 
       switch (e.key) {
+        // Playing, the arrows skip like a player's do (and asymmetrically, see
+        // the constants); stopped, they step a frame, which is the edit
+        // gesture. Shift stays the one-second nudge in both states, so the fine
+        // grain is still reachable without stopping playback.
         case 'ArrowLeft':
           e.preventDefault();
-          stepBy(e.shiftKey ? -1000 : -1000 / s.project.fps);
+          stepBy(
+            e.shiftKey
+              ? -1000
+              : s.playing
+                ? -PLAYBACK_SKIP_BACK_MS
+                : -1000 / s.project.fps,
+          );
           return;
         case 'ArrowRight':
           e.preventDefault();
-          stepBy(e.shiftKey ? 1000 : 1000 / s.project.fps);
+          stepBy(
+            e.shiftKey
+              ? 1000
+              : s.playing
+                ? PLAYBACK_SKIP_FORWARD_MS
+                : 1000 / s.project.fps,
+          );
           return;
         case 'ArrowUp':
           e.preventDefault();
