@@ -181,7 +181,7 @@ export function ColorSection({ clip }: { clip: Clip }) {
                 onClick={() => (boxed ? setSelectedKeyframesEase(e) : setClipKeyframesEase(clip.id, local, e))}
                 className={`touch-hit rounded px-1.5 py-1 text-2xs ${
                   easeAtPlayhead === e
-                    ? 'bg-brand-500/20 text-brand-300'
+                    ? 'brand-on'
                     : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                 }`}
               >

@@ -97,13 +97,13 @@ function TimeReadout() {
   };
 
   return (
-    <span className="min-w-[118px] text-center font-mono text-xs tabular-nums text-zinc-400">
+    <span className="min-w-[118px] text-center text-xs tabular-nums text-zinc-400">
       {draft !== null ? (
         <input
           autoFocus
           onFocus={(e) => e.currentTarget.select()}
           aria-label={t("transport.timecode.goto")}
-          className={`w-[62px] rounded border bg-zinc-950 px-1 text-center font-mono text-xs tabular-nums text-zinc-100 outline-none ${
+          className={`w-[62px] rounded border bg-zinc-950 px-1 text-center text-xs tabular-nums text-zinc-100 outline-none ${
             invalid ? "border-red-500" : "border-brand-500"
           }`}
           value={draft}
@@ -166,7 +166,7 @@ function ViewToolButton({ id }: { id: string }) {
     >
       <button
         className={`touch-hit rounded-lg p-2 hover:bg-zinc-800/70 active:bg-zinc-800 ${
-          command.checked ? "bg-brand-500/20 text-brand-300" : "text-zinc-400"
+          command.checked ? "brand-on" : "text-zinc-400"
         }`}
         aria-pressed={command.checked}
         onClick={command.onClick}
@@ -271,7 +271,7 @@ export function Transport() {
         {region && (
           <Tooltip label={t("transport.region.clear")}>
             <button
-              className="touch-hit rounded-lg px-2 py-1 font-mono text-2xs tabular-nums text-amber-300 hover:bg-zinc-800/70 active:bg-zinc-800"
+              className="touch-hit rounded-lg px-2 py-1 text-2xs tabular-nums text-amber-300 hover:bg-zinc-800/70 active:bg-zinc-800"
               onClick={() => setLoopRegion(null)}
             >
               {formatClock(region.startMs, fps, timeFormat)} →{" "}

@@ -173,12 +173,12 @@ export function CurvesSection({ clip }: { clip: Clip }) {
       >
         {/* Quarter grid + identity diagonal, the neutral reference. */}
         {[0.25, 0.5, 0.75].map((q) => (
-          <g key={q} stroke="#39404b" strokeWidth={0.4}>
+          <g key={q} stroke="#3f3f46" strokeWidth={0.4}>
             <line x1={q * VB} y1={0} x2={q * VB} y2={VB} />
             <line x1={0} y1={q * VB} x2={VB} y2={q * VB} />
           </g>
         ))}
-        <line x1={0} y1={VB} x2={VB} y2={0} stroke="#39404b" strokeWidth={0.5} strokeDasharray="2 2" />
+        <line x1={0} y1={VB} x2={VB} y2={0} stroke="#3f3f46" strokeWidth={0.5} strokeDasharray="2 2" />
         <path d={linePath} fill="none" stroke={color} strokeWidth={1.4} strokeLinejoin="round" />
         {pts.map((p, i) => (
           <circle
@@ -187,7 +187,7 @@ export function CurvesSection({ clip }: { clip: Clip }) {
             cy={(1 - p.y) * VB}
             r={2.4}
             fill={color}
-            stroke="#060910"
+            stroke="#09090b"
             strokeWidth={0.8}
             onDoubleClick={(e) => removePoint(i, e)}
           />

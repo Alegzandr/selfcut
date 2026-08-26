@@ -82,7 +82,7 @@ function ToolButton({ command }: { command: Command | undefined }) {
     >
       <button
         className={`touch-hit rounded-lg p-2 enabled:hover:bg-zinc-800/70 enabled:hover:bg-zinc-800/70 active:bg-zinc-800 disabled:opacity-30 ${
-          command.checked ? 'bg-brand-500/20 text-brand-300' : 'text-zinc-400'
+          command.checked ? 'brand-on' : 'text-zinc-400'
         }`}
         disabled={command.disabled}
         aria-pressed={command.checked}
@@ -248,7 +248,7 @@ export function TopBar() {
           {ASPECTS.map(({ value, titleKey }) => (
             <Tooltip key={value} label={t(titleKey)}>
               <button
-                className={`touch-hit px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'bg-brand-500/20 text-brand-300' : 'text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800'}`}
+                className={`touch-hit px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'brand-on' : 'text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800'}`}
                 onClick={() => setAspectRatio(value)}
               >
                 {value}

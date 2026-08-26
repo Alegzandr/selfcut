@@ -67,7 +67,7 @@ export function ChromaSection({ clip }: { clip: Clip }) {
               className="h-7 w-10 flex-none cursor-pointer rounded border border-zinc-700 bg-zinc-800"
               aria-label={t('inspector.chroma.color')}
             />
-            <span className="flex-1 font-mono text-2xs uppercase text-zinc-400">{key!.color}</span>
+            <span className="flex-1 text-2xs uppercase text-zinc-400">{key!.color}</span>
           </div>
           <SliderRow
             label={t('inspector.chroma.similarity')}

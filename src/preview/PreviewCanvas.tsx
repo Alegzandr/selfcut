@@ -235,7 +235,7 @@ function RenderPreviewBadge() {
     // inside the stage - so it lands on the image and never on the letterbox.
     <div
       data-render-badge
-      className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-baseline gap-2 bg-gradient-to-b from-black/65 to-transparent px-2 pb-5 pt-1.5 font-mono text-2xs uppercase tracking-widest text-zinc-200"
+      className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-baseline gap-2 bg-gradient-to-b from-black/65 to-transparent px-2 pb-5 pt-1.5 text-2xs uppercase tracking-widest text-zinc-200"
     >
       {t('preview.rendering')}
       <span className="tabular-nums tracking-normal text-zinc-400">

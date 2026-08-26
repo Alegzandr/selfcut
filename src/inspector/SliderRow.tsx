@@ -177,7 +177,7 @@ export function SliderRow({
           type="button"
           onClick={() => setDraft(toInput(value).toFixed(decimals))}
           title={t('inspector.entry.hint')}
-          className="touch-hit ml-1 w-16 flex-none rounded text-right font-mono text-xs tabular-nums text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+          className="touch-hit ml-1 w-16 flex-none rounded text-right text-xs tabular-nums text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
         >
           {format(value)}
         </button>
@@ -198,7 +198,7 @@ export function SliderRow({
             // are keystrokes here, not transport commands.
             e.stopPropagation();
           }}
-          className="ml-1 w-16 flex-none rounded border border-brand-500 bg-zinc-800 px-1 text-right font-mono text-xs tabular-nums text-zinc-100 outline-none"
+          className="ml-1 w-16 flex-none rounded border border-brand-500 bg-zinc-800 px-1 text-right text-xs tabular-nums text-zinc-100 outline-none"
         />
       )}
     </div>

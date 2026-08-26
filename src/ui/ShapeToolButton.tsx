@@ -57,7 +57,7 @@ export function ShapeToolButton() {
       <Tooltip label={t('preview.tool.shape', { shape: t(current.labelKey) })} shortcut="R">
         <button
           className={`touch-hit relative rounded-md p-1.5 hover:bg-zinc-800/80 ${
-            active ? 'bg-brand-500/20 text-brand-300' : 'text-zinc-300'
+            active ? 'brand-on' : 'text-zinc-300'
           }`}
           aria-pressed={active}
           onClick={() => setPreviewTool('shape')}

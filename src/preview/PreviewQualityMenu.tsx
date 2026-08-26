@@ -60,7 +60,7 @@ export function PreviewQualityMenu() {
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label={t("preview.quality.title")}
-          className={`touch-hit flex items-center gap-0.5 rounded-lg px-1 py-1 font-mono text-2xs tabular-nums hover:bg-zinc-800/70 active:bg-zinc-800 ${
+          className={`touch-hit flex items-center gap-0.5 rounded-lg px-1 py-1 text-2xs tabular-nums hover:bg-zinc-800/70 active:bg-zinc-800 ${
             open ? "bg-zinc-800 text-zinc-100" : "text-zinc-400"
           }`}
           onClick={() => setOpen((v) => !v)}

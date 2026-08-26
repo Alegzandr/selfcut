@@ -32,7 +32,7 @@ function ToolButton({ command }: { command: Command | undefined }) {
     >
       <button
         className={`touch-hit rounded-md p-1.5 enabled:hover:bg-zinc-800/80 disabled:opacity-30 ${
-          command.checked ? 'bg-brand-500/20 text-brand-300' : 'text-zinc-300'
+          command.checked ? 'brand-on' : 'text-zinc-300'
         }`}
         disabled={command.disabled}
         aria-pressed={command.checked}
@@ -57,7 +57,7 @@ function PenToolButton() {
     <Tooltip label={t('preview.tool.pen.name')}>
       <button
         className={`touch-hit rounded-md p-1.5 enabled:hover:bg-zinc-800/80 disabled:opacity-30 ${
-          active ? 'bg-brand-500/20 text-brand-300' : 'text-zinc-300'
+          active ? 'brand-on' : 'text-zinc-300'
         }`}
         disabled={!hasSelection}
         aria-pressed={active}

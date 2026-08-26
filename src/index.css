@@ -51,25 +51,6 @@
   --color-violet-900: oklch(28% 0.13 292);
   --color-violet-950: oklch(18.5% 0.085 293);
 
-  /* Chrome neutrals, retinted.
-
-     Tailwind's zinc sits at hue 286 with almost no chroma, which reads as a
-     dead grey next to the brand blue. These keep every lightness value zinc
-     had (so no contrast pair moves) and only rotate the hue between the two
-     brand hues, with a little more chroma in the deep steps where the panels,
-     toolbars and timeline live. The result is a cool slate that belongs to the
-     same family as the accent instead of sitting beside it. */
-  --color-zinc-50: oklch(98.5% 0.002 258);
-  --color-zinc-100: oklch(96.7% 0.004 258);
-  --color-zinc-200: oklch(92% 0.007 258);
-  --color-zinc-300: oklch(87.1% 0.011 258);
-  --color-zinc-400: oklch(70.5% 0.019 258);
-  --color-zinc-500: oklch(55.2% 0.021 258);
-  --color-zinc-600: oklch(44.2% 0.022 258);
-  --color-zinc-700: oklch(37% 0.021 258);
-  --color-zinc-800: oklch(27.4% 0.019 258);
-  --color-zinc-900: oklch(21% 0.018 258);
-  --color-zinc-950: oklch(14.1% 0.016 258);
 }
 
 @theme {
@@ -100,6 +81,39 @@
     to {
       transform: translateX(-320px);
     }
+  }
+}
+
+/* The "on" state of every toggle, segmented control and tool button.
+
+   Spelled once because it appeared verbatim at ~20 call sites, and because it
+   is the single most repeated piece of brand in the chrome: whichever tool,
+   aspect ratio or channel mode is armed is the app saying "this one" in
+   SelfCut blue.
+
+   Deliberately the deep end of the ramp rather than the bright one. A wash of
+   `brand-500` over zinc reads teal, indistinguishable from any editor's default
+   cyan highlight; `brand-700` at 45% lands on the indigo half of the brand
+   gradient, which nothing else in the category looks like. The `brand-200`
+   label clears AA comfortably at 8.8:1 on that fill. */
+@utility brand-on {
+  background-color: color-mix(in oklab, var(--color-brand-700) 45%, transparent);
+  color: var(--color-brand-200);
+}
+
+/* A quiet brand-tinted action: the media library's import and add buttons.
+   Same indigo as `brand-on`, but it responds to the pointer because it does
+   something rather than reporting a state. */
+@utility brand-quiet {
+  background-color: color-mix(in oklab, var(--color-brand-700) 40%, transparent);
+  color: var(--color-brand-200);
+
+  &:hover {
+    background-color: color-mix(in oklab, var(--color-brand-700) 60%, transparent);
+  }
+
+  &:active {
+    background-color: color-mix(in oklab, var(--color-brand-700) 78%, transparent);
   }
 }
 

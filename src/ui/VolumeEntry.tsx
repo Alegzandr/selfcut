@@ -116,7 +116,7 @@ function VolumeEntryPanel({
             else if (e.key === 'Escape') onClose();
             e.stopPropagation();
           }}
-          className="w-20 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-right font-mono text-xs text-zinc-200 outline-none focus:border-brand-500"
+          className="w-20 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-xs tabular-nums text-zinc-200 outline-none focus:border-brand-500"
         />
         <span className="text-xs text-zinc-400">dB</span>
       </div>

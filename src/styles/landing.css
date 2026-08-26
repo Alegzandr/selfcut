@@ -58,15 +58,15 @@
      pixel-identical to the real thing - so both read from one set of values
      rather than from two eyeballed approximations. Keep in sync with the `@theme`
      block in `src/index.css` when the app's palette moves. */
-  --zinc-100: oklch(96.7% 0.004 258);
-  --zinc-200: oklch(92% 0.007 258);
-  --zinc-300: oklch(87.1% 0.011 258);
-  --zinc-400: oklch(70.5% 0.019 258);
-  --zinc-500: oklch(55.2% 0.021 258);
-  --zinc-700: oklch(37% 0.021 258);
-  --zinc-800: oklch(27.4% 0.019 258);
-  --zinc-900: oklch(21% 0.018 258);
-  --zinc-950: oklch(14.1% 0.016 258);
+  --zinc-100: oklch(96.7% 0.001 286.375);
+  --zinc-200: oklch(92% 0.004 286.32);
+  --zinc-300: oklch(87.1% 0.006 286.286);
+  --zinc-400: oklch(70.5% 0.015 286.067);
+  --zinc-500: oklch(55.2% 0.016 285.938);
+  --zinc-700: oklch(37% 0.013 285.805);
+  --zinc-800: oklch(27.4% 0.006 286.033);
+  --zinc-900: oklch(21% 0.006 285.885);
+  --zinc-950: oklch(14.1% 0.005 285.823);
   --brand-300: oklch(81.5% 0.098 231.5);
   --brand-400: oklch(75.5% 0.121 232.5);
   --brand-500: oklch(68.7% 0.14 234);
@@ -88,7 +88,7 @@
   /* Not zinc-500: the editor uses it for chrome a user is already looking at,
      but on this page it carries the footer and the CTA notes, and against
      zinc-950 it lands at 4.1:1 - under AA. Nudged up until it clears 4.5. */
-  --faint: oklch(61% 0.021 258);
+  --faint: oklch(61% 0.016 285.938);
   --accent: var(--brand-500);
   --accent-text: var(--brand-300);
 
@@ -99,7 +99,6 @@
   --font-text: 'Madefor Text', system-ui, sans-serif;
   --font-app:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --pad: clamp(1.25rem, 4vw, 4rem);
   --measure: 62ch;

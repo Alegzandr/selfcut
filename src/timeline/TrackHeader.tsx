@@ -200,7 +200,7 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
                   to carry no identity at all, so two audio tracks were the same
                   row of glyphs twice over. */}
               <span
-                className="min-w-0 flex-1 truncate font-mono text-3xs font-medium tracking-wide text-zinc-400"
+                className="min-w-0 flex-1 truncate text-3xs font-medium tracking-wide text-zinc-400"
                 title={t(video ? 'a11y.track.video' : 'a11y.track.audio', { n: ordinal })}
               >
                 {t(video ? 'track.label.video' : 'track.label.audio', { n: ordinal })}
@@ -319,7 +319,7 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
             {badgeAt &&
               createPortal(
                 <div
-                  className="pointer-events-none fixed z-[200] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-zinc-950/85 px-1 py-0.5 font-mono text-3xs leading-tight text-zinc-100 shadow"
+                  className="pointer-events-none fixed z-[200] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-zinc-950/85 px-1 py-0.5 text-3xs tabular-nums leading-tight text-zinc-100 shadow"
                   style={{ left: badgeAt.left, top: badgeAt.top }}
                 >
                   {badgeAt.kind === 'volume'

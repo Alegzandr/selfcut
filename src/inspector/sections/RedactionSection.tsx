@@ -87,7 +87,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
           <div
             key={region.id}
             className={`space-y-2 rounded-md border px-2 py-1.5 ${
-              open ? 'border-brand-500/40 bg-brand-500/5' : 'border-zinc-800 bg-zinc-900/40'
+              open ? 'border-brand-600/50 bg-brand-700/15' : 'border-zinc-800 bg-zinc-900/40'
             }`}
           >
             <div className="flex items-center gap-1.5">
@@ -143,7 +143,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                         onClick={() => commit({ mode })}
                         className={`touch-hit flex-1 rounded px-2 py-1 text-2xs ${
                           active.mode === mode
-                            ? 'bg-brand-500/20 text-brand-300'
+                            ? 'brand-on'
                             : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                         }`}
                       >
@@ -177,7 +177,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                         onClick={() => commit({ shape: s })}
                         className={`touch-hit flex-1 rounded px-2 py-1 text-2xs ${
                           active.shape === s
-                            ? 'bg-brand-500/20 text-brand-300'
+                            ? 'brand-on'
                             : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                         }`}
                       >
@@ -192,7 +192,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                       onClick={() => useStore.getState().setPreviewTool('pen')}
                       className={`touch-hit flex-1 rounded px-2 py-1 text-2xs ${
                         active.shape === 'path'
-                          ? 'bg-brand-500/20 text-brand-300'
+                          ? 'brand-on'
                           : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                       }`}
                     >

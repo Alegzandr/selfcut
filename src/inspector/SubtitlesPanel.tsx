@@ -489,13 +489,13 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
     <li
       className={`group rounded-md border px-2.5 py-2 ${
         selected
-          ? 'border-brand-500/70 bg-brand-500/10'
+          ? 'border-brand-600/80 bg-brand-700/25'
           : 'border-zinc-800 bg-zinc-900/60'
       }`}
     >
       <div className="flex items-center gap-2">
         <button
-          className="font-mono text-2xs tabular-nums text-zinc-500 hover:text-brand-400"
+          className="text-2xs tabular-nums text-zinc-500 hover:text-brand-400"
           title={t('subtitles.goto')}
           onClick={focusCue}
         >

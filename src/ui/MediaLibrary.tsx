@@ -60,7 +60,7 @@ function LibraryTabs() {
           // min-w-0 + truncate: the column narrows to 160px and the labels are
           // translated, so a long word must shrink rather than push the strip.
           className={`min-w-0 flex-1 truncate rounded px-1.5 py-1 text-2xs font-medium ${
-            tab === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'
+            tab === id ? 'brand-on' : 'text-zinc-400 hover:text-zinc-200'
           }`}
           onClick={() => useStore.getState().setLibraryTab(id)}
           aria-current={tab === id}
@@ -110,7 +110,7 @@ export function MediaLibrary() {
             import entry point in reach - the timeline dropzone is gone. */}
         <Tooltip label={t('library.import')}>
           <button
-            className="touch-hit ml-auto rounded bg-brand-500/15 p-1 text-brand-300 hover:bg-brand-500/25 active:bg-brand-500/30 pointer-coarse:p-2"
+            className="touch-hit ml-auto rounded p-1 brand-quiet pointer-coarse:p-2"
             onClick={importHere}
             aria-label={t('library.import')}
           >
@@ -290,7 +290,7 @@ function TrackAction({
       <div className="flex justify-end">
         <Tooltip label={hint}>
           <button
-            className="touch-hit rounded bg-brand-500/15 px-1.5 py-0.5 text-4xs font-medium text-brand-300 hover:bg-brand-500/25 active:bg-brand-500/30 pointer-coarse:p-2"
+            className="touch-hit rounded px-1.5 py-0.5 text-4xs font-medium brand-quiet pointer-coarse:p-2"
             onClick={onClick}
           >
             {icon}
@@ -627,7 +627,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
         ) : (
           <Tooltip label={t('library.add')}>
             <button
-              className="touch-hit flex-none rounded bg-brand-500/15 p-1 text-brand-300 hover:bg-brand-500/25 active:bg-brand-500/30 pointer-coarse:p-2"
+              className="touch-hit flex-none rounded p-1 brand-quiet pointer-coarse:p-2"
               onClick={() => {
                 addClipFromAsset(asset.id);
                 // Mobile drawer: close it so the freshly placed clip is visible.

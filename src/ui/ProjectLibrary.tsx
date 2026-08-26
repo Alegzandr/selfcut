@@ -106,7 +106,7 @@ export function ProjectLibrary() {
                       <li
                         key={p.id}
                         className={`group flex items-center gap-2 rounded-lg px-3 py-2 ${
-                          isCurrent ? 'bg-brand-500/10' : 'hover:bg-zinc-800/70'
+                          isCurrent ? 'bg-brand-700/25' : 'hover:bg-zinc-800/70'
                         }`}
                       >
                         <div className="min-w-0 flex-1">

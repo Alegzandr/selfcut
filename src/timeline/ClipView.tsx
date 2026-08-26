@@ -295,7 +295,7 @@ export const ClipView = memo(function ClipView({
           bubble and the pro-NLE numeric feedback in one. Store-held so it
           survives the remount when the drag crosses onto another track. */}
       {dragBadgeText && (
-        <div className="pointer-events-none absolute left-1/2 top-1 z-30 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-950/85 px-1.5 py-0.5 font-mono text-3xs leading-tight text-zinc-100 shadow">
+        <div className="pointer-events-none absolute left-1/2 top-1 z-30 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-950/85 px-1.5 py-0.5 text-3xs tabular-nums leading-tight text-zinc-100 shadow">
           {dragBadgeText}
         </div>
       )}

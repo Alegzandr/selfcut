@@ -264,7 +264,7 @@ export function ExportSheet() {
                       onClick={() => setGroup(section.group)}
                       className={`touch-hit flex-1 rounded-lg px-2 py-1.5 text-2xs font-medium ${
                         section.group === active.group
-                          ? 'bg-brand-500/20 text-brand-300'
+                          ? 'brand-on'
                           : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                       }`}
                     >
@@ -287,7 +287,7 @@ export function ExportSheet() {
                     return (
                       <button
                         key={preset.id}
-                        className={`block w-full rounded-xl border p-3 text-left ${selected.id === preset.id ? 'border-brand-500 bg-brand-500/10' : 'border-zinc-700 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'}`}
+                        className={`block w-full rounded-xl border p-3 text-left ${selected.id === preset.id ? 'border-brand-600 bg-brand-700/25' : 'border-zinc-700 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'}`}
                         onClick={() => setSelectedId(preset.id)}
                       >
                         <div className="text-sm font-medium text-zinc-100">
@@ -346,7 +346,7 @@ export function ExportSheet() {
                       className="h-3.5 w-3.5 accent-amber-400"
                     />
                     {t('export.regionOnly')}{' '}
-                    <span className="font-mono text-amber-200">
+                    <span className="tabular-nums text-amber-200">
                       {formatTime(region.startMs)} → {formatTime(region.endMs)}
                     </span>
                   </label>
@@ -418,11 +418,11 @@ export function ExportSheet() {
               <div className="space-y-3 py-2 text-center">
                 <CheckCircledIcon className="mx-auto h-8 w-8 text-emerald-400" />
                 <p className="text-sm text-zinc-200">
-                  {/* The file name keeps its monospace styling, hence <Trans>. */}
+                  {/* The file name keeps its own size, hence <Trans>. */}
                   <Trans
                     i18nKey="export.saved"
                     values={{ filename: phase.filename }}
-                    components={{ name: <span className="font-mono text-xs" /> }}
+                    components={{ name: <span className="text-xs" /> }}
                   />
                 </p>
                 <div className="flex gap-2">

@@ -47,7 +47,7 @@ export function PerfOverlay() {
 
   return (
     <div
-      className="pointer-events-auto absolute right-2 top-2 z-30 w-60 select-none rounded border border-zinc-700 bg-zinc-900/95 p-2 font-mono text-[10px] leading-relaxed text-zinc-300 shadow-lg"
+      className="pointer-events-auto absolute right-2 top-2 z-30 w-60 select-none rounded border border-zinc-700 bg-zinc-900/95 p-2 text-[10px] leading-relaxed text-zinc-300 shadow-lg"
       role="status"
       aria-label="Performance"
     >

@@ -208,7 +208,7 @@ export function TrackPickerDialog({
                             ) : (
                               <Tooltip label={actionHint}>
                                 <button
-                                  className="touch-hit flex-none rounded-lg bg-brand-500/15 px-2.5 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/25 active:bg-brand-500/30"
+                                  className="touch-hit flex-none rounded-lg px-2.5 py-1.5 text-xs font-medium brand-quiet"
                                   onClick={() => onPick([track.index])}
                                 >
                                   {icon}
@@ -234,7 +234,7 @@ export function TrackPickerDialog({
                 </span>
                 <Tooltip label={actionHint}>
                   <button
-                    className="touch-hit flex-none rounded-lg bg-brand-500/15 px-3 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/25 active:bg-brand-500/30 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-400"
+                    className="touch-hit flex-none rounded-lg px-3 py-1.5 text-xs font-medium brand-quiet disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-400"
                     disabled={picked.length === 0}
                     onClick={() => onPick(picked)}
                   >

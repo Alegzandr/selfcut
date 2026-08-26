@@ -73,7 +73,7 @@ function InspectorTabs({ cueCount }: { cueCount: number }) {
           role="tab"
           aria-selected={tab === id}
           className={`relative flex flex-1 items-center justify-center gap-1.5 overflow-hidden rounded-md px-2 py-1 text-xs font-medium ${
-            tab === id ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'
+            tab === id ? 'brand-on' : 'text-zinc-400 hover:text-zinc-200'
           }`}
           onClick={() => setInspectorTab(id)}
         >

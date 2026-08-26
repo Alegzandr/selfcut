@@ -234,7 +234,7 @@ export function Timeline() {
                 so translators keep control of the word order around them. */}
             <Trans
               i18nKey="timeline.hint"
-              components={{ kbd: <kbd className="font-mono text-zinc-500" /> }}
+              components={{ kbd: <kbd className="text-zinc-500" /> }}
             />
           </p>
         )}

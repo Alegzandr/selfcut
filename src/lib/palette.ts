@@ -8,9 +8,8 @@
  * that vocabulary drifts apart.
  *
  * The keys mirror the utility-class names so a value can be checked against the
- * class used for the same semantic in neighbouring markup. `brand*` and `zinc*`
- * are SelfCut's own ramps (see the `@theme` block in `index.css`), not
- * Tailwind's stock ones, so the hexes here are the retinted values.
+ * class used for the same semantic in neighbouring markup. `brand*` is SelfCut's
+ * own ramp (see the `@theme` block in `index.css`); the rest are Tailwind's.
  */
 const TW = {
   brand300: '#7dcef7',
@@ -19,9 +18,9 @@ const TW = {
   emerald300: '#6ee7b7',
   emerald400: '#34d399',
   red400: '#f87171',
-  zinc700: '#39404b',
-  zinc900: '#131921',
-  zinc950: '#060910',
+  zinc700: '#3f3f46',
+  zinc900: '#18181b',
+  zinc950: '#09090b',
 } as const;
 
 /**

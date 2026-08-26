@@ -37,7 +37,7 @@ export function MasterVolume() {
       onMouseLeave={() => setActive(false)}
     >
       <span
-        className={`w-14 select-none text-right font-mono text-3xs tabular-nums text-zinc-500 transition-opacity ${
+        className={`w-14 select-none text-right text-3xs tabular-nums text-zinc-500 transition-opacity ${
           active ? 'opacity-100' : 'opacity-0'
         }`}
         aria-hidden

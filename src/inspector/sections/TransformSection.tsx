@@ -105,7 +105,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
         <div className="flex items-center gap-2">
           <Tooltip label={t('inspector.crop.hint')}>
             <button
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-2xs font-medium ${cropEditing ? 'bg-brand-500/20 text-brand-300' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'}`}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-2xs font-medium ${cropEditing ? 'brand-on' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'}`}
               onClick={() => setCropEditing(!cropEditing)}
             >
               <CropIcon className="h-3.5 w-3.5" />
@@ -164,7 +164,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
                 }
                 className={`touch-hit rounded px-1.5 py-1 text-2xs ${
                   activeEase === e
-                    ? 'bg-brand-500/20 text-brand-300'
+                    ? 'brand-on'
                     : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
                 }`}
               >
