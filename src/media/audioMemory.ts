@@ -1,83 +1,23 @@
-import { AudioTrackInfo, isTrackPlayable } from '../types';
-
 /**
- * What a full audio decode is going to cost, and what the machine can afford.
+ * How much decoded audio this machine can afford to hold.
  *
- * The decode strategy is deliberate: every source audio track is decoded once
- * into a single `AudioBuffer` (see `mediaCache.ts`), which is instant to
- * schedule and identical for the preview and the export. It is also the
- * heaviest thing the editor holds - 48 kHz stereo float is ~23 MB per minute -
- * so it has to fail on purpose rather than by accident.
+ * Decoded PCM is the heaviest thing the editor keeps - 48 kHz stereo float is
+ * ~23 MB per minute - so how much of it is live has to be a decision rather
+ * than an accident. It used to be neither: every source track was decoded whole
+ * into one `AudioBuffer`, which made an hour-long recording a 1.4 GB allocation
+ * that no eviction could rescue, since there is nothing to free that makes a
+ * single object fit.
  *
- * Two failures are possible and they are not the same problem:
- *
- * 1. **One track too large.** A 90-minute stereo podcast is a 2 GB buffer, in
- *    ONE indivisible allocation. No eviction can help: there is nothing to free
- *    that makes a single object fit. This is the case that kills the tab, and
- *    the only one worth warning about before decoding.
- * 2. **A batch larger than the budget.** Nothing crashes - the LRU in
- *    `mediaCache` handles it - but the cache thrashes: decode, evict, decode
- *    again on the next scrub. Worth a word, not an alarm.
+ * Audio is now decoded in segments (see `audioSegments.ts`), so no single
+ * allocation is ever large and what is held is a function of what is being
+ * played. That turns the question from "will this file fit?" - which had no
+ * good answer, and produced a warning at import that the user could do nothing
+ * about - into "how much of the timeline stays warm?", which is what the budget
+ * below sets and what `mediaCache`'s LRU enforces.
  *
  * Everything here is pure and testable without a browser; `readMemoryEnv` is
  * the one impure function, and it only reads.
  */
-
-/** A decoded sample is one f32 per channel. */
-const BYTES_PER_SAMPLE = 4;
-
-/**
- * Assumed when the container does not state a rate. 48 kHz is what browsers
- * decode to in practice, and guessing low here would under-estimate the very
- * thing this module exists to bound.
- */
-export const DEFAULT_SAMPLE_RATE = 48_000;
-
-/**
- * Bytes one track occupies once decoded.
- *
- * Mirrors `decodeFullAudio`'s own allocation, second of slack included: the
- * point is to predict the exact object that is about to be created, not to
- * describe audio in general.
- */
-export function decodedTrackBytes(
-  durationMs: number,
-  track: { sampleRate?: number; channels?: number },
-): number {
-  const sampleRate = track.sampleRate && track.sampleRate > 0 ? track.sampleRate : DEFAULT_SAMPLE_RATE;
-  const channels = Math.max(1, track.channels ?? 2);
-  const frames = Math.ceil((Math.max(0, durationMs) / 1000) * sampleRate) + sampleRate;
-  return frames * channels * BYTES_PER_SAMPLE;
-}
-
-/** One track of an asset, sized. */
-export interface TrackEstimate {
-  /** `AudioTrackInfo.index`, i.e. what a clip stores in `audioTrackIndex`. */
-  index: number;
-  bytes: number;
-}
-
-/**
- * Size every track that would actually be decoded. Undecodable tracks are
- * skipped: they decode to nothing until an explicit transcode, which is a
- * different path with its own progress and its own cache.
- */
-export function estimateAudioTracks(
-  durationMs: number,
-  tracks: readonly AudioTrackInfo[],
-): TrackEstimate[] {
-  return tracks
-    .filter(isTrackPlayable)
-    .map((track) => ({ index: track.index, bytes: decodedTrackBytes(durationMs, track) }));
-}
-
-/** What an import adds to the cache if every playable track is decoded. */
-export function estimateAssetBytes(
-  durationMs: number,
-  tracks: readonly AudioTrackInfo[],
-): number {
-  return estimateAudioTracks(durationMs, tracks).reduce((sum, track) => sum + track.bytes, 0);
-}
 
 /** What the machine will admit about itself. Every field is optional on purpose. */
 export interface MemoryEnv {
@@ -120,9 +60,10 @@ const ASSUMED_HANDHELD_GB = 2;
  * Derived from the machine for the same reason the on-disk cache derives its
  * own budget from the storage quota: the right number is a property of the
  * device, not something the app can guess. The floor keeps a browser that
- * under-reports from disabling the cache outright - one track still has to fit,
- * which is the case it exists for - and the ceiling stops a 64 GB workstation
- * from handing us a budget large enough to be the problem again.
+ * under-reports from thrashing - it is several minutes of decoded audio either
+ * way, far more than the window around the playhead needs - and the ceiling
+ * stops a 64 GB workstation from handing us a budget large enough to be the
+ * problem again.
  */
 export function audioCacheBudgetBytes(env: MemoryEnv = {}): number {
   const gb = env.deviceMemoryGb ?? (env.coarsePointer ? ASSUMED_HANDHELD_GB : ASSUMED_DESKTOP_GB);
@@ -132,32 +73,6 @@ export function audioCacheBudgetBytes(env: MemoryEnv = {}): number {
     heapLimit != null && isFinite(heapLimit) && heapLimit > 0 ? heapLimit * HEAP_SHARE : Infinity;
   return Math.round(Math.min(MAX_BUDGET_BYTES, Math.max(MIN_BUDGET_BYTES, Math.min(fromRam, fromHeap))));
 }
-
-/**
- * The largest single track worth decoding up front.
- *
- * Half the budget rather than a second machine heuristic: one number to reason
- * about, and it already tracks the device. On a machine reporting 4 GB that is
- * ~429 MB, about 18 minutes of 48 kHz stereo - which the short-form editing
- * this targets never reaches, and which a two-hour rip exceeds immediately. A
- * guard should be invisible in the use case and present outside it.
- *
- * Note what being over the cap does and does not mean: the track is not
- * refused, it is not decoded on speculation. Putting the clip on the timeline
- * still decodes it, because that is the user asking.
- */
-export function trackDecodeCapBytes(budgetBytes: number): number {
-  return Math.round(budgetBytes * 0.5);
-}
-
-/**
- * How far past the budget a single import goes before it is worth mentioning.
- *
- * Not an error and barely a warning: the cache evicts, so the cost is a
- * re-decode, not a failure. Twice the budget keeps the notice off a normal
- * folder drop.
- */
-export const BATCH_NOTICE_FACTOR = 2;
 
 /**
  * Whether a caught error is the browser refusing to allocate.
@@ -179,9 +94,10 @@ export function isAllocationFailure(err: unknown): boolean {
  * A decode that ran out of room, carrying what a message needs to name it.
  *
  * The point of the type is that the failure stops being anonymous: without it
- * an allocation failure is swallowed by the cache's `catch`, the track is
- * silently null, and the user gets a mute clip with no explanation - or, when
- * it happens during an export, a video whose sound is simply missing.
+ * an allocation failure is swallowed by the cache's `catch`, the segment is
+ * silently null, and the user gets a clip that goes quiet for half a minute
+ * with no explanation - or, when it happens during an export, a video whose
+ * sound is simply missing.
  */
 export class AudioMemoryError extends Error {
   constructor(

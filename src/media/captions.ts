@@ -1,7 +1,8 @@
 import { Clip, MediaAsset } from '../types';
 import type { SubtitleCue } from '../lib/subtitles';
 import { clipDurationMs, clipEndMs } from '../model';
-import { getAudioBuffer } from './mediaCache';
+import { getAudioSegment } from './mediaCache';
+import { segmentIndexes } from './audioSegments';
 import type {
   CaptionReply,
   CaptionRequest,
@@ -86,7 +87,17 @@ export function normalizeSpeech(samples: Float32Array): Float32Array {
 
 /**
  * Whisper wants mono 16 kHz: render the clip's source span through an offline
- * context, which resamples and downmixes to one channel in one pass.
+ * context, which resamples and downmixes to one channel.
+ *
+ * One segment at a time (see `audioSegments.ts`), because the source is decoded
+ * that way: transcribing an hour-long take would otherwise mean holding 1.4 GB
+ * of 48 kHz stereo to produce 230 MB of 16 kHz mono. Only the 16 kHz result is
+ * kept whole, which is what the model is handed.
+ *
+ * Each piece is written at the position its own timestamp gives it rather than
+ * after the previous one, so a rounding error cannot accumulate across an hour
+ * of segments, and a segment missing from the middle of a source leaves silence
+ * of the right length instead of pulling the rest of the transcript early.
  *
  * With `enhance`, the render also runs the speech chain. It is off by default:
  * benchmarked against the untouched audio it cost accuracy rather than buying
@@ -99,40 +110,73 @@ export function normalizeSpeech(samples: Float32Array): Float32Array {
  *    mumbled aside, so one pass of levelling suits the whole clip;
  *  - normalisation: see `normalizeSpeech`.
  *
+ * The chain restarts on each piece, so its filters have no history across a
+ * boundary. At 30 s apart on speech that is inaudible to the model, and the
+ * alternative - one context over the whole span - is the allocation this exists
+ * to avoid.
+ *
  * Deliberately NOT here: source separation (a second model download, and it
  * costs more than it gains once the voice is levelled) and noise gating (it
  * clips word onsets, and a swallowed first syllable is worse than a noisy one).
  */
 async function extractMono16k(
-  buffer: AudioBuffer,
-  startSec: number,
-  durationSec: number,
+  asset: MediaAsset,
+  audioTrackIndex: number | undefined,
+  fromMs: number,
+  toMs: number,
   enhance: boolean,
+  signal?: AbortSignal,
 ): Promise<Float32Array> {
-  const frames = Math.max(1, Math.ceil(durationSec * 16000));
-  const ctx = new OfflineAudioContext(1, frames, 16000);
-  const src = ctx.createBufferSource();
-  src.buffer = buffer;
-  if (enhance) {
-    const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = 80;
-    hp.Q.value = 0.7;
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -24;
-    comp.knee.value = 12;
-    comp.ratio.value = 4;
-    comp.attack.value = 0.005;
-    comp.release.value = 0.15;
-    src.connect(hp).connect(comp).connect(ctx.destination);
-  } else {
-    src.connect(ctx.destination);
+  const totalFrames = Math.max(1, Math.ceil(((toMs - fromMs) / 1000) * CAPTION_SAMPLE_RATE));
+  const out = new Float32Array(totalFrames);
+
+  for (const index of segmentIndexes(fromMs, toMs)) {
+    if (signal?.aborted) return out;
+    const segment = await getAudioSegment(asset, audioTrackIndex, index);
+    if (!segment) continue;
+    const segmentEndMs =
+      segment.startMs + (segment.buffer.length / segment.buffer.sampleRate) * 1000;
+    const partFrom = Math.max(fromMs, segment.startMs);
+    const partTo = Math.min(toMs, segmentEndMs);
+    if (partTo <= partFrom) continue;
+
+    const at = Math.round(((partFrom - fromMs) / 1000) * CAPTION_SAMPLE_RATE);
+    const frames = Math.min(
+      totalFrames - at,
+      Math.max(1, Math.round(((partTo - partFrom) / 1000) * CAPTION_SAMPLE_RATE)),
+    );
+    if (frames <= 0) continue;
+
+    const ctx = new OfflineAudioContext(1, frames, CAPTION_SAMPLE_RATE);
+    const src = ctx.createBufferSource();
+    src.buffer = segment.buffer;
+    if (enhance) {
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 80;
+      hp.Q.value = 0.7;
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -24;
+      comp.knee.value = 12;
+      comp.ratio.value = 4;
+      comp.attack.value = 0.005;
+      comp.release.value = 0.15;
+      src.connect(hp).connect(comp).connect(ctx.destination);
+    } else {
+      src.connect(ctx.destination);
+    }
+    src.start(0, (partFrom - segment.startMs) / 1000, (partTo - partFrom) / 1000);
+    const rendered = await ctx.startRendering();
+    out.set(rendered.getChannelData(0).subarray(0, frames), at);
   }
-  src.start(0, Math.max(0, startSec), durationSec);
-  const rendered = await ctx.startRendering();
-  const mono = rendered.getChannelData(0).slice();
-  return enhance ? normalizeSpeech(mono) : mono;
+
+  // Levelled over the whole span, not per piece: an RMS read from 30 s of a
+  // take would move the gain every time the speaker paused.
+  return enhance ? normalizeSpeech(out) : out;
 }
+
+/** What Whisper is trained on, and the only rate it is fed. */
+const CAPTION_SAMPLE_RATE = 16000;
 
 /**
  * Map Whisper segments (seconds, audio-relative) to timeline cues for `clip`,
@@ -174,14 +218,13 @@ export async function generateCaptions(
 ): Promise<SubtitleCue[] | null> {
   if (!asset.hasAudio || clipDurationMs(clip) <= 0) return null;
   const trackIndex = opts.audioTrackIndex ?? clip.audioTrackIndex;
-  const buffer = await getAudioBuffer(asset, trackIndex);
-  if (!buffer || signal?.aborted) return null;
-
   const audio = await extractMono16k(
-    buffer,
-    clip.sourceInMs / 1000,
-    (clip.sourceOutMs - clip.sourceInMs) / 1000,
+    asset,
+    trackIndex,
+    clip.sourceInMs,
+    clip.sourceOutMs,
     opts.enhanceVoice === true,
+    signal,
   );
   if (signal?.aborted) return null;
 

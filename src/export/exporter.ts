@@ -1,8 +1,9 @@
-import { LoopRegion, MediaAsset, Project } from '../types';
+import { Clip, LoopRegion, MediaAsset, Project } from '../types';
 import { clipEndMs, delegatedLinkIds, projectDurationMs } from '../model';
 import { AUDIO_SAMPLE_RATE } from '../app/config';
 import { t } from '../i18n';
-import { audioKey, getAudioBuffer } from '../media/mediaCache';
+import { audioKey, getAudioRange } from '../media/mediaCache';
+import { AudioSegment, segmentIndexes } from '../media/audioSegments';
 import { decodeImageFile } from '../media/stillImage';
 import { scheduleProjectAudio } from '../preview/audioMix';
 import { openExportScratch, readExportScratch } from '../lib/opfs';
@@ -259,9 +260,9 @@ export function startExport(
     }
 
     onProgress(0.02);
-    // Decodes the sources the mix needs and works out its shape; the samples
-    // themselves are rendered slice by slice, as the worker asks for them.
-    const mix = await prepareAudioMix(project, assets, startMs, durationMs);
+    // Works out the mix's shape; the samples themselves - and the source
+    // segments they read - are produced slice by slice, as the worker asks.
+    const mix = prepareAudioMix(project, assets, startMs, durationMs);
     if (canceled) throw new Error(t('errors.export.canceled'));
     onProgress(0.1);
     if (preset.kind === 'mp3' && !mix) {
@@ -466,6 +467,12 @@ export function startExport(
  * peak at one slice instead of the whole timeline. An hour of stereo 48 kHz is
  * 690 MB as one block, and 1.9 MB a slice at a time.
  *
+ * The sources feeding it are streamed the same way. Each slice decodes only the
+ * segments its own span reads (see `audioSegments.ts`) and holds them for the
+ * length of the render, so exporting an hour-long recording costs a window of
+ * decoded audio rather than the whole source - which used to be 1.4 GB in one
+ * allocation, and simply failed.
+ *
  * Slice boundaries are exact sample counts, so nothing drifts: slice `n` starts
  * at sample `offset` and the timeline position it renders from is derived from
  * that sample, not accumulated.
@@ -473,12 +480,19 @@ export function startExport(
 class AudioMixRenderer {
   constructor(
     private readonly project: Project,
-    private readonly buffers: Map<string, AudioBuffer | null>,
+    private readonly assets: Record<string, MediaAsset>,
     private readonly startMs: number,
     readonly info: AudioMixInfo,
   ) {}
 
   async render(offset: number, frames: number): Promise<Float32Array[]> {
+    const fromMs = this.startMs + (offset / this.info.sampleRate) * 1000;
+    const durationMs = (Math.max(1, frames) / this.info.sampleRate) * 1000;
+    // Decoded first and held for the whole render: the scheduler reads what is
+    // in hand synchronously, and a cache eviction between the decode and the
+    // schedule would silently drop part of the slice.
+    const held = await decodeSliceSegments(this.project, this.assets, fromMs, durationMs);
+
     const ctx = new OfflineAudioContext(
       this.info.channelCount,
       Math.max(1, frames),
@@ -491,9 +505,19 @@ class AudioMixRenderer {
       ctx,
       ctx.destination,
       this.project,
-      (id, audioTrackIndex) => this.buffers.get(audioKey(id, audioTrackIndex)) ?? null,
-      this.startMs + (offset / this.info.sampleRate) * 1000,
+      (assetId, audioTrackIndex, segFromMs, segToMs) => {
+        const byIndex = held.get(audioKey(assetId, audioTrackIndex));
+        if (!byIndex) return [];
+        const out: AudioSegment[] = [];
+        for (const index of segmentIndexes(segFromMs, segToMs)) {
+          const segment = byIndex.get(index);
+          if (segment) out.push(segment);
+        }
+        return out;
+      },
+      fromMs,
       0,
+      durationMs,
     );
     const rendered = await ctx.startRendering();
     const channels: Float32Array[] = [];
@@ -502,17 +526,20 @@ class AudioMixRenderer {
   }
 }
 
-/** Prepare the mix: decode every source it needs, and describe its shape. */
-async function prepareAudioMix(
+/**
+ * Every clip audible in a span, with the asset it reads.
+ *
+ * Shared by the slice decoder and the "is there any sound at all" pass, so the
+ * two can never disagree about what the mix contains - a mismatch there is
+ * either a silent AAC track forced into the file or a slice missing its audio.
+ */
+function audibleClips(
   project: Project,
   assets: Record<string, MediaAsset>,
   startMs: number,
   durationMs: number,
-): Promise<AudioMixRenderer | null> {
-  const buffers = new Map<string, AudioBuffer | null>();
-  const pending: Promise<void>[] = [];
-  let hasAudibleClip = false;
-
+): { clip: Clip; asset: MediaAsset }[] {
+  const out: { clip: Clip; asset: MediaAsset }[] = [];
   const delegated = delegatedLinkIds(project);
   for (const track of project.tracks) {
     if (track.muted) continue;
@@ -526,28 +553,58 @@ async function prepareAudioMix(
       if (clip.timelineStartMs >= startMs + durationMs) continue;
       const asset = assets[clip.assetId];
       if (!asset?.hasAudio) continue;
-      const key = audioKey(asset.id, clip.audioTrackIndex);
-      // Kicked off, not awaited: decoding one source at a time serialized the
-      // whole pre-roll of an export, and these decodes are independent.
-      if (!buffers.has(key)) {
-        buffers.set(key, null);
-        pending.push(
-          getAudioBuffer(asset, clip.audioTrackIndex).then((buffer) => {
-            buffers.set(key, buffer);
-          }),
-        );
-      }
-      // An asset with an audio track counts as audible here; a source that
-      // turns out to decode to nothing is filtered out below.
-      hasAudibleClip = true;
+      out.push({ clip, asset });
     }
   }
-  if (!hasAudibleClip) return null;
-  await Promise.all(pending);
-  if (![...buffers.values()].some(Boolean)) return null;
+  return out;
+}
 
+/**
+ * Decode what one slice reads, keyed the way the scheduler asks for it.
+ *
+ * Sources decode concurrently - one slice waits on the slowest of them, not on
+ * their sum, and the encoder is idle until this resolves.
+ */
+async function decodeSliceSegments(
+  project: Project,
+  assets: Record<string, MediaAsset>,
+  fromMs: number,
+  durationMs: number,
+): Promise<Map<string, Map<number, AudioSegment>>> {
+  const held = new Map<string, Map<number, AudioSegment>>();
+  await Promise.all(
+    audibleClips(project, assets, fromMs, durationMs).map(async ({ clip, asset }) => {
+      const speed = clip.speed || 1;
+      const windowFrom = Math.max(fromMs, clip.timelineStartMs);
+      const windowTo = Math.min(fromMs + durationMs, clipEndMs(clip));
+      if (windowTo <= windowFrom) return;
+      const segments = await getAudioRange(
+        asset,
+        clip.audioTrackIndex,
+        clip.sourceInMs + (windowFrom - clip.timelineStartMs) * speed,
+        Math.min(clip.sourceOutMs, clip.sourceInMs + (windowTo - clip.timelineStartMs) * speed),
+      );
+      const key = audioKey(asset.id, clip.audioTrackIndex);
+      let byIndex = held.get(key);
+      if (!byIndex) held.set(key, (byIndex = new Map()));
+      for (const segment of segments) byIndex.set(segment.index, segment);
+    }),
+  );
+  return held;
+}
+
+/** Describe the mix's shape, or answer that the export has no sound in it. */
+function prepareAudioMix(
+  project: Project,
+  assets: Record<string, MediaAsset>,
+  startMs: number,
+  durationMs: number,
+): AudioMixRenderer | null {
+  // An asset with an audio track counts as audible; a source that turns out to
+  // decode to nothing renders as silence in its slices.
+  if (audibleClips(project, assets, startMs, durationMs).length === 0) return null;
   const totalFrames = Math.max(1, Math.ceil((durationMs / 1000) * AUDIO_SAMPLE_RATE));
-  return new AudioMixRenderer(project, buffers, startMs, {
+  return new AudioMixRenderer(project, assets, startMs, {
     sampleRate: AUDIO_SAMPLE_RATE,
     channelCount: 2,
     totalFrames,

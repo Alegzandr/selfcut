@@ -263,19 +263,23 @@ src/
   mid-playback; the paused still refines to full resolution once the playhead
   settles (Premiere's "Paused Resolution = Full"). Persisted under
   `selfcut.previewResolution`; export is unaffected.
-- **Audio decode strategy**: each source audio track is decoded once into a
-  full `AudioBuffer`, cached per `(asset, audioTrackIndex)` so a multi-track
-  video's tracks never evict one another. Instant to schedule; costs memory
-  (~23 MB per stereo minute per track), fine for the short-form editing this
-  targets. The cache is **bounded**: a budget derived from the machine
-  (`deviceMemory`, capped by `jsHeapSizeLimit` where Chrome exposes it, halved
-  on a touch device when neither says anything) and LRU eviction, transcoded PCM
-  ranked last since it cost minutes rather than seconds. Import sizes what a
-  file will cost before decoding it (`media/audioMemory.ts`): a track past half
-  the budget is imported but not warmed, with a warning that carries the remedy,
-  because a single buffer that large is one allocation no eviction can rescue.
-  An allocation that does fail names the file and the track instead of leaving a
-  silent clip behind.
+- **Audio decode strategy**: source audio is decoded in fixed 30 s segments on
+  a grid anchored at the source's zero (`media/audioSegments.ts`), and a clip
+  plays as a row of buffer sources scheduled as the playhead reaches them. What
+  is held is therefore a function of what is being PLAYED, not of what was
+  imported: an hour-long screen recording costs the window around the playhead,
+  and a segment is shared by every clip reading that part of the source, so
+  twenty razor cuts in one take decode each region once. It used to be one
+  `AudioBuffer` per track - instant to schedule, and 1.4 GB in a single
+  indivisible allocation for that same recording, which no eviction could
+  rescue and which the import could only warn about. The cache is **bounded**:
+  a budget derived from the machine (`deviceMemory`, capped by
+  `jsHeapSizeLimit` where Chrome exposes it, halved on a touch device when
+  neither says anything) and LRU eviction, transcoded PCM ranked last since it
+  cost minutes rather than seconds. The preview decodes ~45 s ahead of the
+  playhead and schedules ~20 s of it; the export decodes only what each of its
+  mix slices reads. An allocation that does fail names the file and the track
+  instead of leaving a silent clip behind.
 - **Speed does not preserve pitch** (plain `playbackRate`), as scoped.
 - **Import degrades instead of rejecting**: probing keeps whatever is usable.
   Undecodable audio tracks are listed and can be transcoded on demand; a file

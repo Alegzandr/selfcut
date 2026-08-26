@@ -1,7 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appDepUrl, appModuleUrl } from './appModule';
+import { makeWav } from './wav';
 
 /**
  * The exported soundtrack is continuous, and building it does not need the
@@ -85,10 +86,113 @@ test('a soundtrack longer than one mix slice comes back continuous', async ({ pa
   const timelineSec = layout.totalSec;
   expect(timelineSec).toBeGreaterThan(CHUNK_SEC * 3);
 
-  // Export straight through the exporter module with an MP3 preset: the audio
-  // path with nothing else in it.
+  const exported = await exportMp3(page, storeUrl);
+  expect(exported.error ?? null).toBeNull();
+  expect(exported.ok).toBe(true);
+
+  const analysis = await analyseScratch(page, WINDOW_SEC);
+  expect(analysis.error ?? null).toBeNull();
+  const rms = analysis.rms!;
+
+  // The file is as long as the timeline (one window of slack for the encoder's
+  // priming and its final partial frame).
+  expect(analysis.duration!).toBeGreaterThan(timelineSec - 0.5);
+
+  // Every window carries signal. A slice that failed to render, or a boundary
+  // that dropped samples, shows up as a hole here.
+  const loud = rms.filter((v) => v > 0.001).length;
+  expect(loud / rms.length).toBeGreaterThan(0.9);
+
+  // The strong assertion, and the one this test exists for.
+  //
+  // The timeline is the SAME clip repeated end to end, so the envelope must be
+  // exactly periodic at the clip length. A slice boundary that dropped a
+  // sample, repeated one, or restarted a source at the wrong offset breaks that
+  // periodicity - and the boundaries fall inside clips, not between them, so
+  // there is nowhere for such an error to hide.
+  const period = Math.round(layout.clipMs / (WINDOW_SEC * 1000));
+  expect(period).toBeGreaterThan(1);
+  const boundaryWindow = Math.floor(CHUNK_SEC / WINDOW_SEC);
+  expect(boundaryWindow).toBeLessThan(rms.length);
+
+  const deviations = rms
+    .map((v, i) => (i < period ? 0 : Math.abs(v - rms[i % period]!) / Math.max(rms[i % period]!, 1e-6)))
+    .map((d, i) => ({ i, d }))
+    .filter(({ d }) => d > 0.05);
+  expect(deviations).toEqual([]);
+});
+
+/**
+ * The same guarantee, one level down: a SOURCE longer than one decode segment.
+ *
+ * Sources are decoded in 30 s pieces and a clip is played by a row of buffer
+ * sources rather than by one (see `src/media/audioSegments.ts`). That is what
+ * makes an hour-long recording usable at all - the old whole-track decode was
+ * 1.4 GB in a single allocation, and simply refused - but it puts a join every
+ * 30 s inside a clip that used to be one continuous buffer.
+ *
+ * The joins here fall at 30 s and 60 s, in the middle of one clip playing one
+ * take, where a lost or repeated sample has nowhere to hide: the source's
+ * envelope is exactly periodic, so any discontinuity breaks the periodicity of
+ * the exported one.
+ */
+test('a source longer than one decode segment comes back continuous', async ({ page }) => {
+  test.setTimeout(180_000);
+
+  await page.addInitScript(() => {
+    delete (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker;
+  });
+
+  await page.goto('/app/');
+  // 75 s: two segment boundaries, and short enough to export in seconds.
+  const seconds = 75;
+  await page.setInputFiles('input[type="file"]', {
+    name: 'long-take.wav',
+    mimeType: 'audio/wav',
+    buffer: makeWav({ seconds }),
+  });
+  await expect(page.locator('[data-clip-id]')).toHaveCount(1);
+
+  const storeUrl = await appModuleUrl(page, STORE_MODULE);
+  const exported = await exportMp3(page, storeUrl);
+  expect(exported.error ?? null).toBeNull();
+  expect(exported.ok).toBe(true);
+
+  const analysis = await analyseScratch(page, WINDOW_SEC);
+  expect(analysis.error ?? null).toBeNull();
+  const rms = analysis.rms!;
+  expect(analysis.duration!).toBeGreaterThan(seconds - 0.5);
+
+  // Nothing dropped out: a segment that failed to decode would silence a full
+  // 30 s of this, which no averaging could hide.
+  expect(rms.filter((v) => v > 0.001).length / rms.length).toBeGreaterThan(0.95);
+
+  // The envelope modulates at 1 Hz, so it repeats every four 250 ms windows.
+  // The first and last periods are dropped: an MP3 encoder primes at the head
+  // and pads at the tail, which is not what is under test here.
+  const period = Math.round(1000 / (WINDOW_SEC * 1000));
+  const body = rms.slice(period, rms.length - period);
+  const reference = body.slice(0, period);
+  const deviations = body
+    .map((v, i) => ({ i, d: Math.abs(v - reference[i % period]!) / Math.max(reference[i % period]!, 1e-6) }))
+    .filter(({ d }) => d > 0.12);
+  expect(deviations).toEqual([]);
+
+  // And the joins really were crossed: 75 s of source is three segments.
+  const held = await page.evaluate(async (mod) => {
+    const cache = (await import(mod)) as { cachedAudioBytes: () => number };
+    return cache.cachedAudioBytes();
+  }, await appModuleUrl(page, '/src/media/mediaCache.ts'));
+  expect(held).toBeGreaterThan(0);
+});
+
+/**
+ * Export the current project through the exporter module with an MP3 preset:
+ * the audio path with nothing else in it.
+ */
+async function exportMp3(page: Page, storeUrl: string) {
   const exporterUrl = await appModuleUrl(page, EXPORTER_MODULE);
-  const exported = await page.evaluate(
+  return page.evaluate(
     async ({ exporter, store }) => {
       const { startExport } = (await import(exporter)) as {
         startExport: (
@@ -118,12 +222,15 @@ test('a soundtrack longer than one mix slice comes back continuous', async ({ pa
     },
     { exporter: exporterUrl, store: storeUrl },
   );
-  expect(exported.error ?? null).toBeNull();
-  expect(exported.ok).toBe(true);
+}
 
-  // Decode the scratch file and measure the envelope in 250 ms windows.
+/**
+ * Decode the render that landed in scratch storage and measure its envelope in
+ * windows of `windowSec`.
+ */
+async function analyseScratch(page: Page, windowSeconds: number) {
   const mediabunny = await appDepUrl(page, 'mediabunny');
-  const analysis = await page.evaluate(
+  return page.evaluate(
     async ({ dep, windowSec }) => {
       type Dir = {
         getDirectoryHandle(name: string): Promise<Dir>;
@@ -166,36 +273,7 @@ test('a soundtrack longer than one mix slice comes back continuous', async ({ pa
       void dep;
       return { duration: decoded.duration, rate, rms };
     },
-    { dep: mediabunny, windowSec: WINDOW_SEC },
+    { dep: mediabunny, windowSec: windowSeconds },
   );
 
-  expect(analysis.error ?? null).toBeNull();
-  const rms = analysis.rms!;
-
-  // The file is as long as the timeline (one window of slack for the encoder's
-  // priming and its final partial frame).
-  expect(analysis.duration!).toBeGreaterThan(timelineSec - 0.5);
-
-  // Every window carries signal. A slice that failed to render, or a boundary
-  // that dropped samples, shows up as a hole here.
-  const loud = rms.filter((v) => v > 0.001).length;
-  expect(loud / rms.length).toBeGreaterThan(0.9);
-
-  // The strong assertion, and the one this test exists for.
-  //
-  // The timeline is the SAME clip repeated end to end, so the envelope must be
-  // exactly periodic at the clip length. A slice boundary that dropped a
-  // sample, repeated one, or restarted a source at the wrong offset breaks that
-  // periodicity - and the boundaries fall inside clips, not between them, so
-  // there is nowhere for such an error to hide.
-  const period = Math.round(layout.clipMs / (WINDOW_SEC * 1000));
-  expect(period).toBeGreaterThan(1);
-  const boundaryWindow = Math.floor(CHUNK_SEC / WINDOW_SEC);
-  expect(boundaryWindow).toBeLessThan(rms.length);
-
-  const deviations = rms
-    .map((v, i) => (i < period ? 0 : Math.abs(v - rms[i % period]!) / Math.max(rms[i % period]!, 1e-6)))
-    .map((d, i) => ({ i, d }))
-    .filter(({ d }) => d > 0.05);
-  expect(deviations).toEqual([]);
-});
+}

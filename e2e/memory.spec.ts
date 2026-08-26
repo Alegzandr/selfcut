@@ -2,6 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appModuleUrl } from './appModule';
+import { makeWav } from './wav';
 
 /**
  * The three resource leaks behind a session that got slower the longer it ran,
@@ -213,4 +214,67 @@ test('an unbroken edit stream still reaches the disk', async ({ page }) => {
   // scheduling jitter without letting a never-firing debounce through (which
   // measured ~336 steps behind - the entire burst).
   expect(result.live - result.persisted!).toBeLessThan(220);
+});
+
+/**
+ * A source far longer than the window being played costs the window, not the
+ * source.
+ *
+ * This is the failure the segment grid exists for. Every source audio track
+ * used to be decoded whole into one `AudioBuffer` - 23 MB per stereo minute, in
+ * one indivisible allocation - so an hour-long screen recording, which is the
+ * material this editor is for, was 1.4 GB that no eviction could rescue. The
+ * import path could only warn about the file before it was ever played, and the
+ * remedy it offered ("shorten the clip on the timeline") did nothing at all:
+ * the decode covered the whole source whatever the trim was.
+ *
+ * What is asserted is the ratio: playing twenty minutes of source from one spot
+ * holds a couple of segments around that spot, not the track.
+ */
+test('a long source costs the window played, not the whole track', async ({ page }) => {
+  const MINUTES = 20;
+  const RATE = 8000;
+  /** One decoded segment of this source: 30 s of mono f32. */
+  const SEGMENT_BYTES = 30 * RATE * 4;
+  const WHOLE_TRACK_BYTES = MINUTES * 60 * RATE * 4;
+
+  await page.goto(EDITOR_URL);
+  await page.setInputFiles('input[type="file"]', {
+    name: 'long-take.wav',
+    mimeType: 'audio/wav',
+    buffer: makeWav({ seconds: MINUTES * 60, sampleRate: RATE }),
+  });
+  await expect(page.locator('[data-clip-id]')).toHaveCount(1);
+
+  // Nothing to warn about any more: the import used to raise a red banner about
+  // a file it could not decode, which the user could do nothing about.
+  await expect(page.locator('[role="alert"]')).toHaveCount(0);
+
+  // Play across a segment boundary: parked just before 30 s, where the next
+  // piece has to be decoded and joined for the sound to continue.
+  const held = await page.evaluate(
+    async ({ storeMod, cacheMod }) => {
+      const { useStore } = (await import(storeMod)) as {
+        useStore: { getState: () => { seek: (ms: number) => void; setPlaying: (v: boolean) => void } };
+      };
+      const cache = (await import(cacheMod)) as { cachedAudioBytes: () => number };
+      useStore.getState().seek(29_000);
+      useStore.getState().setPlaying(true);
+      await new Promise((r) => setTimeout(r, 3000));
+      useStore.getState().setPlaying(false);
+      return cache.cachedAudioBytes();
+    },
+    {
+      storeMod: await appModuleUrl(page, STORE_MODULE),
+      cacheMod: await appModuleUrl(page, CACHE_MODULE),
+    },
+  );
+
+  // More than one segment: the playhead crossed a boundary, so the piece after
+  // it was decoded and joined rather than the clip going silent at 30 s.
+  expect(held).toBeGreaterThan(SEGMENT_BYTES);
+  // And nowhere near the track. The prefetch reaches 45 s ahead, so a handful
+  // of segments is the whole of what a long source is allowed to cost.
+  expect(held).toBeLessThan(SEGMENT_BYTES * 6);
+  expect(held).toBeLessThan(WHOLE_TRACK_BYTES / 4);
 });

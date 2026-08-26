@@ -1,80 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import type { AudioTrackInfo } from '../types';
 import {
   AudioMemoryError,
-  DEFAULT_SAMPLE_RATE,
   audioCacheBudgetBytes,
-  decodedTrackBytes,
-  estimateAssetBytes,
-  estimateAudioTracks,
   isAllocationFailure,
-  trackDecodeCapBytes,
 } from './audioMemory';
+import { SEGMENT_MS } from './audioSegments';
 
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
-const MINUTE = 60_000;
 
-const stereo = { sampleRate: 48_000, channels: 2 };
-
-describe('decodedTrackBytes', () => {
-  it('matches the buffer decodeFullAudio actually allocates', () => {
-    // frames = ceil(duration x rate) + one second of slack, f32 per channel.
-    const frames = Math.ceil(90 * 48_000) + 48_000;
-    expect(decodedTrackBytes(90_000, stereo)).toBe(frames * 2 * 4);
-  });
-
-  it('lands on the ~23 MB per stereo minute the decode strategy is costed at', () => {
-    const perMinute = decodedTrackBytes(MINUTE, stereo) - decodedTrackBytes(0, stereo);
-    expect(Math.round(perMinute / 1e6)).toBe(23);
-  });
-
-  it('scales with the channel count: a 5.1 track is three stereo tracks', () => {
-    expect(decodedTrackBytes(MINUTE, { sampleRate: 48_000, channels: 6 })).toBe(
-      decodedTrackBytes(MINUTE, stereo) * 3,
-    );
-  });
-
-  it('assumes 48 kHz when the container states no rate', () => {
-    // Assets probed before `sampleRate` was recorded have none, and guessing low
-    // would under-estimate the very thing the guard exists to bound.
-    expect(decodedTrackBytes(MINUTE, { channels: 2 })).toBe(
-      decodedTrackBytes(MINUTE, { sampleRate: DEFAULT_SAMPLE_RATE, channels: 2 }),
-    );
-  });
-
-  it('never returns a negative size for a nonsense duration', () => {
-    expect(decodedTrackBytes(-5000, stereo)).toBe(48_000 * 2 * 4);
-  });
-});
-
-describe('estimateAudioTracks', () => {
-  const track = (index: number, extra: Partial<AudioTrackInfo> = {}): AudioTrackInfo => ({
-    index,
-    channels: 2,
-    sampleRate: 48_000,
-    ...extra,
-  });
-
-  it('sizes every playable track, keyed by the index a clip stores', () => {
-    expect(estimateAudioTracks(MINUTE, [track(0), track(1)])).toEqual([
-      { index: 0, bytes: decodedTrackBytes(MINUTE, stereo) },
-      { index: 1, bytes: decodedTrackBytes(MINUTE, stereo) },
-    ]);
-  });
-
-  it('skips a track no browser can decode', () => {
-    // It decodes to nothing until an explicit transcode, which is a different
-    // path with its own cache: counting it here would inflate every rip.
-    const tracks = [track(0), track(1, { undecodable: true })];
-    expect(estimateAudioTracks(MINUTE, tracks).map((t) => t.index)).toEqual([0]);
-  });
-
-  it('counts an undecodable track once it has been transcoded this session', () => {
-    const tracks = [track(0, { undecodable: true, transcoded: true })];
-    expect(estimateAssetBytes(MINUTE, tracks)).toBe(decodedTrackBytes(MINUTE, stereo));
-  });
-});
+/** Bytes one 48 kHz stereo segment occupies once decoded. */
+const SEGMENT_BYTES = (SEGMENT_MS / 1000) * 48_000 * 2 * 4;
 
 describe('audioCacheBudgetBytes', () => {
   it('takes a fifth of the RAM the machine reports, between a floor and a ceiling', () => {
@@ -138,33 +74,20 @@ describe('audioCacheBudgetBytes', () => {
   });
 });
 
-describe('trackDecodeCapBytes', () => {
-  const cap = trackDecodeCapBytes(audioCacheBudgetBytes({ deviceMemoryGb: 4 }));
-
-  it('is half the budget', () => {
-    expect(cap).toBe(Math.round(audioCacheBudgetBytes({ deviceMemoryGb: 4 }) / 2));
+describe('the budget against the segment grid', () => {
+  it('holds several minutes of decoded audio even on the machine it trusts least', () => {
+    // The floor is what a browser that under-reports gets, and it still has to
+    // cover the window the preview keeps around the playhead (scheduling
+    // horizon + prefetch, on more than one track at once) with room to spare.
+    const segments = audioCacheBudgetBytes({ coarsePointer: true }) / SEGMENT_BYTES;
+    expect(segments).toBeGreaterThan(8);
   });
 
-  it('leaves the short-form material this targets alone', () => {
-    // Ten minutes of stereo, which is already long for the format.
-    expect(decodedTrackBytes(10 * MINUTE, stereo)).toBeLessThanOrEqual(cap);
-  });
-
-  it('sits just under 19 minutes of stereo, and catches what is past it', () => {
-    // The two sides of the same threshold: the guard has to be invisible below
-    // it and present above, and this pins where "above" starts.
-    expect(decodedTrackBytes(18 * MINUTE, stereo)).toBeLessThanOrEqual(cap);
-    expect(decodedTrackBytes(19 * MINUTE, stereo)).toBeGreaterThan(cap);
-  });
-
-  it('catches the case it exists for: an hour-long source', () => {
-    expect(decodedTrackBytes(60 * MINUTE, stereo)).toBeGreaterThan(cap);
-  });
-
-  it('is tighter on a handheld we could not measure', () => {
-    const handheld = trackDecodeCapBytes(audioCacheBudgetBytes({ coarsePointer: true }));
-    expect(handheld).toBeLessThan(cap);
-    expect(decodedTrackBytes(5 * MINUTE, stereo)).toBeLessThanOrEqual(handheld);
+  it('never lets one segment be the allocation that fails', () => {
+    // The case that used to kill the tab was a single object too large to fit.
+    // A segment is a fixed 30 s whatever the source's length, so the ratio
+    // below is what makes an hour-long recording no different from a short one.
+    expect(SEGMENT_BYTES).toBeLessThan(audioCacheBudgetBytes({ coarsePointer: true }) / 8);
   });
 });
 

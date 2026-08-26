@@ -5,12 +5,16 @@ import { StillFrame, decodeImageFile } from './stillImage';
 import {
   AudioMemoryError,
   audioCacheBudgetBytes,
-  decodedTrackBytes,
   formatBytes,
   isAllocationFailure,
   readMemoryEnv,
-  trackDecodeCapBytes,
 } from './audioMemory';
+import {
+  AudioSegment,
+  SEGMENT_MS,
+  segmentIndexes,
+  segmentStartMs,
+} from './audioSegments';
 
 /**
  * Cache key for a single audio track of an asset. `undefined` means the source's
@@ -109,12 +113,15 @@ async function resolveAudioTrack(
 }
 
 /**
- * One memoized decode of a single audio track, plus what the budget below needs
- * to rank it. `bytes` is 0 until the decode resolves - an in-flight entry cannot
- * be sized, and evicting it would not free anything anyway.
+ * One memoized decode of a single SEGMENT of an audio track, plus what the
+ * budget below needs to rank it. `bytes` is 0 until the decode resolves - an
+ * in-flight entry cannot be sized, and evicting it would not free anything
+ * anyway.
  */
 interface AudioEntry {
-  promise: Promise<AudioBuffer | null>;
+  promise: Promise<AudioSegment | null>;
+  /** Set once the decode resolves, so the mix can read it synchronously. */
+  value: AudioSegment | null;
   bytes: number;
   /** Monotonic use stamp; see `useStamp`. */
   lastUsedAt: number;
@@ -126,7 +133,17 @@ interface AudioEntry {
   pinned: boolean;
 }
 
+/** Keyed by `${assetId}#${track}@${segmentIndex}` - see `segmentCacheKey`. */
 const audioEntries = new Map<string, AudioEntry>();
+
+/** Cache key of one segment of one track of one asset. */
+export function segmentCacheKey(
+  assetId: string,
+  audioTrackIndex: number | undefined,
+  index: number,
+): string {
+  return `${audioKey(assetId, audioTrackIndex)}@${index}`;
+}
 
 /**
  * A counter rather than a clock: two decodes resolving inside the same
@@ -143,16 +160,14 @@ function audioBufferBytes(buffer: AudioBuffer): number {
  * How much decoded PCM may sit in memory at once.
  *
  * Decoded audio is by far the heaviest thing the editor holds: 48 kHz stereo
- * float is ~23 MB per minute, so a batch import of a dozen ten-minute gameplay
- * captures used to pin ~2.7 GB before the user had touched anything. Nothing
- * ever released it (the map was a plain memo, keyed forever), and the first
- * large allocation after that - the export's output buffer, the offline mix -
- * failed outright with "Array buffer allocation failed".
+ * float is ~23 MB per minute. What bounds it now is the segment grid - nothing
+ * ever decodes more of a source than the window being played - and this budget
+ * is what decides how much of that window is KEPT once the playhead has moved
+ * on, so scrubbing back over a cut does not decode it again.
  *
- * The budget itself, and what it is derived from, live in `audioMemory.ts`:
- * the import path needs the same numbers before any of this runs, to say what
- * a file is about to cost. Read once - the machine does not change mid-session,
- * and a budget that moved under the eviction policy would be its own bug.
+ * The budget itself, and what it is derived from, live in `audioMemory.ts`.
+ * Read once - the machine does not change mid-session, and a budget that moved
+ * under the eviction policy would be its own bug.
  *
  * Every entry is reconstructible by re-decoding the source, so eviction costs
  * time, never data - the same rule the transcoded-audio cache is built on.
@@ -198,7 +213,7 @@ export function selectAudioEvictions(
 
   const candidates = all
     // An in-flight decode has nothing to free, and dropping the memo would only
-    // start a second decode of the same track alongside the first.
+    // start a second decode of the same segment alongside the first.
     .filter(([key, entry]) => key !== keep && entry.bytes > 0)
     // Least-recently-used within each tier, unpinned tier first: a pinned entry
     // is simply last in line, and is only reached when dropping every unpinned
@@ -223,41 +238,128 @@ function enforceAudioBudget(keep?: string): void {
 }
 
 /**
- * Decode one audio track of an asset into a single AudioBuffer (memoized per
- * track, under the budget above). `audioTrackIndex` selects a track of a
- * multi-track source.
+ * Decodes of one track run one after another.
  *
- * An evicted track simply decodes again on its next request. Callers that are
- * holding the buffer (the preview's scheduled sources, an export mix being
- * assembled) keep it alive through their own reference: eviction drops the
- * cache's claim on it, never the buffer out from under whoever is using it.
+ * Every segment decode opens its own decoder and seeks: a window needing three
+ * of them at once would run three decoders over one demuxer, which is both
+ * slower and more memory than doing them in turn. Queued PER TRACK, so two
+ * different sources still decode in parallel - a stacked cut needs both, and
+ * serializing everything globally would make the second one wait on the first
+ * for no reason.
  */
-export function getAudioBuffer(
+const decodeQueues = new Map<string, Promise<unknown>>();
+
+function enqueueDecode<T>(queueKey: string, run: () => Promise<T>): Promise<T> {
+  const previous = decodeQueues.get(queueKey) ?? Promise.resolve();
+  // Same `run` on both settlements: a failed decode must not stall the queue.
+  const next = previous.then(run, run);
+  decodeQueues.set(
+    queueKey,
+    next.catch(() => {}),
+  );
+  return next;
+}
+
+/**
+ * One segment of one audio track, decoded once and shared by every clip that
+ * reads that part of the source.
+ *
+ * `audioTrackIndex` selects a track of a multi-track source. An evicted segment
+ * simply decodes again on its next request. Callers holding the buffer (the
+ * preview's scheduled sources, an export slice being rendered) keep it alive
+ * through their own reference: eviction drops the cache's claim on it, never
+ * the buffer out from under whoever is using it.
+ */
+export function getAudioSegment(
   asset: MediaAsset,
-  audioTrackIndex?: number,
-): Promise<AudioBuffer | null> {
-  const key = audioKey(asset.id, audioTrackIndex);
+  audioTrackIndex: number | undefined,
+  index: number,
+): Promise<AudioSegment | null> {
+  const key = segmentCacheKey(asset.id, audioTrackIndex, index);
   const existing = audioEntries.get(key);
   if (existing) {
     existing.lastUsedAt = ++useStamp;
     return existing.promise;
   }
   const entry: AudioEntry = {
-    promise: decodeGuarded(asset, audioTrackIndex, key),
+    promise: enqueueDecode(audioKey(asset.id, audioTrackIndex), () =>
+      decodeGuarded(asset, audioTrackIndex, index, key),
+    ),
+    value: null,
     bytes: 0,
     lastUsedAt: ++useStamp,
     pinned: false,
   };
   audioEntries.set(key, entry);
-  void entry.promise.then((buffer) => {
+  void entry.promise.then((segment) => {
     // The entry can have been dropped while decoding (asset removed, or the
     // budget swept it): sizing a record nobody holds would resurrect it.
-    if (buffer && audioEntries.get(key) === entry) {
-      entry.bytes = audioBufferBytes(buffer);
+    if (segment && audioEntries.get(key) === entry) {
+      entry.value = segment;
+      entry.bytes = audioBufferBytes(segment.buffer);
       enforceAudioBudget(key);
     }
   });
   return entry.promise;
+}
+
+/**
+ * Every segment covering a source time range, decoded.
+ *
+ * Missing segments (a range past the end of the source, a decode that failed)
+ * are simply absent from the result - the caller renders the silence rather
+ * than the whole range failing.
+ */
+export async function getAudioRange(
+  asset: MediaAsset,
+  audioTrackIndex: number | undefined,
+  fromMs: number,
+  toMs: number,
+): Promise<AudioSegment[]> {
+  const segments = await Promise.all(
+    segmentIndexes(fromMs, toMs).map((index) => getAudioSegment(asset, audioTrackIndex, index)),
+  );
+  return segments.filter((segment): segment is AudioSegment => segment !== null);
+}
+
+/**
+ * Start decoding a range without waiting for it. What the preview calls ahead
+ * of the playhead: by the time the window is scheduled the segments are there,
+ * and a late one is picked up by a later scheduling pass.
+ */
+export function prefetchAudioRange(
+  asset: MediaAsset,
+  audioTrackIndex: number | undefined,
+  fromMs: number,
+  toMs: number,
+): void {
+  for (const index of segmentIndexes(fromMs, toMs)) {
+    void getAudioSegment(asset, audioTrackIndex, index).catch(() => null);
+  }
+}
+
+/**
+ * What is decoded RIGHT NOW for a source range, without asking for anything.
+ *
+ * Synchronous because the mix scheduler runs inside a rAF tick and inside an
+ * OfflineAudioContext render: both have to answer "what can I play" without
+ * awaiting. Marks what it returns as used, so playing a region is what keeps it
+ * in the cache.
+ */
+export function peekAudioRange(
+  assetId: string,
+  audioTrackIndex: number | undefined,
+  fromMs: number,
+  toMs: number,
+): AudioSegment[] {
+  const out: AudioSegment[] = [];
+  for (const index of segmentIndexes(fromMs, toMs)) {
+    const entry = audioEntries.get(segmentCacheKey(assetId, audioTrackIndex, index));
+    if (!entry?.value) continue;
+    entry.lastUsedAt = ++useStamp;
+    out.push(entry.value);
+  }
+  return out;
 }
 
 /**
@@ -267,21 +369,22 @@ export function getAudioBuffer(
  * An allocation failure used to resolve to null like any other problem: the
  * clip went silent, no message was shown, and an export produced a video whose
  * sound was simply missing. It gets one retry, because the common shape of the
- * failure is not "this track is impossible" but "this track plus everything
+ * failure is not "this segment is impossible" but "this segment plus everything
  * already cached is" - and everything already cached is reconstructible.
  */
 async function decodeGuarded(
   asset: MediaAsset,
   audioTrackIndex: number | undefined,
+  index: number,
   key: string,
-): Promise<AudioBuffer | null> {
+): Promise<AudioSegment | null> {
   try {
-    return await decodeFullAudio(asset, audioTrackIndex);
+    return await decodeSegment(asset, audioTrackIndex, index);
   } catch (err) {
     if (!(err instanceof AudioMemoryError)) return null;
     releaseReclaimable(key);
     try {
-      return await decodeFullAudio(asset, audioTrackIndex);
+      return await decodeSegment(asset, audioTrackIndex, index);
     } catch (retryErr) {
       reportAudioMemory(asset, retryErr instanceof AudioMemoryError ? retryErr : err);
       return null;
@@ -344,11 +447,36 @@ function reportAudioMemory(asset: MediaAsset, err: AudioMemoryError): void {
   })();
 }
 
-async function decodeFullAudio(
+/**
+ * Trailing slack on the last segment of a source.
+ *
+ * A container's stated duration and what its packets actually carry disagree by
+ * a frame or two often enough to matter, and the disagreement is always at the
+ * end. Half a second of room costs nothing and is the difference between the
+ * last word of a take and most of it.
+ */
+const SOURCE_SLACK_MS = 500;
+
+/**
+ * Decode one segment of one track into a single AudioBuffer.
+ *
+ * The buffer covers exactly `[index * SEGMENT_MS, +SEGMENT_MS)` of SOURCE time,
+ * clipped to what the source has left, so its frame 0 is always at a known
+ * timestamp - which is what lets a clip be scheduled from pieces without any of
+ * them knowing about clips.
+ */
+async function decodeSegment(
   asset: MediaAsset,
-  audioTrackIndex?: number,
-): Promise<AudioBuffer | null> {
+  audioTrackIndex: number | undefined,
+  index: number,
+): Promise<AudioSegment | null> {
   if (!asset.hasAudio) return null;
+  const startMs = segmentStartMs(index);
+  // Entirely past the end of the source: nothing to decode, and a memoized null
+  // here is what stops a clip trimmed past its media from asking again.
+  const spanMs = Math.min(SEGMENT_MS, asset.durationMs + SOURCE_SLACK_MS - startMs);
+  if (spanMs <= 0) return null;
+
   const input = await getInput(asset);
   const track = await resolveAudioTrack(input, audioTrackIndex);
   if (!track || !(await track.canDecode())) return null;
@@ -357,81 +485,74 @@ async function decodeFullAudio(
   const sink = new AudioBufferSink(track);
   const sampleRate = track.sampleRate;
   const numberOfChannels = Math.max(1, track.numberOfChannels);
-  const totalFrames = Math.ceil((asset.durationMs / 1000) * sampleRate) + sampleRate;
-  // The whole track in one object: this is the allocation that fails, and the
-  // only place where the browser's refusal can still be attributed to a file
-  // and a track rather than surfacing as a bare RangeError from nowhere.
+  const frames = Math.ceil((spanMs / 1000) * sampleRate);
+  const startSec = startMs / 1000;
+  const endSec = (startMs + spanMs) / 1000;
+
   let target: AudioBuffer;
   try {
-    target = new AudioBuffer({ length: totalFrames, numberOfChannels, sampleRate });
+    target = new AudioBuffer({ length: frames, numberOfChannels, sampleRate });
   } catch (err) {
     if (!isAllocationFailure(err)) throw err;
-    throw new AudioMemoryError(
-      asset.file.name,
-      audioTrackIndex,
-      totalFrames * numberOfChannels * 4,
-      { cause: err },
-    );
+    throw new AudioMemoryError(asset.file.name, audioTrackIndex, frames * numberOfChannels * 4, {
+      cause: err,
+    });
   }
 
-  for await (const wrapped of sink.buffers()) {
-    const offset = Math.round(wrapped.timestamp * sampleRate);
-    if (offset < 0 || offset >= totalFrames) continue;
+  // `buffers(start, end)` yields the last packet starting at or before `start`,
+  // so the piece is covered from its very first sample: that packet begins
+  // BEFORE this segment and is copied from the right offset into it.
+  let wrote = false;
+  for await (const wrapped of sink.buffers(startSec, endSec)) {
+    const offset = Math.round((wrapped.timestamp - startSec) * sampleRate);
+    if (offset >= frames) break;
     for (let ch = 0; ch < numberOfChannels; ch++) {
       const srcCh = Math.min(ch, wrapped.buffer.numberOfChannels - 1);
-      const data = wrapped.buffer.getChannelData(srcCh);
-      const room = totalFrames - offset;
-      target.copyToChannel(room < data.length ? data.subarray(0, room) : data, ch, offset);
+      let data = wrapped.buffer.getChannelData(srcCh);
+      let at = offset;
+      if (at < 0) {
+        if (-at >= data.length) continue;
+        data = data.subarray(-at);
+        at = 0;
+      }
+      const room = frames - at;
+      if (room <= 0) continue;
+      target.copyToChannel(room < data.length ? data.subarray(0, room) : data, ch, at);
+      wrote = true;
     }
   }
-  return target;
+  // Nothing at all landed here: a hole in the source, or a range past its real
+  // end. Holding 30 s of silence for that would be the cache paying for it.
+  return wrote ? { buffer: target, startMs, index } : null;
 }
+
+/** How much of a track's head a warm decodes: enough to cover pressing play. */
+const WARM_SEGMENTS = 1;
 
 /**
- * Warm decodes run one after another, and only while the cache has room.
+ * Decode the head of every playable track right after import.
  *
- * Both halves matter for a batch import. Concurrently, a dozen files decoded at
- * once turned the import into a several-second freeze and allocated every
- * buffer before a single one could be ranked for eviction. Unconditionally, the
- * warm pass filled the cache with footage the user may never play, evicting
- * whatever they were actually working on - a warm is a head start, so it is the
- * first thing to give up when memory is tight rather than the last.
+ * Only the head: a warm is a head start on pressing play, not a reason to hold
+ * a file the user may never touch. Everything past it arrives from the
+ * preview's own prefetch as the playhead approaches it.
  */
-let warmQueue: Promise<unknown> = Promise.resolve();
-
-function queueWarm(asset: MediaAsset, audioTrackIndex?: number): void {
-  warmQueue = warmQueue.then(async () => {
-    // Re-checked here, not when queued: the entries ahead in the queue are what
-    // fills the cache, so the decision is only meaningful at its turn.
-    if (cachedAudioBytes() >= audioBudgetBytes()) return;
-    await getAudioBuffer(asset, audioTrackIndex);
-  }, () => {});
-}
-
-/**
- * Whether a track is small enough to decode on speculation.
- *
- * Over the cap, a decode is one allocation large enough to be the reason the
- * next one fails, and warming is speculation by definition - the user has not
- * asked for this track yet. Putting the clip on the timeline is the moment they
- * do, and `getAudioBuffer` still decodes it then: this only declines to spend
- * the memory before being asked. The import path warns with the same numbers,
- * so what is announced and what happens are the same decision.
- */
-function warmable(asset: MediaAsset, track?: { sampleRate?: number; channels?: number }): boolean {
-  return decodedTrackBytes(asset.durationMs, track ?? {}) <= trackDecodeCapBytes(audioBudgetBytes());
-}
-
-/** Kick off background audio decoding (every playable audio track) right after import. */
 export function warmAudio(asset: MediaAsset): void {
+  const warm = (audioTrackIndex?: number) => {
+    for (let index = 0; index < WARM_SEGMENTS; index++) {
+      // Skipped rather than queued when the cache is already full: a warm is
+      // speculation, so it is the first thing to give up when memory is tight.
+      if (cachedAudioBytes() >= audioBudgetBytes()) return;
+      void getAudioSegment(asset, audioTrackIndex, index).catch(() => null);
+    }
+  };
   if (asset.audioTracks.length === 0) {
-    if (asset.hasAudio && warmable(asset)) queueWarm(asset);
+    if (asset.hasAudio) warm();
     return;
   }
   // Undecodable tracks would only decode to null: they wait for an explicit
   // transcode, which fills the cache through setTranscodedAudio.
   for (const track of asset.audioTracks) {
-    if (isTrackPlayable(track) && warmable(asset, track)) queueWarm(asset, track.index);
+    if (isTrackPlayable(track)) warm(track.index);
   }
 }
 
@@ -440,6 +561,12 @@ export function warmAudio(asset: MediaAsset): void {
  * decoded the track natively. Everything downstream (preview mix, export,
  * waveform) reads the cache, so this single injection makes the track audible
  * everywhere without any of them knowing a transcode happened.
+ *
+ * Sliced onto the same grid as a normal decode: the mix only ever asks for
+ * segments, so a transcode publishing one long buffer would be inaudible. The
+ * slices are pinned - unlike a decode, this PCM cannot be reconstructed by
+ * asking the browser again, and the only way back is the minutes-long
+ * conversion that produced it.
  *
  * Peaks are re-derived from the buffer here because `streamPeaks` decodes
  * through mediabunny, which is exactly what cannot handle this track.
@@ -455,25 +582,47 @@ export function setTranscodedAudio(
   // deliberately distinct from '#0'. When this IS the source's only track, the
   // two address the same sound, so publish under both or such a clip (any
   // audio-only import) would stay silent after its transcode.
-  const keys = alsoPrimary
-    ? [audioKey(assetId, audioTrackIndex), audioKey(assetId)]
-    : [audioKey(assetId, audioTrackIndex)];
-  for (const key of keys) {
-    // Pinned: unlike a decode, this PCM cannot be reconstructed by asking the
-    // browser again - the track is undecodable, and the only way back is the
-    // minutes-long transcode that produced it.
-    audioEntries.set(key, {
-      promise: Promise.resolve(buffer),
-      bytes: audioBufferBytes(buffer),
-      lastUsedAt: ++useStamp,
-      pinned: true,
-    });
-    peaksPromises.set(key, Promise.resolve(peaks));
+  const tracks: (number | undefined)[] = alsoPrimary
+    ? [audioTrackIndex, undefined]
+    : [audioTrackIndex];
+  const durationMs = (buffer.length / buffer.sampleRate) * 1000;
+  let lastKey = '';
+  for (const track of tracks) {
+    for (const index of segmentIndexes(0, durationMs)) {
+      const segment = sliceSegment(buffer, index);
+      if (!segment) continue;
+      lastKey = segmentCacheKey(assetId, track, index);
+      audioEntries.set(lastKey, {
+        promise: Promise.resolve(segment),
+        value: segment,
+        bytes: audioBufferBytes(segment.buffer),
+        lastUsedAt: ++useStamp,
+        pinned: true,
+      });
+    }
+    peaksPromises.set(audioKey(assetId, track), Promise.resolve(peaks));
   }
-  // Both keys address the same buffer, so it is counted twice above; the budget
-  // pass runs once, after both are in.
-  enforceAudioBudget(keys[0]);
+  // Every slice is in before the budget is asked to rank them: sweeping between
+  // two of them could drop one half of a track that was just published whole.
+  enforceAudioBudget(lastKey);
   return peaks;
+}
+
+/** Copy one grid-aligned piece out of a whole-track buffer. */
+function sliceSegment(buffer: AudioBuffer, index: number): AudioSegment | null {
+  const startMs = segmentStartMs(index);
+  const from = Math.round((startMs / 1000) * buffer.sampleRate);
+  if (from >= buffer.length) return null;
+  const frames = Math.min(Math.round((SEGMENT_MS / 1000) * buffer.sampleRate), buffer.length - from);
+  const target = new AudioBuffer({
+    length: frames,
+    numberOfChannels: buffer.numberOfChannels,
+    sampleRate: buffer.sampleRate,
+  });
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    target.copyToChannel(buffer.getChannelData(ch).subarray(from, from + frames), ch, 0);
+  }
+  return { buffer: target, startMs, index };
 }
 
 /** Same normalized envelope as `streamPeaks`, computed from an in-memory buffer. */

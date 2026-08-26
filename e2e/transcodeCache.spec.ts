@@ -123,25 +123,44 @@ test('a transcoded track survives a reload without re-transcoding', async ({ pag
 
   const restored = await page.evaluate(async ({ id, m }) => {
     const { useStore } = await import(m.store);
-    const { getAudioBuffer } = await import(m.mediaCache);
+    const { getAudioRange } = await import(m.mediaCache);
 
     const deadline = Date.now() + 30_000;
     for (;;) {
       const asset = useStore.getState().assets[id];
       const track = asset?.audioTracks?.[0];
       if (track?.transcoded) {
-        const buffer = await getAudioBuffer(asset, 0);
+        // Republished PCM is sliced onto the same segment grid as a decode, so
+        // what the mix would read back is the pieces covering the source.
+        const segments = await getAudioRange(asset, 0, 0, asset.durationMs);
+        let duration = 0;
+        let peak = 0;
+        for (const segment of segments) {
+          duration += segment.buffer.duration;
+          for (const v of segment.buffer.getChannelData(0)) {
+            const a = Math.abs(v);
+            if (a > peak) peak = a;
+          }
+        }
         return {
           transcoded: true,
           hasAudio: asset.hasAudio,
           peaks: track.peaks?.length ?? 0,
-          duration: buffer ? buffer.duration : 0,
+          segments: segments.length,
+          duration,
           // Silence would satisfy every structural check above.
-          peak: buffer ? Math.max(...buffer.getChannelData(0).map(Math.abs)) : 0,
+          peak,
         };
       }
       if (Date.now() > deadline) {
-        return { transcoded: false, hasAudio: asset?.hasAudio ?? null, peaks: 0, duration: 0, peak: 0 };
+        return {
+          transcoded: false,
+          hasAudio: asset?.hasAudio ?? null,
+          peaks: 0,
+          segments: 0,
+          duration: 0,
+          peak: 0,
+        };
       }
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -151,6 +170,9 @@ test('a transcoded track survives a reload without re-transcoding', async ({ pag
   expect(restored.transcoded).toBe(true);
   expect(restored.hasAudio).toBe(true);
   expect(restored.peaks).toBeGreaterThan(0);
+  // A second of audio is one segment: the republish has to land on the grid the
+  // mix reads, or the track is restored and inaudible.
+  expect(restored.segments).toBe(1);
   // Sample-accurate round-trip: a container that loses the encoder delay would
   // come back long, and the audio would sit late against picture on every open.
   expect(restored.duration).toBeGreaterThan(0.98);

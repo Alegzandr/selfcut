@@ -1,6 +1,7 @@
 import { useStore, EditorState } from '../store/store';
 import { MediaAsset, MediaClip, Project } from '../types';
 import {
+  clipEndMs,
   delegatedLinkIds,
   isTextClip,
   outputDimensions,
@@ -9,7 +10,7 @@ import {
 } from '../model';
 import { loadFonts, onFontLoaded } from '../lib/fonts';
 import { FRAME_MS, PREVIEW_RESOLUTION_SCALE } from '../app/config';
-import { audioKey, getAudioBuffer, getStillFrame } from '../media/mediaCache';
+import { getStillFrame, peekAudioRange, prefetchAudioRange } from '../media/mediaCache';
 import type { DrawableFrame } from '../media/stillImage';
 import { FrameCursor } from './FrameCursor';
 import { frameBytes, maxLiveCursors, selectCursorEvictions } from './cursorPool';
@@ -24,7 +25,7 @@ import { syncLuts } from './colorPass';
 import { SCOPE_SAMPLE_WIDTH } from './scopes';
 import { hasScopeListeners, publishScopeFrame } from './scopeBus';
 import { renderPreviewFrame, subscribeRenderPreview } from '../export/renderPreviewBus';
-import { ScheduledSource, sameAudioMix, scheduleProjectAudio, stopScheduled } from './audioMix';
+import { MixScheduler, sameAudioMix } from './audioMix';
 import { TrackLevels, hasLevelListeners, publishLevels } from './meterBus';
 
 /**
@@ -126,6 +127,42 @@ const LOOP_PREROLL_LEAD_MS = 900;
  */
 const PREROLL_SETTLE_MS = 400;
 
+/**
+ * How far ahead of the playhead audio is SCHEDULED, in timeline ms.
+ *
+ * Audio is decoded in segments (see `audioSegments.ts`), so playback is a row
+ * of buffer sources handed to the context as the playhead approaches them
+ * rather than one source per clip. The horizon has to be long enough that a
+ * tick the browser skipped cannot leave a gap, and short enough that scheduling
+ * an hour-long clip does not mean holding an hour of decoded audio.
+ */
+const AUDIO_SCHEDULE_HORIZON_MS = 20_000;
+
+/**
+ * Shortest gap between two scheduling passes.
+ *
+ * The pass walks every clip of the project, and re-running it is also how a
+ * segment that finished decoding late gets picked up - so it wants to be
+ * frequent, but not sixty times a second on a timeline with hundreds of clips.
+ */
+const AUDIO_SCHEDULE_INTERVAL_MS = 50;
+
+/**
+ * How far ahead of the playhead audio is DECODED, and how far behind is kept
+ * warm.
+ *
+ * Further than the scheduling horizon, deliberately: a segment has to be
+ * decoded before the window that plays it is scheduled, and a decode is a seek
+ * plus 30 s of packets. The lead is scaled by the shuttle rate, so playing at
+ * 4x asks for the audio four times sooner. The backward reach covers the small
+ * step back a scrub makes constantly, which would otherwise re-decode.
+ */
+const AUDIO_PREFETCH_AHEAD_MS = 45_000;
+const AUDIO_PREFETCH_BEHIND_MS = 5_000;
+
+/** Shortest gap between two prefetch passes: it walks every clip too. */
+const AUDIO_PREFETCH_INTERVAL_MS = 250;
+
 interface TrackBus {
   /** Summing bus of the track's clips (post clip & track volume). */
   gain: GainNode;
@@ -168,9 +205,14 @@ export class PlaybackEngine {
    * detects a reconnected source (same id, new file) and re-rasterizes.
    */
   private stills = new Map<string, { file: File; frame: DrawableFrame | null }>();
-  private scheduled: ScheduledSource[] = [];
-  private audioBuffers = new Map<string, AudioBuffer | null>();
-  private audioDirty = false;
+  /**
+   * The live audio schedule, or null while stopped. Owns every node it created,
+   * so replacing it is one `stop()` and a fresh anchor.
+   */
+  private mix: MixScheduler | null = null;
+  /** `performance.now()` of the last schedule extension and the last prefetch pass. */
+  private lastExtendAt = 0;
+  private lastPrefetchAt = 0;
   /** Set whenever the canvas must repaint (new frame, edit, seek). Idle frames skip drawing. */
   private videoDirty = true;
   private lastDrawnMs = -1;
@@ -256,8 +298,7 @@ export class PlaybackEngine {
     this.unsubscribeFonts?.();
     this.unsubscribeRenderPreview?.();
     cancelAnimationFrame(this.raf);
-    stopScheduled(this.scheduled);
-    this.scheduled = [];
+    this.stopAudio();
     for (const cursor of this.cursors.values()) cursor.dispose();
     this.cursors.clear();
     this.dropPrerolls();
@@ -307,47 +348,95 @@ export class PlaybackEngine {
   /** (Re)start audio playback from a given timeline position. */
   private restartAt(state: EditorState, fromMs: number): void {
     if (!this.audioCtx || !this.masterGain) return;
-    stopScheduled(this.scheduled);
-
-    // Kick decoding for any (asset, audio track) pair we don't have a buffer for
-    // yet - a multi-track clip pulls its own source track, keyed independently.
-    const delegated = delegatedLinkIds(state.project);
-    for (const track of state.project.tracks) {
-      for (const clip of track.clips) {
-        // A linked video clip delegates its sound to its audio partners and is
-        // never scheduled (see audioMix): decoding its primary track here would
-        // duplicate their buffers (~23 MB per stereo minute, twice).
-        if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
-        const asset = state.assets[clip.assetId];
-        if (!asset?.hasAudio) continue;
-        const key = audioKey(asset.id, clip.audioTrackIndex);
-        if (this.audioBuffers.has(key)) continue;
-        this.audioBuffers.set(key, null);
-        void getAudioBuffer(asset, clip.audioTrackIndex).then((buffer) => {
-          this.audioBuffers.set(key, buffer);
-          if (buffer) this.audioDirty = true;
-        });
-      }
-    }
+    this.mix?.stop();
 
     const startCtx = this.audioCtx.currentTime + 0.03;
     this.anchorCtxTime = startCtx;
     this.anchorMediaMs = fromMs;
     this.rate = state.playbackRate;
-    this.scheduled = scheduleProjectAudio(
+    this.mix = new MixScheduler(
       this.audioCtx,
       (trackId) => this.busFor(trackId).gain,
-      state.project,
-      (assetId, audioTrackIndex) => this.audioBuffers.get(audioKey(assetId, audioTrackIndex)) ?? null,
+      peekAudioRange,
       fromMs,
       startCtx,
       this.rate,
     );
+    // Zeroed so the first extension of the new schedule is never rate-limited.
+    this.lastExtendAt = 0;
+    // Ask for the audio around the new position before scheduling: a seek into
+    // a cold region has nothing decoded, and the first window would otherwise
+    // schedule silence and wait for the next tick to notice.
+    this.prefetchAudio(state, fromMs, true);
+    this.extendAudio(state, fromMs);
+  }
+
+  /**
+   * Push the schedule forward, and pick up segments that have arrived since.
+   *
+   * Called every tick while playing. `extend` is idempotent per (clip,
+   * segment), so re-scheduling the same window costs a walk of the project and
+   * a few set lookups - and re-walking it is exactly what makes a segment that
+   * finished decoding late audible without restarting anything.
+   */
+  private extendAudio(state: EditorState, tMs: number): void {
+    if (!this.mix) return;
+    const now = performance.now();
+    if (now - this.lastExtendAt < AUDIO_SCHEDULE_INTERVAL_MS) return;
+    this.lastExtendAt = now;
+    // The window always starts at the playhead rather than at the last edge:
+    // a segment that landed late belongs to a window already passed, and only
+    // a window that still contains it can catch it.
+    this.mix.extend(state.project, tMs, tMs + AUDIO_SCHEDULE_HORIZON_MS);
+  }
+
+  /**
+   * Decode the audio the playhead is about to reach.
+   *
+   * Nothing else does: the mix only ever reads what is already decoded, so this
+   * is the entire reason there is sound past the first segment. The lead has to
+   * cover a decode (a seek plus 30 s of packets) at playback speed, and the
+   * cache's own budget is what stops it from running away on a long timeline.
+   *
+   * Rate-limited rather than run per frame - it walks every clip - and run
+   * while paused too, so pressing play does not start with a decode.
+   */
+  private prefetchAudio(state: EditorState, tMs: number, force = false): void {
+    const now = performance.now();
+    if (!force && now - this.lastPrefetchAt < AUDIO_PREFETCH_INTERVAL_MS) return;
+    this.lastPrefetchAt = now;
+
+    const from = Math.max(0, tMs - AUDIO_PREFETCH_BEHIND_MS);
+    const until = tMs + AUDIO_PREFETCH_AHEAD_MS * (this.wasPlaying ? this.rate : 1);
+    const delegated = delegatedLinkIds(state.project);
+    for (const track of state.project.tracks) {
+      if (track.muted) continue;
+      for (const clip of track.clips) {
+        // A linked video clip delegates its sound to its audio partners and is
+        // never scheduled (see audioMix): decoding its primary track here would
+        // hold the same audio twice.
+        if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
+        if (clip.volume <= 0) continue;
+        const clipEnd = clipEndMs(clip);
+        if (clipEnd <= from || clip.timelineStartMs >= until) continue;
+        const asset = state.assets[clip.assetId];
+        if (!asset?.hasAudio) continue;
+        const speed = clip.speed || 1;
+        const windowFrom = Math.max(from, clip.timelineStartMs);
+        const windowTo = Math.min(until, clipEnd);
+        prefetchAudioRange(
+          asset,
+          clip.audioTrackIndex,
+          clip.sourceInMs + (windowFrom - clip.timelineStartMs) * speed,
+          Math.min(clip.sourceOutMs, clip.sourceInMs + (windowTo - clip.timelineStartMs) * speed),
+        );
+      }
+    }
   }
 
   private stopAudio(): void {
-    stopScheduled(this.scheduled);
-    this.scheduled = [];
+    this.mix?.stop();
+    this.mix = null;
   }
 
   private playbackTimeMs(state: EditorState): number {
@@ -409,11 +498,6 @@ export class PlaybackEngine {
       }
     }
 
-    if (this.audioDirty) {
-      this.audioDirty = false;
-      if (this.wasPlaying) this.restartAt(state, this.playbackTimeMs(state));
-    }
-
     let t = state.currentTimeMs;
     if (this.wasPlaying) {
       t = this.playbackTimeMs(state);
@@ -433,6 +517,13 @@ export class PlaybackEngine {
       }
       state.setCurrentTimeFromEngine(t);
     }
+
+    // Audio is scheduled one window at a time and decoded a window ahead of
+    // that, so both have to be pushed forward as the playhead moves. Paused,
+    // only the prefetch runs - which is what makes pressing play instant
+    // instead of starting with a decode.
+    if (this.wasPlaying) this.extendAudio(state, t);
+    this.prefetchAudio(state, t);
 
     // Trim preview: while an edge is being dragged, the picture shows the frame
     // at that edge instead of the playhead's. Applied after the playback branch
@@ -924,11 +1015,9 @@ export class PlaybackEngine {
 
   private pruneCursors(project: Project): void {
     const liveIds = new Set<string>();
-    const liveAudioKeys = new Set<string>();
     for (const track of project.tracks) {
       for (const clip of track.clips) {
         liveIds.add(clip.id);
-        liveAudioKeys.add(audioKey(clip.assetId, clip.audioTrackIndex));
       }
     }
     for (const [clipId, cursor] of this.cursors) {
@@ -949,11 +1038,6 @@ export class PlaybackEngine {
     for (const track of project.tracks) for (const clip of track.clips) liveAssetIds.add(clip.assetId);
     for (const assetId of [...this.stills.keys()]) {
       if (!liveAssetIds.has(assetId)) this.stills.delete(assetId);
-    }
-    // Decoded audio no longer referenced by any clip can be large - drop it,
-    // per (asset, audio track) so one track's buffer never evicts another's.
-    for (const key of [...this.audioBuffers.keys()]) {
-      if (!liveAudioKeys.has(key)) this.audioBuffers.delete(key);
     }
     // Buses of deleted tracks: disconnect so they stop feeding the master.
     const liveTrackIds = new Set(project.tracks.map((t) => t.id));
