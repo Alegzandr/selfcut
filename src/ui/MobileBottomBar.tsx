@@ -1,8 +1,17 @@
-import type { ComponentType } from 'react';
+import { useState, type ComponentType, type ReactNode } from 'react';
 import type { ParseKeys } from 'i18next';
 import { AnimatePresence, m } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { TrashIcon, UploadIcon } from '@radix-ui/react-icons';
+import {
+  ChevronLeftIcon,
+  FrameIcon,
+  CircleIcon,
+  Pencil1Icon,
+  SquareIcon,
+  TrashIcon,
+  TriangleUpIcon,
+  UploadIcon,
+} from '@radix-ui/react-icons';
 import { useStore, getSelectedClip, getSelectedTrackKind, getLinkTargets } from '../store/store';
 import { useIsCoarsePointer } from '../lib/device';
 import { useEditorCommands } from './commands';
@@ -13,7 +22,15 @@ import { useEditorCommands } from './commands';
  * Its content swaps with the selection:
  *  - no clip selected → a scrollable rail of creation tools (add media/text/…);
  *  - a clip selected → a scrollable rail of contextual clip actions.
+ *  - either of them → a "Preview" tile opens the monitor rail underneath.
  * The media library and the inspector open as sheets *over* this bar.
+ *
+ * The monitor rail is the touch home of what the desktop draws floating over
+ * the preview: the select / pan / zoom modes, "fit the view", the shape
+ * primitives and the mask pen. None of those are in any menu, so before this
+ * rail existed they were the one group of features a phone simply did not
+ * have - and with no pinch handler on the monitor, a phone could not even zoom
+ * the picture it was cutting.
  */
 type Tile = {
   /** Command id from the shared registry (its handler + disabled state). */
@@ -73,33 +90,145 @@ const CLIP_TILES: readonly Tile[] = [
   { cmd: 'clip.rippleDelete', icon: TrashIcon, labelKey: 'clipbar.delete', danger: true },
 ];
 
-function Rail({ tiles }: { tiles: readonly Tile[] }) {
+/** One tile. Shared so a command tile and a mode tile cannot drift apart. */
+function RailTile({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+  active,
+  danger,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  /** Mode tiles only (the monitor rail): exactly one of a group is on. */
+  active?: boolean;
+  danger?: boolean;
+}) {
+  const color = danger ? 'text-red-300' : active ? 'text-blue-300' : 'text-zinc-300';
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-pressed={active}
+      className={`flex min-w-16 flex-none flex-col items-center gap-1.5 rounded-lg px-2 py-1 text-3xs font-medium ${color} hover:bg-zinc-800/70 active:bg-zinc-800 disabled:opacity-30`}
+      onClick={onClick}
+    >
+      <span
+        className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+          active ? 'bg-blue-500/20' : 'bg-zinc-800/70'
+        }`}
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+      {label}
+    </button>
+  );
+}
+
+function RailRow({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {children}
+    </div>
+  );
+}
+
+function Rail({ tiles, onPreview }: { tiles: readonly Tile[]; onPreview: () => void }) {
   const { t } = useTranslation();
   const commands = useEditorCommands();
   return (
-    <div className="flex gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <RailRow>
       {tiles.map((tile) => {
         const command = commands[tile.cmd];
         if (!command) return null;
         const Icon = tile.icon ?? command.icon;
         if (!Icon) return null;
-        const color = tile.danger ? 'text-red-300' : 'text-zinc-300';
         return (
-          <button
+          <RailTile
             key={tile.cmd}
-            type="button"
+            icon={Icon}
+            label={t(tile.labelKey)}
             disabled={command.disabled}
-            className={`flex min-w-16 flex-none flex-col items-center gap-1.5 rounded-lg px-2 py-1 text-3xs font-medium ${color} hover:bg-zinc-800/70 active:bg-zinc-800 disabled:opacity-30`}
+            danger={tile.danger}
             onClick={command.onClick}
-          >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800/70">
-              <Icon className="h-5 w-5" />
-            </span>
-            {t(tile.labelKey)}
-          </button>
+          />
         );
       })}
-    </div>
+      {/* Last, after the actions of the rail it hangs off: it is a way in to
+          another rail, not one more thing to do to the timeline. */}
+      <RailTile icon={FrameIcon} label={t('mobile.preview')} onClick={onPreview} />
+    </RailRow>
+  );
+}
+
+/**
+ * The monitor rail: the preview's own tools, which on desktop float over the
+ * canvas. The shape primitives are listed flat rather than behind the desktop's
+ * flyout - a long-press to reveal a tool group is an Adobe habit, not a phone
+ * one, and there are only three of them.
+ */
+function PreviewRail({ onBack }: { onBack: () => void }) {
+  const { t } = useTranslation();
+  const commands = useEditorCommands();
+  const previewTool = useStore((s) => s.previewTool);
+  const shapeKind = useStore((s) => s.previewShapeKind);
+  const hasSelection = useStore((s) => s.selectedClipId !== null);
+  const { setPreviewTool, setPreviewShapeKind } = useStore.getState();
+
+  const shapes = [
+    { kind: 'rect' as const, icon: SquareIcon, labelKey: 'preview.shape.rect' as ParseKeys },
+    { kind: 'ellipse' as const, icon: CircleIcon, labelKey: 'preview.shape.ellipse' as ParseKeys },
+    { kind: 'polygon' as const, icon: TriangleUpIcon, labelKey: 'preview.shape.polygon' as ParseKeys },
+  ];
+
+  return (
+    <RailRow>
+      <RailTile icon={ChevronLeftIcon} label={t('mobile.back')} onClick={onBack} />
+      {(['preview.toolSelect', 'preview.toolHand', 'preview.toolZoom', 'preview.resetView'] as const).map(
+        (id, i) => {
+          const command = commands[id];
+          const Icon = command?.icon;
+          if (!command || !Icon) return null;
+          return (
+            <RailTile
+              key={id}
+              icon={Icon}
+              label={t((['mobile.select', 'mobile.pan', 'mobile.zoom', 'mobile.fit'] as ParseKeys[])[i]!)}
+              disabled={command.disabled}
+              active={command.checked}
+              onClick={command.onClick}
+            />
+          );
+        },
+      )}
+      {shapes.map(({ kind, icon, labelKey }) => (
+        <RailTile
+          key={kind}
+          icon={icon}
+          label={t(labelKey)}
+          // Armed AND drawing: on desktop the flyout picks the primitive and the
+          // button arms the tool, but here one tap has to do both or the tile
+          // would be a setting with no visible effect.
+          active={previewTool === 'shape' && shapeKind === kind}
+          onClick={() => {
+            setPreviewShapeKind(kind);
+            setPreviewTool('shape');
+          }}
+        />
+      ))}
+      {/* A mask belongs to a clip, so this one is dead without a selection -
+          same rule the desktop pen button follows. */}
+      <RailTile
+        icon={Pencil1Icon}
+        label={t('mobile.mask')}
+        disabled={!hasSelection}
+        active={previewTool === 'pen'}
+        onClick={() => setPreviewTool(previewTool === 'pen' ? 'select' : 'pen')}
+      />
+    </RailRow>
   );
 }
 
@@ -111,6 +240,7 @@ export function MobileBottomBar() {
   // a video asset, so the lane is what settles it.
   const onVideoTrack = useStore(getSelectedTrackKind) !== 'audio';
   const inspectorOpen = useStore((s) => s.inspectorOpen);
+  const [showPreviewRail, setShowPreviewRail] = useState(false);
   if (!coarse) return null;
 
   // A selected clip shows its action rail; the inspector sheet (Adjust) takes
@@ -130,13 +260,17 @@ export function MobileBottomBar() {
     <nav className="flex-none border-t border-zinc-800 bg-zinc-900/95 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur">
       <AnimatePresence mode="wait" initial={false}>
         <m.div
-          key={showClip ? 'clip' : 'tools'}
+          key={showPreviewRail ? 'preview' : showClip ? 'clip' : 'tools'}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.12 }}
         >
-          <Rail tiles={tiles} />
+          {showPreviewRail ? (
+            <PreviewRail onBack={() => setShowPreviewRail(false)} />
+          ) : (
+            <Rail tiles={tiles} onPreview={() => setShowPreviewRail(true)} />
+          )}
         </m.div>
       </AnimatePresence>
     </nav>

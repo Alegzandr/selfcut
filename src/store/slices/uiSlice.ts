@@ -89,6 +89,7 @@ export function createUiSlice(
   | 'requestConfirm'
   | 'resolveConfirm'
   | 'setRenamingMarker'
+  | 'setTrackSettingsTrack'
   | 'setTimeFormat'
   | 'setPreviewTool'
   | 'setSelectedRedactionId'
@@ -212,6 +213,7 @@ export function createUiSlice(
       if (get().contextMenu) set({ contextMenu: null });
     },
     setRenamingMarker: (markerId) => set({ renamingMarkerId: markerId }),
+    setTrackSettingsTrack: (trackId) => set({ trackSettingsTrackId: trackId }),
 
     requestConfirm: (options) =>
       new Promise<boolean>((resolve) => {

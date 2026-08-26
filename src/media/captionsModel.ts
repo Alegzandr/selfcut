@@ -20,6 +20,9 @@ export type CaptionDevice = 'webgpu' | 'wasm';
 /** The weight precisions used here, a subset of what transformers.js accepts. */
 export type CaptionDtype = 'fp32' | 'fp16' | 'q8' | 'q4';
 
+/** One precision for the whole model, or one per ONNX file. */
+export type CaptionDtypeSpec = CaptionDtype | Record<string, CaptionDtype>;
+
 export interface CaptionModelInfo {
   /** Stable key, persisted in the preference - NOT the repo id, which can move. */
   id: string;
@@ -46,7 +49,16 @@ export interface CaptionModelInfo {
    * quantized loaders some Whisper builds ship hit onnxruntime-web bugs, and a
    * caption run that crashes is worse than one that downloads more.
    */
-  dtype: Record<CaptionDevice, CaptionDtype | Record<string, CaptionDtype>>;
+  dtype: Record<CaptionDevice, CaptionDtypeSpec>;
+  /**
+   * Precision to use on a WebGPU adapter that lacks `shader-f16`.
+   *
+   * WebGPU is one API but not one capability set: fp16 shaders are an optional
+   * feature, and an adapter without them does not silently promote to fp32 -
+   * the session fails to build, after the download. Only meaningful on a model
+   * whose `dtype.webgpu` asks for fp16 in the first place.
+   */
+  dtypeNoF16?: CaptionDtypeSpec;
 }
 
 export const CAPTION_MODELS: CaptionModelInfo[] = [
@@ -87,6 +99,11 @@ export const CAPTION_MODELS: CaptionModelInfo[] = [
       webgpu: { encoder_model: 'fp16', decoder_model_merged: 'q4' },
       wasm: 'fp32',
     },
+    // Adapters without shader-f16 exist (some AMD and Intel drivers on Windows,
+    // older Mesa on Linux); q8 keeps the encoder on the GPU for a comparable
+    // download instead of failing the load. Apple Silicon always reports the
+    // feature, so this is not the Mac path.
+    dtypeNoF16: { encoder_model: 'q8', decoder_model_merged: 'q4' },
   },
 ];
 
@@ -95,4 +112,24 @@ export const DEFAULT_CAPTION_MODEL = 'base';
 
 export function captionModel(id: string): CaptionModelInfo {
   return CAPTION_MODELS.find((m) => m.id === id) ?? CAPTION_MODELS.find((m) => m.id === DEFAULT_CAPTION_MODEL)!;
+}
+
+function usesF16(spec: CaptionDtypeSpec): boolean {
+  return typeof spec === 'string' ? spec === 'fp16' : Object.values(spec).includes('fp16');
+}
+
+/**
+ * The precision to load `model` at on a WebGPU adapter, given whether that
+ * adapter exposes `shader-f16`.
+ *
+ * `null` means this machine cannot run the model on the GPU at all: the model
+ * only exists as an fp16 proposition and the adapter has no fp16. Callers rule
+ * it out up front rather than letting the pipeline throw once the weights are
+ * already on disk.
+ */
+export function webgpuDtype(model: CaptionModelInfo, f16: boolean): CaptionDtypeSpec | null {
+  const spec = model.dtype.webgpu;
+  if (f16 || !usesF16(spec)) return spec;
+  if (model.dtypeNoF16 && !usesF16(model.dtypeNoF16)) return model.dtypeNoF16;
+  return null;
 }

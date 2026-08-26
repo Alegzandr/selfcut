@@ -18,6 +18,22 @@ export const FRAME_MS = 1000 / PROJECT_FPS;
  */
 export const MIN_CLIP_DURATION_MS = FRAME_MS;
 
+/**
+ * How far the arrow keys jump while the timeline is PLAYING.
+ *
+ * Stopped, an arrow is a frame - that is the edit gesture, and nothing replaces
+ * it. Running, a frame is meaningless: at 30 fps it is a thirtieth of what has
+ * already gone past by the time the key is read, so the arrows become what they
+ * are in a player, a skip.
+ *
+ * Back is the shorter of the two on purpose. Skipping forward is a search - you
+ * mean to leave; skipping back is a repair - you missed a line and want it
+ * again, and an over-long rewind makes you sit through what you already heard.
+ * The same asymmetry every podcast player ships.
+ */
+export const PLAYBACK_SKIP_FORWARD_MS = 10_000;
+export const PLAYBACK_SKIP_BACK_MS = 5_000;
+
 /** Default timeline duration of a still-image clip (a still has no intrinsic length). */
 export const IMAGE_CLIP_DEFAULT_MS = 5000;
 

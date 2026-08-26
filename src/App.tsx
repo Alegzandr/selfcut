@@ -39,6 +39,7 @@ import { A11yAnnouncer } from "./ui/A11yAnnouncer";
 import { useEditorHotkeys } from "./ui/useEditorHotkeys";
 import { useFileDragOverlay } from "./ui/useFileDragOverlay";
 import { useIsCoarsePointer } from "./lib/device";
+import { TrackSettingsSheet } from "./timeline/TrackSettingsSheet";
 import { isSoftwareRendering } from "./lib/gpu";
 import { PerfOverlay } from "./perf/PerfOverlay";
 
@@ -162,7 +163,13 @@ export default function App() {
       <About />
       <ProjectLibrary />
       <ConfirmDialog />
-      {!coarse && <ContextMenu />}
+      <TrackSettingsSheet />
+      {/* Mounted on touch too: the track header's "…" button opens this same
+          menu, and while it was desktop-only that button did nothing - track
+          hide, expand, lock and per-track captions were unreachable on a
+          phone. Nothing opens it by itself on touch (long-press keeps the
+          native menu), so mounting it costs a null render. */}
+      <ContextMenu />
       <Toast />
       <A11yAnnouncer />
 

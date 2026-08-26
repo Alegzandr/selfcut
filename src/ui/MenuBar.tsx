@@ -7,71 +7,15 @@ import logoUrl from '../assets/logo.png?url';
 import { APP_NAME } from '../app/config';
 import { useEditorCommands } from './commands';
 import { MenuList, type MenuEntry } from './menu/MenuList';
+import { MENUS } from './menu/appMenus';
 import { MasterVolume } from './MasterVolume';
 
 /**
- * Desktop menu bar (File / Edit / …). The menu *structure* lives here as ids
- * into the shared command map; `'---'` is a separator. A menu opens on click and,
- * while any menu is open, switches on hover - the standard desktop menu-bar feel.
+ * Desktop menu bar (File / Edit / …). The menu structure itself lives in
+ * `menu/appMenus.ts`, shared with the touch menu sheet. A menu opens on click
+ * and, while any menu is open, switches on hover - the standard desktop
+ * menu-bar feel.
  */
-type Menu = { titleKey: ParseKeys; items: readonly string[] };
-
-const MENUS: readonly Menu[] = [
-  {
-    titleKey: 'menu.file',
-    items: [
-      'file.new',
-      'file.open',
-      'file.projects',
-      '---',
-      'file.save',
-      'file.saveAs',
-      '---',
-      'file.import',
-      'file.importSubtitles',
-      'file.exportSubtitles',
-      'file.importPreset',
-      'file.savePreset',
-      '---',
-      'file.export',
-    ],
-  },
-  {
-    titleKey: 'menu.edit',
-    items: ['edit.undo', 'edit.redo', '---', 'edit.cut', 'edit.copy', 'edit.paste', '---', 'edit.selectAll', '---', 'edit.preferences'],
-  },
-  {
-    titleKey: 'menu.insert',
-    items: ['insert.text', 'insert.color', 'insert.gradient', '---', 'insert.videoTrack', 'insert.audioTrack', '---', 'insert.marker'],
-  },
-  {
-    titleKey: 'menu.clip',
-    items: ['clip.split', 'clip.duplicate', '---', 'clip.punchIn', 'clip.stream', 'clip.blurRegion', 'clip.captions', 'clip.link', 'clip.unlink', '---', 'clip.delete', 'clip.rippleDelete'],
-  },
-  {
-    titleKey: 'menu.view',
-    // The shortcuts panel lives under Help alone: it was in both menus, the
-    // same command listed twice under the same label.
-    items: [
-      'view.zoomIn',
-      'view.zoomOut',
-      '---',
-      'view.media',
-      'view.effects',
-      'view.transitions',
-      '---',
-      'view.subtitles',
-      '---',
-      'view.snap',
-    ],
-  },
-  {
-    titleKey: 'menu.playback',
-    items: ['playback.playPause', 'playback.start', '---', 'playback.loop', 'playback.regionIn', 'playback.regionOut'],
-  },
-  { titleKey: 'menu.help', items: ['help.shortcuts', '---', 'help.about'] },
-];
-
 export function MenuBar() {
   const { t } = useTranslation();
   const commands = useEditorCommands();

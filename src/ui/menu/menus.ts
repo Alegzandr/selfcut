@@ -8,6 +8,7 @@ import {
   LockOpen1Icon,
   Pencil2Icon,
   PlusIcon,
+  SliderIcon,
   SpeakerLoudIcon,
   SpeakerModerateIcon,
   TrashIcon,
@@ -18,6 +19,7 @@ import { audioKey } from '../../media/mediaCache';
 import type { ContextTarget } from '../../store/editorState';
 import { reconnectAssetViaPicker } from '../MediaLibrary';
 import { useEditorCommands, type Command } from '../commands';
+import { useIsCoarsePointer } from '../../lib/device';
 import type { MenuEntry } from './MenuList';
 
 /**
@@ -40,6 +42,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
   const assets = useStore((s) => s.assets);
   const canLink = useStore((s) => getLinkTargets(s) !== null);
   const expandedTrackIds = useStore((s) => s.expandedTrackIds);
+  const coarse = useIsCoarsePointer();
   const st = useStore.getState;
 
   /** Map global command ids (and separators) to rows, dropping unknown ids. */
@@ -160,6 +163,16 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
           icon: EyeOpenIcon,
           checked: track.hidden,
           onClick: () => st().toggleTrackHidden(id),
+        });
+      }
+      // Volume and opacity: faders on the desktop header, and nothing at all on
+      // the 44px touch one, so on touch the menu is where they live.
+      if (coarse) {
+        items.push({
+          id: 'ctx.track.settings',
+          labelKey: 'track.settings',
+          icon: SliderIcon,
+          onClick: () => st().setTrackSettingsTrack(id),
         });
       }
       // Reachable nowhere else on a coarse pointer: the touch header is two

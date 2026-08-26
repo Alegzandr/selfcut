@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import type { CaptionRequest, CaptionReply, CaptionSegment } from './captionsProtocol';
-import { captionModel } from './captionsModel';
+import { captionModel, webgpuDtype } from './captionsModel';
+import { captionCapabilities } from './captionsCapabilities';
 
 /**
  * Whisper transcription worker (desktop only). transformers.js is dynamically
@@ -12,6 +13,11 @@ import { captionModel } from './captionsModel';
  * runs on wasm, where every model stays at fp32: the quantized-weight loaders
  * hit onnxruntime-web bugs in some Whisper builds, and a crashed run is worse
  * than a larger download.
+ *
+ * The backend and the precision come from `captionCapabilities`, the same probe
+ * the model picker rates rows with - the vendor never enters into it (WebGPU is
+ * D3D12, Vulkan or Metal underneath and none of that reaches here), but the
+ * optional `shader-f16` feature does, so the two must not answer differently.
  */
 
 type Asr = ((
@@ -90,17 +96,6 @@ function post(reply: CaptionReply): void {
   (self as unknown as Worker).postMessage(reply);
 }
 
-/** Whether a real WebGPU adapter is available (not just the `navigator.gpu` API). */
-async function hasWebGpu(): Promise<boolean> {
-  const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
-  if (!gpu) return false;
-  try {
-    return (await gpu.requestAdapter()) != null;
-  } catch {
-    return false;
-  }
-}
-
 async function getAsr(modelId: string): Promise<Asr> {
   const cached = pipelines.get(modelId);
   if (cached) return cached;
@@ -115,12 +110,15 @@ async function getAsr(modelId: string): Promise<Asr> {
       }
     };
     // The WebGPU object can exist with no adapter behind it (headless, some
-    // machines), and ONNX then fails at inference - so probe for a real adapter.
-    if (await hasWebGpu()) {
+    // machines), and ONNX then fails at inference - so the probe asks for a real
+    // adapter, and for the fp16 feature the precision below may depend on.
+    const caps = await captionCapabilities();
+    const dtype = caps.device === 'webgpu' ? webgpuDtype(model, caps.f16) : null;
+    if (dtype) {
       try {
         return (await pipeline('automatic-speech-recognition', model.repo, {
           device: 'webgpu',
-          dtype: model.dtype.webgpu,
+          dtype,
           progress_callback,
         })) as unknown as Asr;
       } catch (err) {
@@ -130,7 +128,15 @@ async function getAsr(modelId: string): Promise<Asr> {
         if (model.gpuOnly) throw err;
       }
     }
-    if (model.gpuOnly) throw new Error(`${model.name} requires WebGPU`);
+    if (model.gpuOnly) {
+      // Say which of the two it is: "requires WebGPU" on a machine that plainly
+      // has a GPU sends the user looking in the wrong place.
+      throw new Error(
+        caps.device === 'webgpu'
+          ? `${model.name} requires WebGPU fp16 (shader-f16), which this GPU does not provide`
+          : `${model.name} requires WebGPU`,
+      );
+    }
     return (await pipeline('automatic-speech-recognition', model.repo, {
       device: 'wasm',
       dtype: model.dtype.wasm,

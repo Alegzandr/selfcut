@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   clamp,
   formatTime,
+  formatTimePrecise,
   formatTimeShort,
   formatTimecode,
   formatTimecodeParts,
@@ -19,6 +20,18 @@ describe('formatTime (m:ss.d)', () => {
   });
   it('clamps negatives to zero', () => {
     expect(formatTime(-500)).toBe('0:00.0');
+  });
+});
+
+describe('formatTimePrecise (m:ss.mmm)', () => {
+  it('keeps every millisecond, so a field seeded from it round-trips', () => {
+    expect(formatTimePrecise(1250)).toBe('0:01.250');
+    expect(formatTimePrecise(61_007)).toBe('1:01.007');
+    expect(parseClock(formatTimePrecise(1250), 30, 'decimal')).toBe(1250);
+  });
+
+  it('floors at zero rather than printing a negative time', () => {
+    expect(formatTimePrecise(-5)).toBe('0:00.000');
   });
 });
 

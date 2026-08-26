@@ -234,6 +234,13 @@ export interface EditorState {
   confirmDialog: ConfirmRequest | null;
   /** Marker whose inline label editor is open (opened by dbl-click or the menu). */
   renamingMarkerId: string | null;
+  /**
+   * Track whose levels sheet is open, or null.
+   *
+   * Touch only in practice: the desktop header carries the volume and opacity
+   * faders inline, and the 44px touch header has room for two icon buttons.
+   */
+  trackSettingsTrackId: string | null;
   /** How the transport spells time out (persisted). */
   timeFormat: TimeFormat;
   /** Preview playback resolution the user picked (persisted). */
@@ -698,6 +705,7 @@ export interface EditorState {
   resolveConfirm: (ok: boolean) => void;
   /** Open (id) or close (null) a marker's inline label editor. */
   setRenamingMarker: (markerId: string | null) => void;
+  setTrackSettingsTrack: (trackId: string | null) => void;
   setTimeFormat: (format: TimeFormat) => void;
   setPreviewTool: (tool: PreviewTool) => void;
   /** Move/scale the preview camera; the caller clamps via `clampView`. */
