@@ -28,6 +28,7 @@ const RENDER_SPECS = [
   /export.*\.spec\.ts/,
   /memory\.spec\.ts/,
   /perf\.spec\.ts/,
+  /playbackEdit\.spec\.ts/,
   /previewCuts\.spec\.ts/,
   /transcode.*\.spec\.ts/,
   // Excluded from every default run (see EXCLUDED), but they render harder than

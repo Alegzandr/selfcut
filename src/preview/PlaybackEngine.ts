@@ -128,6 +128,24 @@ const LOOP_PREROLL_LEAD_MS = 900;
 const PREROLL_SETTLE_MS = 400;
 
 /**
+ * How still the project must be before a mid-playback edit rebuilds the audio
+ * schedule.
+ *
+ * A gesture is not one edit: dragging a clip along the timeline, trimming an
+ * edge or sliding a fade writes the store on every pointermove, and every one
+ * of those moves the audio. Restarting per move stopped a row of buffer
+ * sources mid-sample sixty times a second - that is the buzz - and re-anchored
+ * the transport thirty milliseconds into the future each time, which froze the
+ * clock and left the picture wandering off the playhead.
+ *
+ * So the rebuild waits for the edits to stop. Until they do, the mix keeps
+ * playing the schedule from before the gesture, which is what an NLE does with
+ * a clip dragged under a running playhead: sound carries on, picture follows
+ * the edit, and the two meet again at the drop.
+ */
+const MIX_SETTLE_MS = 120;
+
+/**
  * How far ahead of the playhead audio is SCHEDULED, in timeline ms.
  *
  * Audio is decoded in segments (see `audioSegments.ts`), so playback is a row
@@ -210,6 +228,11 @@ export class PlaybackEngine {
    * so replacing it is one `stop()` and a fresh anchor.
    */
   private mix: MixScheduler | null = null;
+  /**
+   * `performance.now()` of the most recent edit that took the audio schedule
+   * out of step with the project, or 0 when the two match. See MIX_SETTLE_MS.
+   */
+  private mixDirtyAt = 0;
   /** `performance.now()` of the last schedule extension and the last prefetch pass. */
   private lastExtendAt = 0;
   private lastPrefetchAt = 0;
@@ -347,6 +370,9 @@ export class PlaybackEngine {
 
   /** (Re)start audio playback from a given timeline position. */
   private restartAt(state: EditorState, fromMs: number): void {
+    // Cleared even when there is no context yet: the schedule this rebuild was
+    // asked for cannot exist either, so nothing is left owing.
+    this.mixDirtyAt = 0;
     if (!this.audioCtx || !this.masterGain) return;
     this.mix?.stop();
 
@@ -494,8 +520,17 @@ export class PlaybackEngine {
       // a transform drag fires updateClip on every pointermove, and
       // rescheduling there stutters the audio for nothing.
       if (this.wasPlaying && !sameAudioMix(previous, state.project)) {
-        this.restartAt(state, this.playbackTimeMs(state));
+        // Coalesced rather than acted on here, and pushed back by every
+        // further edit so a gesture rebuilds once, at its end, not on a timer
+        // running underneath it. See MIX_SETTLE_MS.
+        this.mixDirtyAt = performance.now();
       }
+    }
+
+    // The edits have stopped: put the schedule back in step with the project.
+    if (this.mixDirtyAt !== 0 && performance.now() - this.mixDirtyAt >= MIX_SETTLE_MS) {
+      if (this.wasPlaying) this.restartAt(state, this.playbackTimeMs(state));
+      else this.mixDirtyAt = 0;
     }
 
     let t = state.currentTimeMs;
