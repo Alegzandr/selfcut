@@ -573,6 +573,7 @@
   "clipbar.blurRegion": "Unscharf",
   "errors.export.videoEncoderUnsupported": "Dieser Browser kann H.264-Video in dieser Auflösung nicht kodieren. Versuchen Sie eine niedrigere Auflösung oder einen Browser mit H.264-Unterstützung (Chrome, Edge, Safari).",
   "errors.export.encoderStalled": "Der Video-Encoder antwortet nicht mehr, weder per Hardware noch per Software. Versuchen Sie eine Voreinstellung mit geringerer Auflösung oder laden Sie die Seite neu und exportieren Sie erneut.",
+  "errors.export.cannotClone": "Dieser Browser hat einen Teil des Renderings nicht an den Exportarbeiter kopiert ({{field}}), und die Ausweichwege halfen auch nicht. Laden Sie die Seite neu und exportieren Sie erneut; wenn es bleibt, melden Sie es mit diesem Namen.",
   "errors.export.disconnectedSources": "Einige Quelldateien sind getrennt: {{names}}. Verbinden Sie sie vor dem Export erneut.",
   "export.close": "Schließen",
   "mobile.settings": "Einstellungen",

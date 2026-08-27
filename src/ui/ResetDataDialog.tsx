@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import { ExclamationTriangleIcon } from '@radix-ui/react-icons';
 import { eraseSelfcutData } from '../lib/resetData';
 import { captionCacheAvailable, listCachedModels } from '../media/captionsCache';
@@ -31,6 +32,7 @@ const LOSSES: readonly ParseKeys[] = [
 
 export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
+  const dialog = useEnterMotion({ y: 8, scale: 0.96 });
   const [keepModels, setKeepModels] = useState(true);
   const [modelBytes, setModelBytes] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -95,9 +97,7 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
           onClick={() => !busy && onClose()}
         >
           <m.div
-            initial={{ scale: 0.96, y: 8 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.96, y: 8 }}
+            {...dialog}
             role="alertdialog"
             aria-modal="true"
             aria-label={t('preferences.data.reset.title')}

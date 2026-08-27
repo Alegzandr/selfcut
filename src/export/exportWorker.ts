@@ -14,8 +14,10 @@ import {
   AudioSample,
   canEncodeAudio,
   canEncodeVideo,
+  type StreamTargetChunk,
 } from 'mediabunny';
 import { registerAacEncoder } from '@mediabunny/aac-encoder';
+import { reopenExportScratch } from '../lib/opfs';
 import { registerMp3Encoder } from '@mediabunny/mp3-encoder';
 import { FrameRenderer } from './frameRenderer';
 import { RenderPreviewTap } from './renderPreview';
@@ -46,6 +48,7 @@ import {
   type AudioMixInfo,
   ExportErrorCode,
   ExportRequest,
+  type ExportSink,
   type MainToWorker,
   WorkerReply,
 } from './protocol';
@@ -464,16 +467,67 @@ async function supportsAudio(
  * Retried rather than waited out unconditionally, so the first attempt - which
  * is nearly every attempt - pays nothing at all.
  */
-async function openWritable(handle: FileSystemFileHandle): Promise<FileSystemWritableFileStream> {
+async function openWritable(sink: ExportSink): Promise<WritableStream<StreamTargetChunk> | null> {
+  const handle =
+    sink.kind === 'picked' ? sink.handle : await reopenExportScratch(sink.name);
+  // A scratch file that is not there any more is not worth failing a render
+  // over: the buffered path still produces the same output.
+  if (!handle) return null;
+
   for (let attempt = 0; ; attempt++) {
     try {
-      return await handle.createWritable();
+      // The scratch file is written through the synchronous handle, and the
+      // picked one through a writable stream, because that is what each of them
+      // has. WebKit implements no `FileSystemWritableFileStream` at all, and
+      // offers `createSyncAccessHandle` instead - worker-only, which is exactly
+      // where this runs; it is also OPFS-only, which is exactly what the
+      // scratch file is. Chromium takes the same branch rather than a second
+      // one it happens to support, so the path iOS runs is the path everything
+      // runs, and the one this is tested on.
+      return sink.kind === 'scratch'
+        ? await syncAccessStream(handle)
+        : ((await handle.createWritable()) as unknown as WritableStream<StreamTargetChunk>);
     } catch (err) {
       const locked = err instanceof DOMException && err.name === 'NoModificationAllowedError';
       if (!locked || attempt >= 4) throw err;
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
+}
+
+/**
+ * A `FileSystemSyncAccessHandle` dressed as the writable stream the muxer
+ * expects, for the engines that have no writable stream to give.
+ *
+ * The chunk shape mediabunny writes - `{ type: 'write', data, position }` - is
+ * the same shape `FileSystemWritableFileStream` accepts, so the adapter is
+ * mostly a rename: `position` becomes `at`. The writes are synchronous, which
+ * on this thread is what is wanted - it is the encoder's thread, and the bytes
+ * are already in hand.
+ *
+ * `truncate(0)` first, because this handle appends to whatever the file
+ * already holds and a scratch file is reused by name: without it, a render
+ * shorter than the last one would end with the tail of that one still on it.
+ * `close()` is what releases the lock the main thread then needs to read the
+ * file, so it runs on the way out of both endings.
+ */
+async function syncAccessStream(
+  handle: FileSystemFileHandle,
+): Promise<WritableStream<StreamTargetChunk>> {
+  const access = await handle.createSyncAccessHandle();
+  access.truncate(0);
+  return new WritableStream<StreamTargetChunk>({
+    write(chunk) {
+      access.write(chunk.data, { at: chunk.position });
+    },
+    close() {
+      access.flush();
+      access.close();
+    },
+    abort() {
+      access.close();
+    },
+  });
 }
 
 function postProgress(value: number): void {
@@ -549,7 +603,7 @@ async function exportMp4(req: ExportRequest, preset: Mp4Preset): Promise<void> {
   // That mode needs an upper bound on packets per track, and overshooting only
   // reserves a few unused bytes while undershooting aborts the render, so both
   // bounds below are deliberately loose.
-  const writable = req.fileHandle ? await openWritable(req.fileHandle) : null;
+  const writable = req.sink ? await openWritable(req.sink) : null;
   const target = writable ? new StreamTarget(writable, { chunked: true }) : new BufferTarget();
   const output = new Output({
     format: new Mp4OutputFormat({ fastStart: writable ? 'reserve' : 'in-memory' }),
@@ -901,7 +955,19 @@ async function renderParallel(
       frameCount: segment.frameCount,
       ...(req.measure ? { measure: true } : {}),
     };
-    w.postMessage(request);
+    try {
+      w.postMessage(request);
+    } catch (err) {
+      // The stills are copied to every segment worker, and an ImageBitmap is
+      // not copyable on every engine (WebKit transfers one but will not clone
+      // it). Reported as what it is, so the main thread re-runs the render
+      // serially - one worker, which is handed the bitmaps it already holds -
+      // rather than as a crash with the browser's own unattributed sentence.
+      if (err instanceof DOMException && err.name === 'DataCloneError') {
+        throw new ExportError('cannotClone');
+      }
+      throw err;
+    }
   };
 
   /**
@@ -1103,7 +1169,7 @@ async function exportMp3(req: ExportRequest): Promise<void> {
   // Same destination handling as the video path, so both presets behave the
   // same way. An mp3 is small enough that memory was never the issue here - it
   // is about the file landing where the user asked for it.
-  const writable = req.fileHandle ? await openWritable(req.fileHandle) : null;
+  const writable = req.sink ? await openWritable(req.sink) : null;
   const target = writable ? new StreamTarget(writable, { chunked: true }) : new BufferTarget();
   const output = new Output({ format: new Mp3OutputFormat(), target });
   const audioSource = new AudioSampleSource({ codec: 'mp3', bitrate: preset.audioBitrate });

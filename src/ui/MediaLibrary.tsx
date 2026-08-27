@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import { useTranslation } from 'react-i18next';
 import {
   ArchiveIcon,
@@ -90,6 +91,7 @@ export function MediaLibrary() {
   const libraryOpen = useStore((s) => s.libraryOpen);
   const libraryWidthPx = useStore((s) => s.libraryWidthPx);
   const importFiles = useImport();
+  const drawer = useEnterMotion({ x: '-105%' });
   const list = Object.values(assets);
   const importHere = () => openMediaPicker(importFiles);
 
@@ -174,9 +176,7 @@ export function MediaLibrary() {
             onClick={() => useStore.getState().setLibraryOpen(false)}
           />
           <m.aside
-            initial={{ x: '-105%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '-105%' }}
+            {...drawer}
             transition={{ type: 'spring', damping: 30, stiffness: 380 }}
             // w-64, not the w-44 this drawer used to be: it now carries a
             // three-tab strip plus the close button, and anything narrower

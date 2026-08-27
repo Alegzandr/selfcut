@@ -1,6 +1,7 @@
 import { useState, type ComponentType, type ReactNode } from 'react';
 import type { ParseKeys } from 'i18next';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronLeftIcon,
@@ -241,6 +242,7 @@ export function MobileBottomBar() {
   const onVideoTrack = useStore(getSelectedTrackKind) !== 'audio';
   const inspectorOpen = useStore((s) => s.inspectorOpen);
   const [showPreviewRail, setShowPreviewRail] = useState(false);
+  const rail = useEnterMotion({ opacity: 0, y: 6 }, { opacity: 0, y: -6 });
   if (!coarse) return null;
 
   // A selected clip shows its action rail; the inspector sheet (Adjust) takes
@@ -261,9 +263,7 @@ export function MobileBottomBar() {
       <AnimatePresence mode="wait" initial={false}>
         <m.div
           key={showPreviewRail ? 'preview' : showClip ? 'clip' : 'tools'}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
+          {...rail}
           transition={{ duration: 0.12 }}
         >
           {showPreviewRail ? (

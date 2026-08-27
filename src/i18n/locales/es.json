@@ -573,6 +573,7 @@
   "clipbar.blurRegion": "Difuminar",
   "errors.export.videoEncoderUnsupported": "Este navegador no puede codificar vídeo H.264 a esta resolución. Prueba un ajuste de menor resolución o un navegador compatible con H.264 (Chrome, Edge, Safari).",
   "errors.export.encoderStalled": "El codificador de vídeo dejó de responder, tanto por hardware como por software. Prueba un ajuste de menor resolución, o recarga la página y vuelve a exportar.",
+  "errors.export.cannotClone": "Este navegador se negó a copiar parte del render al trabajador de exportación ({{field}}), y las alternativas tampoco sirvieron. Recarga la página y vuelve a exportar; si sigue pasando, repórtalo con ese nombre.",
   "errors.export.disconnectedSources": "Algunos archivos de origen están desconectados: {{names}}. Vuelve a conectarlos antes de exportar.",
   "export.close": "Cerrar",
   "mobile.settings": "Ajustes",

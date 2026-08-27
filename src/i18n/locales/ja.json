@@ -573,6 +573,7 @@
   "clipbar.blurRegion": "ぼかし",
   "errors.export.videoEncoderUnsupported": "このブラウザーはこの解像度でH.264の映像をエンコードできません。解像度の低いプリセットを選ぶか、H.264に対応したブラウザー（Chrome、Edge、Safari）をお使いください。",
   "errors.export.encoderStalled": "映像エンコーダーが、ハードウェアでもソフトウェアでも応答しなくなりました。解像度の低いプリセットを選ぶか、ページを再読み込みしてもう一度書き出してください。",
+  "errors.export.cannotClone": "このブラウザーは書き出しの一部（{{field}}）を書き出しワーカーへ渡せませんでした。代わりの手も効きませんでした。ページを再読み込みしてもう一度書き出してください。続くようなら、その名称を添えてご報告ください。",
   "errors.export.disconnectedSources": "一部のソースファイルが切断されています：{{names}}。書き出す前に再接続してください。",
   "export.close": "閉じる",
   "mobile.settings": "設定",

@@ -6,6 +6,7 @@ import { audioKey, getAudioRange } from '../media/mediaCache';
 import { AudioSegment, segmentIndexes } from '../media/audioSegments';
 import { decodeImageFile } from '../media/stillImage';
 import { scheduleProjectAudio } from '../preview/audioMix';
+import { firstUncloneable } from '../lib/cloneable';
 import { openExportScratch, readExportScratch } from '../lib/opfs';
 import { flushProjectSave } from '../lib/persistence';
 import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
@@ -17,6 +18,7 @@ import {
   type ExportEncoderInfo,
   ExportErrorCode,
   ExportRequest,
+  type ExportSink,
   WorkerReply,
 } from './protocol';
 
@@ -143,6 +145,9 @@ const ERROR_KEYS = {
   // on one encoder, then on the software one, without the user being told
   // anything. Reaching this sentence means the encoder answers nothing at all.
   encoderStalled: 'errors.export.encoderStalled',
+  // Retried on terms that copy less before it is ever shown; the sentence names
+  // the value the browser refused, which is the only part worth reporting.
+  cannotClone: 'errors.export.cannotClone',
 } as const satisfies Record<ExportErrorCode, string>;
 
 /**
@@ -150,10 +155,23 @@ const ERROR_KEYS = {
  * `segmentMismatch` can be acted on instead of merely displayed.
  */
 class ExportWorkerError extends Error {
-  constructor(readonly code: ExportErrorCode) {
-    super(t(ERROR_KEYS[code]));
+  constructor(
+    readonly code: ExportErrorCode,
+    params?: Record<string, string>,
+  ) {
+    super(t(ERROR_KEYS[code], params));
     this.name = 'ExportWorkerError';
   }
+}
+
+/**
+ * A refused structured clone, whatever the engine calls it. The message differs
+ * between them - Chromium says the object "could not be cloned", WebKit that it
+ * "can not be cloned" - so the name is what identifies it. Anything else thrown
+ * by `postMessage` is not this and is left to surface as itself.
+ */
+function isDataCloneError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'DataCloneError';
 }
 
 /**
@@ -236,22 +254,28 @@ export function startExport(
     // First await of the run: everything above is synchronous so the picker
     // still runs under the activation of the click that started the export.
     const filename = exportFileName(preset);
-    let fileHandle = await pickExportFile(
+    const picked = await pickExportFile(
       filename,
       preset.kind === 'mp3' ? 'audio/mpeg' : 'video/mp4',
     );
+    let sink: ExportSink | null = picked ? { kind: 'picked', handle: picked } : null;
 
     // No file to write into (Firefox and Safari have no save picker, and the
     // picker can be refused even where it exists): render into origin-private
     // scratch storage rather than into memory. The render streams either way,
     // so only where the bytes land changes - and the user still gets the same
     // download at the end, just from disk instead of from a 6 GB buffer.
+    //
+    // The scratch file goes to the worker as its NAME. WebKit will not put a
+    // `FileSystemFileHandle` through `postMessage` - it refuses the whole
+    // message - so an export on any iOS browser died here, before a frame was
+    // drawn, with the browser's own "The object can not be cloned."
     let scratch: FileSystemFileHandle | null = null;
-    if (!fileHandle) {
+    if (!sink) {
       const opened = await openExportScratch(filename);
       if (opened) {
         scratch = opened.handle;
-        fileHandle = opened.handle;
+        sink = { kind: 'scratch', name: opened.name };
       } else if (estimatedOutputBytes(preset, durationMs) > MAX_IN_MEMORY_EXPORT_BYTES) {
         // Neither a picked file nor scratch space: the only path left builds the
         // whole file in RAM, and this one would not fit.
@@ -333,7 +357,10 @@ export function startExport(
         startMs,
         durationMs,
         audio: mix?.info ?? null,
-        fileHandle,
+        // Dropped on a buffered attempt: it is the only part of the request
+        // that is not plain data, so it is the first thing to go when the
+        // browser refuses to copy the request at all.
+        sink: attempt.bufferOutput ? null : sink,
         measure: perfEnabled(),
         ...(attempt.noParallel ? { noParallel: true } : {}),
         ...(attempt.preferSoftware ? { preferSoftwareEncoder: true } : {}),
@@ -376,7 +403,22 @@ export function startExport(
             if (worker === target) target.postMessage({ type: 'audioFailed', offset });
           }
         };
-        worker!.postMessage(request);
+        try {
+          worker!.postMessage(request);
+        } catch (err) {
+          // A structured clone the engine would not perform. Nothing has started
+          // - so this is not a failed render, it is a request this browser will
+          // not carry - and the retry plan drops what it had to copy. The value
+          // it choked on is worked out here, once, and travels with the error:
+          // the browser's own message names nothing at all.
+          if (!isDataCloneError(err)) throw err;
+          // The browser's own sentence is the fallback: an engine can refuse a
+          // worker message and still put every value in it through a port, and
+          // then there is no field to name - only what it said.
+          const field = firstUncloneable(request) ?? String((err as Error).message);
+          console.warn(`[export] this browser will not copy \`${field}\` to the worker`);
+          reject(new ExportWorkerError('cannotClone', { field }));
+        }
       });
     };
 
@@ -385,7 +427,11 @@ export function startExport(
      * that has an answer. `nextAttempt` owns which those are, and when there is
      * nothing left to try it returns null and the failure reaches the user.
      */
-    let attempt: ExportAttempt = { noParallel: !!options?.noParallel, preferSoftware: false };
+    let attempt: ExportAttempt = {
+      noParallel: !!options?.noParallel,
+      preferSoftware: false,
+      bufferOutput: false,
+    };
     let buffer: { buffer: ArrayBuffer | null; mime: string };
     for (;;) {
       try {
@@ -425,7 +471,12 @@ export function startExport(
     // handed back as a File the download anchor can point at without ever
     // loading it into memory; only the in-memory last resort materializes a
     // Blob from a buffer.
-    if (scratch) return { blob: await readExportScratch(scratch), filename };
+    //
+    // `bufferOutput` is what tells those last two apart. The scratch file is
+    // opened before the first attempt and outlives one that never used it, so
+    // an attempt that buffered would otherwise hand back that untouched file -
+    // a download of nothing at all, reported as a finished export.
+    if (scratch && !attempt.bufferOutput) return { blob: await readExportScratch(scratch), filename };
     return {
       blob: buffer.buffer ? new Blob([buffer.buffer], { type: buffer.mime }) : null,
       filename,

@@ -49,6 +49,22 @@ export interface AudioFailedMessage {
 
 export type MainToWorker = ExportRequest | AudioChunkMessage | AudioFailedMessage;
 
+/**
+ * Where a render's bytes go.
+ *
+ * The scratch file travels as a NAME rather than as its handle, and that is not
+ * a style choice: WebKit refuses to put a `FileSystemFileHandle` through
+ * `postMessage` at all - the whole message comes back "The object can not be
+ * cloned." and the export dies before a frame is drawn. A directory name and a
+ * filename are two strings, and the worker opens the file itself. Only the
+ * picked file has to travel as a handle, and only Chromium has that picker.
+ */
+export type ExportSink =
+  /** A file the user chose through the File System Access picker. */
+  | { kind: 'picked'; handle: FileSystemFileHandle }
+  /** A file in the origin's private scratch directory, by name. */
+  | { kind: 'scratch'; name: string };
+
 export interface ExportRequest {
   type: 'export';
   project: Project;
@@ -76,13 +92,12 @@ export interface ExportRequest {
    */
   audio: AudioMixInfo | null;
   /**
-   * Destination picked by the user, when the browser supports the File System
-   * Access API. The worker then muxes straight into the file instead of holding
-   * the whole output in memory: a 5 min 4K render is ~2 GB, which the buffered
-   * path had to allocate contiguously and then copy again into a Blob.
-   * Null on browsers without the API - the buffered path stays the fallback.
+   * Where the worker muxes to, instead of holding the whole output in memory:
+   * a 5 min 4K render is ~2 GB, which the buffered path had to allocate
+   * contiguously and then copy again into a Blob. Null leaves that buffered
+   * path as the fallback.
    */
-  fileHandle: FileSystemFileHandle | null;
+  sink: ExportSink | null;
   /**
    * Turn the worker's frame instrumentation on for this render. Off by default:
    * the probe costs nothing when disabled, and an export the user started is
@@ -124,7 +139,14 @@ export type ExportErrorCode =
    * Acted on rather than shown: the main thread re-runs the render on the
    * software encoder, and only a second stall reaches the user.
    */
-  | 'encoderStalled';
+  | 'encoderStalled'
+  /**
+   * The browser refused to copy the render request to a worker. Not a failure
+   * of the render at all - a gap in what this engine's structured clone
+   * accepts, which differs between them - so it is retried on terms that ask it
+   * to copy less (see `retryPlan`).
+   */
+  | 'cannotClone';
 
 export type WorkerReply =
   | { type: 'progress'; value: number }

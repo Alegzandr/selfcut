@@ -14,6 +14,7 @@ import {
   trackCrossfades,
 } from '../model';
 import { gradeFrame } from './colorPass';
+import { drawBlurred } from './blur';
 import { fontStack } from '../lib/fonts';
 import type { DrawableFrame } from '../media/stillImage';
 import { count, endSpan, span } from '../perf/probe';
@@ -162,16 +163,19 @@ export function drawClipSample(
   // at the source resolution - asks the rasterizer for a filtered path it then
   // has no work to do in, so it is turned off outright there.
   const resampling = Math.abs(dw - cropW) > 0.5 || Math.abs(dh - cropH) > 0.5;
-  setResampling(ctx, resampling);
+  // A blurred draw always resamples: without the native filter it arrives as an
+  // upscale of a much smaller buffer, and nearest-neighbour would hand back the
+  // blocks the blur is supposed to hide.
+  setResampling(ctx, resampling || blurPx > 0);
 
   const drawStarted = span();
   ctx.globalAlpha = alpha;
-  if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
   withRotation(ctx, clipRotationAt(clip, timelineMs), dx + dw / 2, dy + dh / 2, () => {
-    if (graded) ctx.drawImage(graded, sx, sy, cropW, cropH, dx, dy, dw, dh);
-    else sample.draw(ctx, sx, sy, cropW, cropH, dx, dy, dw, dh);
+    drawBlurred(ctx, blurPx, { x: dx, y: dy, w: dw, h: dh }, (target) => {
+      if (graded) target.drawImage(graded, sx, sy, cropW, cropH, dx, dy, dw, dh);
+      else sample.draw(target, sx, sy, cropW, cropH, dx, dy, dw, dh);
+    });
   });
-  if (blurPx > 0) ctx.filter = 'none';
   ctx.globalAlpha = 1;
   endSpan(blurPx > 0 ? 'blur' : 'blit', drawStarted);
   count('clipDraws');
@@ -830,7 +834,7 @@ export function maskPathCenterPx(path: BezierPoint[], outW: number, outH: number
 }
 
 /** Trace a closed bezier path (pen mask) onto the current sub-path, in px. */
-function traceMaskPath(ctx: OffscreenCanvasRenderingContext2D, path: BezierPoint[], outW: number, outH: number): void {
+function traceMaskPath(ctx: Ctx2D, path: BezierPoint[], outW: number, outH: number): void {
   const n = path.length;
   ctx.moveTo(path[0]!.x * outW, path[0]!.y * outH);
   for (let i = 0; i < n; i++) {
@@ -870,22 +874,28 @@ function applyMask(
   ctx.save();
   // destination-in keeps the destination only where the shape is opaque; the
   // inverse keeps it only where the shape is NOT. A blurred fill gives the
-  // feathered edge (its partial alpha becomes the soft matte).
+  // feathered edge (its partial alpha becomes the soft matte) - which is why
+  // the feather goes through `drawBlurred`: where the canvas cannot blur, the
+  // matte arrives as a shape with a hard edge and the feather is simply lost.
   ctx.globalCompositeOperation = mask.invert ? 'destination-out' : 'destination-in';
-  if (mask.feather > 0) ctx.filter = `blur(${Math.max(0.5, mask.feather * outH * 0.5)}px)`;
-  // Motion: translate by the frame-fraction offset, then scale/rotate about the
-  // shape's centre so the drawn geometry below can stay in its authored place.
-  ctx.translate(motion.tx * outW, motion.ty * outH);
-  ctx.translate(cx, cy);
-  ctx.rotate((motion.rotation * Math.PI) / 180);
-  ctx.scale(motion.scale, motion.scale);
-  ctx.translate(-cx, -cy);
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  if (path) traceMaskPath(ctx, path, outW, outH);
-  else if (mask.shape === 'ellipse') ctx.ellipse(boxCx, boxCy, w / 2, h / 2, 0, 0, Math.PI * 2);
-  else ctx.rect(left, top, w, h);
-  ctx.fill();
+  const feather = mask.feather > 0 ? Math.max(0.5, mask.feather * outH * 0.5) : 0;
+  drawBlurred(ctx, feather, { x: 0, y: 0, w: outW, h: outH }, (target) => {
+    target.save();
+    // Motion: translate by the frame-fraction offset, then scale/rotate about the
+    // shape's centre so the drawn geometry below can stay in its authored place.
+    target.translate(motion.tx * outW, motion.ty * outH);
+    target.translate(cx, cy);
+    target.rotate((motion.rotation * Math.PI) / 180);
+    target.scale(motion.scale, motion.scale);
+    target.translate(-cx, -cy);
+    target.fillStyle = '#fff';
+    target.beginPath();
+    if (path) traceMaskPath(target, path, outW, outH);
+    else if (mask.shape === 'ellipse') target.ellipse(boxCx, boxCy, w / 2, h / 2, 0, 0, Math.PI * 2);
+    else target.rect(left, top, w, h);
+    target.fill();
+    target.restore();
+  });
   ctx.restore();
 }
 
@@ -1018,9 +1028,9 @@ function applyRedactions(
       const sy = Math.max(0, box.y - pad);
       const sw = Math.min(outW, box.x + box.w + pad) - sx;
       const sh = Math.min(outH, box.y + box.h + pad) - sy;
-      scratch.ctx.filter = `blur(${radius}px)`;
-      scratch.ctx.drawImage(ctx.canvas, sx, sy, sw, sh, sx, sy, sw, sh);
-      scratch.ctx.filter = 'none';
+      drawBlurred(scratch.ctx, radius, { x: sx, y: sy, w: sw, h: sh }, (target) =>
+        target.drawImage(ctx.canvas, sx, sy, sw, sh, sx, sy, sw, sh),
+      );
     }
     applyMask(scratch.ctx, redaction, outW, outH, motion);
     scratch.ctx.restore();

@@ -573,6 +573,7 @@
   "clipbar.blurRegion": "打码",
   "errors.export.videoEncoderUnsupported": "这个浏览器无法在该分辨率下编码 H.264 视频。请换一个分辨率更低的预设，或改用支持 H.264 的浏览器（Chrome、Edge、Safari）。",
   "errors.export.encoderStalled": "视频编码器没有响应，硬件和软件方式都试过了。请换一个分辨率更低的预设，或重新加载页面再导出一次。",
+  "errors.export.cannotClone": "此浏览器没能把渲染的一部分（{{field}}）复制给导出工作线程，几种退路也都没用。请重新加载页面再导出一次；如果一直这样，请附上这个名称反馈。",
   "errors.export.disconnectedSources": "有些源文件已断开：{{names}}。请先重新连接再导出。",
   "export.close": "关闭",
   "mobile.settings": "设置",

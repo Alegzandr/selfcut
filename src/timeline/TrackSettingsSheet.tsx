@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from '../ui/motion';
 import { BlendingModeIcon, Cross2Icon, SpeakerLoudIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { gainDb } from '../inspector/format';
@@ -18,6 +19,7 @@ import { faderToGainStepped, gainToFader } from '../lib/gain';
  */
 export function TrackSettingsSheet() {
   const { t } = useTranslation();
+  const sheet = useEnterMotion({ y: '100%' });
   const trackId = useStore((s) => s.trackSettingsTrackId);
   const track = useStore((s) => s.project.tracks.find((tr) => tr.id === trackId) ?? null);
   const { setTrackSettingsTrack, updateTrack, beginGesture, endGesture } = useStore.getState();
@@ -38,9 +40,7 @@ export function TrackSettingsSheet() {
             onClick={close}
           />
           <m.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
+            {...sheet}
             transition={{ type: 'spring', damping: 32, stiffness: 380 }}
             role="dialog"
             aria-modal="true"

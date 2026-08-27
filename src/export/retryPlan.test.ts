@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { nextAttempt, retryReason, type ExportAttempt } from './retryPlan';
 
-const FIRST: ExportAttempt = { noParallel: false, preferSoftware: false };
+const FIRST: ExportAttempt = { noParallel: false, preferSoftware: false, bufferOutput: false };
 
 describe('nextAttempt', () => {
   it('walks a stalled encoder from fanned-out to one encoder to software', () => {
     const serial = nextAttempt(FIRST, 'encoderStalled');
-    expect(serial).toEqual({ noParallel: true, preferSoftware: false });
+    expect(serial).toEqual({ noParallel: true, preferSoftware: false, bufferOutput: false });
     const software = nextAttempt(serial!, 'encoderStalled');
-    expect(software).toEqual({ noParallel: true, preferSoftware: true });
+    expect(software).toEqual({ noParallel: true, preferSoftware: true, bufferOutput: false });
     // Nothing gentler left to ask for: the failure is the user's to see.
     expect(nextAttempt(software!, 'encoderStalled')).toBeNull();
   });
@@ -20,9 +20,31 @@ describe('nextAttempt', () => {
     expect(nextAttempt(FIRST, 'encoderStalled')?.preferSoftware).toBe(false);
   });
 
+  it('drops what a refused clone had to copy, one thing at a time', () => {
+    // The output file handle first: buffering costs memory the machine usually
+    // has, where rendering serially costs the whole fan-out's speed.
+    const buffered = nextAttempt(FIRST, 'cannotClone');
+    expect(buffered).toEqual({ noParallel: false, preferSoftware: false, bufferOutput: true });
+    // Then the segment workers, which is what the still bitmaps get copied to.
+    const serial = nextAttempt(buffered!, 'cannotClone');
+    expect(serial).toEqual({ noParallel: true, preferSoftware: false, bufferOutput: true });
+    // Nothing in the request is optional after that.
+    expect(nextAttempt(serial!, 'cannotClone')).toBeNull();
+  });
+
+  it('never asks for the software encoder over a refused clone', () => {
+    // A clone is refused before any encoding starts, so which encoder would run
+    // has nothing to do with it.
+    let attempt: ExportAttempt | null = FIRST;
+    while (attempt) {
+      expect(attempt.preferSoftware).toBe(false);
+      attempt = nextAttempt(attempt, 'cannotClone');
+    }
+  });
+
   it('sends a segment mismatch serial, and no further', () => {
     const serial = nextAttempt(FIRST, 'segmentMismatch');
-    expect(serial).toEqual({ noParallel: true, preferSoftware: false });
+    expect(serial).toEqual({ noParallel: true, preferSoftware: false, bufferOutput: false });
     // A different encoder does not make two encoders agree; there is only ever
     // one answer to a mismatch, and it has been given.
     expect(nextAttempt(serial!, 'segmentMismatch')).toBeNull();
@@ -32,6 +54,7 @@ describe('nextAttempt', () => {
     const serial = nextAttempt(FIRST, 'segmentMismatch')!;
     expect(nextAttempt(serial, 'encoderStalled')).toEqual({
       noParallel: true,
+      bufferOutput: false,
       preferSoftware: true,
     });
   });
@@ -65,11 +88,20 @@ describe('nextAttempt', () => {
 
 describe('retryReason', () => {
   it('names the encoder the render is falling back to', () => {
-    expect(retryReason('encoderStalled', { noParallel: true, preferSoftware: false })).toMatch(
-      /one encoder/,
-    );
-    expect(retryReason('encoderStalled', { noParallel: true, preferSoftware: true })).toMatch(
-      /software/,
-    );
+    expect(
+      retryReason('encoderStalled', { noParallel: true, preferSoftware: false, bufferOutput: false }),
+    ).toMatch(/one encoder/);
+    expect(
+      retryReason('encoderStalled', { noParallel: true, preferSoftware: true, bufferOutput: false }),
+    ).toMatch(/software/);
+  });
+
+  it('says which half of a refused clone is being dropped', () => {
+    expect(
+      retryReason('cannotClone', { noParallel: false, preferSoftware: false, bufferOutput: true }),
+    ).toMatch(/in memory/);
+    expect(
+      retryReason('cannotClone', { noParallel: true, preferSoftware: false, bufferOutput: true }),
+    ).toMatch(/serially/);
   });
 });

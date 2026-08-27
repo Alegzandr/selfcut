@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import { useStore } from '../store/store';
 
 /**
@@ -12,6 +13,7 @@ import { useStore } from '../store/store';
  */
 export function ConfirmDialog() {
   const { t } = useTranslation();
+  const dialog = useEnterMotion({ y: 8, scale: 0.96 });
   const request = useStore((s) => s.confirmDialog);
   const { resolveConfirm } = useStore.getState();
   const confirmRef = useRef<HTMLButtonElement>(null);
@@ -46,9 +48,7 @@ export function ConfirmDialog() {
           onClick={() => resolveConfirm(false)}
         >
           <m.div
-            initial={{ scale: 0.96, y: 8 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.96, y: 8 }}
+            {...dialog}
             role="alertdialog"
             aria-modal="true"
             aria-label={request.title}

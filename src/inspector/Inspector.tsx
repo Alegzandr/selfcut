@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from '../ui/motion';
 import { useTranslation } from 'react-i18next';
 import { Cross2Icon, TrashIcon } from '@radix-ui/react-icons';
 import { useStore, getSelectedClip } from '../store/store';
@@ -102,6 +103,7 @@ function InspectorTabs({ cueCount }: { cueCount: number }) {
 
 export function Inspector() {
   const { t } = useTranslation();
+  const sheet = useEnterMotion({ y: '110%' });
   const clip = useStore(getSelectedClip);
   const asset = useStore((s) => (clip ? s.assets[clip.assetId] : undefined));
   const coarse = useIsCoarsePointer();
@@ -192,9 +194,7 @@ export function Inspector() {
       {show && (
         <m.div
           key={showSubtitles ? 'subtitles' : clip!.id}
-          initial={{ y: '110%' }}
-          animate={{ y: 0 }}
-          exit={{ y: '110%' }}
+          {...sheet}
           transition={{ type: 'spring', damping: 28, stiffness: 320 }}
           className="fixed inset-x-0 bottom-0 z-40 max-h-[55dvh] space-y-3 overflow-x-hidden overflow-y-auto rounded-t-2xl [scrollbar-gutter:stable] border-t border-zinc-800 bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black"
         >

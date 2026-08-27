@@ -1,178 +1,148 @@
-import { test, expect } from '@playwright/test';
-import { stat } from 'node:fs/promises';
+import { test, expect, type Page } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appModuleUrl } from './appModule';
 
 /**
- * Where an export's bytes land when the browser will not hand us a file.
+ * Where an export's bytes go, on an engine that will not take a file handle.
  *
- * Chrome and Edge open a save picker and the render streams straight into the
- * chosen file. Firefox and Safari have no picker at all, and even where one
- * exists it can be refused - and the fallback used to be a single ArrayBuffer
- * holding the entire MP4. That is fine for a short 1080p clip and impossible
- * for the exports people reach a "120 fps · 4K" preset for: at ~134 Mbps a
- * six-minute render is ~6 GB in one contiguous allocation, and it died partway
- * through with the browser's raw "Array buffer allocation failed".
+ * Everything the render needs crosses into the worker in one message, and what
+ * a browser carries across that boundary is not the same everywhere. WebKit
+ * refuses to serialize a `FileSystemFileHandle` at all: the whole message comes
+ * back "The object can not be cloned." and the export dies before a frame is
+ * drawn. It also implements no `FileSystemWritableFileStream`, so a handle that
+ * did arrive would have nothing to write through. Both are why exporting from
+ * any iOS browser failed - they are all WebKit.
  *
- * The fallback now streams into origin-private scratch storage, so memory stays
- * flat whatever the length and the user still gets their download.
+ * So the scratch file travels as a NAME, which every engine copies, and the
+ * worker opens it itself through the synchronous handle that WebKit does have
+ * (worker-only, which is where this runs). The retry that drops parts of a
+ * refused request stays underneath as the net for whatever is refused next.
  *
- * It is also the one spec that drives the export sheet the way a user does -
- * shortcut, CTA, download - rather than calling the exporter directly the way
- * the other export specs do to keep their subject in view. So the wiring
- * between the two is asserted here as well: that the CTA renders the preset the
- * sheet has highlighted, and that the sheet reports where the file went. There
- * was a second spec doing exactly that and nothing else, which meant a third
- * full render of the same three seconds for one extra assertion.
+ * Exercised on an audio export: it runs the same sink code as video and needs
+ * no video encoder, so it proves the bytes on any machine.
  */
 
-const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
-const FIXTURE_MP4 = path.join(FIXTURES, 'clip.mp4');
+const FIXTURE_WAV = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'tone.wav');
 
-/**
- * Names and sizes of everything sitting in the export scratch directory.
- *
- * The OPFS handles are typed structurally inside each `evaluate`, not through
- * the DOM lib: this file compiles under the Node tsconfig, which has none.
- */
-async function scratchContents(page: import('@playwright/test').Page) {
-  return page.evaluate(async () => {
-    type Dir = {
-      getDirectoryHandle(name: string): Promise<Dir>;
-      getFileHandle(name: string): Promise<{ getFile(): Promise<{ size: number }> }>;
-      keys(): AsyncIterable<string>;
-    };
-    const root = await (globalThis as unknown as {
-      navigator: { storage: { getDirectory(): Promise<Dir> } };
-    }).navigator.storage.getDirectory();
-    let dir: Dir;
-    try {
-      dir = await root.getDirectoryHandle('exports');
-    } catch {
-      return [] as { name: string; size: number }[];
-    }
-    const out: { name: string; size: number }[] = [];
-    for await (const name of dir.keys()) {
-      // A name from `keys()` is a name the directory HAD. Startup fires its
-      // sweep without awaiting it (`void sweepExportScratch()`), so a reclaim
-      // can land between the listing and the open, and the file is gone by the
-      // time it is asked for - which is the very state this inventory is
-      // polled for. Counting it as absent is the honest reading and the one
-      // every caller wants; leaving it to throw turns the poll into a
-      // NotFoundError on the runs where the sweep happened to be fast.
-      try {
-        const file = await (await dir.getFileHandle(name)).getFile();
-        out.push({ name, size: file.size });
-      } catch {
-        continue;
-      }
-    }
-    return out;
-  });
+interface SentRequest {
+  sink: string | null;
+  carriesHandle: boolean;
 }
 
-test('without a save picker the render streams to disk, not into memory', async ({ page }) => {
-  // Exactly the browsers this path exists for: no File System Access API.
-  await page.addInitScript(() => {
-    // `globalThis` rather than `window`: this file typechecks under the Node
-    // tsconfig (no DOM lib), and in the page the two are the same object.
-    delete (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker;
-  });
+/** Refuse to copy a file-system handle, as WebKit does, and record what is sent. */
+const REFUSE_HANDLES = () => {
+  const win = window as unknown as { sentRequests: SentRequest[] };
+  win.sentRequests = [];
+  // `createSyncAccessHandle` is worker-only, so it is not what identifies a
+  // handle on this thread - the class is.
+  const carries = (value: unknown, depth = 0): boolean => {
+    if (!value || typeof value !== 'object') return false;
+    if (value instanceof FileSystemHandle) return true;
+    if (depth > 3) return false;
+    return Object.values(value).some((inner) => carries(inner, depth + 1));
+  };
+  const refuse = () => new DOMException('The object can not be cloned.', 'DataCloneError');
+  const portPost = MessagePort.prototype.postMessage;
+  MessagePort.prototype.postMessage = function (message: unknown, ...rest: unknown[]) {
+    if (carries(message)) throw refuse();
+    return (portPost as (...a: unknown[]) => void).call(this, message, ...rest);
+  };
+  const workerPost = Worker.prototype.postMessage;
+  Worker.prototype.postMessage = function (message: unknown, ...rest: unknown[]) {
+    const request = message as { type?: string; sink?: { kind: string } } | null;
+    if (request?.type === 'export') {
+      win.sentRequests.push({ sink: request.sink?.kind ?? null, carriesHandle: carries(message) });
+    }
+    if (carries(message)) throw refuse();
+    return (workerPost as (...a: unknown[]) => void).call(this, message, ...rest);
+  };
+};
 
+async function editorWithTone(page: Page): Promise<void> {
   await page.goto('/app/');
-  await page.setInputFiles('input[type="file"]', FIXTURE_MP4);
+  await page.setInputFiles('input[type="file"]', FIXTURE_WAV);
   await expect(page.locator('[data-clip-id]')).toHaveCount(1);
+}
 
-  expect(await scratchContents(page)).toEqual([]);
+/** Render the project to mp3 and hand back the first bytes of the result. */
+async function exportMp3(page: Page): Promise<{ bytes: number; head: number[] }> {
+  const exporter = await appModuleUrl(page, '/src/export/exporter.ts');
+  const store = await appModuleUrl(page, '/src/store/store.ts');
+  const presets = await appModuleUrl(page, '/src/export/presets.ts');
+  return page.evaluate(
+    async ([exporterUrl, storeUrl, presetsUrl]) => {
+      const { startExport } = (await import(exporterUrl!)) as {
+        startExport: (...a: unknown[]) => { promise: Promise<{ blob: Blob | null }> };
+      };
+      const { useStore } = (await import(storeUrl!)) as {
+        useStore: { getState: () => { project: unknown; assets: unknown } };
+      };
+      const { PRESETS } = (await import(presetsUrl!)) as { PRESETS: { kind: string }[] };
+      const state = useStore.getState();
+      const preset = PRESETS.find((p) => p.kind === 'mp3');
+      const { blob } = await startExport(
+        state.project,
+        state.assets,
+        preset,
+        () => undefined,
+      ).promise;
+      if (!blob) return { bytes: 0, head: [] };
+      return { bytes: blob.size, head: [...new Uint8Array(await blob.slice(0, 2).arrayBuffer())] };
+    },
+    [exporter, store, presets],
+  );
+}
 
-  await page.keyboard.press('Control+e');
-  const sheet = page.getByRole('dialog', { name: 'Export' });
-  await expect(sheet).toBeVisible();
-  // The sheet springs in from below; clicking mid-animation can land on the
-  // backdrop, which dismisses it. Wait for the box to stop moving.
-  let prevBox = '';
-  await expect
-    .poll(async () => {
-      const box = JSON.stringify(await sheet.boundingBox());
-      const settled = box === prevBox;
-      prevBox = box;
-      return settled;
-    })
-    .toBe(true);
+const sentRequests = (page: Page) =>
+  page.evaluate(() => (window as unknown as { sentRequests: SentRequest[] }).sentRequests);
 
-  const downloadPromise = page.waitForEvent('download', { timeout: 90_000 });
-  await sheet.getByRole('button', { name: /^Export / }).click();
-  const download = await downloadPromise;
+/** An mp3 frame starts 0xFF 0xFx: proof the bytes are the render's, not an empty file. */
+function expectMp3({ bytes, head }: { bytes: number; head: number[] }) {
+  expect(bytes, 'the export produced no bytes').toBeGreaterThan(1000);
+  expect(head[0]).toBe(0xff);
+  expect(head[1]! & 0xe0).toBe(0xe0);
+}
 
-  // The user still gets their file, and it is a real one.
-  expect(download.suggestedFilename()).toMatch(/\.mp4$/);
-  const { size } = await stat(await download.path());
-  expect(size).toBeGreaterThan(10_000);
+test('the scratch file travels as a name, so nothing has to be cloned', async ({ page }) => {
+  await page.addInitScript(() => {
+    // Safari has no save picker, so the export reaches for the scratch file.
+    delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker;
+  });
+  await page.addInitScript(REFUSE_HANDLES);
+  await editorWithTone(page);
 
-  // And it came off disk: the render wrote into scratch storage rather than
-  // growing a buffer the length of the whole export in RAM.
-  const scratch = await scratchContents(page);
-  expect(scratch).toHaveLength(1);
-  expect(scratch[0]!.name).toMatch(/\.mp4$/);
-  expect(scratch[0]!.size).toBe(size);
+  expectMp3(await exportMp3(page));
 
-  // And the sheet says so, which is the only part of a finished export the user
-  // ever sees.
-  await expect(sheet.getByText('Saved as', { exact: false })).toBeVisible();
-
-  // A second export reclaims the first one's file rather than stacking
-  // gigabytes of finished renders in the origin's storage.
-  await sheet.getByRole('button', { name: 'New export' }).click();
-  const secondDownload = page.waitForEvent('download', { timeout: 90_000 });
-  await sheet.getByRole('button', { name: /^Export / }).click();
-  await secondDownload;
-
-  const afterSecond = await scratchContents(page);
-  expect(afterSecond).toHaveLength(1);
+  const sent = await sentRequests(page);
+  // One request, accepted first time. Two would mean it was refused and retried,
+  // which is the fallback working rather than the request being right.
+  expect(sent).toHaveLength(1);
+  expect(sent[0]!.sink).toBe('scratch');
+  expect(sent[0]!.carriesHandle, 'the request must carry no handle at all').toBe(false);
 });
 
-test('startup reclaims a leftover scratch file', async ({ page }) => {
-  await page.goto('/app/');
-  await expect(page.locator('canvas').first()).toBeVisible();
-  // Let THIS session's startup sweep run first, so the file seeded below is
-  // only ever reclaimed by the next one - which is what is being tested.
-  //
-  // Startup fires the sweep and does not await it (`void sweepExportScratch()`
-  // in persistence.ts), so there is nothing to wait ON - but running one more
-  // and awaiting THAT drains the directory's work queue, which is the property
-  // actually needed. It replaces a flat 1500 ms guess that was both slower than
-  // this and no guarantee on a slow machine.
-  await page.evaluate(async (mod) => {
-    const { sweepExportScratch } = (await import(mod)) as {
-      sweepExportScratch: (except?: string) => Promise<void>;
-    };
-    await sweepExportScratch();
-  }, await appModuleUrl(page, '/src/lib/opfs.ts'));
-
-  // Stand in for the file a finished export leaves behind on purpose (the
-  // download reads from it long after the render ends, so it cannot be deleted
-  // there). Startup is where it is finally safe to reclaim.
-  await page.evaluate(async () => {
-    type Dir = {
-      getDirectoryHandle(name: string, options: { create: boolean }): Promise<Dir>;
-      getFileHandle(name: string, options: { create: boolean }): Promise<{
-        createWritable(): Promise<{ write(d: Uint8Array): Promise<void>; close(): Promise<void> }>;
-      }>;
-    };
-    const root = await (globalThis as unknown as {
-      navigator: { storage: { getDirectory(): Promise<Dir> } };
-    }).navigator.storage.getDirectory();
-    const dir = await root.getDirectoryHandle('exports', { create: true });
-    const handle = await dir.getFileHandle('selfcut-stale.mp4', { create: true });
-    const writable = await handle.createWritable();
-    await writable.write(new Uint8Array(1024));
-    await writable.close();
+test('a request that is still refused falls back to a buffered render', async ({ page }) => {
+  await page.addInitScript(() => {
+    // A picked file DOES travel as a handle - only Chromium has that picker, and
+    // it copies handles. Stubbed here to put one in the request on purpose, so
+    // the net underneath is exercised rather than assumed.
+    (window as unknown as { showSaveFilePicker: () => Promise<FileSystemFileHandle> }).showSaveFilePicker =
+      async () => {
+        const root = await navigator.storage.getDirectory();
+        const dir = await root.getDirectoryHandle('picked-export', { create: true });
+        return dir.getFileHandle('out.mp3', { create: true });
+      };
   });
-  expect(await scratchContents(page)).toHaveLength(1);
+  await page.addInitScript(REFUSE_HANDLES);
+  await editorWithTone(page);
 
-  await page.reload();
-  await expect(page.locator('canvas').first()).toBeVisible();
+  expectMp3(await exportMp3(page));
 
-  await expect.poll(async () => (await scratchContents(page)).length).toBe(0);
+  const sent = await sentRequests(page);
+  expect(sent).toHaveLength(2);
+  expect(sent[0]!.carriesHandle, 'the first attempt is the one that gets refused').toBe(true);
+  // Dropped, and the output built in memory instead: slower and hungrier, and
+  // it finishes, which is the whole point of a fallback.
+  expect(sent[1]!.sink).toBeNull();
 });

@@ -39,7 +39,11 @@ export function MenuItemRow({ command, onRun }: { command: Command; onRun: () =>
           <Icon className="h-4 w-4" />
         ) : null}
       </span>
-      <span className="flex-1 whitespace-nowrap">{command.label ?? t(command.labelKey)}</span>
+      {/* `min-w-0` + `truncate` rather than a bare `whitespace-nowrap`: a flex
+          item refuses to shrink below its content by default, so a long label -
+          a localization is routinely half again the English - pushed the row
+          wider than the phone's menu sheet instead of ending in an ellipsis. */}
+      <span className="min-w-0 flex-1 truncate">{command.label ?? t(command.labelKey)}</span>
       {/* Hidden on a touch-first device: the whole menu set is rendered there
           (MobileMenuSheet), and a column of Ctrl+ hints on a phone is a column
           of instructions for a keyboard nobody has. */}

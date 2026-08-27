@@ -573,6 +573,7 @@
   "clipbar.blurRegion": "Flouter",
   "errors.export.videoEncoderUnsupported": "Ce navigateur ne sait pas encoder la vidéo H.264 à cette résolution. Essayez un préréglage plus léger, ou un navigateur compatible H.264 (Chrome, Edge, Safari).",
   "errors.export.encoderStalled": "L'encodeur vidéo ne répond plus, en matériel comme en logiciel. Essayez un préréglage de résolution inférieure, ou rechargez la page avant de réexporter.",
+  "errors.export.cannotClone": "Ce navigateur a refusé de copier une partie du rendu vers le worker d'export ({{field}}), et les solutions de repli n'ont rien changé. Rechargez la page et réexportez ; si cela persiste, signalez-le avec ce nom.",
   "errors.export.disconnectedSources": "Des fichiers sources sont déconnectés : {{names}}. Reconnectez-les avant d'exporter.",
   "export.close": "Fermer",
   "mobile.settings": "Réglages",

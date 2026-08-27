@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, type KeyboardEvent, type ReactNode } from '
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import { Cross2Icon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { PLAYBACK_SKIP_BACK_MS, PLAYBACK_SKIP_FORWARD_MS } from '../app/config';
@@ -242,6 +243,7 @@ function renderKeys(template: string, labels: Readonly<Record<string, string>>):
  */
 export function ShortcutsHelp() {
   const { t } = useTranslation();
+  const dialog = useEnterMotion({ y: 8, scale: 0.96 });
   const labels = useKeyLabels();
   const open = useStore((s) => s.shortcutsOpen);
   const { setShortcutsOpen } = useStore.getState();
@@ -301,9 +303,7 @@ export function ShortcutsHelp() {
         >
           <m.div
             ref={panelRef}
-            initial={{ scale: 0.96, y: 8 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.96, y: 8 }}
+            {...dialog}
             // Explicit ease-out rather than the default spring: a reference
             // sheet should arrive and settle, not overshoot.
             transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
