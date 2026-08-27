@@ -18,6 +18,7 @@ import {
   type ExportEncoderInfo,
   ExportErrorCode,
   ExportRequest,
+  type ExportSink,
   WorkerReply,
 } from './protocol';
 
@@ -253,22 +254,28 @@ export function startExport(
     // First await of the run: everything above is synchronous so the picker
     // still runs under the activation of the click that started the export.
     const filename = exportFileName(preset);
-    let fileHandle = await pickExportFile(
+    const picked = await pickExportFile(
       filename,
       preset.kind === 'mp3' ? 'audio/mpeg' : 'video/mp4',
     );
+    let sink: ExportSink | null = picked ? { kind: 'picked', handle: picked } : null;
 
     // No file to write into (Firefox and Safari have no save picker, and the
     // picker can be refused even where it exists): render into origin-private
     // scratch storage rather than into memory. The render streams either way,
     // so only where the bytes land changes - and the user still gets the same
     // download at the end, just from disk instead of from a 6 GB buffer.
+    //
+    // The scratch file goes to the worker as its NAME. WebKit will not put a
+    // `FileSystemFileHandle` through `postMessage` - it refuses the whole
+    // message - so an export on any iOS browser died here, before a frame was
+    // drawn, with the browser's own "The object can not be cloned."
     let scratch: FileSystemFileHandle | null = null;
-    if (!fileHandle) {
+    if (!sink) {
       const opened = await openExportScratch(filename);
       if (opened) {
         scratch = opened.handle;
-        fileHandle = opened.handle;
+        sink = { kind: 'scratch', name: opened.name };
       } else if (estimatedOutputBytes(preset, durationMs) > MAX_IN_MEMORY_EXPORT_BYTES) {
         // Neither a picked file nor scratch space: the only path left builds the
         // whole file in RAM, and this one would not fit.
@@ -350,10 +357,10 @@ export function startExport(
         startMs,
         durationMs,
         audio: mix?.info ?? null,
-        // Dropped on a buffered attempt: it is the one thing in the request the
-        // worker cannot be handed a copy of, so it is the first thing to go
-        // when the browser refuses to copy the request at all.
-        fileHandle: attempt.bufferOutput ? null : fileHandle,
+        // Dropped on a buffered attempt: it is the only part of the request
+        // that is not plain data, so it is the first thing to go when the
+        // browser refuses to copy the request at all.
+        sink: attempt.bufferOutput ? null : sink,
         measure: perfEnabled(),
         ...(attempt.noParallel ? { noParallel: true } : {}),
         ...(attempt.preferSoftware ? { preferSoftwareEncoder: true } : {}),

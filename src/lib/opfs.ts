@@ -15,7 +15,14 @@
  * nothing here can touch their documents.
  */
 
-const SCRATCH_DIR = 'exports';
+/**
+ * Where scratch files live under the origin's private root. Exported because
+ * the export worker re-opens the file by name rather than being handed the
+ * handle: WebKit will not put a `FileSystemFileHandle` through `postMessage`
+ * (it refuses the whole message with "The object can not be cloned."), and a
+ * directory name and a filename are two strings every engine copies.
+ */
+export const SCRATCH_DIR = 'exports';
 
 async function scratchDir(): Promise<FileSystemDirectoryHandle | null> {
   try {
@@ -67,6 +74,21 @@ export async function openExportScratch(
     await sweepExportScratch(filename);
     const handle = await dir.getFileHandle(filename, { create: true });
     return { handle, name: filename };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The scratch file of this name, re-opened wherever the caller is - the export
+ * worker included, which is the point: it receives the name and finds the file
+ * itself. Null when OPFS is not there or the file is not.
+ */
+export async function reopenExportScratch(name: string): Promise<FileSystemFileHandle | null> {
+  const dir = await scratchDir();
+  if (!dir) return null;
+  try {
+    return await dir.getFileHandle(name);
   } catch {
     return null;
   }
