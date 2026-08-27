@@ -573,6 +573,7 @@
   "clipbar.blurRegion": "Blur",
   "errors.export.videoEncoderUnsupported": "This browser can't encode H.264 video at this resolution. Try a lower-resolution preset, or a browser with H.264 support (Chrome, Edge, Safari).",
   "errors.export.encoderStalled": "The video encoder stopped responding, on hardware and in software alike. Try a lower-resolution preset, or reload the page and export again.",
+  "errors.export.cannotClone": "This browser would not copy part of the render to the export worker ({{field}}), and the fallbacks did not help either. Reload the page and export again; if it keeps happening, report it with that name.",
   "errors.export.disconnectedSources": "Some source files are disconnected: {{names}}. Reconnect them before exporting.",
   "export.close": "Close",
   "mobile.settings": "Settings",

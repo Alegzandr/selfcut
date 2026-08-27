@@ -901,7 +901,19 @@ async function renderParallel(
       frameCount: segment.frameCount,
       ...(req.measure ? { measure: true } : {}),
     };
-    w.postMessage(request);
+    try {
+      w.postMessage(request);
+    } catch (err) {
+      // The stills are copied to every segment worker, and an ImageBitmap is
+      // not copyable on every engine (WebKit transfers one but will not clone
+      // it). Reported as what it is, so the main thread re-runs the render
+      // serially - one worker, which is handed the bitmaps it already holds -
+      // rather than as a crash with the browser's own unattributed sentence.
+      if (err instanceof DOMException && err.name === 'DataCloneError') {
+        throw new ExportError('cannotClone');
+      }
+      throw err;
+    }
   };
 
   /**

@@ -15,6 +15,12 @@ export interface ExportAttempt {
   noParallel: boolean;
   /** Ask for the software encoder rather than letting the browser choose. */
   preferSoftware: boolean;
+  /**
+   * Build the output in memory instead of handing the worker a file to stream
+   * into. Costs the whole render in RAM, and asks the browser to copy one less
+   * thing across the worker boundary.
+   */
+  bufferOutput: boolean;
 }
 
 /**
@@ -39,6 +45,15 @@ export interface ExportAttempt {
  * that is helped by asking for a different encoder, so it does not escalate
  * past serial.
  *
+ * A REQUEST THAT WILL NOT COPY is not about the render either, but about what
+ * this browser's structured clone accepts - and the two things in the request
+ * that are not plain data are the file handle the worker streams into and the
+ * still bitmaps it passes on to its segment workers. So each is dropped in
+ * turn: buffer the output (no handle to copy), then render serially (no segment
+ * workers to copy the stills to). Both cost something real, which is why
+ * neither is the first thing tried, and both are instant to fall through: a
+ * clone is refused before any work starts.
+ *
  * Every other code is a statement about the project or the browser rather than
  * about how hard the render was asked to work, and re-running it would produce
  * the same failure more slowly.
@@ -52,12 +67,23 @@ export function nextAttempt(current: ExportAttempt, code: ExportErrorCode): Expo
     if (!current.preferSoftware) return { ...current, preferSoftware: true };
     return null;
   }
+  if (code === 'cannotClone') {
+    if (!current.bufferOutput) return { ...current, bufferOutput: true };
+    if (!current.noParallel) return { ...current, noParallel: true };
+    return null;
+  }
   return null;
 }
 
 /** Why the render is starting over, for the console of whoever reports the bug. */
 export function retryReason(code: ExportErrorCode, next: ExportAttempt): string {
   if (code === 'segmentMismatch') return 'segment encoders disagreed, re-rendering serially';
+  if (code === 'cannotClone') {
+    // Read off what the next attempt drops, in the order `nextAttempt` drops it.
+    return next.noParallel
+      ? 'the browser would not copy the request, re-rendering serially'
+      : 'the browser would not copy the request, buffering the output in memory';
+  }
   return next.preferSoftware
     ? 'encoder stopped responding, re-rendering on the software encoder'
     : 'encoder stopped responding, re-rendering on one encoder';

@@ -573,6 +573,7 @@
   "clipbar.blurRegion": "가리기",
   "errors.export.videoEncoderUnsupported": "이 브라우저는 이 해상도에서 H.264 영상을 인코딩하지 못합니다. 해상도가 더 낮은 프리셋을 고르거나, H.264를 지원하는 브라우저(Chrome, Edge, Safari)를 쓰세요.",
   "errors.export.encoderStalled": "비디오 인코더가 하드웨어에서도 소프트웨어에서도 응답을 멈췄습니다. 해상도가 더 낮은 프리셋을 고르거나, 페이지를 새로 고친 뒤 다시 내보내세요.",
+  "errors.export.cannotClone": "이 브라우저는 렌더링의 일부({{field}})를 내보내기 워커로 복사하지 못했고, 대체 경로도 도움이 되지 않았습니다. 페이지를 새로 고친 뒤 다시 내보내고, 계속되면 그 이름과 함께 알려주세요.",
   "errors.export.disconnectedSources": "일부 소스 파일의 연결이 끊겼습니다: {{names}}. 내보내기 전에 다시 연결하세요.",
   "export.close": "닫기",
   "mobile.settings": "설정",

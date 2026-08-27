@@ -124,7 +124,14 @@ export type ExportErrorCode =
    * Acted on rather than shown: the main thread re-runs the render on the
    * software encoder, and only a second stall reaches the user.
    */
-  | 'encoderStalled';
+  | 'encoderStalled'
+  /**
+   * The browser refused to copy the render request to a worker. Not a failure
+   * of the render at all - a gap in what this engine's structured clone
+   * accepts, which differs between them - so it is retried on terms that ask it
+   * to copy less (see `retryPlan`).
+   */
+  | 'cannotClone';
 
 export type WorkerReply =
   | { type: 'progress'; value: number }
