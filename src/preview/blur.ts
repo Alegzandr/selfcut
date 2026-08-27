@@ -43,22 +43,28 @@ const MIN_SIDE_PX = 2;
 let nativeFilter: boolean | null = null;
 
 /**
- * Does this thread's 2D canvas actually blur when told to?
+ * Does this thread's 2D canvas actually blur when told to, and only where it
+ * was told to?
  *
- * Asked of the pixels rather than of the object: `'filter' in ctx` answers for
- * the property existing, and an engine that parses the value and ignores it
- * would pass that check while drawing everything sharp. Painted once per
- * thread, on an 8x8 canvas.
+ * Asked of the pixels rather than of the object, twice. `'filter' in ctx`
+ * answers for the property existing, and an engine that parses the value and
+ * ignores it would pass that check while drawing everything sharp - so the
+ * first question is whether an edge softened at all. The second is whether the
+ * blur stayed inside the shape that was drawn: a filter region that wraps
+ * instead of fading to nothing repeats the picture beside itself, which is a
+ * worse answer than not blurring, and the fallback below - which paints into a
+ * buffer the size of the destination and blits it back - cannot do it.
+ *
+ * Painted once per thread on a 32x32 canvas, and only ever on the first blur.
  */
 export function hasNativeCanvasFilter(): boolean {
   if (nativeFilter !== null) return nativeFilter;
-  nativeFilter = probeNativeFilter();
+  nativeFilter = blursSoftly() && blursOnlyWhereDrawn();
   return nativeFilter;
 }
 
-function probeNativeFilter(): boolean {
-  const canvas = newCanvas(8, 8);
-  const ctx = canvas?.getContext('2d') as Ctx2D | null;
+function blursSoftly(): boolean {
+  const ctx = probeCtx(8, 8);
   if (!ctx) return false;
   try {
     ctx.fillStyle = '#fff';
@@ -73,6 +79,29 @@ function probeNativeFilter(): boolean {
   } catch {
     return false;
   }
+}
+
+function blursOnlyWhereDrawn(): boolean {
+  const ctx = probeCtx(32, 32);
+  if (!ctx) return false;
+  try {
+    ctx.clearRect(0, 0, 32, 32);
+    ctx.filter = 'blur(2px)';
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(12, 12, 8, 8);
+    ctx.filter = 'none';
+    // The corner is six standard deviations from the square: a blur that fades
+    // out leaves it untouched, and anything that reads as painted there is
+    // spreading the picture somewhere the caller never asked for.
+    return ctx.getImageData(0, 0, 1, 1).data[3]! < 8;
+  } catch {
+    return false;
+  }
+}
+
+function probeCtx(w: number, h: number): Ctx2D | null {
+  const canvas = newCanvas(w, h);
+  return (canvas?.getContext('2d') as Ctx2D | null) ?? null;
 }
 
 function newCanvas(w: number, h: number): OffscreenCanvas | HTMLCanvasElement | null {
@@ -137,9 +166,17 @@ export function drawBlurred(
     return;
   }
 
+  // Outset by three sigma, which is where a gaussian has nothing left to give.
+  // The native filter fades the drawn shape's own edge outwards into whatever
+  // is beside it; a buffer cut to the destination would end that fade in a
+  // crisp line instead, and a letterboxed clip would gain an edge the filter
+  // never draws.
+  const pad = Math.ceil(radiusPx * 3);
+  const box = { x: dest.x - pad, y: dest.y - pad, w: dest.w + pad * 2, h: dest.h + pad * 2 };
+
   const shrink = Math.max(1, radiusPx * SHRINK_PER_RADIUS_PX);
-  const w = Math.max(MIN_SIDE_PX, Math.round(dest.w / shrink));
-  const h = Math.max(MIN_SIDE_PX, Math.round(dest.h / shrink));
+  const w = Math.max(MIN_SIDE_PX, Math.round(box.w / shrink));
+  const h = Math.max(MIN_SIDE_PX, Math.round(box.h / shrink));
   const small = getScratch(w, h);
   if (!small) {
     paint(ctx);
@@ -153,12 +190,12 @@ export function drawBlurred(
   small.imageSmoothingQuality = 'high';
   // Destination coordinates map onto the small canvas, so `paint` is written
   // once against the frame it is drawing into and never against this buffer.
-  small.setTransform(w / dest.w, 0, 0, h / dest.h, (-dest.x * w) / dest.w, (-dest.y * h) / dest.h);
+  small.setTransform(w / box.w, 0, 0, h / box.h, (-box.x * w) / box.w, (-box.y * h) / box.h);
   paint(small);
   small.restore();
 
   const smoothing = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(small.canvas as CanvasImageSource, 0, 0, w, h, dest.x, dest.y, dest.w, dest.h);
+  ctx.drawImage(small.canvas as CanvasImageSource, 0, 0, w, h, box.x, box.y, box.w, box.h);
   ctx.imageSmoothingEnabled = smoothing;
 }

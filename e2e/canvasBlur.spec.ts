@@ -63,7 +63,33 @@ function edgeEnergy(page: Page, box: { x: number; y: number; w: number; h: numbe
   }, box);
 }
 
+/** Mean brightness over a fraction of the preview. */
+function meanLuma(page: Page, box: { x: number; y: number; w: number; h: number }): Promise<number> {
+  return page.evaluate((area) => {
+    const canvas = [...document.querySelectorAll('canvas')].sort(
+      (a, b) => b.width * b.height - a.width * a.height,
+    )[0]!;
+    const data = canvas
+      .getContext('2d')!
+      .getImageData(
+        Math.round(area.x * canvas.width),
+        Math.round(area.y * canvas.height),
+        Math.round(area.w * canvas.width),
+        Math.round(area.h * canvas.height),
+      );
+    let total = 0;
+    for (let i = 0; i < data.data.length; i += 4) total += data.data[i]!;
+    return total / (data.data.length / 4);
+  }, box);
+}
+
 const WHOLE_FRAME = { x: 0, y: 0, w: 1, h: 1 };
+/**
+ * Deep in the letterbox beside the square clip, and far enough out that even a
+ * blur at full strength has nothing left there: a 6% -of-height radius reaches
+ * about 200px into a 420px bar.
+ */
+const FAR_LETTERBOX = { x: 0.01, y: 0.4, w: 0.05, h: 0.2 };
 /** Inside the redaction region placed below, and clear of its edges. */
 const INSIDE_REGION = { x: 0.42, y: 0.42, w: 0.16, h: 0.16 };
 
@@ -101,6 +127,29 @@ for (const nativeFilter of [true, false]) {
     await expect
       .poll(() => edgeEnergy(page, WHOLE_FRAME), { message: 'the frame never blurred' })
       .toBeLessThan(1);
+  });
+
+  test(`blur stays inside the clip it is applied to ${engine}`, async ({ page }) => {
+    await editorWithChecker(page, nativeFilter);
+    // The square clip letterboxes in a 16:9 frame, so this is bare background.
+    const emptyBefore = await meanLuma(page, FAR_LETTERBOX);
+    expect(emptyBefore).toBeLessThan(4);
+
+    await page.evaluate(async (mod) => {
+      const { useStore } = (await import(mod)) as unknown as EditorStore;
+      const state = useStore.getState();
+      const clip = state.project.tracks.flatMap((t) => t.clips)[0]!;
+      state.updateClipColorLive(clip.id, 'blur', 1, state.currentTimeMs);
+    }, await appModuleUrl(page, STORE_MODULE));
+
+    await expect.poll(() => edgeEnergy(page, WHOLE_FRAME)).toBeLessThan(1);
+    // A blur spreads a picture; it must not carry it somewhere else. An engine
+    // whose filter region wraps instead of fading out repeats the frame beside
+    // itself, which is what this is here to catch.
+    expect(
+      await meanLuma(page, FAR_LETTERBOX),
+      'the blur painted the picture into the letterbox',
+    ).toBeLessThan(4);
   });
 
   test(`a blur redaction hides what it covers ${engine}`, async ({ page }) => {
