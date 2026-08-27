@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bestDefaultModel,
   captionFit,
+  captionModelSizeMb,
   captionsSupported,
   type CaptionCapabilities,
 } from './captionsCapabilities';
@@ -60,15 +61,37 @@ describe('captionFit', () => {
     expect(captionFit(captionModel('large-v3-turbo'), gpuNoMemory)).toBe('usable');
   });
 
-  it('keeps the heavy models off a phone without ruling them out', () => {
-    expect(captionFit(captionModel('large-v3-turbo'), phone)).toBe('slow');
-    expect(captionFit(captionModel('small'), phone)).toBe('usable');
+  it('rules the heavy models out on a phone rather than merely warning', () => {
+    // They have no handheld profile, and offering them anyway is what put an
+    // fp32 download in front of a browser that dies holding it.
+    expect(captionFit(captionModel('large-v3-turbo'), phone)).toBe('unsupported');
+    expect(captionFit(captionModel('small'), phone)).toBe('unsupported');
     expect(captionFit(captionModel('base'), phone)).toBe('recommended');
+    expect(captionFit(captionModel('tiny'), phone)).toBe('usable');
+  });
+
+  it('rules out every model on a phone whose adapter has no fp16', () => {
+    // The handheld weights only exist as fp16 in these repos: there is no
+    // slower path to fall back to, so the honest answer is none.
+    const noF16 = { ...phone, f16: false };
+    for (const model of CAPTION_MODELS)
+      expect(captionFit(model, noF16)).toBe('unsupported');
   });
 
   it('rules out a model an adapter cannot allocate', () => {
     const tinyBuffers: CaptionCapabilities = { ...gpu, maxBufferBytes: 16 * 1024 * 1024 };
     expect(captionFit(captionModel('large-v3-turbo'), tinyBuffers)).toBe('unsupported');
+  });
+});
+
+describe('captionModelSizeMb', () => {
+  it('quotes the handheld download on a phone and the fp32 one elsewhere', () => {
+    // The same model is not the same download twice, and the picker must not
+    // print the desktop figure to someone about to spend the phone one.
+    const base = captionModel('base');
+    expect(captionModelSizeMb(base, phone)).toBe(base.handheld!.sizeMb);
+    expect(captionModelSizeMb(base, gpu)).toBe(base.sizeMb.webgpu);
+    expect(captionModelSizeMb(base, cpu)).toBe(base.sizeMb.wasm);
   });
 });
 
@@ -79,6 +102,10 @@ describe('captionsSupported', () => {
 
   it('declines the CPU path on a handheld, where it means an hour of full tilt', () => {
     expect(captionsSupported(phoneNoGpu)).toBe(false);
+  });
+
+  it('declines a handheld GPU that cannot load any model', () => {
+    expect(captionsSupported({ ...phone, f16: false })).toBe(false);
   });
 
   it('keeps the CPU fallback on a desktop, as it always was', () => {

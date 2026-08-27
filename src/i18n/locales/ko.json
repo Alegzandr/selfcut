@@ -739,6 +739,8 @@
   "library.subtitles.ready_other": "자막을 추가했습니다: {{count}}개",
   "errors.media.subtitleFailed": "자막 트랙({{codec}}) 추출에 실패했습니다: {{name}}",
   "errors.captions.failed": "자막 만들기에 실패했습니다",
+  "errors.captions.download": "모델 다운로드에 실패했습니다",
+  "errors.captions.storage": "이 모델을 저장할 공간이 없습니다",
   "library.tab.media": "미디어",
   "library.tab.effects": "효과",
   "library.tab.transitions": "전환",

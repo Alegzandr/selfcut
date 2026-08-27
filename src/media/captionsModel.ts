@@ -59,7 +59,39 @@ export interface CaptionModelInfo {
    * whose `dtype.webgpu` asks for fp16 in the first place.
    */
   dtypeNoF16?: CaptionDtypeSpec;
+  /**
+   * How the model is loaded on a phone or a tablet, when it is offered there
+   * at all (absent = not offered; see `captionFit`).
+   *
+   * Not a nicety: a handheld browser caps a tab's memory far below a desktop
+   * one - Safari on iOS kills the tab outright - and fp32 Whisper weights blow
+   * through that ceiling while the session is being built, which reads as the
+   * browser crashing at the end of the download. So on those devices the
+   * weights are half-precision and the decoder quantized: the same combination
+   * `large-v3-turbo` uses above, for the same reason, and roughly half the
+   * download of the fp32 files.
+   *
+   * It is a WebGPU-only proposition, and fp16 there is not optional: these
+   * repos ship fp32, fp16 and q4 and nothing in between, so an adapter without
+   * `shader-f16` has no handheld path at all rather than a slower one.
+   */
+  handheld?: {
+    dtype: CaptionDtypeSpec;
+    /** Rough download in MB, same caveat as `sizeMb`. */
+    sizeMb: number;
+  };
 }
+
+/**
+ * The precision the small models load at on a handheld: the encoder is the
+ * heavy half and survives fp16, the decoder is the one that runs per token and
+ * is the one worth quantizing. Shared, because the trade is the device's and
+ * not the model's.
+ */
+const HANDHELD_DTYPE: CaptionDtypeSpec = {
+  encoder_model: 'fp16',
+  decoder_model_merged: 'q4',
+};
 
 export const CAPTION_MODELS: CaptionModelInfo[] = [
   {
@@ -69,6 +101,7 @@ export const CAPTION_MODELS: CaptionModelInfo[] = [
     sizeMb: { webgpu: 155, wasm: 155 },
     quality: 1,
     dtype: { webgpu: 'fp32', wasm: 'fp32' },
+    handheld: { dtype: HANDHELD_DTYPE, sizeMb: 105 },
   },
   {
     id: 'base',
@@ -77,6 +110,7 @@ export const CAPTION_MODELS: CaptionModelInfo[] = [
     sizeMb: { webgpu: 290, wasm: 290 },
     quality: 2,
     dtype: { webgpu: 'fp32', wasm: 'fp32' },
+    handheld: { dtype: HANDHELD_DTYPE, sizeMb: 165 },
   },
   {
     id: 'small',
@@ -120,14 +154,23 @@ function usesF16(spec: CaptionDtypeSpec): boolean {
 
 /**
  * The precision to load `model` at on a WebGPU adapter, given whether that
- * adapter exposes `shader-f16`.
+ * adapter exposes `shader-f16` and whether this is a handheld.
  *
  * `null` means this machine cannot run the model on the GPU at all: the model
- * only exists as an fp16 proposition and the adapter has no fp16. Callers rule
- * it out up front rather than letting the pipeline throw once the weights are
- * already on disk.
+ * only exists as an fp16 proposition and the adapter has no fp16, or it has no
+ * handheld profile and this is a phone. Callers rule it out up front rather
+ * than letting the pipeline throw once the weights are already on disk.
  */
-export function webgpuDtype(model: CaptionModelInfo, f16: boolean): CaptionDtypeSpec | null {
+export function webgpuDtype(
+  model: CaptionModelInfo,
+  f16: boolean,
+  handheld = false,
+): CaptionDtypeSpec | null {
+  if (handheld) {
+    // No fallback pass below: the handheld profile is fp16 or nothing.
+    if (!model.handheld) return null;
+    return f16 || !usesF16(model.handheld.dtype) ? model.handheld.dtype : null;
+  }
   const spec = model.dtype.webgpu;
   if (f16 || !usesF16(spec)) return spec;
   if (model.dtypeNoF16 && !usesF16(model.dtypeNoF16)) return model.dtypeNoF16;

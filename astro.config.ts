@@ -40,13 +40,18 @@ export default defineConfig({
         // thumbnails.
         "img-src 'self' blob: data:",
         "media-src 'self' blob:",
-        // Auto-captions (desktop only) run Whisper locally via transformers.js.
-        // The audio never leaves the browser; only the open-source model weights
+        // Auto-captions run Whisper locally via transformers.js. The audio
+        // never leaves the browser; only the open-source model weights
         // (HuggingFace hub, cached after first download) and the onnxruntime wasm
         // (jsdelivr) are fetched - hence these hosts and the jsdelivr script
         // source below. Self-hosting them like the ffmpeg core would remove them
         // entirely; see captionsModel.ts.
-        "connect-src 'self' https://huggingface.co https://*.huggingface.co https://cdn.jsdelivr.net",
+        //
+        // `*.hf.co` is not a second vendor: huggingface.co URLs 302 to the CDN
+        // that actually serves the weights (`us.aws.cdn.hf.co` today), and CSP
+        // checks every hop of a redirect. Without it the download fails on the
+        // first byte of the first weight file.
+        "connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co https://cdn.jsdelivr.net",
         "worker-src 'self' blob:",
         "object-src 'none'",
         "base-uri 'none'",

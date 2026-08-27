@@ -36,6 +36,25 @@ export function startCaptionModelDownload(id: string, onDone: () => void): void 
       await prefetchCaptionModel(id, (value) => report({ id, value }), signal);
     } catch (err) {
       console.warn('[captions] model download failed:', err);
+      // Said out loud, because the failure is otherwise invisible: the bar just
+      // stops and the next transcription starts the same download again. The
+      // one worth naming apart is storage - on a phone it means "make room",
+      // and nothing about retrying will help until it is made.
+      // Imported here rather than at the top, as `mediaCache` does: the store
+      // reaches back into this module through the surfaces that start the job.
+      const [{ useStore }, { t }] = await Promise.all([
+        import('../store/store'),
+        import('../i18n'),
+      ]);
+      useStore
+        .getState()
+        .setError(
+          t(
+            err instanceof Error && err.name === 'CaptionStorageError'
+              ? 'errors.captions.storage'
+              : 'errors.captions.download',
+          ),
+        );
     } finally {
       onDone();
     }

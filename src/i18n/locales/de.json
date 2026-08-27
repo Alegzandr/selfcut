@@ -739,6 +739,8 @@
   "library.subtitles.ready_other": "Untertitel hinzugefügt: {{count}} Einblendungen",
   "errors.media.subtitleFailed": "Extrahieren der Untertitelspur ({{codec}}) fehlgeschlagen: {{name}}",
   "errors.captions.failed": "Untertitel-Erzeugung fehlgeschlagen",
+  "errors.captions.download": "Modell-Download fehlgeschlagen",
+  "errors.captions.storage": "Kein Speicherplatz mehr für dieses Modell",
   "library.tab.media": "Medien",
   "library.tab.effects": "Effekte",
   "library.tab.transitions": "Übergänge",

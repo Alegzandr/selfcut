@@ -15,7 +15,13 @@ import { CAPTION_MODELS, type CaptionModelInfo } from './captionsModel';
  * alone by construction.
  */
 
-const CACHE_NAME = 'transformers-cache';
+/**
+ * The bucket transformers.js writes into (`env.cacheKey`). Shared with the
+ * downloader, which fills the same bucket by hand: two names for one store is
+ * how a model ends up downloaded and then downloaded again.
+ */
+export const CAPTION_CACHE_NAME = 'transformers-cache';
+const CACHE_NAME = CAPTION_CACHE_NAME;
 
 export interface CachedModel {
   /** Bytes the model's files occupy, as measured, not as advertised. */

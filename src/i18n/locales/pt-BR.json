@@ -739,6 +739,8 @@
   "library.subtitles.ready_other": "Legendas adicionadas: {{count}} falas",
   "errors.media.subtitleFailed": "Falha ao extrair a faixa de legendas ({{codec}}): {{name}}",
   "errors.captions.failed": "Falha ao gerar legendas",
+  "errors.captions.download": "Falha ao baixar o modelo",
+  "errors.captions.storage": "Não há espaço para armazenar este modelo",
   "library.tab.media": "Mídia",
   "library.tab.effects": "Efeitos",
   "library.tab.transitions": "Transições",

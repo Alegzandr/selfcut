@@ -739,6 +739,8 @@
   "library.subtitles.ready_other": "Subtitles added: {{count}} cues",
   "errors.media.subtitleFailed": "Extracting the subtitle track ({{codec}}) failed: {{name}}",
   "errors.captions.failed": "Caption generation failed",
+  "errors.captions.download": "Model download failed",
+  "errors.captions.storage": "No room left to store this model",
   "library.tab.media": "Media",
   "library.tab.effects": "Effects",
   "library.tab.transitions": "Transitions",

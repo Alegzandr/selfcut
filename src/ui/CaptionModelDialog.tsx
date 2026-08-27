@@ -13,6 +13,7 @@ import { CAPTION_MODELS, type CaptionModelInfo } from '../media/captionsModel';
 import {
   captionCapabilities,
   captionFit,
+  captionModelSizeMb,
   type CaptionCapabilities,
   type CaptionFit,
 } from '../media/captionsCapabilities';
@@ -89,7 +90,9 @@ function ModelRow({
   const { t } = useTranslation();
   const fit = caps ? captionFit(model, caps) : 'usable';
   const unsupported = fit === 'unsupported';
-  const size = model.sizeMb[caps?.device ?? 'wasm'];
+  // What THIS machine downloads: a phone fetches half-precision weights, and
+  // quoting the desktop figure would promise twice the wait it will have.
+  const size = caps ? captionModelSizeMb(model, caps) : model.sizeMb.wasm;
 
   return (
     <li>

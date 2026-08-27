@@ -739,6 +739,8 @@
   "library.subtitles.ready_other": "已添加字幕：{{count}} 条",
   "errors.media.subtitleFailed": "提取字幕轨（{{codec}}）失败：{{name}}",
   "errors.captions.failed": "字幕生成失败",
+  "errors.captions.download": "模型下载失败",
+  "errors.captions.storage": "没有足够空间保存该模型",
   "library.tab.media": "媒体",
   "library.tab.effects": "效果",
   "library.tab.transitions": "转场",

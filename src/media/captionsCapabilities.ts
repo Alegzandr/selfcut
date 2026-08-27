@@ -83,6 +83,22 @@ export function captionCapabilities(): Promise<CaptionCapabilities> {
   return probe;
 }
 
+/**
+ * What `model` costs to download on THIS machine, in MB.
+ *
+ * The same model is not the same download twice: a handheld fetches the
+ * half-precision weights, a desktop the fp32 ones. The picker quotes this
+ * rather than one headline figure, since the number it prints is the one the
+ * user is about to spend.
+ */
+export function captionModelSizeMb(
+  model: CaptionModelInfo,
+  caps: CaptionCapabilities,
+): number {
+  if (caps.handheld && model.handheld) return model.handheld.sizeMb;
+  return model.sizeMb[caps.device];
+}
+
 /** How a model rates on this machine, for the badge the picker shows on each row. */
 export type CaptionFit = 'recommended' | 'usable' | 'slow' | 'unsupported';
 
@@ -102,23 +118,24 @@ export function captionFit(model: CaptionModelInfo, caps: CaptionCapabilities): 
     if (model.quality >= 3) return 'slow';
     return model.quality === 2 ? 'recommended' : 'usable';
   }
-  const dtype = webgpuDtype(model, caps.f16);
-  // Nothing to load: fp16-only weights on an adapter with no fp16.
+  const dtype = webgpuDtype(model, caps.f16, caps.handheld);
+  // Nothing to load: fp16-only weights on an adapter with no fp16, or a model
+  // with no handheld profile on a phone.
   if (!dtype) return 'unsupported';
   // WebGPU allocates the largest weight tensor as one buffer, so an adapter with
   // a small cap fails at load time rather than running slowly.
-  const needBytes = model.sizeMb.webgpu * 1024 * 1024;
+  const needBytes = captionModelSizeMb(model, caps) * 1024 * 1024;
   if (caps.maxBufferBytes != null && needBytes > caps.maxBufferBytes * 4) return 'unsupported';
+  if (caps.handheld) {
+    // Whatever is left is a model with a handheld profile, which is the whole
+    // test: a phone GPU transcribes, what it does not have is the room for a
+    // gigabyte of weights, nor the thermal headroom for a long run, nor usually
+    // an unmetered connection to fetch them over.
+    return model.quality >= 2 ? 'recommended' : 'usable';
+  }
   // The no-f16 fallback runs, at a precision this project has not measured
   // against the fp16 path: offer it, do not recommend it.
   if (dtype !== model.dtype.webgpu) return 'usable';
-  if (caps.handheld) {
-    // A phone GPU transcribes; what it does not have is the room for a
-    // gigabyte of weights, nor the thermal headroom for a long run, nor
-    // usually an unmetered connection to fetch them over.
-    if (model.quality === 4) return 'slow';
-    return model.quality === 3 ? 'usable' : 'recommended';
-  }
   if (model.quality === 4) {
     // navigator.deviceMemory is Chromium-only: on Safari and Firefox there is
     // no RAM figure at all. Saying 'recommended' there would be a promise made
@@ -141,9 +158,18 @@ export function captionFit(model: CaptionModelInfo, caps: CaptionCapabilities): 
  * instead: on a handheld the wasm path is not a slower option but an hour of the
  * device at full tilt with the screen hot, so there a GPU is the condition;
  * on a desktop the CPU fallback stays offered, as it always was.
+ *
+ * A GPU is necessary and not sufficient: the handheld weights are fp16, so an
+ * adapter without `shader-f16` leaves no model to run and the card must not be
+ * offered - the alternative is the user discovering it from a picker where
+ * every row is greyed out.
  */
 export function captionsSupported(caps: CaptionCapabilities): boolean {
-  return caps.device === 'webgpu' || !caps.handheld;
+  if (!caps.handheld) return true;
+  return (
+    caps.device === 'webgpu' &&
+    CAPTION_MODELS.some((m) => captionFit(m, caps) !== 'unsupported')
+  );
 }
 
 /** The model to preselect on a machine that has never chosen one. */

@@ -739,6 +739,8 @@
   "library.subtitles.ready_other": "Sous-titres ajoutés : {{count}} répliques",
   "errors.media.subtitleFailed": "L'extraction de la piste de sous-titres ({{codec}}) a échoué : {{name}}",
   "errors.captions.failed": "Échec de la génération des sous-titres",
+  "errors.captions.download": "Échec du téléchargement du modèle",
+  "errors.captions.storage": "Plus assez d'espace pour stocker ce modèle",
   "library.tab.media": "Médias",
   "library.tab.effects": "Effets",
   "library.tab.transitions": "Transitions",

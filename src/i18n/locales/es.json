@@ -739,6 +739,8 @@
   "library.subtitles.ready_other": "Subtítulos añadidos: {{count}} líneas",
   "errors.media.subtitleFailed": "Error al extraer la pista de subtítulos ({{codec}}): {{name}}",
   "errors.captions.failed": "Error al generar subtítulos",
+  "errors.captions.download": "Error al descargar el modelo",
+  "errors.captions.storage": "No queda espacio para guardar este modelo",
   "library.tab.media": "Medios",
   "library.tab.effects": "Efectos",
   "library.tab.transitions": "Transiciones",

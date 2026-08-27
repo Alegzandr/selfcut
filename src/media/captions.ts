@@ -3,6 +3,7 @@ import type { SubtitleCue } from '../lib/subtitles';
 import { clipDurationMs, clipEndMs } from '../model';
 import { getAudioSegment } from './mediaCache';
 import { segmentIndexes } from './audioSegments';
+import { captionCapabilities } from './captionsCapabilities';
 import type {
   CaptionReply,
   CaptionRequest,
@@ -10,8 +11,8 @@ import type {
 } from './captionsProtocol';
 
 /**
- * Local auto-captions (desktop only): transcribe a clip's audio with Whisper (in
- * a worker) and turn the result into subtitle cues, ready for `addSubtitleClips`.
+ * Local auto-captions: transcribe a clip's audio with Whisper (in a worker) and
+ * turn the result into subtitle cues, ready for `addSubtitleClips`.
  * The audio is decoded, downmixed and resampled to mono 16 kHz here and
  * transferred to the worker - nothing leaves the browser.
  */
@@ -45,6 +46,17 @@ export interface CaptionOptions {
    * the captions wanted are not always the ones being monitored.
    */
   audioTrackIndex?: number;
+}
+
+/**
+ * Rebuild the worker's error on this side, keeping its code: `postMessage` only
+ * carries the message, and the caller distinguishes a full disk from a failed
+ * fetch by the name (see `captionModelJob`).
+ */
+function captionError(reply: { message: string; code?: 'storage' }): Error {
+  const err = new Error(reply.message);
+  if (reply.code === 'storage') err.name = 'CaptionStorageError';
+  return err;
 }
 
 let worker: Worker | null = null;
@@ -232,6 +244,9 @@ export async function generateCaptions(
   );
   if (signal?.aborted) return null;
 
+  // Read here, not in the worker: the probe's `handheld` is a `matchMedia`
+  // answer, and there is no window to ask off the main thread.
+  const { handheld } = await captionCapabilities();
   const w = ensureWorker();
   return new Promise<SubtitleCue[] | null>((resolve, reject) => {
     const cleanup = () => {
@@ -246,7 +261,7 @@ export async function generateCaptions(
         resolve(segmentsToCues(m.segments, clip));
       } else if (m.type === 'error') {
         cleanup();
-        reject(new Error(m.message));
+        reject(captionError(m));
       }
     };
     const onAbort = () => {
@@ -264,6 +279,7 @@ export async function generateCaptions(
       audio,
       model: opts.model,
       language: opts.language,
+      handheld,
     };
     w.postMessage(req, [audio.buffer]);
   });
@@ -311,15 +327,17 @@ export async function generateCaptionsForClips(
 
 /**
  * Download a model's weights without transcribing anything, for the model
- * manager. Runs in its own throwaway worker: the loaded pipeline is not what is
- * wanted here (the browser cache is), and terminating it hands the memory back
- * instead of holding a model nobody asked to run.
+ * manager. Runs in its own throwaway worker, which streams the files into the
+ * browser cache and never builds a session (see `captionsDownload`): the
+ * pipeline is not what is wanted here, and on a phone building it is what turns
+ * a finished download into a crashed tab.
  */
-export function prefetchCaptionModel(
+export async function prefetchCaptionModel(
   model: string,
   onProgress: (value: number) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  const { handheld } = await captionCapabilities();
   const w = newWorker();
   return new Promise<void>((resolve, reject) => {
     const done = (fn: () => void) => {
@@ -332,10 +350,10 @@ export function prefetchCaptionModel(
       const m = e.data;
       if (m.type === 'progress' && m.stage === 'model') onProgress(m.value);
       else if (m.type === 'ready') done(resolve);
-      else if (m.type === 'error') done(() => reject(new Error(m.message)));
+      else if (m.type === 'error') done(() => reject(captionError(m)));
     });
     signal?.addEventListener('abort', onAbort);
-    const req: CaptionRequest = { type: 'prefetch', model };
+    const req: CaptionRequest = { type: 'prefetch', model, handheld };
     w.postMessage(req);
   });
 }

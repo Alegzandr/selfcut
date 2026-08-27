@@ -739,6 +739,8 @@
   "library.subtitles.ready_other": "字幕を追加しました：{{count}} 件のキュー",
   "errors.media.subtitleFailed": "字幕トラック（{{codec}}）の抽出に失敗しました：{{name}}",
   "errors.captions.failed": "字幕の生成に失敗しました",
+  "errors.captions.download": "モデルのダウンロードに失敗しました",
+  "errors.captions.storage": "このモデルを保存する空き容量がありません",
   "library.tab.media": "メディア",
   "library.tab.effects": "エフェクト",
   "library.tab.transitions": "トランジション",

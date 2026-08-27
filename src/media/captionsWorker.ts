@@ -2,9 +2,10 @@
 import type { CaptionRequest, CaptionReply, CaptionSegment } from './captionsProtocol';
 import { captionModel, webgpuDtype } from './captionsModel';
 import { captionCapabilities } from './captionsCapabilities';
+import { downloadCaptionModel } from './captionsDownload';
 
 /**
- * Whisper transcription worker (desktop only). transformers.js is dynamically
+ * Whisper transcription worker. transformers.js is dynamically
  * imported the first time a job arrives, and each ASR pipeline is memoized for
  * the session, keyed by model - switching models in the picker must load the new
  * weights, not hand back the ones already in memory.
@@ -14,8 +15,8 @@ import { captionCapabilities } from './captionsCapabilities';
  * hit onnxruntime-web bugs in some Whisper builds, and a crashed run is worse
  * than a larger download.
  *
- * The backend and the precision come from `captionCapabilities`, the same probe
- * the model picker rates rows with - the vendor never enters into it (WebGPU is
+ * The backend and the precision come from `captionCapabilities` plus the
+ * request's `handheld` flag, the same pair the model picker rates rows with - the vendor never enters into it (WebGPU is
  * D3D12, Vulkan or Metal underneath and none of that reaches here), but the
  * optional `shader-f16` feature does, so the two must not answer differently.
  */
@@ -96,7 +97,21 @@ function post(reply: CaptionReply): void {
   (self as unknown as Worker).postMessage(reply);
 }
 
-async function getAsr(modelId: string): Promise<Asr> {
+/**
+ * The backend and precision a run takes here, for the model and this device.
+ *
+ * `handheld` comes from the request, not from the probe: `matchMedia` is a
+ * window API and answers nothing in a worker (see `HandheldFlag`).
+ */
+async function resolve(model: ReturnType<typeof captionModel>, handheld: boolean) {
+  const caps = await captionCapabilities();
+  return {
+    caps,
+    dtype: caps.device === 'webgpu' ? webgpuDtype(model, caps.f16, handheld) : null,
+  };
+}
+
+async function getAsr(modelId: string, handheld: boolean): Promise<Asr> {
   const cached = pipelines.get(modelId);
   if (cached) return cached;
   const model = captionModel(modelId);
@@ -112,8 +127,7 @@ async function getAsr(modelId: string): Promise<Asr> {
     // The WebGPU object can exist with no adapter behind it (headless, some
     // machines), and ONNX then fails at inference - so the probe asks for a real
     // adapter, and for the fp16 feature the precision below may depend on.
-    const caps = await captionCapabilities();
-    const dtype = caps.device === 'webgpu' ? webgpuDtype(model, caps.f16) : null;
+    const { caps, dtype } = await resolve(model, handheld);
     if (dtype) {
       try {
         return (await pipeline('automatic-speech-recognition', model.repo, {
@@ -124,9 +138,16 @@ async function getAsr(modelId: string): Promise<Asr> {
       } catch (err) {
         // WebGPU present but unusable (driver, memory): fall through to wasm -
         // unless this model only exists as a GPU proposition, where the wasm
-        // path would be a multi-gigabyte download to run slower than real time.
-        if (model.gpuOnly) throw err;
+        // path would be a multi-gigabyte download to run slower than real time,
+        // or this is a handheld, where the fp32 wasm weights are the download
+        // that kills the tab.
+        if (model.gpuOnly || handheld) throw err;
       }
+    }
+    if (handheld) {
+      // Reached only when the picker was bypassed: `captionFit` marks these
+      // rows unsupported, precisely so nobody arrives here after a download.
+      throw new Error(`${model.name} cannot run on this device`);
     }
     if (model.gpuOnly) {
       // Say which of the two it is: "requires WebGPU" on a machine that plainly
@@ -154,12 +175,22 @@ self.onmessage = async (e: MessageEvent<CaptionRequest>) => {
   const req = e.data;
   try {
     if (req.type === 'prefetch') {
-      await getAsr(req.model);
+      // Files into the cache, no session built: see `captionsDownload`.
+      const model = captionModel(req.model);
+      const { caps, dtype } = await resolve(model, req.handheld);
+      // Fetch what a run would load, so the run finds it: the wasm path has no
+      // GPU precision to resolve, and no precision at all on the GPU means the
+      // picker offered a download it had already marked unsupported.
+      const wanted = caps.device === 'wasm' ? model.dtype.wasm : dtype;
+      if (!wanted) throw new Error(`${model.name} cannot run on this device`);
+      await downloadCaptionModel(model, caps.device, wanted, (value) =>
+        post({ type: 'progress', stage: 'model', value }),
+      );
       post({ type: 'ready' });
       return;
     }
     if (req.type !== 'transcribe') return;
-    const asr = await getAsr(req.model);
+    const asr = await getAsr(req.model, req.handheld);
     const durationSec = req.audio.length / SAMPLE_RATE;
     let streamer: unknown;
     try {
@@ -201,6 +232,12 @@ self.onmessage = async (e: MessageEvent<CaptionRequest>) => {
       .filter((s) => s.text.length > 0);
     post({ type: 'result', segments });
   } catch (err) {
-    post({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+    post({
+      type: 'error',
+      message: err instanceof Error ? err.message : String(err),
+      ...(err instanceof Error && err.name === 'CaptionStorageError'
+        ? { code: 'storage' as const }
+        : {}),
+    });
   }
 };
