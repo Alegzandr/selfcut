@@ -12,11 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/install
       - run: npm run typecheck
       # Warnings fail here: the categories in .oxlintrc.json are deliberate, so
       # a new warning is a decision to make, not a line to scroll past.
@@ -41,11 +37,7 @@ jobs:
         project: [ui, render]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/install
       # `channel: 'chromium'` in playwright.config.ts: the full Chromium build,
       # not the headless shell, whose VideoEncoder stalls forever on export.
       - run: npx playwright install --with-deps chromium
@@ -62,11 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/install
       # Asserts the per-frame budgets in src/perf/*.bench.test.ts. A regression
       # that makes compositing allocate again fails the branch, not a profile
       # someone runs by hand six months later.
