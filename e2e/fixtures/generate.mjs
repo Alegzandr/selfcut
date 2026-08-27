@@ -13,8 +13,14 @@
  *   (two clips), which would complicate every clip-count assertion.
  * - tone.wav: 2 s of 16-bit PCM mono at 22.05 kHz with an amplitude
  *   envelope, written directly from Node (RIFF header + samples).
+ * - checker.png: a 256x256 black-and-white checkerboard, written directly from
+ *   Node (a one-chunk PNG). A still, so it imports without a video codec, and
+ *   nothing but hard edges - which is what makes it a blur meter: the average
+ *   difference between neighbouring pixels is high while it is sharp and falls
+ *   to near zero once something has actually blurred it.
  */
 import { chromium } from '@playwright/test';
+import { deflateSync } from 'node:zlib';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -121,5 +127,55 @@ async function generateWav() {
   console.log(`tone.wav: ${wav.length} bytes`);
 }
 
+/** A PNG chunk: length, type, payload, CRC. */
+function pngChunk(type, payload) {
+  const head = Buffer.alloc(4);
+  head.writeUInt32BE(payload.length);
+  const body = Buffer.concat([Buffer.from(type, 'latin1'), payload]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([head, body, crc]);
+}
+
+function crc32(buf) {
+  let c = ~0;
+  for (const byte of buf) {
+    c ^= byte;
+    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+  }
+  return ~c >>> 0;
+}
+
+async function generateCheckerPng() {
+  const size = 256;
+  const cell = 8;
+  // One filter byte (0 = none) then RGB triplets, per scanline.
+  const raw = Buffer.alloc(size * (1 + size * 3));
+  let at = 0;
+  for (let y = 0; y < size; y++) {
+    raw[at++] = 0;
+    for (let x = 0; x < size; x++) {
+      const v = (((x / cell) | 0) + ((y / cell) | 0)) % 2 === 0 ? 255 : 0;
+      raw[at++] = v;
+      raw[at++] = v;
+      raw[at++] = v;
+    }
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // colour type: truecolour
+  const png = Buffer.concat([
+    Buffer.from('89504e470d0a1a0a', 'hex'),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', deflateSync(raw)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+  await writeFile(path.join(here, 'checker.png'), png);
+  console.log(`checker.png: ${png.length} bytes`);
+}
+
 await generateMp4();
 await generateWav();
+await generateCheckerPng();
