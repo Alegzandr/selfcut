@@ -1,0 +1,34 @@
+name: Install
+description: Node 22 with the npm cache, and dependencies installed through a registry that is not always reachable.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      with:
+        node-version: 22
+        cache: npm
+
+    # A runner that cannot reach registry.npmjs.org fails the branch for a
+    # reason that has nothing to do with the branch: a deploy died here on
+    # `connect ETIMEDOUT` to the registry's v4 address and `ENETUNREACH` to its
+    # v6 one, on a tree whose only crime was being pushed at the wrong minute.
+    # npm's own fetch retries cover a slow answer, not a connection that never
+    # lands, so the install is retried as a whole and only the third failure is
+    # believed. `npm ci` clears node_modules first, so every attempt starts from
+    # the same place the first one did.
+    - shell: bash
+      run: |
+        set -uo pipefail
+        for attempt in 1 2 3; do
+          if npm ci --fetch-retries 5 --fetch-retry-maxtimeout 120000; then
+            exit 0
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            delay=$((attempt * 20))
+            echo "::warning::npm ci failed (attempt $attempt/3), retrying in ${delay}s"
+            sleep "$delay"
+          fi
+        done
+        echo "::error::npm ci failed three times: this runner cannot reach the npm registry"
+        exit 1
