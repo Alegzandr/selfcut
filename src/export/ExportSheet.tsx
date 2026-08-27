@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from '../ui/motion';
 import { Trans, useTranslation } from 'react-i18next';
 import {
   CheckCircledIcon,
@@ -114,6 +115,7 @@ function useRenderClock(rendering: boolean, progress: number) {
 
 export function ExportSheet() {
   const { t } = useTranslation();
+  const sheet = useEnterMotion({ y: '110%' });
   const open = useStore((s) => s.exportOpen);
   const project = useStore((s) => s.project);
   const assets = useStore((s) => s.assets);
@@ -226,9 +228,7 @@ export function ExportSheet() {
             }}
           />
           <m.div
-            initial={{ y: '110%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '110%' }}
+            {...sheet}
             transition={{ type: 'spring', damping: 28, stiffness: 320 }}
             role="dialog"
             aria-modal="true"

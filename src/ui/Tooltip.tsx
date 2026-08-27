@@ -9,7 +9,8 @@ import {
 } from 'react';
 import type { FocusEvent, PointerEvent, ReactElement, ReactNode, Ref } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, m, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import { useIsCoarsePointer } from '../lib/device';
 import { Kbd } from './Kbd';
 
@@ -66,7 +67,6 @@ export function Tooltip({
   children,
 }: TooltipProps) {
   const coarse = useIsCoarsePointer();
-  const reduce = useReducedMotion();
   const triggerRef = useRef<HTMLElement | null>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const timer = useRef<number | undefined>(undefined);
@@ -76,6 +76,11 @@ export function Tooltip({
     top: 0,
     place: placement,
   });
+  // Rises out of the trigger, and only ever shrinks back into it.
+  const pill = useEnterMotion(
+    { opacity: 0, scale: 0.96, y: pos.place === 'top' ? 3 : -3 },
+    { opacity: 0, scale: 0.96 },
+  );
 
   const measure = useCallback(() => {
     const trigger = triggerRef.current;
@@ -173,9 +178,10 @@ export function Tooltip({
                 top: pos.top,
                 translate: pos.place === 'top' ? '-50% -100%' : '-50% 0',
               }}
-              initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: pos.place === 'top' ? 3 : -3 }}
-              animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.08 } }}
+              {...pill}
+              // Leaves faster than it arrives, and only shrinks: a tooltip that
+              // slides back out draws the eye to the thing being dismissed.
+              exit={{ ...pill.exit, transition: { duration: 0.08 } }}
               transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
               className="pointer-events-none z-[200] flex max-w-64 items-center gap-2 rounded-md border border-zinc-700/70 bg-zinc-950/95 px-2 py-1 text-xs font-medium leading-snug text-zinc-100 shadow-lg shadow-black/50 ring-1 ring-white/5 backdrop-blur-sm"
             >

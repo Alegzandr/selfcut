@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
-import { m, useReducedMotion } from 'framer-motion';
+import { m } from 'framer-motion';
+import { useEnterMotion } from '../motion';
 
 /**
  * Close a popover on Escape or on a pointer press outside of it. Bound to the
@@ -49,15 +50,15 @@ export function MenuPanel({
   from?: 'top' | 'bottom';
   children: ReactNode;
 }) {
-  const reduce = useReducedMotion();
-  const offset = from === 'top' ? -4 : 4;
+  const enter = useEnterMotion({ opacity: 0, y: from === 'top' ? -4 : 4 }, { opacity: 0 });
   return (
     <m.div
       role="menu"
       className={`absolute z-40 max-w-[calc(100vw-1rem)] rounded-lg border border-zinc-700 bg-zinc-900/95 p-1 shadow-xl shadow-black/50 backdrop-blur ${className}`}
-      initial={reduce ? { opacity: 0 } : { opacity: 0, y: offset }}
-      animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
-      exit={{ opacity: 0, transition: { duration: 0.08 } }}
+      {...enter}
+      // Leaves faster than it arrives, and without travelling: a menu that
+      // lingers on its way out reads as lag on the click that dismissed it.
+      exit={{ ...enter.exit, transition: { duration: 0.08 } }}
       transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
     >
       {children}

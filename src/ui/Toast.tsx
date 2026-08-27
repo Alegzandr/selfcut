@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import { CheckIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 
@@ -24,14 +25,13 @@ export function Toast() {
   }, [message, isError]);
 
   const Icon = isError ? ExclamationTriangleIcon : CheckIcon;
+  const toast = useEnterMotion({ y: 24, opacity: 0 });
 
   return (
     <AnimatePresence>
       {message && (
         <m.div
-          initial={{ y: 24, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 24, opacity: 0 }}
+          {...toast}
           role={isError ? 'alert' : 'status'}
           aria-live={isError ? 'assertive' : 'polite'}
           className={`fixed bottom-4 left-1/2 z-50 flex max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm shadow-xl ${

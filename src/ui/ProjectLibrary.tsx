@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import { CheckIcon, Cross2Icon, FilePlusIcon, Pencil2Icon, TrashIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import {
@@ -21,6 +22,7 @@ import {
  */
 export function ProjectLibrary() {
   const { t } = useTranslation();
+  const dialog = useEnterMotion({ y: 8, scale: 0.96 });
   const open = useStore((s) => s.projectLibraryOpen);
   const projects = useStore((s) => s.projects);
   const currentId = useStore((s) => s.currentProjectId);
@@ -74,9 +76,7 @@ export function ProjectLibrary() {
           onClick={close}
         >
           <m.div
-            initial={{ scale: 0.96, y: 8 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.96, y: 8 }}
+            {...dialog}
             role="dialog"
             aria-modal="true"
             aria-label={t('projects.title')}

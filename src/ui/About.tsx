@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import { Cross2Icon } from '@radix-ui/react-icons';
 // ?url keeps this a plain URL string: Astro otherwise resolves an image
 // import in src/ to an ImageMetadata object, which renders as [object Object].
@@ -15,6 +16,7 @@ import { Tooltip } from './Tooltip';
  */
 export function About() {
   const { t } = useTranslation();
+  const dialog = useEnterMotion({ y: 8, scale: 0.96 });
   const open = useStore((s) => s.aboutOpen);
   const { setAboutOpen } = useStore.getState();
 
@@ -43,9 +45,7 @@ export function About() {
           onClick={() => setAboutOpen(false)}
         >
           <m.div
-            initial={{ scale: 0.96, y: 8 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.96, y: 8 }}
+            {...dialog}
             role="dialog"
             aria-modal="true"
             aria-label={t('menu.help.about')}

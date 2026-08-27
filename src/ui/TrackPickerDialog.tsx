@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import { Cross2Icon, MagnifyingGlassIcon } from '@radix-ui/react-icons';
 import { Tooltip } from './Tooltip';
 import { JobProgress } from './JobProgress';
@@ -79,6 +80,7 @@ export function TrackPickerDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const dialog = useEnterMotion({ y: 8, scale: 0.96 });
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<number[]>([]);
 
@@ -124,9 +126,7 @@ export function TrackPickerDialog({
           onClick={onClose}
         >
           <m.div
-            initial={{ scale: 0.96, y: 8 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.96, y: 8 }}
+            {...dialog}
             role="dialog"
             aria-modal="true"
             aria-label={title}

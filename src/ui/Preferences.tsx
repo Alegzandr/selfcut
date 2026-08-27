@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import {
   ArchiveIcon,
   ChatBubbleIcon,
@@ -314,6 +315,7 @@ function DataTab() {
  */
 export function Preferences() {
   const { t } = useTranslation();
+  const dialog = useEnterMotion({ y: 8, scale: 0.96 });
   const open = useStore((s) => s.preferencesOpen);
   const { setPreferencesOpen } = useStore.getState();
   // Same rule the subtitles pane applies: the tab exists where the machine can
@@ -364,9 +366,7 @@ export function Preferences() {
           onClick={() => setPreferencesOpen(false)}
         >
           <m.div
-            initial={{ scale: 0.96, y: 8 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.96, y: 8 }}
+            {...dialog}
             role="dialog"
             aria-modal="true"
             aria-label={t('preferences.title')}

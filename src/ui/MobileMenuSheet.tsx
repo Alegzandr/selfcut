@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
+import { useEnterMotion } from './motion';
 import { Cross2Icon } from '@radix-ui/react-icons';
 import { useEditorCommands } from './commands';
 import { MenuList, type MenuEntry } from './menu/MenuList';
@@ -26,6 +27,7 @@ import { MasterVolume } from './MasterVolume';
 export function MobileMenuSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const commands = useEditorCommands();
+  const sheet = useEnterMotion({ y: '100%' });
 
   return (
     <AnimatePresence>
@@ -39,9 +41,7 @@ export function MobileMenuSheet({ open, onClose }: { open: boolean; onClose: () 
             onClick={onClose}
           />
           <m.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
+            {...sheet}
             transition={{ type: 'spring', damping: 32, stiffness: 380 }}
             role="menu"
             aria-label={t('topbar.menu')}

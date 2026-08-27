@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, m } from "framer-motion";
+import { useEnterMotion } from "./ui/motion";
 import {
   Cross2Icon,
   DownloadIcon,
@@ -338,6 +339,7 @@ function DisconnectedBanner() {
 
 function ImportingBadge() {
   const { t } = useTranslation();
+  const badge = useEnterMotion({ opacity: 0, y: -8 });
   const importing = useStore((s) => s.importing);
   // The detailed line (remuxing a container) takes over the badge while it lasts;
   // the rest of an import is quick enough for the generic label.
@@ -346,9 +348,7 @@ function ImportingBadge() {
     <AnimatePresence>
       {importing && (
         <m.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
+          {...badge}
           className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 rounded-full bg-zinc-800/90 px-3 py-1.5 text-xs text-zinc-200 shadow-lg"
         >
           <span className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
