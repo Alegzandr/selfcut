@@ -64,7 +64,16 @@ export function MobileMenuSheet({ open, onClose }: { open: boolean; onClose: () 
                 </button>
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 py-2">
+            {/* This column scrolls in one direction only, and it takes both of
+                these to hold that. `overflow-y-auto` alone computes overflow-x
+                to `auto`, and the rows did overflow it: `touch-hit` hangs an
+                invisible 8px hit-area expander off every row, which poked 2px
+                past a 6px inline padding. Two pixels of scrollable width is all
+                a touch browser needs to hand the whole menu a horizontal pan,
+                and it rubber-bands the column sideways under the thumb. So the
+                padding matches the expander exactly (nothing to scroll to), and
+                overflow-x is pinned shut for whatever the next wide child is. */}
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 py-2">
               {MENUS.map((menu) => (
                 <section key={menu.titleKey} className="pb-1">
                   <h2 className="px-2 pb-1 pt-2 text-3xs font-semibold uppercase tracking-wider text-zinc-500">
