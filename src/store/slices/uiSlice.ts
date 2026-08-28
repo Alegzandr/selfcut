@@ -82,6 +82,7 @@ export function createUiSlice(
   | 'setLibraryOpen'
   | 'setLibraryTab'
   | 'setShortcutsOpen'
+  | 'setCurveEditorOpen'
   | 'setPreferencesOpen'
   | 'setAboutOpen'
   | 'openContextMenu'
@@ -205,6 +206,7 @@ export function createUiSlice(
     setLibraryOpen: (open) => set({ libraryOpen: open }),
     setLibraryTab: (tab) => set({ libraryTab: tab }),
     setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
+    setCurveEditorOpen: (open) => set({ curveEditorOpen: open }),
     setPreferencesOpen: (open) => set({ preferencesOpen: open }),
     setAboutOpen: (open) => set({ aboutOpen: open }),
 

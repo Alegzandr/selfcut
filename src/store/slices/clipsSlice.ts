@@ -814,7 +814,11 @@ export function createClipsSlice(
           // contrast key, and the picker re-eases the column, not one of them.
           for (const { keys } of animatedProps(clip)) {
             const k = keys.find((kk) => Math.abs(kk.t - local) < 1);
-            if (k) k.ease = ease;
+            if (!k) continue;
+            k.ease = ease;
+            // A custom curve wins over `ease` at sample time, so a named preset
+            // has to clear it - see `setSelectedKeyframesEase`.
+            delete k.bezier;
           }
         }
       });

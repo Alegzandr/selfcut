@@ -82,7 +82,8 @@ export type ContextTarget =
   | { kind: 'timeline' }
   | { kind: 'marker'; markerId: string }
   | { kind: 'track'; trackId: string }
-  | { kind: 'asset'; assetId: string };
+  | { kind: 'asset'; assetId: string }
+  | { kind: 'keyframe'; ref: KeyframeRef };
 
 export interface ContextMenuState {
   /** Viewport coordinates of the click (the menu anchors here, flipping at edges). */
@@ -224,6 +225,12 @@ export interface EditorState {
   /** Which catalogue the media library column shows. */
   libraryTab: LibraryTab;
   shortcutsOpen: boolean;
+  /**
+   * Curve (graph) editor panel, opened from the timeline's top-left corner. It
+   * edits the easing of `selectedKeyframes`, so it is a timeline surface rather
+   * than an inspector one - the diamonds it reads live on the lanes.
+   */
+  curveEditorOpen: boolean;
   /** Preferences dialog (language, time format, preview surround). */
   preferencesOpen: boolean;
   /** About dialog (app name, version). */
@@ -436,6 +443,11 @@ export interface EditorState {
   deleteSelectedKeyframes: () => void;
   /** Set the easing of every selected keyframe — its own history entry. */
   setSelectedKeyframesEase: (ease: EaseId) => void;
+  /**
+   * Give every selected keyframe the same custom cubic-Bezier curve, or drop
+   * back to a named easing when passed `null`. The graph editor's write path.
+   */
+  setSelectedKeyframesBezier: (bezier: [number, number, number, number] | null) => void;
   moveClip: (clipId: string, timelineStartMs: number, targetTrackId?: string) => void;
   /** Batch position update (multi-selection drag), no history - wrap with begin/endGesture. */
   moveClips: (entries: { clipId: string; timelineStartMs: number }[]) => void;
@@ -690,6 +702,7 @@ export interface EditorState {
   setLibraryOpen: (open: boolean) => void;
   setLibraryTab: (tab: LibraryTab) => void;
   setShortcutsOpen: (open: boolean) => void;
+  setCurveEditorOpen: (open: boolean) => void;
   setPreferencesOpen: (open: boolean) => void;
   setAboutOpen: (open: boolean) => void;
   /** Open the right-click menu for `target` at viewport coords (x, y). */

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { Channel, isAnimated, removeKeyframe, sampleChannel, setKeyframe } from './animation';
+import {
+  Channel,
+  easeAt,
+  isAnimated,
+  keyBezier,
+  keyShape,
+  removeKeyframe,
+  sampleChannel,
+  setKeyframe,
+} from './animation';
 
 describe('sampleChannel', () => {
   it('returns a constant channel unchanged at any time', () => {
@@ -145,5 +154,52 @@ describe('removeKeyframe', () => {
       { t: 100, value: 2 },
     ];
     expect(removeKeyframe(ch, 999)).toBe(ch);
+  });
+});
+
+describe('keyShape', () => {
+  it('spells the interpolation: step, straight line, curve', () => {
+    expect(keyShape({ t: 0, value: 0, ease: 'hold' })).toBe('square');
+    expect(keyShape({ t: 0, value: 0, ease: 'linear' })).toBe('diamond');
+    expect(keyShape({ t: 0, value: 0, ease: 'in' })).toBe('round');
+    expect(keyShape({ t: 0, value: 0, ease: 'out' })).toBe('round');
+  });
+
+  it('reads the default easing as the curve it is', () => {
+    expect(keyShape({ t: 0, value: 0 })).toBe('round');
+  });
+
+  it('calls a custom curve a curve, whatever `ease` says next to it', () => {
+    expect(keyShape({ t: 0, value: 0, ease: 'linear', bezier: [0.2, 0, 0.8, 1] })).toBe('round');
+  });
+});
+
+describe('keyBezier', () => {
+  it('hands back the custom curve when there is one', () => {
+    expect(keyBezier({ t: 0, value: 0, bezier: [0.2, 0, 0.8, 1] })).toEqual([0.2, 0, 0.8, 1]);
+  });
+
+  it('resolves a named preset to the control points it stands for', () => {
+    expect(keyBezier({ t: 0, value: 0, ease: 'inOut' })).toEqual([0.42, 0, 0.58, 1]);
+  });
+
+  it('has no curve to offer for a straight line or a step', () => {
+    expect(keyBezier({ t: 0, value: 0, ease: 'linear' })).toBeNull();
+    expect(keyBezier({ t: 0, value: 0, ease: 'hold' })).toBeNull();
+  });
+});
+
+describe('easeAt', () => {
+  it('plots the same curve `sampleChannel` interpolates with', () => {
+    const key = { t: 0, value: 0, bezier: [0.2, 0, 0.8, 1] as [number, number, number, number] };
+    const channel: Channel = [key, { t: 100, value: 1 }];
+    for (const p of [0.25, 0.5, 0.75]) {
+      expect(easeAt(key, p)).toBeCloseTo(sampleChannel(channel, p * 100), 10);
+    }
+  });
+
+  it('lets a control point pulled past the top overshoot', () => {
+    const key = { t: 0, value: 0, bezier: [0.3, 1.6, 0.7, 1] as [number, number, number, number] };
+    expect(easeAt(key, 0.5)).toBeGreaterThan(1);
   });
 });

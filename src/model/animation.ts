@@ -86,6 +86,45 @@ function easeProgress(key: Keyframe, p: number): number {
 }
 
 /**
+ * The cubic-Bezier a graph editor should draw and edit for a key: its custom
+ * curve when it has one, otherwise the control points of its named preset.
+ * `null` for `hold` and `linear`, which are not curves - a graph editor shows
+ * them as a step and a straight line, with no handles to grab.
+ */
+export function keyBezier(key: Keyframe): [number, number, number, number] | null {
+  if (key.bezier) return key.bezier;
+  const ease = key.ease ?? DEFAULT_EASE;
+  return ease === 'hold' || ease === 'linear' ? null : [...EASE_BEZIER[ease]];
+}
+
+/**
+ * Eased progress in [0,1] (overshoot allowed) for a key's curve — the same math
+ * `sampleChannel` interpolates with, exposed so the graph editor plots exactly
+ * the curve the renderer will follow.
+ */
+export function easeAt(key: Keyframe, p: number): number {
+  return easeProgress(key, p);
+}
+
+/**
+ * How a keyframe should be drawn on the timeline, from the easing of the
+ * segment it governs. Every NLE spells interpolation as a shape rather than a
+ * colour: `square` steps (hold), `diamond` is a straight line (linear), `round`
+ * is a curve (the eased presets and any custom Bezier). Reading a lane's motion
+ * then takes no click.
+ */
+export type KeyShape = 'square' | 'diamond' | 'round';
+
+export function keyShape(key: Keyframe | undefined): KeyShape {
+  if (!key) return 'diamond';
+  if (key.bezier) return 'round';
+  const ease = key.ease ?? DEFAULT_EASE;
+  if (ease === 'hold') return 'square';
+  if (ease === 'linear') return 'diamond';
+  return 'round';
+}
+
+/**
  * Value of a channel at a clip-local time (ms). A constant channel returns
  * itself; a keyframed channel holds at the first/last value outside its range
  * and eases between bracketing keyframes inside it. Keyframes are assumed sorted

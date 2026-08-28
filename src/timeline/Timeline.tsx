@@ -29,6 +29,9 @@ import { DropGhost } from './DropGhost';
 import { publishViewport } from './viewport';
 import { trackIndexAtY, trackTops } from './trackHeight';
 import { keyframeKey, keyframesInBox } from './keyframeSelection';
+import { CurveEditor } from './CurveEditor';
+import { CurveIcon } from './KeyframeIcon';
+import { Tooltip } from '../ui/Tooltip';
 import type { KeyframeRef } from '../types';
 
 /** Vertical guide at the point a drag is currently snapped to (all NLEs flash one). */
@@ -42,6 +45,35 @@ function SnapGuide() {
       className="pointer-events-none absolute inset-y-0 z-10 w-px bg-blue-300/90"
       style={{ left: padLeft + snapGuideMs * (pxPerSec / 1000) }}
     />
+  );
+}
+
+/**
+ * Graph-editor toggle, in the timeline's top-left corner. Enabled only with
+ * keyframes selected: the panel has nothing to draw otherwise, and a button that
+ * opens an empty box teaches nothing about where curves come from.
+ */
+function CurveEditorToggle() {
+  const { t } = useTranslation();
+  const open = useStore((s) => s.curveEditorOpen);
+  const selected = useStore((s) => s.selectedKeyframes.length);
+  return (
+    <Tooltip label={t('timeline.curveEditor')} shortcut="G" placement="bottom">
+      <button
+        type="button"
+        aria-label={t('timeline.curveEditor')}
+        aria-pressed={open}
+        disabled={selected === 0 && !open}
+        className={`touch-hit rounded p-1 ${
+          open
+            ? 'brand-on'
+            : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 disabled:text-zinc-600 disabled:hover:bg-transparent'
+        }`}
+        onClick={() => useStore.getState().setCurveEditorOpen(!open)}
+      >
+        <CurveIcon className="h-4 w-4" />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -367,17 +399,24 @@ export function Timeline() {
       onDragLeave={onAssetDragLeave}
       onDrop={onAssetDrop}
     >
+      {/* Floats over the panes rather than scrolling with them: it edits the
+          selection, not a place on the timeline. */}
+      <CurveEditor />
+
       {/* Fixed header pane, outside the scroller: the timeline cannot reach it. */}
       <div
         className="flex shrink-0 flex-col border-r border-zinc-800 bg-zinc-900"
         style={{ width: headerWidth, paddingBottom: hBarPx }}
       >
         {/* Corner block, matching the marker bar + ruler so row N of the pane
-            lines up with row N of the scroller. */}
+            lines up with row N of the scroller. It carries the graph editor
+            toggle: the one timeline-wide control, at the timeline's own origin. */}
         <div
-          className="shrink-0 border-b border-zinc-800"
+          className="flex shrink-0 items-center border-b border-zinc-800 px-1.5"
           style={{ height: MARKER_BAR_HEIGHT_PX + RULER_HEIGHT_PX }}
-        />
+        >
+          <CurveEditorToggle />
+        </div>
         <div className="min-h-0 flex-1 overflow-hidden">
           {/* Translated to mirror the scroller's vertical offset - the pane has
               no scroll of its own, so the two can never drift apart. */}

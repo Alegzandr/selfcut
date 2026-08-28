@@ -15,6 +15,9 @@ import {
 } from '@radix-ui/react-icons';
 import { useTranslation } from 'react-i18next';
 import { useStore, getLinkTargets } from '../../store/store';
+import { EASE_IDS } from '../../model';
+import { selectionEase } from '../../timeline/keyframeSelection';
+import { CurveIcon } from '../../timeline/KeyframeIcon';
 import { audioKey } from '../../media/mediaCache';
 import type { ContextTarget } from '../../store/editorState';
 import { reconnectAssetViaPicker } from '../MediaLibrary';
@@ -236,6 +239,36 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
           onClick: () => st().removeTrack(id),
         },
       );
+      return items;
+    }
+
+    // A right-click on a diamond. The rows act on the whole keyframe selection
+    // (the handler put the pressed key in it), which is what makes re-easing a
+    // boxed run a single gesture rather than one menu per key.
+    case 'keyframe': {
+      const refs = st().selectedKeyframes;
+      const current = selectionEase(st().project, refs);
+      const items: MenuEntry[] = EASE_IDS.map((ease) => ({
+        id: `ctx.keyframe.ease.${ease}`,
+        labelKey: `inspector.easing.${ease}` as const,
+        checked: current === ease,
+        onClick: () => st().setSelectedKeyframesEase(ease),
+      }));
+      items.push('---', {
+        id: 'ctx.keyframe.curve',
+        labelKey: 'timeline.curveEditor',
+        icon: CurveIcon,
+        checked: current === 'custom',
+        shortcut: 'G',
+        onClick: () => st().setCurveEditorOpen(true),
+      });
+      items.push('---', {
+        id: 'ctx.keyframe.delete',
+        labelKey: refs.length > 1 ? 'ctx.keyframe.deleteMany' : 'ctx.keyframe.delete',
+        icon: TrashIcon,
+        danger: true,
+        onClick: () => st().deleteSelectedKeyframes(),
+      });
       return items;
     }
 

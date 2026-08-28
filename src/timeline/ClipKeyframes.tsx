@@ -1,26 +1,49 @@
 /**
- * Keyframe markers on the selected clip: a diamond at every keyframe time,
- * aggregated across the clip's animated properties. Drag a diamond to retime its
+ * Keyframe markers on the selected clip: a glyph at every keyframe time,
+ * aggregated across the clip's animated properties - its shape spelling the
+ * interpolation of the column (see `KeyframeIcon`). Drag a diamond to retime its
  * key column; a click (no drag) seeks the playhead to it — the Adobe/Vegas
  * reflex of reading, navigating and nudging an animation by its keys. Shown on
  * selection, like the fade handles, so an idle timeline stays quiet.
  */
 import { memo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Clip } from '../types';
-import { clipDurationMs } from '../model';
+import { Clip, KeyframeProp, KeyframeRef } from '../types';
+import { clipDurationMs, keyShape, type KeyShape } from '../model';
+import { KeyframeIcon } from './KeyframeIcon';
 import { useStore } from '../store/store';
 import { formatTime } from '../lib/time';
 
-/** Unique keyframe times (clip-local ms) across every animated property of a clip. */
-function keyframeTimes(clip: Clip): number[] {
-  const anim = clip.animation;
-  if (!anim) return [];
-  const set = new Set<number>();
-  for (const keys of Object.values(anim)) {
-    if (keys) for (const k of keys) set.add(k.t);
+/** One aggregated key column: a time, the properties keyed there, and its glyph. */
+interface KeyColumn {
+  t: number;
+  props: KeyframeProp[];
+  shape: KeyShape;
+}
+
+/**
+ * The key columns of a clip: every distinct keyframe time across its animated
+ * properties, sorted. A column's glyph is the shape its keys agree on; when a
+ * scale key eases and a rotation key at the same time holds, it falls back to
+ * the neutral diamond rather than picking a winner and lying about the other.
+ */
+function keyColumns(clip: Clip): KeyColumn[] {
+  const byTime = new Map<number, KeyColumn>();
+  // Transform keys only, matching `dragBounds`: this lane retimes what it shows,
+  // and a colour key drawn here would be dragged by a gesture that never touches it.
+  for (const [name, keys] of Object.entries(clip.animation ?? {})) {
+    const prop = name as KeyframeProp;
+    for (const k of keys ?? []) {
+      const shape = keyShape(k);
+      const col = byTime.get(k.t);
+      if (!col) byTime.set(k.t, { t: k.t, props: [prop], shape });
+      else {
+        col.props.push(prop);
+        if (col.shape !== shape) col.shape = 'diamond';
+      }
+    }
   }
-  return [...set].sort((a, b) => a - b);
+  return [...byTime.values()].sort((a, b) => a.t - b.t);
 }
 
 /**
@@ -60,9 +83,10 @@ export const ClipKeyframes = memo(function ClipKeyframes({
 }) {
   const { t } = useTranslation();
   const drag = useRef<Drag | null>(null);
-  const times = keyframeTimes(clip);
-  if (!times.length) return null;
-  const size = coarse ? 'h-3.5 w-3.5' : 'h-2.5 w-2.5';
+  const columns = keyColumns(clip);
+  if (!columns.length) return null;
+  const size = coarse ? 'h-4 w-4' : 'h-3 w-3';
+  const glyph = coarse ? 'h-3.5 w-3.5' : 'h-2.5 w-2.5';
 
   const onDown = (e: React.PointerEvent, time: number) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -89,24 +113,39 @@ export const ClipKeyframes = memo(function ClipKeyframes({
     if (!d.moved) useStore.getState().seek(clip.timelineStartMs + d.origT);
     drag.current = null;
   };
+  // Right-click on a column selects the whole column - every property keyed at
+  // that instant - then opens the menu on it. Re-easing one property of a
+  // column and leaving its siblings behind is never what this lane means: it is
+  // the aggregate view, and it edits the aggregate.
+  const onMenu = (e: React.MouseEvent, col: KeyColumn) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const refs: KeyframeRef[] = col.props.map((prop) => ({ clipId: clip.id, prop, t: col.t }));
+    const state = useStore.getState();
+    state.setSelectedKeyframes(refs);
+    state.openContextMenu(e.clientX, e.clientY, { kind: 'keyframe', ref: refs[0]! });
+  };
 
   return (
     // A thin lane along the clip's bottom edge; the diamonds take pointer events,
     // the lane does not, so it never blocks a clip drag.
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-3">
-      {times.map((time) => (
+      {columns.map((col) => (
         <button
-          key={time}
+          key={col.t}
           type="button"
-          aria-label={`${t('inspector.keyframe')} · ${formatTime(clip.timelineStartMs + time)}`}
-          title={`${t('inspector.keyframe')} · ${formatTime(clip.timelineStartMs + time)}`}
-          className={`pointer-events-auto absolute bottom-0.5 -translate-x-1/2 rotate-45 rounded-[1px] border border-zinc-900 bg-zinc-100 shadow cursor-ew-resize touch-none hover:bg-blue-200 active:bg-blue-300 ${size}`}
-          style={{ left: time * pxPerMs }}
-          onPointerDown={(e) => onDown(e, time)}
+          aria-label={`${t('inspector.keyframe')} · ${formatTime(clip.timelineStartMs + col.t)}`}
+          title={`${t('inspector.keyframe')} · ${formatTime(clip.timelineStartMs + col.t)}`}
+          className={`group pointer-events-auto absolute bottom-0 flex -translate-x-1/2 items-center justify-center cursor-ew-resize touch-none ${size}`}
+          style={{ left: col.t * pxPerMs }}
+          onPointerDown={(e) => onDown(e, col.t)}
           onPointerMove={onMove}
           onPointerUp={onUp}
           onPointerCancel={onUp}
-        />
+          onContextMenu={(e) => onMenu(e, col)}
+        >
+          <KeyframeIcon shape={col.shape} className={`${glyph} drop-shadow`} />
+        </button>
       ))}
     </div>
   );

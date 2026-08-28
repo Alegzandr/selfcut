@@ -45,6 +45,7 @@ export function createKeyframesSlice(
   | 'moveSelectedKeyframes'
   | 'deleteSelectedKeyframes'
   | 'setSelectedKeyframesEase'
+  | 'setSelectedKeyframesBezier'
 > {
   /** Rewrite one clip's animation, property by property, over the selected keys. */
   const editClips = (
@@ -72,6 +73,24 @@ export function createKeyframesSlice(
         ]),
       ),
     );
+
+  /** Apply an in-place edit to every selected keyframe, as one history step. */
+  const editSelectedKeys = (edit: (k: Keyframe) => void) => {
+    const refs = get().selectedKeyframes;
+    if (!refs.length) return;
+    const groups = byClipAndProp(refs);
+    withHistory((p) => {
+      for (const [clipId, props] of groups) {
+        const clip = findClip(p, clipId)?.clip;
+        if (!clip) continue;
+        for (const [prop, times] of props) {
+          for (const k of keyframesOf(clip, prop) ?? []) {
+            if (isSelected(times, k.t)) edit(k);
+          }
+        }
+      }
+    });
+  };
 
   return {
     setSelectedKeyframes: (refs) => set({ selectedKeyframes: refs }),
@@ -126,19 +145,19 @@ export function createKeyframesSlice(
     },
 
     setSelectedKeyframesEase: (ease) => {
-      const refs = get().selectedKeyframes;
-      if (!refs.length) return;
-      const groups = byClipAndProp(refs);
-      withHistory((p) => {
-        for (const [clipId, props] of groups) {
-          const clip = findClip(p, clipId)?.clip;
-          if (!clip) continue;
-          for (const [prop, times] of props) {
-            for (const k of keyframesOf(clip, prop) ?? []) {
-              if (isSelected(times, k.t)) k.ease = ease;
-            }
-          }
-        }
+      editSelectedKeys((k) => {
+        k.ease = ease;
+        // A custom curve overrides `ease` when sampling, so picking a named
+        // preset has to drop it - otherwise the click would change the label
+        // under the pointer and nothing about the motion.
+        delete k.bezier;
+      });
+    },
+
+    setSelectedKeyframesBezier: (bezier) => {
+      editSelectedKeys((k) => {
+        if (bezier) k.bezier = [...bezier] as [number, number, number, number];
+        else delete k.bezier;
       });
     },
   };

@@ -233,6 +233,7 @@ export const useStore = create<EditorState>((set, get) => {
     libraryTab: 'media',
     loadedPresets: [],
     shortcutsOpen: false,
+    curveEditorOpen: false,
     preferencesOpen: false,
     aboutOpen: false,
     contextMenu: null,

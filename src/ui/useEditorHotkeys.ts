@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useStore, getSelectedClip, projectDurationMs, clipEndMs, sortedMarkers } from '../store/store';
 import { zoomAtPlayhead } from '../timeline/zoom';
+import { EASE_IDS } from '../model';
 import { focusIsKeyboardDriven } from '../lib/focusModality';
 import { openProject, saveProject } from './projectActions';
 import { PLAYBACK_SKIP_BACK_MS, PLAYBACK_SKIP_FORWARD_MS } from '../app/config';
@@ -152,6 +153,16 @@ export function useEditorHotkeys() {
         return;
       }
 
+      // F9 is After Effects' Easy Ease, muscle memory for anyone arriving from
+      // it. Shift and Ctrl+Shift are its one-sided variants, same as there.
+      if (e.key === 'F9') {
+        e.preventDefault();
+        if (s.selectedKeyframes.length) {
+          s.setSelectedKeyframesEase(mod && e.shiftKey ? 'out' : e.shiftKey ? 'in' : 'inOut');
+        }
+        return;
+      }
+
       if (mod) {
         switch (e.key.toLowerCase()) {
           case 'z':
@@ -216,6 +227,16 @@ export function useEditorHotkeys() {
         return;
       }
 
+      // Easing of the boxed keyframes, Alt + the picker's own order. Alt rather
+      // than a bare digit because 1…9 are the marker cue keys below, and a
+      // monteur uses those far more often than they re-ease a curve.
+      const easeDigit = /^(?:Digit|Numpad)([1-5])$/.exec(e.code);
+      if (e.altKey && !mod && easeDigit && s.selectedKeyframes.length) {
+        e.preventDefault();
+        const ease = EASE_IDS[Number(easeDigit[1]) - 1];
+        if (ease) s.setSelectedKeyframesEase(ease);
+        return;
+      }
       // 1…9: jump to the n-th marker (Vegas-style cue keys). Matched on
       // e.code so the digit row works on AZERTY too (where unshifted e.key
       // is "&", "é", …), plus the numpad.
@@ -337,6 +358,13 @@ export function useEditorHotkeys() {
           return;
         case 'n':
           s.toggleSnap();
+          return;
+        case 'g':
+          // The graph editor, on the letter every NLE gives it. Opening it with
+          // nothing boxed would show an empty panel, so it only toggles when
+          // there is a curve to show - or when it is already open, to close it.
+          if (s.curveEditorOpen) s.setCurveEditorOpen(false);
+          else if (s.selectedKeyframes.length) s.setCurveEditorOpen(true);
           return;
         case 'e':
           // Adobe's reflex: E toggles the "expand track" view. Targets the

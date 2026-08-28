@@ -7,8 +7,8 @@
  * Times are compared with the same 1ms tolerance the store's keyframe actions
  * use, so a key found by the box is the key those actions will edit.
  */
-import type { Clip, KeyframeRef, Project, Track } from '../types';
-import { clipDurationMs, keyframesOf } from '../model';
+import type { Clip, EaseId, Keyframe, KeyframeRef, Project, Track } from '../types';
+import { DEFAULT_EASE, clipDurationMs, keyBezier, keyframesOf } from '../model';
 import {
   KEYFRAME_LANE_HEIGHT_PX,
   KEYFRAME_LANES_GAP_PX,
@@ -124,4 +124,61 @@ export function selectionDragBounds(project: Project, refs: KeyframeRef[]): [num
   // A set boxed across clips of very different lengths can end up with no room
   // at all; collapse to a no-op rather than letting maxDelta < minDelta invert.
   return [minDelta, Math.max(minDelta, maxDelta)];
+}
+
+
+/** Every selected keyframe, resolved against the project (missing refs dropped). */
+export function selectedKeys(project: Project, refs: KeyframeRef[]): Keyframe[] {
+  const clips = new Map<string, Clip>();
+  for (const track of project.tracks) {
+    for (const clip of track.clips) clips.set(clip.id, clip);
+  }
+  const out: Keyframe[] = [];
+  for (const ref of refs) {
+    const clip = clips.get(ref.clipId);
+    if (!clip) continue;
+    const key = keyframesOf(clip, ref.prop)?.find(
+      (k) => Math.abs(k.t - ref.t) < SAME_KEY_EPSILON_MS,
+    );
+    if (key) out.push(key);
+  }
+  return out;
+}
+
+/**
+ * The easing the whole selection agrees on, for a picker's checked state:
+ * a named preset, `'custom'` when every key carries the same Bezier, or `null`
+ * when the set is mixed (or empty). A picker showing "Smooth" over a set where
+ * half the keys hold would be lying about what a second click would undo.
+ */
+export function selectionEase(
+  project: Project,
+  refs: KeyframeRef[],
+): EaseId | 'custom' | null {
+  const keys = selectedKeys(project, refs);
+  if (!keys.length) return null;
+  const idOf = (k: Keyframe) => (k.bezier ? `b:${k.bezier.join(',')}` : `e:${k.ease ?? DEFAULT_EASE}`);
+  const first = idOf(keys[0]!);
+  if (keys.some((k) => idOf(k) !== first)) return null;
+  return keys[0]!.bezier ? 'custom' : (keys[0]!.ease ?? DEFAULT_EASE);
+}
+
+/**
+ * The Bezier control points the graph editor should show for the selection: the
+ * curve every selected key shares, or `null` when they disagree or the shared
+ * easing has no curve (`linear`, `hold`).
+ */
+export function selectionBezier(
+  project: Project,
+  refs: KeyframeRef[],
+): [number, number, number, number] | null {
+  const keys = selectedKeys(project, refs);
+  if (!keys.length) return null;
+  const first = keyBezier(keys[0]!);
+  if (!first) return null;
+  const same = keys.every((k) => {
+    const b = keyBezier(k);
+    return b !== null && b.every((v, i) => Math.abs(v - first[i]!) < 1e-6);
+  });
+  return same ? [...first] : null;
 }

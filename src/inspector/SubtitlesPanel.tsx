@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { ParseKeys } from 'i18next';
-import { useTranslation } from 'react-i18next';
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ParseKeys } from "i18next";
+import { useTranslation } from "react-i18next";
 import {
   Cross2Icon,
   DownloadIcon,
@@ -8,33 +8,33 @@ import {
   MagicWandIcon,
   TextIcon,
   TrashIcon,
-} from '@radix-ui/react-icons';
-import { useStore } from '../store/store';
-import { Tooltip } from '../ui/Tooltip';
-import { openSubtitlePicker } from '../ui/mediaPicker';
-import { useImport } from '../ui/useImport';
-import { useAutoGrow } from '../ui/useAutoGrow';
-import { exportSubtitles } from '../ui/subtitleActions';
+} from "@radix-ui/react-icons";
+import { useStore } from "../store/store";
+import { Tooltip } from "../ui/Tooltip";
+import { openSubtitlePicker } from "../ui/mediaPicker";
+import { useImport } from "../ui/useImport";
+import { useAutoGrow } from "../ui/useAutoGrow";
+import { exportSubtitles } from "../ui/subtitleActions";
 import {
   audioTrackForClip,
   clipEndMs,
   isTextClip,
   supersededCueIds,
-} from '../model';
+} from "../model";
 import {
   generateCaptionsForClips,
   type CaptionProgress,
-} from '../media/captions';
+} from "../media/captions";
 import {
   cancelCaptionJob,
   isCaptionJobRunning,
   startCaptionJob,
   useCaptionJob,
-} from '../media/captionJob';
+} from "../media/captionJob";
 import {
   captionCapabilities,
   bestDefaultModel,
-} from '../media/captionsCapabilities';
+} from "../media/captionsCapabilities";
 import {
   AUTO_LANGUAGE,
   CAPTION_LANGUAGES,
@@ -44,20 +44,21 @@ import {
   setStoredCaptionLanguage,
   storedCaptionModel,
   whisperLanguage,
-} from '../media/captionsPrefs';
+} from "../media/captionsPrefs";
 import {
   useCaptionEnhancePref,
   useCaptionLanguagePref,
   useCaptionModelPref,
-} from '../media/useCaptionPrefs';
-import { useCaptionsSupported } from '../media/useCaptionCapabilities';
-import { formatTime, formatTimePrecise, parseClock } from '../lib/time';
+} from "../media/useCaptionPrefs";
+import { useCaptionsSupported } from "../media/useCaptionCapabilities";
+import { formatTime, formatTimePrecise, parseClock } from "../lib/time";
 import {
   isTrackPlayable,
   type Clip,
   type MediaAsset,
+  type Project,
   type TextClip,
-} from '../types';
+} from "../types";
 
 /**
  * Cue list: every text clip in the project, in timeline order, editable as
@@ -79,6 +80,20 @@ interface CaptionTarget {
   asset: MediaAsset;
 }
 
+/** Those of `ids` that are media clips with sound, in timeline order. */
+function audibleTargets(
+  project: Project,
+  assets: Record<string, MediaAsset>,
+  ids: Set<string>,
+): CaptionTarget[] {
+  return project.tracks
+    .flatMap((track) => track.clips)
+    .filter((clip) => ids.has(clip.id) && clip.kind === "media")
+    .map((clip) => ({ clip, asset: assets[clip.assetId] }))
+    .filter((x): x is CaptionTarget => !!x.asset?.hasAudio)
+    .sort((a, b) => a.clip.timelineStartMs - b.clip.timelineStartMs);
+}
+
 /** Progress bar with a cancel button, shown in place of the generate button. */
 function CaptionProgressBar({
   progress,
@@ -93,27 +108,27 @@ function CaptionProgressBar({
   // indeterminate look instead of pretending to a number it does not have.
   const pct = progress.value == null ? null : Math.round(progress.value * 100);
   const label =
-    progress.stage === 'model'
-      ? t('subtitles.downloadingModel', { pct })
+    progress.stage === "model"
+      ? t("subtitles.downloadingModel", { pct })
       : progress.clip
         ? pct == null
-          ? t('subtitles.transcribingClip', {
+          ? t("subtitles.transcribingClip", {
               index: progress.clip.index,
               total: progress.clip.total,
             })
-          : t('subtitles.transcribingClipPct', {
+          : t("subtitles.transcribingClipPct", {
               index: progress.clip.index,
               total: progress.clip.total,
               pct,
             })
         : pct == null
-          ? t('subtitles.transcribing')
-          : t('subtitles.transcribingPct', { pct });
+          ? t("subtitles.transcribing")
+          : t("subtitles.transcribingPct", { pct });
   return (
     <div className="flex w-full items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
         <div
-          className={`h-full rounded-full bg-brand-500 ${pct == null ? 'w-full animate-pulse' : 'transition-[width]'}`}
+          className={`h-full rounded-full bg-brand-500 ${pct == null ? "w-full animate-pulse" : "transition-[width]"}`}
           style={pct == null ? undefined : { width: `${pct}%` }}
         />
       </div>
@@ -121,7 +136,7 @@ function CaptionProgressBar({
       <button
         type="button"
         onClick={onCancel}
-        aria-label={t('confirm.cancel')}
+        aria-label={t("confirm.cancel")}
         className="touch-hit rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
       >
         <Cross2Icon className="h-3.5 w-3.5" />
@@ -166,7 +181,14 @@ function Field({
  * Captions are the reason most people open this pane, and an affordance that
  * only exists while the project has no subtitles is one nobody finds twice.
  */
-function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
+function CaptionGenerator({
+  targets,
+  remembered,
+}: {
+  targets: CaptionTarget[];
+  /** Targets carried over from an earlier selection, so the line says so. */
+  remembered: boolean;
+}) {
   const { t, i18n } = useTranslation();
   // Model, language and voice focus are machine preferences, shared with the
   // Preferences dialog: read through the prefs hooks so a change made there
@@ -228,7 +250,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
   }, [sharedAsset, targets, pickableTracks]);
   // A choice made by hand survives until the selection points somewhere else.
   useEffect(() => setPickedTrack(null), [clipTrack]);
-  const audioTrack = pickedTrack ?? clipTrack ?? 'clip';
+  const audioTrack = pickedTrack ?? clipTrack ?? "clip";
 
   const run = () => {
     if (targets.length === 0 || isCaptionJobRunning()) return;
@@ -239,9 +261,9 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
       const superseded = supersededCueIds(st.project, from, to);
       if (superseded.length > 0) {
         const ok = await st.requestConfirm({
-          title: t('subtitles.replace.title'),
-          message: t('subtitles.replace.message', { count: superseded.length }),
-          confirmLabel: t('subtitles.replace.confirm'),
+          title: t("subtitles.replace.title"),
+          message: t("subtitles.replace.message", { count: superseded.length }),
+          confirmLabel: t("subtitles.replace.confirm"),
           danger: true,
         });
         if (!ok) return;
@@ -254,7 +276,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
               model,
               language: whisperLanguage(language),
               enhanceVoice: enhance,
-              ...(audioTrack === 'clip'
+              ...(audioTrack === "clip"
                 ? {}
                 : { audioTrackIndex: Number(audioTrack) }),
             },
@@ -267,11 +289,11 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
             // lands right above its footage - only meaningful for one source.
             st.addSubtitleClips(cues, sharedAsset?.id, superseded);
           } else if (cues) {
-            st.setNotice(t('subtitles.noSpeech'));
+            st.setNotice(t("subtitles.noSpeech"));
           }
         } catch (err) {
-          console.warn('[captions] failed:', err);
-          st.setError(t('errors.captions.failed'));
+          console.warn("[captions] failed:", err);
+          st.setError(t("errors.captions.failed"));
         }
       });
     })();
@@ -279,27 +301,29 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
 
   const scope =
     targets.length === 0
-      ? t('subtitles.generate.needsAudio')
-      : targets.length === 1
-        ? t('subtitles.scope.one')
-        : t('subtitles.scope.many', { count: targets.length });
+      ? t("subtitles.generate.needsAudio")
+      : remembered
+        ? t("subtitles.scope.last", { count: targets.length })
+        : targets.length === 1
+          ? t("subtitles.scope.one")
+          : t("subtitles.scope.many", { count: targets.length });
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
       <div className="flex items-center gap-2">
         <MagicWandIcon className="h-3.5 w-3.5 flex-none text-brand-400" />
         <span className="flex-1 text-xs font-medium text-zinc-100">
-          {t('subtitles.auto')}
+          {t("subtitles.auto")}
         </span>
       </div>
 
       <div className="mt-2 flex gap-2">
         <Field
-          label={t('subtitles.language')}
+          label={t("subtitles.language")}
           value={language}
           onChange={setStoredCaptionLanguage}
         >
-          <option value={AUTO_LANGUAGE}>{t('subtitles.language.auto')}</option>
+          <option value={AUTO_LANGUAGE}>{t("subtitles.language.auto")}</option>
           {CAPTION_LANGUAGES.map((code) => (
             <option key={code} value={code}>
               {languageName(code, i18n.language)}
@@ -308,11 +332,11 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
         </Field>
         {showTrackPicker && (
           <Field
-            label={t('subtitles.audioTrack')}
+            label={t("subtitles.audioTrack")}
             value={audioTrack}
             onChange={setPickedTrack}
           >
-            <option value="clip">{t('subtitles.audioTrack.clip')}</option>
+            <option value="clip">{t("subtitles.audioTrack.clip")}</option>
             {pickableTracks.map((track) => (
               <option key={track.index} value={String(track.index)}>
                 {track.label ?? track.language ?? `#${track.index + 1}`}
@@ -324,7 +348,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
 
       {/* The one control that changes what Whisper hears rather than what it is
           asked for, so it sits with the run button and not behind the models. */}
-      <Tooltip label={t('subtitles.enhance.hint')}>
+      <Tooltip label={t("subtitles.enhance.hint")}>
         <label className="mt-2 flex w-fit cursor-pointer items-center gap-1.5 text-2xs text-zinc-400 hover:text-zinc-200">
           <input
             type="checkbox"
@@ -332,7 +356,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
             checked={enhance}
             onChange={(e) => setStoredCaptionEnhance(e.target.checked)}
           />
-          {t('subtitles.enhance')}
+          {t("subtitles.enhance")}
         </label>
       </Tooltip>
 
@@ -347,7 +371,7 @@ function CaptionGenerator({ targets }: { targets: CaptionTarget[] }) {
             className="flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-40"
           >
             <MagicWandIcon className="h-3.5 w-3.5" />
-            {t('subtitles.generate')}
+            {t("subtitles.generate")}
           </button>
         )}
       </div>
@@ -384,15 +408,28 @@ export function SubtitlesPanel() {
   );
 
   /** Every selected clip that actually carries sound, in timeline order. */
-  const targets = useMemo(() => {
-    const ids = new Set(selectedClipIds);
-    return project.tracks
-      .flatMap((track) => track.clips)
-      .filter((clip) => ids.has(clip.id) && clip.kind === 'media')
-      .map((clip) => ({ clip, asset: assets[clip.assetId] }))
-      .filter((x): x is CaptionTarget => !!x.asset?.hasAudio)
-      .sort((a, b) => a.clip.timelineStartMs - b.clip.timelineStartMs);
-  }, [project, selectedClipIds, assets]);
+  const selectedTargets = useMemo(
+    () => audibleTargets(project, assets, new Set(selectedClipIds)),
+    [project, selectedClipIds, assets],
+  );
+
+  // Touching a cue selects its text clip, and a text clip carries no sound: the
+  // generator would grey out the moment someone starts fixing what it wrote,
+  // exactly when re-running it is what they want. So the last audible selection
+  // stays the target until another one replaces it - re-resolved against the
+  // project every time, so a clip that has since been deleted drops out.
+  const remembered = useRef<string[]>([]);
+  useEffect(() => {
+    if (selectedTargets.length > 0)
+      remembered.current = selectedTargets.map((x) => x.clip.id);
+  }, [selectedTargets]);
+  const targets = useMemo(
+    () =>
+      selectedTargets.length > 0
+        ? selectedTargets
+        : audibleTargets(project, assets, new Set(remembered.current)),
+    [selectedTargets, project, assets],
+  );
 
   const importSubtitles = () =>
     openSubtitlePicker((files) => void importFiles(files));
@@ -403,22 +440,27 @@ export function SubtitlesPanel() {
       onClick={importSubtitles}
     >
       <FilePlusIcon className="h-3.5 w-3.5" />
-      {t('subtitles.import')}
+      {t("subtitles.import")}
     </button>
   );
 
   if (cues.length === 0) {
     return (
       <div className="space-y-3">
-        {captionsAvailable && <CaptionGenerator targets={targets} />}
+        {captionsAvailable && (
+          <CaptionGenerator
+            targets={targets}
+            remembered={selectedTargets.length === 0}
+          />
+        )}
         <div className="flex flex-col items-center gap-3 px-2 py-4 text-center">
           <TextIcon className="h-7 w-7 text-zinc-600" />
           <p className="text-xs leading-relaxed text-zinc-400">
-            {t('subtitles.empty')}
+            {t("subtitles.empty")}
           </p>
           {importButton}
           <p className="text-2xs text-zinc-500">
-            {t('subtitles.empty.formats')}
+            {t("subtitles.empty.formats")}
           </p>
         </div>
       </div>
@@ -427,12 +469,17 @@ export function SubtitlesPanel() {
 
   return (
     <div className="space-y-2">
-      {captionsAvailable && <CaptionGenerator targets={targets} />}
+      {captionsAvailable && (
+        <CaptionGenerator
+          targets={targets}
+          remembered={selectedTargets.length === 0}
+        />
+      )}
       <div className="flex items-center gap-2">
         <span className="flex-1 text-xs text-zinc-400">
-          {t('subtitles.count', { count: cues.length })}
+          {t("subtitles.count", { count: cues.length })}
         </span>
-        <Tooltip label={t('subtitles.import')}>
+        <Tooltip label={t("subtitles.import")}>
           <button
             className="touch-hit rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
             onClick={importSubtitles}
@@ -442,7 +489,7 @@ export function SubtitlesPanel() {
         </Tooltip>
         {/* The cues on the timeline are the working copy: whatever file they
             came from is stale as soon as one is retimed or rewritten. */}
-        <Tooltip label={t('subtitles.export')}>
+        <Tooltip label={t("subtitles.export")}>
           <button
             className="touch-hit rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
             onClick={exportSubtitles}
@@ -491,7 +538,7 @@ function CueTime({
   const commit = (): boolean => {
     // The row renders decimal seconds whatever the transport is set to, so the
     // field is read the same way - "1:02.5" is a second and a half, never frames.
-    const parsed = parseClock(draft ?? '', fps, 'decimal');
+    const parsed = parseClock(draft ?? "", fps, "decimal");
     if (parsed === null) {
       setInvalid(true);
       return false;
@@ -524,7 +571,7 @@ function CueTime({
       onFocus={(e) => e.currentTarget.select()}
       aria-label={t(labelKey)}
       className={`w-16 rounded border bg-zinc-950 px-1 text-center text-2xs tabular-nums text-zinc-100 outline-none ${
-        invalid ? 'border-red-500' : 'border-blue-500'
+        invalid ? "border-red-500" : "border-blue-500"
       }`}
       value={draft}
       onChange={(e) => {
@@ -534,8 +581,8 @@ function CueTime({
       // The editor hotkeys skip inputs, but Enter and Escape still have to stop
       // here rather than reaching whatever else listens for them.
       onKeyDown={(e) => {
-        if (e.key === 'Enter') commit();
-        else if (e.key === 'Escape') setDraft(null);
+        if (e.key === "Enter") commit();
+        else if (e.key === "Escape") setDraft(null);
         e.stopPropagation();
       }}
       onBlur={() => {
@@ -576,7 +623,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
    * subtitle editor does with a two-number row, and dragging the clip is
    * already there for moving one without changing its length.
    */
-  const retime = (edge: 'left' | 'right', ms: number) => {
+  const retime = (edge: "left" | "right", ms: number) => {
     beginGesture();
     useStore.getState().trimClip(clip.id, edge, ms);
     endGesture();
@@ -586,8 +633,8 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
     <li
       className={`group rounded-md border px-2.5 py-2 ${
         selected
-          ? 'border-blue-600/80 bg-blue-700/25'
-          : 'border-zinc-800 bg-zinc-900/60'
+          ? "border-blue-600/80 bg-blue-700/25"
+          : "border-zinc-800 bg-zinc-900/60"
       }`}
     >
       <div className="flex items-center gap-2">
@@ -600,14 +647,14 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
             ms={clip.timelineStartMs}
             labelKey="subtitles.cue.start"
             onOpen={focusCue}
-            onCommit={(ms) => retime('left', ms)}
+            onCommit={(ms) => retime("left", ms)}
           />
           ·
           <CueTime
             ms={clipEndMs(clip)}
             labelKey="subtitles.cue.end"
             onOpen={focusCue}
-            onCommit={(ms) => retime('right', ms)}
+            onCommit={(ms) => retime("right", ms)}
           />
         </span>
         <span className="flex-1" />
@@ -615,7 +662,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
             per cue, lit up all at once down a long list, competed with the text
             that is the actual content here. Coarse pointers have no hover, so
             there it stays out. */}
-        <Tooltip label={t('subtitles.delete')}>
+        <Tooltip label={t("subtitles.delete")}>
           <button
             className="touch-hit rounded p-1 text-zinc-500 opacity-0 transition-opacity duration-150 hover:bg-zinc-800 hover:text-red-400 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100"
             onClick={() => deleteClips([clip.id], false)}
@@ -628,7 +675,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
         ref={textRef}
         value={clip.text.content}
         rows={1}
-        aria-label={t('a11y.subtitles.cue')}
+        aria-label={t("a11y.subtitles.cue")}
         // resize-none + auto-grow: the field is already the size of its cue, so
         // the native grip had nothing left to do but crowd the row's corner.
         className="mt-1 block w-full resize-none overflow-hidden rounded border border-transparent bg-transparent px-1 py-0.5 text-xs leading-relaxed text-zinc-100 outline-none hover:border-zinc-700 focus:border-brand-500 focus:bg-zinc-800"

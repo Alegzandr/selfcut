@@ -113,6 +113,17 @@ const GROUPS: readonly Group[] = [
     ],
   },
   {
+    title: 'shortcuts.group.keyframes',
+    rows: [
+      ['{{alt}} + 1 … 5', 'shortcuts.keyframe.ease'],
+      ['F9', 'shortcuts.keyframe.easyEase'],
+      ['{{shift}} + F9 {{or}} {{ctrl}} + {{shift}} + F9', 'shortcuts.keyframe.easeInOut'],
+      ['G', 'shortcuts.keyframe.curveEditor'],
+      ['{{rightClickKeyframe}}', 'shortcuts.keyframe.menu'],
+      ['{{del}} / {{backspace}}', 'shortcuts.keyframe.delete'],
+    ],
+  },
+  {
     title: 'shortcuts.group.trim',
     rows: [
       [', / .', 'shortcuts.edit.nudge'],
@@ -157,6 +168,7 @@ const GESTURES: ReadonlySet<string> = new Set([
   'doubleClickClip',
   'dragMagnifier',
   'middleDrag',
+  'rightClickKeyframe',
 ]);
 
 /** Punctuation that joins keys instead of being one. `+` combines, `/` and `…` alternate. */

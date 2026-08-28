@@ -18,11 +18,12 @@
 import { memo, useRef } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { Clip, KeyframeProp, KeyframeRef, Track } from '../types';
+import { Clip, Keyframe, KeyframeProp, KeyframeRef, Track } from '../types';
 import { useStore } from '../store/store';
 import { formatTime } from '../lib/time';
 import { KEYFRAME_LANE_HEIGHT_PX, KEYFRAME_LANES_GAP_PX, lanesHeightPx, trackLanes } from './trackHeight';
-import { keyframesOf } from '../model';
+import { DEFAULT_EASE, keyframesOf, keyShape } from '../model';
+import { KeyframeIcon } from './KeyframeIcon';
 import { keyframeKey, keyframeKeySet, selectionDragBounds } from './keyframeSelection';
 
 interface Drag {
@@ -37,9 +38,9 @@ interface Drag {
   moved: boolean;
 }
 
-/** Clip-local ms of every keyframe on a property, sorted. */
-function keyTimes(clip: Clip, prop: KeyframeProp): number[] {
-  return (keyframesOf(clip, prop) ?? []).map((k) => k.t);
+/** Every keyframe on a property, sorted (the model keeps them so). */
+function keysOf(clip: Clip, prop: KeyframeProp): Keyframe[] {
+  return keyframesOf(clip, prop) ?? [];
 }
 
 export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
@@ -109,6 +110,17 @@ export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
     }
     drag.current = null;
   };
+  // Right-click: the pressed diamond joins the selection if it is not already in
+  // it (like a right-click on a clip), then the menu opens on the whole set - so
+  // a boxed run of keys is re-eased in one gesture.
+  const onMenu = (e: React.MouseEvent, clip: Clip, prop: KeyframeProp, time: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const state = useStore.getState();
+    const ref: KeyframeRef = { clipId: clip.id, prop, t: time };
+    if (!selectedKeys.has(keyframeKey(ref))) state.setSelectedKeyframes([ref]);
+    state.openContextMenu(e.clientX, e.clientY, { kind: 'keyframe', ref });
+  };
 
   return (
     <div
@@ -126,13 +138,19 @@ export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
           style={{ height: KEYFRAME_LANE_HEIGHT_PX }}
         >
           {track.clips.map((clip) => {
-            const times = keyTimes(clip, prop);
-            if (!times.length) return null;
+            const keys = keysOf(clip, prop);
+            if (!keys.length) return null;
             const propLabel = t(propLabelKey(prop));
-            return times.map((time, i) => {
+            return keys.map((key, i) => {
+              const time = key.t;
               const left = padLeft + (clip.timelineStartMs + time) * pxPerMs;
               const timeLabel = formatTime(clip.timelineStartMs + time);
               const selected = selectedKeys.has(keyframeKey({ clipId: clip.id, prop, t: time }));
+              // A key carrying a custom curve has no preset name to show: the
+              // graph editor is where its shape lives, so it reads "Custom".
+              const easeLabel = key.bezier
+                ? t('inspector.easing.custom')
+                : t(`inspector.easing.${key.ease ?? DEFAULT_EASE}`);
               return (
                 <button
                   // Keyed by rank, not by time: a drag retimes the key under the
@@ -141,20 +159,25 @@ export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
                   // it. Ranks are stable because a drag never reorders the lane.
                   key={`${clip.id}:${prop}:${i}`}
                   type="button"
-                  aria-label={`${t('inspector.keyframe')} · ${propLabel} · ${timeLabel}`}
+                  aria-label={`${t('inspector.keyframe')} · ${propLabel} · ${timeLabel} · ${easeLabel}`}
                   aria-pressed={selected}
-                  title={`${propLabel} · ${timeLabel}`}
-                  className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[1px] border shadow cursor-ew-resize touch-none ${
-                    selected
-                      ? 'scale-125 border-blue-200 bg-blue-400'
-                      : 'border-zinc-900 bg-zinc-100 hover:bg-blue-200 active:bg-blue-300'
+                  title={`${propLabel} · ${timeLabel} · ${easeLabel}`}
+                  className={`group absolute top-1/2 flex h-3 w-3 -translate-x-1/2 -translate-y-1/2 items-center justify-center cursor-ew-resize touch-none ${
+                    selected ? 'scale-125' : ''
                   }`}
                   style={{ left }}
                   onPointerDown={(e) => onDown(e, clip, prop, time)}
                   onPointerMove={onMove}
                   onPointerUp={onUp}
                   onPointerCancel={onUp}
-                />
+                  onContextMenu={(e) => onMenu(e, clip, prop, time)}
+                >
+                  <KeyframeIcon
+                    shape={keyShape(key)}
+                    tone={selected ? 'selected' : 'idle'}
+                    className="h-2.5 w-2.5 drop-shadow"
+                  />
+                </button>
               );
             });
           })}
