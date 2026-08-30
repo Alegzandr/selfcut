@@ -89,6 +89,7 @@ describe('splitAtPlayhead with colour and mask keyframes', () => {
         y: 0.5,
         w: 0.5,
         h: 0.5,
+        feather: 0,
         motion: { tx: [{ t: 0, value: 0, ease: 'linear' }, { t: 4000, value: 0.4 }] },
       },
     });
