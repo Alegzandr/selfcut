@@ -11,6 +11,7 @@
  * circle cannot both come out of the same box, and the glyph has to be able to
  * change under the pointer without the element remounting mid-drag.
  */
+import type React from 'react';
 import type { KeyShape } from '../model';
 
 /** Fill/stroke of the glyph. Selection is a colour, the shape stays the shape. */
@@ -25,15 +26,18 @@ export function KeyframeIcon({
   shape,
   tone = 'idle',
   className = '',
+  ...rest
 }: {
   shape: KeyShape;
   tone?: KeyframeTone;
   className?: string;
-}) {
+} & React.SVGProps<SVGSVGElement>) {
   return (
     // A 12-unit box with the glyph inset by 1: the stroke then sits inside the
     // viewBox instead of being clipped on all four sides.
-    <svg viewBox="0 0 12 12" className={className} aria-hidden focusable="false">
+    // `rest` carries x/y/width/height when the glyph is nested inside another
+    // SVG (the ramp editor places it on a graph rather than in a flow layout).
+    <svg viewBox="0 0 12 12" className={className} aria-hidden focusable="false" {...rest}>
       <g className={TONE[tone]} strokeWidth={1.2} vectorEffect="non-scaling-stroke">
         {shape === 'square' ? (
           <rect x={1.5} y={1.5} width={9} height={9} rx={1} />

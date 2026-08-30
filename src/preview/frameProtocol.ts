@@ -18,6 +18,13 @@ export interface RequestFrameMessage {
   cursorId: string;
   sourceSec: number;
   sequential: boolean;
+  /**
+   * Ask for the two frames bracketing `sourceSec` and how far between them it
+   * falls, so the main thread can blend them. Set only when the clip is playing
+   * slower than it was shot: above unity there are more source frames than
+   * output frames and there is nothing to invent.
+   */
+  blend?: boolean;
 }
 
 export interface DisposeCursorMessage {
@@ -39,6 +46,17 @@ export interface FrameMessage {
   type: 'frame';
   cursorId: string;
   frame: VideoFrame;
+  /**
+   * The frame after `frame`, when the request asked to blend and one exists.
+   * Together with `mix` this is what turns slow motion from a sequence of held
+   * frames into a continuous one.
+   */
+  next?: VideoFrame;
+  /**
+   * Where the wanted instant falls between `frame` and `next`, 0..1. 0 is
+   * `frame` exactly. Absent whenever `next` is.
+   */
+  mix?: number;
   /** Container rotation in degrees (0 | 90 | 180 | 270). */
   rotation: number;
   /** Post-rotation display size (what the compositor lays out with). */

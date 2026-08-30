@@ -2,6 +2,7 @@ import { MediaAsset } from '../types';
 import type { DrawableFrame } from '../media/stillImage';
 import type { FrameMessage, PreviewWorkerRequest, PreviewWorkerResponse } from './frameProtocol';
 import { reportCaughtError } from '../app/globalErrors';
+import { isHighBitDepth, transferKindFor } from '../media/frameSource';
 
 /**
  * Main-thread proxy of one decode cursor living in the preview frame worker.
@@ -136,7 +137,60 @@ function send(message: PreviewWorkerRequest): void {
  * onto the pre-rotation image, canvas rotated around the destination center).
  */
 class RemoteFrame implements DrawableFrame {
+  /**
+   * The two frames cross-faded into one surface, built on first use and kept
+   * for the life of the frame. Null until then, and null for good on a frame
+   * that is not blended (the overwhelming majority) - where every path below
+   * reads the decoded frame directly, exactly as it did before blending existed.
+   */
+  private blended: OffscreenCanvas | null = null;
+  private blendTried = false;
+
   constructor(private msg: FrameMessage) {}
+
+  /**
+   * Whether this frame can be blended at all.
+   *
+   * High-bit-depth and HDR frames cannot: the cross-fade happens in an 8-bit
+   * sRGB canvas, and pushing PQ or HLG code values through one destroys the
+   * grade far more visibly than judder ever did. Those clips hold their frames
+   * instead, which is the honest trade and not a silent one - it is the same
+   * result `frameBlend: 'sharp'` asks for.
+   */
+  private get blendable(): boolean {
+    if (!this.msg.next || this.msg.mix === undefined) return false;
+    const { format, colorSpace } = this.msg.frame;
+    return !isHighBitDepth(format, transferKindFor(colorSpace.transfer));
+  }
+
+  /**
+   * The surface to draw from: the blend of the pair when there is one, the
+   * decoded frame otherwise. Built lazily because a frame can be superseded
+   * before anything ever draws it - during a catch-up, most are.
+   */
+  private get surface(): OffscreenCanvas | VideoFrame {
+    if (this.blended) return this.blended;
+    if (this.blendTried || !this.blendable) return this.msg.frame;
+    this.blendTried = true;
+    const { frame, next, mix, squarePixelWidth, squarePixelHeight } = this.msg;
+    try {
+      // Pre-rotation size, so the rotation mapping in `draw` and the direct GPU
+      // upload both keep working against the geometry they already expect.
+      const canvas = new OffscreenCanvas(squarePixelWidth, squarePixelHeight);
+      const ctx = canvas.getContext('2d', { alpha: false });
+      if (!ctx) return this.msg.frame;
+      ctx.drawImage(frame, 0, 0, squarePixelWidth, squarePixelHeight);
+      ctx.globalAlpha = mix!;
+      ctx.drawImage(next!, 0, 0, squarePixelWidth, squarePixelHeight);
+      ctx.globalAlpha = 1;
+      this.blended = canvas;
+      return canvas;
+    } catch {
+      // A canvas the browser refuses to allocate is not worth failing a frame
+      // over: fall back to holding the first frame of the pair.
+      return this.msg.frame;
+    }
+  }
 
   get displayWidth(): number {
     return this.msg.displayWidth;
@@ -151,14 +205,20 @@ class RemoteFrame implements DrawableFrame {
     return this.msg.rotation;
   }
 
-  /** The decoder's own colour description, for the grade's luma matrix and transfer. */
-  get colorSpace(): VideoColorSpace {
-    return this.msg.frame.colorSpace;
+  /**
+   * The decoder's own colour description, for the grade's luma matrix and
+   * transfer. A blended frame reports none: it is an sRGB canvas by then, and
+   * handing the grade the source's transfer would have it invert a curve the
+   * pixels no longer carry. (Only frames that survive the `blendable` test are
+   * ever blended, so nothing HDR reaches this branch.)
+   */
+  get colorSpace(): VideoColorSpace | null {
+    return this.blended ? null : this.msg.frame.colorSpace;
   }
 
   /** Pixel format, so a 10-bit source can be uploaded at more than 8 bits. */
   get format(): string | null {
-    return this.msg.frame.format;
+    return this.blended ? null : this.msg.frame.format;
   }
 
   /**
@@ -166,8 +226,8 @@ class RemoteFrame implements DrawableFrame {
    * canvas. Callers must honour `rotation`: this surface is the stored image,
    * before the container's rotation is applied (only `draw` applies it).
    */
-  toCanvasImageSource(): VideoFrame {
-    return this.msg.frame;
+  toCanvasImageSource(): OffscreenCanvas | VideoFrame {
+    return this.surface;
   }
 
   draw(
@@ -181,7 +241,8 @@ class RemoteFrame implements DrawableFrame {
     dw: number,
     dh: number,
   ): void {
-    const { frame, rotation, squarePixelWidth, squarePixelHeight } = this.msg;
+    const { rotation, squarePixelWidth, squarePixelHeight } = this.msg;
+    const frame = this.surface;
     if (rotation === 0) {
       ctx.drawImage(frame, sx, sy, sw, sh, dx, dy, dw, dh);
       return;
@@ -207,6 +268,7 @@ class RemoteFrame implements DrawableFrame {
 
   close(): void {
     this.msg.frame.close();
+    this.msg.next?.close();
   }
 }
 
@@ -218,6 +280,8 @@ export class FrameCursor {
   private disposed = false;
   /** Last requested time, to skip re-posting the identical paused request every rAF. */
   private lastSentSec = NaN;
+  /** Whether the last request asked for a blend, so a worker restart re-asks for the same thing. */
+  private lastBlend = false;
   /**
    * Whether this cursor has ever decoded anything.
    *
@@ -244,12 +308,13 @@ export class FrameCursor {
     send({ type: 'create', cursorId: this.id, assetId: asset.id, file: asset.file });
   }
 
-  request(sourceSec: number, sequential: boolean): void {
+  request(sourceSec: number, sequential: boolean, blend = false): void {
     if (this.disposed) return;
     // Paused on the same time with a frame already shown: nothing to ask for.
     if (!sequential && this.current && sourceSec === this.lastSentSec) return;
     this.lastSentSec = sourceSec;
-    send({ type: 'request', cursorId: this.id, sourceSec, sequential });
+    this.lastBlend = blend;
+    send({ type: 'request', cursorId: this.id, sourceSec, sequential, blend });
   }
 
   /**
@@ -277,7 +342,13 @@ export class FrameCursor {
     if (this.disposed) return;
     send({ type: 'create', cursorId: this.id, assetId: this.open.assetId, file: this.open.file });
     if (Number.isFinite(this.lastSentSec)) {
-      send({ type: 'request', cursorId: this.id, sourceSec: this.lastSentSec, sequential: false });
+      send({
+        type: 'request',
+        cursorId: this.id,
+        sourceSec: this.lastSentSec,
+        sequential: false,
+        blend: this.lastBlend,
+      });
     }
   }
 
@@ -285,6 +356,7 @@ export class FrameCursor {
   receive(msg: FrameMessage): void {
     if (this.disposed) {
       msg.frame.close();
+      msg.next?.close();
       return;
     }
     this.current?.close();

@@ -1,6 +1,6 @@
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny';
 import type { Clip, Project } from '../types';
-import { isTextClip, timelineToSourceMs } from '../model';
+import { isTextClip, shouldBlendFrames, timelineToSourceMs } from '../model';
 import { drawClip, forEachVisibleVideoClip, invalidateResampling } from '../preview/compositor';
 import { syncLuts } from '../preview/colorPass';
 import { loadFonts } from '../lib/fonts';
@@ -182,7 +182,10 @@ export class FrameRenderer {
           layer.sample = still;
           return;
         }
-        layer.sample = await this.reader(clip).frameAt(timelineToSourceMs(clip, tMs) / 1000);
+        layer.sample = await this.reader(clip).frameAt(
+          timelineToSourceMs(clip, tMs) / 1000,
+          shouldBlendFrames(clip, tMs),
+        );
       }),
     );
     endSpan('decode', decodeStarted);

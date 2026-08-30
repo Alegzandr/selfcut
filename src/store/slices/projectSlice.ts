@@ -1,6 +1,7 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
 import { MediaAsset } from '../../types';
+import { isGeneratedClip, outputDimensions, reframedTransform } from '../../model';
 import { createEmptyProject } from '../projectOps';
 import { disposeAssetResources } from '../../media/mediaCache';
 import { clearTranscodedAudio } from '../../lib/audioCache';
@@ -12,7 +13,46 @@ export function createProjectSlice(
   { withHistory }: SliceHelpers,
 ): Pick<EditorState, 'setAspectRatio' | 'hydrate' | 'resetProject'> {
   return {
-    setAspectRatio: (a) => withHistory((p) => void (p.aspectRatio = a)),
+    /**
+     * Switch the output ratio, and reframe with it.
+     *
+     * `fill` (the default, what a plain click does) rescales every clip still
+     * carrying the automatic framing so it covers the new frame: turning a 16:9
+     * project vertical is meant to give a full-bleed vertical video, not a
+     * landscape strip floating in black. `fit` is the opposite - it puts those
+     * clips back at the contain fit, bars included - and is what Shift+click and
+     * the toast's toggle reach.
+     *
+     * Clips the user has framed by hand (moved, stretched, rotated, keyframed,
+     * or scaled to anything but these two values) are never touched, whichever
+     * mode this runs in. The whole pass sits in one `withHistory` entry, so a
+     * single undo returns both the ratio and every scale it wrote.
+     *
+     * Returns how many clips it actually reframed: the caller offers the
+     * "fill / fit" toggle only when the choice made a visible difference, so
+     * picking a ratio in an empty project raises no toast about framing.
+     */
+    setAspectRatio: (a, framing = 'fill') => {
+      const from = outputDimensions(get().project.aspectRatio);
+      const to = outputDimensions(a);
+      const assets = get().assets;
+      let reframed = 0;
+      withHistory((p) => {
+        p.aspectRatio = a;
+        for (const track of p.tracks) {
+          if (track.kind !== 'video') continue;
+          for (const clip of track.clips) {
+            if (isGeneratedClip(clip)) continue;
+            const next = reframedTransform(clip, assets[clip.assetId], from, to, framing);
+            if (next) {
+              clip.transform = next;
+              reframed++;
+            }
+          }
+        }
+      });
+      return reframed;
+    },
 
     hydrate: (project, assets) => {
       const map: Record<string, MediaAsset> = {};

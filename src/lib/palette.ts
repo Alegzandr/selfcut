@@ -19,6 +19,7 @@ const TW = {
   emerald300: "#6ee7b7",
   emerald400: "#34d399",
   red400: "#f87171",
+  rose300: "#fda4af",
   zinc700: "#3f3f46",
   zinc900: "#18181b",
   zinc950: "#09090b",
@@ -41,6 +42,16 @@ export const CLIP_COLORS = {
   crossfadeRamp: alpha(TW.blue300, 0.9),
   /** Waveform inside an audio clip, over its emerald body. */
   audioWaveform: alpha(TW.emerald300, 0.65),
+  /**
+   * Velocity ramp line drawn across a clip. Rose, and not amber: the volume
+   * line is amber and sits on the same clip, and two warm-yellow rules a few
+   * pixels apart is exactly how a reader stops being able to tell level from
+   * speed at a glance. Rose also stays clear of the blue crossfade wedges at
+   * the clip edges and of red, which the meter owns for "too hot".
+   */
+  velocityRamp: alpha(TW.rose300, 0.95),
+  /** The same line at rest, and the 1x tick it is read against. */
+  velocityUnity: alpha(TW.rose300, 0.3),
 } as const;
 
 /**

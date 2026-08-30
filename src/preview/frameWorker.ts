@@ -5,7 +5,7 @@ import {
   VideoSample,
   VideoSampleSink,
 } from 'mediabunny';
-import { advancesToNextFrame } from '../media/frameMatch';
+import { FRAME_MATCH_EPSILON_SEC, advancesToNextFrame } from '../media/frameMatch';
 import type { PreviewWorkerRequest, PreviewWorkerResponse } from './frameProtocol';
 
 /**
@@ -82,7 +82,7 @@ class WorkerCursor {
   private sinkPromise: Promise<VideoSampleSink | null>;
   private current: VideoSample | null = null;
   private busy = false;
-  private pending: { sourceSec: number; sequential: boolean } | null = null;
+  private pending: { sourceSec: number; sequential: boolean; blend: boolean } | null = null;
   private disposed = false;
 
   private iterator: AsyncGenerator<VideoSample, void, unknown> | null = null;
@@ -104,40 +104,66 @@ class WorkerCursor {
     this.sinkPromise = createSink(input);
   }
 
-  request(sourceSec: number, sequential: boolean): void {
+  request(sourceSec: number, sequential: boolean, blend = false): void {
+    // While blending, the same pair of frames answers several consecutive
+    // instants with a different weight each time, so an identical `sourceSec`
+    // is the only request that can be skipped.
     if (!sequential && !this.busy && this.current && sourceSec === this.lastSec) return;
     if (this.busy) {
-      this.pending = { sourceSec, sequential };
+      this.pending = { sourceSec, sequential, blend };
       return;
     }
     this.busy = true;
-    void this.fetch(Math.max(0, sourceSec), sequential);
+    void this.fetch(Math.max(0, sourceSec), sequential, blend);
   }
 
-  private emit(): void {
+  /**
+   * Post the frame this cursor has landed on, plus - when asked to blend and a
+   * successor is already in hand - the frame after it and where `targetSec`
+   * falls between the two. The pair is what the main thread cross-fades; a lone
+   * frame is the unblended behaviour, unchanged.
+   */
+  private emit(targetSec?: number): void {
     if (!this.current) return;
     const frame = this.current.toVideoFrame();
+    const transfer: Transferable[] = [frame];
+    let next: VideoFrame | undefined;
+    let mix: number | undefined;
+    if (targetSec !== undefined && this.lookahead) {
+      const from = this.current.timestamp;
+      const to = this.lookahead.timestamp;
+      const span = to - from;
+      // A non-positive span means the container timestamps do not separate the
+      // two frames; there is no meaningful weight, so show the first alone.
+      if (span > 0) {
+        mix = Math.min(1, Math.max(0, (targetSec - from) / span));
+        next = this.lookahead.toVideoFrame();
+        transfer.push(next);
+      }
+    }
     post(
       {
         type: 'frame',
         cursorId: this.cursorId,
         frame,
+        next,
+        mix,
         rotation: this.current.rotation,
         displayWidth: this.current.displayWidth,
         displayHeight: this.current.displayHeight,
         squarePixelWidth: this.current.squarePixelWidth,
         squarePixelHeight: this.current.squarePixelHeight,
       },
-      [frame],
+      transfer,
     );
   }
 
-  private async fetch(sourceSec: number, sequential: boolean): Promise<void> {
+  private async fetch(sourceSec: number, sequential: boolean, blend: boolean): Promise<void> {
     try {
       const sink = await this.sinkPromise;
       if (sink && !this.disposed) {
-        if (sequential) await this.fetchSequential(sink, sourceSec);
-        else await this.fetchSeek(sink, sourceSec);
+        if (sequential) await this.fetchSequential(sink, sourceSec, blend);
+        else await this.fetchSeek(sink, sourceSec, blend);
       }
     } catch (err) {
       // Reported, not swallowed. A decode that THROWS is not a decode that
@@ -160,23 +186,26 @@ class WorkerCursor {
       } else if (this.pending) {
         const next = this.pending;
         this.pending = null;
-        this.request(next.sourceSec, next.sequential);
+        this.request(next.sourceSec, next.sequential, next.blend);
       }
     }
   }
 
-  private async fetchSeek(sink: VideoSampleSink, sourceSec: number): Promise<void> {
+  private async fetchSeek(sink: VideoSampleSink, sourceSec: number, blend: boolean): Promise<void> {
     await this.stopIterator();
     const sample = await sink.getSample(sourceSec);
     if (sample) {
       this.current?.close();
       this.current = sample;
-      this.emit();
+      // A seek lands on one frame and holds no successor, so a scrub shows the
+      // frame itself. Blending a scrub would be wrong anyway: the picture under
+      // the pointer has to be a frame that exists in the source.
+      this.emit(blend && this.lookahead ? sourceSec : undefined);
     }
     this.lastSec = sourceSec;
   }
 
-  private async fetchSequential(sink: VideoSampleSink, sourceSec: number): Promise<void> {
+  private async fetchSequential(sink: VideoSampleSink, sourceSec: number, blend: boolean): Promise<void> {
     // A backward jump or a large forward jump is a seek: restart the iterator.
     if (this.iterator && (sourceSec < this.lastSec || sourceSec > this.lastSec + 1)) {
       await this.stopIterator();
@@ -212,13 +241,7 @@ class WorkerCursor {
         this.lookahead = value.clone();
         value.close();
       }
-      if (
-        !this.restarted &&
-        this.current &&
-        !advancesToNextFrame(this.current.timestamp, this.lookahead.timestamp, sourceSec)
-      ) {
-        break;
-      }
+      if (!this.restarted && this.current && !this.shouldAdvance(sourceSec, blend)) break;
       this.restarted = false;
       this.current?.close();
       this.current = this.lookahead;
@@ -229,8 +252,32 @@ class WorkerCursor {
     // a catch-up after a seek walks a whole GOP, and posting every intermediate
     // picture makes the main thread draw frames nobody will ever see - which is
     // exactly the work that keeps the catch-up from ending.
-    if (advanced) this.emit();
+    // Blending emits on every request, not only when the pair changed: the same
+    // two frames answer several consecutive instants at a different weight each
+    // time, and skipping the unchanged ones is exactly what would put the
+    // judder back.
+    if (advanced || (blend && this.lookahead)) this.emit(blend ? sourceSec : undefined);
     this.lastSec = sourceSec;
+  }
+
+  /**
+   * Whether the reader should step onto `lookahead` for `sourceSec`.
+   *
+   * Unblended this is the nearest-frame rule the export reader uses too (see
+   * `frameMatch`), because picking ONE frame out of a source whose container
+   * ticks are rounded has to tolerate half a frame of error.
+   *
+   * Blended, the rule is a floor instead: the pair has to BRACKET the instant,
+   * so `current` must never sit after it. The tick-rounding the nearest rule
+   * exists to absorb costs nothing here - it shifts the weight of a cross-fade
+   * by a fraction, which is invisible, where under the nearest rule it decided
+   * between two whole frames.
+   */
+  private shouldAdvance(sourceSec: number, blend: boolean): boolean {
+    const current = this.current!;
+    const next = this.lookahead!;
+    if (blend) return next.timestamp <= sourceSec + FRAME_MATCH_EPSILON_SEC;
+    return advancesToNextFrame(current.timestamp, next.timestamp, sourceSec);
   }
 
   private async stopIterator(): Promise<void> {
@@ -272,7 +319,7 @@ self.onmessage = (event: MessageEvent<PreviewWorkerRequest>) => {
     cursors.get(msg.cursorId)?.dispose();
     cursors.set(msg.cursorId, new WorkerCursor(msg.cursorId, msg.assetId, acquireInput(msg.assetId, msg.file)));
   } else if (msg.type === 'request') {
-    cursors.get(msg.cursorId)?.request(msg.sourceSec, msg.sequential);
+    cursors.get(msg.cursorId)?.request(msg.sourceSec, msg.sequential, msg.blend);
   } else if (msg.type === 'dispose') {
     cursors.get(msg.cursorId)?.dispose();
     cursors.delete(msg.cursorId);

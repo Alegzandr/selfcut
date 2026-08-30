@@ -274,6 +274,7 @@ export const useStore = create<EditorState>((set, get) => {
     transcodes: {},
     error: null,
     notice: null,
+    noticeAction: null,
     past: [],
     future: [],
     gestureSnapshot: null,

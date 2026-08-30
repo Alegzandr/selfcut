@@ -607,6 +607,38 @@ interface BaseClip {
   sourceOutMs: number;
   /** 1 = normal, <1 = slow motion, >1 = sped up. */
   speed: number;
+  /**
+   * Velocity ramp: the clip's speed as a curve instead of a constant. Undefined
+   * = the clip runs at the flat `speed` above, which is the untouched path.
+   *
+   * Two things differ from every other keyframe list in this file, and both are
+   * deliberate (see `src/model/velocity.ts`): `t` is SOURCE ms from
+   * `sourceInMs` rather than clip-local timeline ms, because the ramp decides
+   * the timeline duration and a key expressed in it would be circular; and
+   * `value` is a multiplier OF `speed`, so the scalar control keeps its meaning
+   * and rescales the ramp rather than replacing it.
+   */
+  velocity?: Keyframe[];
+  /**
+   * Freeze the clip's timeline duration under a ramp (the Vegas behaviour)
+   * instead of letting it stretch. Undefined/false = elastic: the whole source
+   * window plays and the clip changes length. Locked, source the ramp never
+   * reaches goes unplayed, and the timeline draws it as hatching so the loss is
+   * visible rather than silent.
+   */
+  velocityLocked?: boolean;
+  /**
+   * How frames are sampled when the clip plays slower than its source was shot
+   * (rate < 1), where there are fewer distinct source frames than output frames
+   * to fill. `smooth` (the default) blends the two frames either side of the
+   * wanted instant, which is what stops slow motion from juddering; `sharp`
+   * holds the nearest frame, for footage that blending ruins — titles,
+   * screen captures, graphics, or a stop-motion look that is the point.
+   *
+   * Only consulted below unity: at 1× and above the source is played at or past
+   * its native cadence and there is nothing to invent.
+   */
+  frameBlend?: 'smooth' | 'sharp';
   /** Linear gain, 1 = unity. 0 (silence) .. MAX_GAIN (+12 dB). */
   volume: number;
   fadeInMs: number;

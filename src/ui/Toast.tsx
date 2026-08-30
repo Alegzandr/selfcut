@@ -9,10 +9,13 @@ const DISMISS_MS = 5000;
 export function Toast() {
   const error = useStore((s) => s.error);
   const notice = useStore((s) => s.notice);
+  const action = useStore((s) => s.noticeAction);
   // One slot, two tones: raising either message clears the other in the store,
   // so at most one of the two is ever set.
   const message = error ?? notice;
   const isError = error !== null;
+  // An action belongs to a notice only: an error offers nothing to undo.
+  const noticeAction = isError ? null : action;
 
   useEffect(() => {
     if (!message) return;
@@ -48,6 +51,21 @@ export function Toast() {
           <Icon className={`h-4 w-4 flex-none ${isError ? 'text-red-400' : 'text-emerald-400'}`} />
           {/* Multi-file import failures arrive as several lines: show them all. */}
           <span className="min-w-0 whitespace-pre-line">{message}</span>
+          {/* The toast's own button - the visible, tappable half of a choice the
+              app made on the user's behalf. Placed inside the dismissable
+              surface, so its click must not bubble into the dismiss handler. */}
+          {noticeAction && (
+            <button
+              type="button"
+              className="touch-hit ml-1 flex-none rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-100 hover:bg-zinc-700 active:bg-zinc-600"
+              onClick={(e) => {
+                e.stopPropagation();
+                noticeAction.run();
+              }}
+            >
+              {noticeAction.label}
+            </button>
+          )}
         </m.div>
       )}
     </AnimatePresence>

@@ -34,6 +34,9 @@ import {
   staticValueOf,
   timelineToSourceMs,
   writeChannel,
+  hasVelocity,
+  shiftVelocity,
+  sliceVelocity,
 } from '../../model';
 import { uid } from '../../lib/id';
 import {
@@ -450,15 +453,30 @@ export function createClipsSlice(
       set({ selectedClipId: newClipId, selectedClipIds: [newClipId] });
     },
 
-    updateClip: (clipId, patch) =>
-      set({
-        // The spread preserves the clip's discriminant `kind`; the cast tells TS
-        // the patched object is still a valid Clip (a Partial<Clip> spread widens).
-        project: patchClips(
-          get().project,
-          spread(clipId, (c: Clip): Clip => ({ ...c, ...resolvePatch(patch, c) }) as Clip),
-        ),
-      }),
+    updateClip: (clipId, patch) => {
+      const p = get().project;
+      const edits = spread(clipId, (c: Clip): Clip => ({ ...c, ...resolvePatch(patch, c) }) as Clip);
+      // A live ramp drag retimes the clip on every pointer move, so its linked
+      // partners have to follow now rather than at commit - otherwise the sound
+      // sits at the old length for the whole drag and snaps at the end.
+      for (const id of [...edits.keys()]) {
+        const found = findClip(p, id);
+        if (!found) continue;
+        const fields = resolvePatch(patch, found.clip);
+        if (!('velocity' in fields) && !('velocityLocked' in fields)) continue;
+        for (const pid of linkedPartnerIds(p, id)) {
+          if (edits.has(pid)) continue;
+          edits.set(pid, (c: Clip): Clip => ({
+            ...c,
+            ...('velocity' in fields ? { velocity: fields.velocity } : null),
+            ...('velocityLocked' in fields ? { velocityLocked: fields.velocityLocked } : null),
+          }) as Clip);
+        }
+      }
+      // The spread preserves the clip's discriminant `kind`; the cast tells TS
+      // the patched object is still a valid Clip (a Partial<Clip> spread widens).
+      set({ project: patchClips(p, edits) });
+    },
 
     updateClipCommitted: (clipId, patch) => {
       const ids = targetsOf(clipId);
@@ -468,13 +486,16 @@ export function createClipsSlice(
           if (!found) continue;
           const fields = resolvePatch(patch, found.clip);
           Object.assign(found.clip, fields);
-          // Speed changes a clip's timeline duration; linked partners must take
-          // the same speed or picture and sound drift apart immediately.
-          if (fields.speed !== undefined) {
-            for (const pid of linkedPartnerIds(p, id)) {
-              const partner = findClip(p, pid);
-              if (partner) partner.clip.speed = fields.speed;
-            }
+          // Anything that changes a clip's timeline duration has to reach its
+          // linked partners, or picture and sound drift apart immediately: the
+          // flat speed, and the velocity ramp with the lock that decides
+          // whether that ramp stretches the clip at all.
+          for (const pid of linkedPartnerIds(p, id)) {
+            const partner = findClip(p, pid);
+            if (!partner) continue;
+            if (fields.speed !== undefined) partner.clip.speed = fields.speed;
+            if ('velocity' in fields) partner.clip.velocity = fields.velocity;
+            if ('velocityLocked' in fields) partner.clip.velocityLocked = fields.velocityLocked;
           }
         }
       });
@@ -909,11 +930,19 @@ export function createClipsSlice(
           const clamped = clamp(sourceIn, 0, clip.sourceOutMs - minSourceSpan);
           if (clamped === clip.sourceInMs) return clip;
           const shift = (clamped - clip.sourceInMs) / clip.speed;
+          // Ramp keys are source offsets from `sourceInMs`, so they move the
+          // other way to the window's head - and keys pushed negative are kept,
+          // not dropped: they still shape the curve inside the window, which is
+          // what makes a trim slip the ramp instead of flattening its opening.
+          const velocity = clip.velocity?.length
+            ? shiftVelocity(clip.velocity, clamped - clip.sourceInMs)
+            : clip.velocity;
           return shiftClipAnimation(
             {
               ...clip,
               timelineStartMs: clip.timelineStartMs + shift,
               sourceInMs: clamped,
+              velocity,
             },
             -shift,
           );
@@ -951,8 +980,14 @@ export function createClipsSlice(
         edge === 'right'
           ? timelineMs - base.timelineStartMs
           : clipEndMs(base) - Math.max(0, timelineMs);
+      // Ramp values are multipliers of the base speed, so a ramped clip's
+      // duration is still inversely proportional to it: scale the speed by how
+      // far the current length is from the wanted one, and the curve's shape
+      // survives the stretch untouched.
       const speed = clamp(
-        span / Math.max(wantedMs, MIN_CLIP_DURATION_MS),
+        hasVelocity(base)
+          ? (base.speed * clipDurationMs(base)) / Math.max(wantedMs, MIN_CLIP_DURATION_MS)
+          : span / Math.max(wantedMs, MIN_CLIP_DURATION_MS),
         MIN_CLIP_SPEED,
         MAX_CLIP_SPEED,
       );
@@ -1098,6 +1133,15 @@ export function createClipsSlice(
               fadeInMs: 0,
             };
             const left = sliceClipAnimation(cloneClip(clip), 0, cut);
+            // The ramp is anchored to the source, so it is razored on source
+            // offsets rather than on `cut`. `sliceVelocity` synthesizes the
+            // boundary key, so neither half changes speed at the seam.
+            if (clip.velocity?.length) {
+              const span = clip.sourceOutMs - clip.sourceInMs;
+              const at = splitSource - clip.sourceInMs;
+              right.velocity = sliceVelocity(clip.velocity, at, span);
+              clip.velocity = sliceVelocity(clip.velocity, 0, at);
+            }
             if (left.animation) clip.animation = left.animation;
             if (left.color) clip.color = left.color;
             if (left.mask) clip.mask = left.mask;

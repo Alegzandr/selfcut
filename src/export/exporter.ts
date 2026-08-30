@@ -1,5 +1,5 @@
 import { Clip, LoopRegion, MediaAsset, Project } from '../types';
-import { clipEndMs, delegatedLinkIds, projectDurationMs } from '../model';
+import { clipEndMs, delegatedLinkIds, hasVelocity, projectDurationMs } from '../model';
 import { AUDIO_SAMPLE_RATE } from '../app/config';
 import { t } from '../i18n';
 import { audioKey, getAudioRange } from '../media/mediaCache';
@@ -599,6 +599,10 @@ function audibleClips(
       // never schedules it, so don't decode its track (twice) nor let it count
       // as audible (it would force a silent AAC track into the file).
       if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
+      // A velocity ramp silences the clip (see audioMix): it must not be
+      // decoded, and must not count as audible either - one ramped clip alone
+      // on the timeline would otherwise force a silent AAC track into the file.
+      if (hasVelocity(clip)) continue;
       // Clips ending before the span, or starting after it, are silent here.
       if (clip.volume <= 0 || clipEndMs(clip) <= startMs) continue;
       if (clip.timelineStartMs >= startMs + durationMs) continue;

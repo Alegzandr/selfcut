@@ -11,6 +11,7 @@ import { confirmDiscardProject } from './projectActions';
 import { Tooltip } from './Tooltip';
 import { useIsCoarsePointer } from '../lib/device';
 import { AspectRatio } from '../types';
+import type { Framing } from '../model/reframe';
 import { useEditorCommands, type Command } from './commands';
 import { useToolbarOverflow } from './useToolbarOverflow';
 import { ToolOverflowMenu } from './ToolOverflowMenu';
@@ -185,6 +186,26 @@ export function TopBar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { setAspectRatio, setExportOpen, setLibraryOpen } = useStore.getState();
 
+  /**
+   * Apply a ratio and say what it did to the framing, with the other option one
+   * tap away. The toast is the only affordance on touch (no hover, no Shift),
+   * and on desktop it doubles as the confirmation that a plain click filled the
+   * frame rather than letterboxing it. Raised only when clips were actually
+   * reframed: a ratio change that moved nothing has nothing to offer.
+   */
+  const applyAspect = (value: AspectRatio, framing: Framing): void => {
+    const reframed = setAspectRatio(value, framing);
+    if (!reframed) return;
+    const filled = framing === 'fill';
+    useStore.getState().setNotice(
+      t(filled ? 'topbar.aspect.filled' : 'topbar.aspect.fitted', { ratio: value }),
+      {
+        label: t(filled ? 'topbar.aspect.toFit' : 'topbar.aspect.toFill'),
+        run: () => applyAspect(value, filled ? 'fit' : 'fill'),
+      },
+    );
+  };
+
   return (
     <header className="flex h-12 flex-none items-center gap-1 border-b border-zinc-800 bg-zinc-900 px-2 sm:gap-2 sm:px-3">
       {/* Desktop shows the logo/name in the menu bar above; only mobile
@@ -267,10 +288,24 @@ export function TopBar() {
 
         <div className="flex overflow-hidden rounded-lg border border-zinc-700">
           {ASPECTS.map(({ value, titleKey }) => (
-            <Tooltip key={value} label={t(titleKey)}>
+            <Tooltip
+              key={value}
+              label={
+                <>
+                  <span className="block">{t(titleKey)}</span>
+                  {/* The framing rule spelled out, because the click does more
+                      than switch a ratio: it rescales the clips. Touch never
+                      sees a tooltip, so the same two options are repeated in the
+                      toast the click raises - no gesture is discoverable only
+                      through a modifier key. */}
+                  <span className="mt-0.5 block text-zinc-400">{t('topbar.aspect.hint')}</span>
+                </>
+              }
+            >
               <button
+                aria-label={t(titleKey)}
                 className={`touch-hit px-2 py-1.5 text-xs tabular-nums ${aspectRatio === value ? 'brand-on' : 'text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800'}`}
-                onClick={() => setAspectRatio(value)}
+                onClick={(e) => applyAspect(value, e.shiftKey ? 'fit' : 'fill')}
               >
                 {value}
               </button>

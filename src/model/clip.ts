@@ -15,6 +15,7 @@ import {
 } from '../types';
 import { sampleChannel, scaleChannel, shiftChannel, sliceChannel } from './animation';
 import { buildCurveTexture, curvesAreIdentity } from './curves';
+import { hasVelocity, rampDurationMs, rateAt, sourceOffsetAtTimeline } from './velocity';
 
 /**
  * Clip-level model math: durations, source<->timeline mapping, fade/zoom
@@ -90,8 +91,14 @@ export function isGeneratedClip(clip: Clip): clip is TextClip | SolidClip | Shap
   return clip.kind !== 'media';
 }
 
-/** Duration of a clip on the timeline, in ms. */
+/**
+ * Duration of a clip on the timeline, in ms. A velocity ramp makes this the
+ * integral of the curve rather than a division (see `src/model/velocity.ts`);
+ * without one - the overwhelmingly common case - it stays the flat division it
+ * has always been, and costs nothing.
+ */
 export function clipDurationMs(clip: Clip): number {
+  if (hasVelocity(clip)) return rampDurationMs(clip);
   return (clip.sourceOutMs - clip.sourceInMs) / clip.speed;
 }
 
@@ -102,7 +109,40 @@ export function clipEndMs(clip: Clip): number {
 
 /** Source time (ms) corresponding to a timeline time (ms) for a clip. */
 export function timelineToSourceMs(clip: Clip, timelineMs: number): number {
-  return clip.sourceInMs + (timelineMs - clip.timelineStartMs) * clip.speed;
+  const local = timelineMs - clip.timelineStartMs;
+  if (hasVelocity(clip)) return clip.sourceInMs + sourceOffsetAtTimeline(clip, local);
+  return clip.sourceInMs + local * clip.speed;
+}
+
+/**
+ * Playback rate (source ms per timeline ms) at a timeline time: the flat
+ * `speed`, or the ramp's rate at the source instant that timeline time lands
+ * on. What the frame blender and the decode-window planner need, since neither
+ * can read a rate off a duration once it varies.
+ */
+export function clipRateAt(clip: Clip, timelineMs: number): number {
+  if (!hasVelocity(clip)) return clip.speed;
+  return rateAt(clip, sourceOffsetAtTimeline(clip, timelineMs - clip.timelineStartMs));
+}
+
+/**
+ * Whether the two source frames around this instant should be cross-faded
+ * rather than the nearer one held.
+ *
+ * Only below unity. At 1x the source plays at its own cadence and blending
+ * would turn 30 fps footage in a 60 fps project into a permanent dissolve -
+ * mush, and a regression on every clip that exists today. Above unity there are
+ * more source frames than output frames and there is nothing to invent.
+ *
+ * `frameBlend: 'sharp'` opts out for footage a cross-fade ruins: titles, screen
+ * captures, graphics, or a stepped look that is the intent.
+ *
+ * Shared by the preview and the export so a slow-motion clip is judged on
+ * screen exactly as it will be rendered.
+ */
+export function shouldBlendFrames(clip: Clip, timelineMs: number): boolean {
+  if (clip.frameBlend === 'sharp') return false;
+  return clipRateAt(clip, timelineMs) < 1;
 }
 
 /**

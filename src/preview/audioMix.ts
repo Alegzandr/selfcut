@@ -3,6 +3,7 @@ import {
   clipEndMs,
   clipEnvelopeGainAt,
   delegatedLinkIds,
+  hasVelocity,
   isGeneratedClip,
   trackCrossfades,
 } from '../model';
@@ -136,6 +137,13 @@ export class MixScheduler {
     fromMs: number,
     untilMs: number,
   ): void {
+    // A velocity ramp silences the clip, in the preview and in the export
+    // alike. A buffer source plays at one rate for its whole life, and a
+    // varying rate would have to swoop the pitch with it - which is not sound
+    // anyone wants under a speed ramp. Muting is the honest answer, and the
+    // speed control says so at the moment the ramp is laid down rather than
+    // leaving it to be discovered.
+    if (hasVelocity(clip)) return;
     const clipStart = clip.timelineStartMs;
     const speed = clip.speed || 1;
     // Source range this window asks for. The clip's own in/out points bound it:

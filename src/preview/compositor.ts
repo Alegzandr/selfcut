@@ -2,6 +2,7 @@ import { BezierPoint, Clip, ClipMask, ClipRedaction, ClipShape, ClipText, ShapeC
 import {
   DEFAULT_TEXT_WIDTH_FRAC,
   DEFAULT_TRANSFORM,
+  clipEndMs,
   clipEnvelopeGainAt,
   clipRotationAt,
   clipZoomAt,
@@ -525,7 +526,7 @@ function buildTrackIndex(clips: Clip[]): TrackIndex {
   let running = -Infinity;
   for (let i = 0; i < order.length; i++) {
     const clip = order[i]!;
-    ends[i] = clip.timelineStartMs + (clip.sourceOutMs - clip.sourceInMs) / clip.speed;
+    ends[i] = clipEndMs(clip);
     running = Math.max(running, ends[i]!);
     maxEnd[i] = running;
   }

@@ -2,6 +2,8 @@ import { useStore, EditorState } from '../store/store';
 import { MediaAsset, MediaClip, Project } from '../types';
 import {
   clipEndMs,
+  hasVelocity,
+  shouldBlendFrames,
   delegatedLinkIds,
   isTextClip,
   outputDimensions,
@@ -443,18 +445,24 @@ export class PlaybackEngine {
         // hold the same audio twice.
         if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
         if (clip.volume <= 0) continue;
+        // A ramped clip is silent (see audioMix), so decoding its audio would
+        // fill the cache with sound nothing will ever schedule.
+        if (hasVelocity(clip)) continue;
         const clipEnd = clipEndMs(clip);
         if (clipEnd <= from || clip.timelineStartMs >= until) continue;
         const asset = state.assets[clip.assetId];
         if (!asset?.hasAudio) continue;
-        const speed = clip.speed || 1;
         const windowFrom = Math.max(from, clip.timelineStartMs);
         const windowTo = Math.min(until, clipEnd);
+        // Through `timelineToSourceMs` rather than a multiplication, so a clip
+        // carrying a velocity ramp prefetches the source range it will actually
+        // read: at a slow point the window covers far less source than the flat
+        // rate would suggest, and at a fast one, far more.
         prefetchAudioRange(
           asset,
           clip.audioTrackIndex,
-          clip.sourceInMs + (windowFrom - clip.timelineStartMs) * speed,
-          Math.min(clip.sourceOutMs, clip.sourceInMs + (windowTo - clip.timelineStartMs) * speed),
+          timelineToSourceMs(clip, windowFrom),
+          Math.min(clip.sourceOutMs, timelineToSourceMs(clip, windowTo)),
         );
       }
     }
@@ -709,7 +717,11 @@ export class PlaybackEngine {
             }
             this.cursors.set(clip.id, cursor);
             liveClipIds.add(clip.id);
-            cursor.request(timelineToSourceMs(clip, tMs) / 1000, this.wasPlaying);
+            cursor.request(
+              timelineToSourceMs(clip, tMs) / 1000,
+              this.wasPlaying,
+              shouldBlendFrames(clip, tMs),
+            );
             sample = cursor.sample;
             if (!sample) this.awaitingFrame = true;
             // What the pool's memory cap is actually measured against. Taken

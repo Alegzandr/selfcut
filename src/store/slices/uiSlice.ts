@@ -330,7 +330,10 @@ export function createUiSlice(
     setExportOpen: (open) => set({ exportOpen: open }),
     // An error and a confirmation share one slot: raising either clears the
     // other, so the toast never contradicts itself.
-    setError: (msg) => set({ error: msg, ...(msg ? { notice: null } : {}) }),
-    setNotice: (msg) => set({ notice: msg, ...(msg ? { error: null } : {}) }),
+    setError: (msg) => set({ error: msg, noticeAction: null, ...(msg ? { notice: null } : {}) }),
+    // The action rides with the message: raising a new notice without one drops
+    // the previous toast's button, so a stale action can never outlive its text.
+    setNotice: (msg, action = null) =>
+      set({ notice: msg, noticeAction: msg ? action : null, ...(msg ? { error: null } : {}) }),
   };
 }

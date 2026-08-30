@@ -86,7 +86,12 @@ const isDefault = lang === DEFAULT_LANG;
     <meta name="twitter:image" content={`${ORIGIN}/og-image.jpg`} />
     <meta name="twitter:image:alt" content={strings['og.imageAlt']} />
 
-    <script type="application/ld+json" set:html={JSON.stringify(webSite(strings))} />
+    {
+      /* Google reads the site name from the homepage only, so the root page is
+         the only one that carries WebSite. Repeating it on the language pages
+         adds a second, competing declaration for no gain. */
+      isDefault && <script type="application/ld+json" set:html={JSON.stringify(webSite(strings))} />
+    }
     <script type="application/ld+json" set:html={JSON.stringify(softwareApplication(strings))} />
     <script type="application/ld+json" set:html={JSON.stringify(faqPage(strings))} />
 

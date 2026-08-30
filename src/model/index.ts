@@ -4,3 +4,5 @@ export * from './curves';
 export * from './redaction';
 export * from './timeline';
 export * from './keyframeTarget';
+export * from './velocity';
+export * from './reframe';

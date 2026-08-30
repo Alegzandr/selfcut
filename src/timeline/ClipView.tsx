@@ -8,7 +8,7 @@ import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ImageIcon, Link2Icon, SpeakerLoudIcon, TextIcon, VideoIcon } from '@radix-ui/react-icons';
 import { Clip } from '../types';
-import { audioTrackForClip, clipDurationMs } from '../model';
+import { audioTrackForClip, clipDurationMs, hasVelocity, rampRange } from '../model';
 import { peaksJobKey, thumbnailsJobKey } from '../media/visualJobs';
 import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
@@ -25,6 +25,7 @@ import { Filmstrip } from './Filmstrip';
 import { ClipFades } from './ClipFades';
 import { ClipKeyframes } from './ClipKeyframes';
 import { ClipVolumeLine } from './ClipVolumeLine';
+import { ClipVelocityLine } from './ClipVelocityLine';
 import { useClipDrag } from './hooks/useClipDrag';
 import { linkGroupActive } from './linkHighlight';
 
@@ -95,6 +96,23 @@ export const ClipView = memo(function ClipView({
   // Clips whose `volume` actually does something: media with an audio track.
   // Text/solid clips and silent footage get no volume line.
   const hasAudio = clip.kind === 'media' && (audioInfo != null || hasPeaks);
+  // Clips whose speed means something: timed video. A still has no media clock
+  // to run faster or slower, and a generated clip none at all - both stretch
+  // freely under a plain trim already, so a speed line would be a control over
+  // nothing. Audio clips are excluded too: a ramp silences what it is applied
+  // to, which on a sound clip is the whole content.
+  const hasSpeed = clip.kind === 'media' && trackKind === 'video' && asset?.kind === 'video';
+  // The speed read-out on the clip. A ramp has no single speed, so it reports
+  // the two ends of what it reaches - a ramped clip left at base speed 1 would
+  // otherwise show nothing at all while its picture visibly changes pace.
+  const speedBadge = hasVelocity(clip)
+    ? (() => {
+        const { min, max } = rampRange(clip);
+        return `${speedX(min)} · ${speedX(max)}`;
+      })()
+    : clip.speed !== 1
+      ? speedX(clip.speed)
+      : '';
   const volumeFader = gainToFader(clip.volume);
   const volumeEntry = useVolumeEntry({
     gain: clip.volume,
@@ -162,6 +180,7 @@ export const ClipView = memo(function ClipView({
         e.stopPropagation();
         useStore.getState().selectClip(clip.id);
       }}
+      data-clip-body
       className={`group absolute top-1 bottom-1 isolate overflow-hidden rounded-md border outline-none focus-visible:ring-2 focus-visible:ring-blue-300 ${touch} ${border} ${isVideo ? 'bg-blue-950' : 'bg-emerald-950'}`}
       style={{ left, width }}
       onPointerEnter={() => {
@@ -301,7 +320,7 @@ export const ClipView = memo(function ClipView({
       {/* Speed / volume badge */}
       {(clip.speed !== 1 || clip.volume !== 1) && (
         <div className="pointer-events-none absolute right-1 top-0.5 rounded bg-black/60 px-1 text-4xs text-zinc-200">
-          {clip.speed !== 1 ? speedX(clip.speed) : ''}
+          {speedBadge}
           {clip.speed !== 1 && clip.volume !== 1 ? ' · ' : ''}
           {clip.volume !== 1 ? gainDb(clip.volume) : ''}
         </div>
@@ -349,6 +368,16 @@ export const ClipView = memo(function ClipView({
 
       {/* Keyframe markers on the selected clip (click a diamond to jump to it). */}
       {selected && <ClipKeyframes clip={clip} pxPerMs={pxPerMs} coarse={coarse} />}
+
+      {hasSpeed && (
+        <ClipVelocityLine
+          clip={clip}
+          width={width}
+          pxPerMs={pxPerMs}
+          selected={selected}
+          coarse={coarse}
+        />
+      )}
 
       {hasAudio && (
         <ClipVolumeLine

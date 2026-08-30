@@ -22,6 +22,7 @@ import type { TimeFormat } from '../lib/time';
 import type { PreviewResolutionMode } from '../app/config';
 import type { PreviewTool, PreviewView } from '../preview/view';
 import type { ScopeMode } from '../preview/scopes';
+import type { Framing } from '../model/reframe';
 import type { SubtitleCue } from '../lib/subtitles';
 import type { FFmpegProgress } from '../media/ffmpeg';
 import type { PresetLook } from '../effects/presetFile';
@@ -305,12 +306,26 @@ export interface EditorState {
   error: string | null;
   /** Transient confirmation ("Project saved"), shown in the same slot as `error`. */
   notice: string | null;
+  /**
+   * Optional one-tap action carried by the current notice - the toast's own
+   * button. It exists so a decision the app took FOR the user (reframing every
+   * clip on a ratio change) stays reversible by tapping, on touch as well as on
+   * desktop, instead of hiding behind a modifier key nobody has on a phone.
+   * Cleared with the notice it belongs to.
+   */
+  noticeAction: NoticeAction | null;
 
   past: HistoryEntry[];
   future: HistoryEntry[];
   gestureSnapshot: HistoryEntry | null;
 
-  setAspectRatio: (a: AspectRatio) => void;
+  /**
+   * Change the output ratio. `framing` decides what happens to the clips still
+   * carrying the automatic framing: 'fill' (default) rescales them to cover the
+   * new frame, 'fit' puts them back at the contain fit, bars and all. Returns
+   * how many clips were reframed.
+   */
+  setAspectRatio: (a: AspectRatio, framing?: Framing) => number;
   addAsset: (asset: MediaAsset) => void;
   removeAsset: (assetId: string) => void;
   /**
@@ -762,5 +777,11 @@ export interface EditorState {
   /** Set (or clear, with null) the detailed import status line. */
   setImportStatus: (msg: string | null) => void;
   setError: (msg: string | null) => void;
-  setNotice: (msg: string | null) => void;
+  setNotice: (msg: string | null, action?: NoticeAction | null) => void;
+}
+
+/** A toast's inline button: what it says, and what tapping it does. */
+export interface NoticeAction {
+  label: string;
+  run: () => void;
 }
