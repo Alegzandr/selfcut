@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './test';
 
 /**
  * End-to-end check of the on-demand audio conversion pipeline.

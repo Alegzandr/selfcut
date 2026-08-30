@@ -1,4 +1,5 @@
-import { test, type Page } from '@playwright/test';
+import { test } from './test';
+import { type Page } from '@playwright/test';
 
 /**
  * Whether this browser composites on a GPU - and saying so out loud.

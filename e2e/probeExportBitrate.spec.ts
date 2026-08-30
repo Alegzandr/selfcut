@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './test';
 
 /**
  * What bitrate does a real export of a real capture actually come out at?

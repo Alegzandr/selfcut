@@ -1,4 +1,5 @@
-import { test, expect, devices } from '@playwright/test';
+import { test, expect } from './test';
+import { devices } from '@playwright/test';
 
 /**
  * The touch menu sheet scrolls in one direction.

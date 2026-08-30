@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './test';
 
 /**
  * The specs type-check under tsconfig.node.json, which carries no DOM lib, so

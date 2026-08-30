@@ -1,4 +1,5 @@
-import { test, expect, devices, type Page } from '@playwright/test';
+import { test, expect } from './test';
+import { devices, type Page } from '@playwright/test';
 
 /**
  * Panels animate on the compositor, and stop animating for people who ask.
