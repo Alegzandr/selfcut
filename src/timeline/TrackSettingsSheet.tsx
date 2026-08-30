@@ -78,6 +78,12 @@ export function TrackSettingsSheet() {
                   onChange={(e) =>
                     updateTrack(track.id, { volume: faderToGainStepped(Number(e.target.value)) })
                   }
+                  // Double-tap back to unity, like the desktop fader.
+                  onDoubleClick={() => {
+                    beginGesture();
+                    updateTrack(track.id, { volume: 1 });
+                    endGesture();
+                  }}
                 />
                 <span className="w-14 flex-none text-right text-2xs tabular-nums text-zinc-400">
                   {gainDb(track.volume ?? 1)}
@@ -100,6 +106,11 @@ export function TrackSettingsSheet() {
                     onPointerUp={endGesture}
                     onPointerCancel={endGesture}
                     onChange={(e) => updateTrack(track.id, { opacity: Number(e.target.value) })}
+                    onDoubleClick={() => {
+                      beginGesture();
+                      updateTrack(track.id, { opacity: 1 });
+                      endGesture();
+                    }}
                   />
                   <span className="w-14 flex-none text-right text-2xs tabular-nums text-zinc-400">
                     {Math.round((track.opacity ?? 1) * 100)} %

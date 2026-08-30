@@ -75,6 +75,7 @@ export function SliderRow({
   onContextMenu,
   keyframe,
   entry,
+  defaultValue,
 }: {
   label: string;
   value: number;
@@ -89,6 +90,14 @@ export function SliderRow({
   onContextMenu?: (e: MouseEvent) => void;
   /** Keyframe affordance; omit for a plain, non-animatable slider. */
   keyframe?: KeyframeControl;
+  /**
+   * Value a double-click on the slider snaps back to: the property's default,
+   * the one a freshly created clip carries. Every row that HAS a default should
+   * pass it - the gesture is only learnt once, and a slider that ignores it
+   * after three others honoured it reads as broken. Omit only where there is no
+   * such value to go back to.
+   */
+  defaultValue?: number;
   /**
    * Unit the read-out is typed in when clicked. Omit only when the stored value
    * is what the read-out already shows — never to opt out, since every row is
@@ -108,6 +117,21 @@ export function SliderRow({
   // period). Everywhere else the step is only a floor: see `seedDecimals`.
   const decimals =
     entry?.decimals ?? seedDecimals(toInput(value), decimalsForStep(toInput, value, step));
+
+  // Double-click resets to the property's default, the convention every fader
+  // in the app already follows (master volume, track volume, the pane splitters).
+  // Wrapped in a gesture like a typed value: one undo step, however many fields
+  // the handler behind it touches.
+  const reset =
+    defaultValue === undefined
+      ? undefined
+      : () => {
+          beginGesture();
+          (entry?.onCommit ?? onChange)(Math.min(max, Math.max(min, defaultValue)));
+          endGesture();
+        };
+
+  const resetHint = t('inspector.reset.hint');
 
   const commit = () => {
     // Comma is the decimal separator on most of the locales we ship.
@@ -162,9 +186,25 @@ export function SliderRow({
           // dark: without it the browser paints its light-theme groove, which a
           // near-white accent would be invisible against.
           className="min-w-0 flex-1 accent-zinc-300 pointer-coarse:h-8 [color-scheme:dark]"
-          onPointerDown={beginGesture}
+          // The label's own `title` covers the row; the slider overrides it so
+          // the reset gesture is discoverable exactly where it applies.
+          title={reset ? (hint ? `${hint} · ${resetHint}` : resetHint) : undefined}
+          onPointerDown={(e) => {
+            // The second click of a double-click: stop the range from jumping
+            // to the pointer first, since the reset is about to overwrite it
+            // anyway, and a value that flashes past on the way to its default
+            // reads as two edits. `detail` is the click count on mouse input;
+            // touch reports 0 and lands on `onDoubleClick` below instead.
+            if (reset && e.detail === 2) {
+              e.preventDefault();
+              reset();
+              return;
+            }
+            beginGesture();
+          }}
           onPointerUp={endGesture}
           onContextMenu={onContextMenu}
+          onDoubleClick={reset}
           onChange={(e) => onChange(Number(e.target.value))}
         />
       </label>

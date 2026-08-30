@@ -81,6 +81,7 @@ function LutRow({ clip }: { clip: Clip }) {
           step={0.01}
           format={(v) => `${Math.round(v * 100)}%`}
           entry={PERCENT_ENTRY}
+          defaultValue={1}
           onChange={(v) => setClipLutIntensity(clip.id, v)}
         />
       )}
@@ -163,6 +164,8 @@ export function ColorSection({ clip }: { clip: Clip }) {
               min < 0 ? `${v > 0 ? '+' : ''}${Math.round(v * 100)}` : `${Math.round(v * 100)}%`
             }
             entry={PERCENT_ENTRY}
+            // Identity for every graded parameter: no lift, no vignette, no blur.
+            defaultValue={0}
             onChange={(v) => updateClipColorLive(clip.id, key, v, currentTimeMs)}
             keyframe={kf(key, label)}
           />

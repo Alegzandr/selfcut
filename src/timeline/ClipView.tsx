@@ -26,6 +26,7 @@ import { ClipFades } from './ClipFades';
 import { ClipKeyframes } from './ClipKeyframes';
 import { ClipVolumeLine } from './ClipVolumeLine';
 import { useClipDrag } from './hooks/useClipDrag';
+import { linkGroupActive } from './linkHighlight';
 
 interface Props {
   clip: Clip;
@@ -52,6 +53,9 @@ export const ClipView = memo(function ClipView({
   // not every clip on every track through the parent row.
   const selected = useStore((s) => s.selectedClipIds.includes(clip.id));
   const asset = useStore((s) => s.assets[clip.assetId]);
+  // Every member of the A/V group under the pointer - or holding the selection -
+  // is tinted violet, so a shot and its audio read as one thing across rows.
+  const linkActive = useStore((s) => linkGroupActive(s, clip.linkId));
   const padLeft = useStore((s) => s.timelinePadLeft);
   const coarse = useIsCoarsePointer();
   /** This clip's floating drag readout (store-held, so it survives a remount). */
@@ -108,11 +112,17 @@ export const ClipView = memo(function ClipView({
       : null;
 
   const isVideo = trackKind === 'video';
+  // The selected clip keeps the blue ring; its partners take the violet one,
+  // which is what makes the pairing visible rather than just "some link exists".
+  const linkHighlight = linkActive && !selected;
   const border = selected
     ? 'ring-2 ring-blue-400 border-transparent'
-    : isVideo
-      ? 'border-blue-900'
-      : 'border-emerald-900';
+    : linkHighlight
+      ? 'ring-2 ring-brand-300 border-transparent'
+      : isVideo
+        ? 'border-blue-900'
+        : 'border-emerald-900';
+  const linkIconClass = linkActive ? 'text-brand-200' : undefined;
   // Unselected on touch: no touch-action lock, so a horizontal pan scrubs the timeline.
   const touch = coarse && !selected ? '' : 'touch-none';
   // `isolate` below gives the clip its own stacking context. Its inner
@@ -129,7 +139,7 @@ export const ClipView = memo(function ClipView({
       // the keyboard shortcuts have a target.
       role="button"
       tabIndex={0}
-      aria-label={t('a11y.clip.label', {
+      aria-label={`${t('a11y.clip.label', {
         name:
           clip.kind === 'text'
             ? clip.text.content
@@ -141,7 +151,7 @@ export const ClipView = memo(function ClipView({
         start: formatTime(clip.timelineStartMs),
         end: formatTime(clip.timelineStartMs + durMs),
         track: trackNumber,
-      })}
+      })}${clip.linkId ? `, ${t('a11y.clip.linked')}` : ''}`}
       aria-pressed={selected}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -154,6 +164,13 @@ export const ClipView = memo(function ClipView({
       }}
       className={`group absolute top-1 bottom-1 isolate overflow-hidden rounded-md border outline-none focus-visible:ring-2 focus-visible:ring-blue-300 ${touch} ${border} ${isVideo ? 'bg-blue-950' : 'bg-emerald-950'}`}
       style={{ left, width }}
+      onPointerEnter={() => {
+        if (clip.linkId) useStore.getState().setHoveredLinkId(clip.linkId);
+      }}
+      onPointerLeave={() => {
+        if (useStore.getState().hoveredLinkId === clip.linkId)
+          useStore.getState().setHoveredLinkId(null);
+      }}
       onPointerDown={(e) => beginDrag(e, 'move')}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -225,7 +242,7 @@ export const ClipView = memo(function ClipView({
               the way a pro NLE labels its clips. */}
           <div className="absolute left-0 top-0 flex max-w-[calc(100%-2.5rem)] items-center gap-1 rounded-br-md rounded-tl-md bg-black/60 px-1 py-px">
             {clip.linkId ? (
-              <Link2Icon className="h-2.5 w-2.5 flex-none text-blue-200" />
+              <Link2Icon className={`h-2.5 w-2.5 flex-none ${linkIconClass ?? 'text-blue-200'}`} />
             ) : asset.kind === 'image' ? (
               <ImageIcon className="h-2.5 w-2.5 flex-none text-blue-200" />
             ) : (
@@ -242,7 +259,7 @@ export const ClipView = memo(function ClipView({
           <ClipLoading tone="blue" label={t('timeline.clip.readingFrames')} widthPx={width} />
           <div className="absolute left-0 top-0 flex max-w-[calc(100%-2.5rem)] items-center gap-1 rounded-br-md rounded-tl-md bg-black/60 px-1 py-px">
             {clip.linkId ? (
-              <Link2Icon className="h-2.5 w-2.5 flex-none text-blue-200" />
+              <Link2Icon className={`h-2.5 w-2.5 flex-none ${linkIconClass ?? 'text-blue-200'}`} />
             ) : (
               <VideoIcon className="h-2.5 w-2.5 flex-none text-blue-200" />
             )}
@@ -260,7 +277,7 @@ export const ClipView = memo(function ClipView({
           )}
           <div className="absolute left-0 top-0 flex max-w-full items-center gap-1 px-1.5 py-0.5">
             {clip.linkId ? (
-              <Link2Icon className="h-3 w-3 flex-none text-emerald-300" />
+              <Link2Icon className={`h-3 w-3 flex-none ${linkIconClass ?? 'text-emerald-300'}`} />
             ) : (
               <SpeakerLoudIcon className="h-3 w-3 flex-none text-emerald-300" />
             )}
@@ -277,7 +294,7 @@ export const ClipView = memo(function ClipView({
       {/* A/V-link badge, for the video clips that carry no filmstrip label. */}
       {isVideo && clip.kind === 'media' && clip.linkId && !asset?.thumbnails.length && (
         <div className="pointer-events-none absolute left-0.5 top-0.5 rounded bg-black/55 p-0.5">
-          <Link2Icon className="h-2.5 w-2.5 text-blue-200" />
+          <Link2Icon className={`h-2.5 w-2.5 ${linkIconClass ?? 'text-blue-200'}`} />
         </div>
       )}
 

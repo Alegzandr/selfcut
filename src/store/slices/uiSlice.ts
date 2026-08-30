@@ -67,6 +67,7 @@ export function createUiSlice(
 ): Pick<
   EditorState,
   | 'toggleSnap'
+  | 'setHoveredLinkId'
   | 'setSnapGuide'
   | 'setDragBadge'
   | 'setDropPreview'
@@ -133,6 +134,10 @@ export function createUiSlice(
       const cur = get().dragBadge;
       if (cur?.clipId === badge?.clipId && cur?.text === badge?.text) return;
       set({ dragBadge: badge });
+    },
+
+    setHoveredLinkId: (linkId) => {
+      if (get().hoveredLinkId !== linkId) set({ hoveredLinkId: linkId });
     },
 
     // Fires on every `dragover`, most of which land on the same rounded pixel:

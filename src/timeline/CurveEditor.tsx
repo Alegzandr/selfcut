@@ -111,6 +111,15 @@ export function CurveEditor() {
     useStore.getState().endGesture();
   };
 
+  // Double-click drops the hand-bent curve and hands the keys back to their
+  // named ease - the same "back to the default" gesture the faders carry.
+  const resetCurve = () => {
+    const st = useStore.getState();
+    st.beginGesture();
+    st.setSelectedKeyframesBezier(null);
+    st.endGesture();
+  };
+
   const preview = keys[0];
   // `linear` gets handles too, lying flat on the diagonal: bending one is how a
   // straight segment becomes a curve. `hold` gets none - a step has no velocity
@@ -209,6 +218,7 @@ export function CurveEditor() {
                     onPointerMove={onHandleMove}
                     onPointerUp={onHandleUp}
                     onPointerCancel={onHandleUp}
+                    onDoubleClick={resetCurve}
                   />
                 ))}
               </>

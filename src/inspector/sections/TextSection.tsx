@@ -4,7 +4,7 @@ import { useStore } from '../../store/store';
 import { Tooltip } from '../../ui/Tooltip';
 import { ToggleButton } from '../../ui/ToggleButton';
 import { Clip, ClipText, TextAlign, TextClip } from '../../types';
-import { DEFAULT_TEXT_WIDTH_FRAC } from '../../model';
+import { DEFAULT_TEXT_SIZE_FRAC, DEFAULT_TEXT_WIDTH_FRAC } from '../../model';
 import { DEFAULT_FONT_ID, FONTS, fontStack, loadFonts } from '../../lib/fonts';
 import { PERCENT_ENTRY, SliderRow } from '../SliderRow';
 import { pct } from '../format';
@@ -125,6 +125,7 @@ export function TextSection({ clip }: { clip: TextClip }) {
         step={0.005}
         format={pct}
         entry={PERCENT_ENTRY}
+        defaultValue={DEFAULT_TEXT_SIZE_FRAC}
         onChange={(v) => setText({ sizeFrac: v })}
       />
       <SliderRow
@@ -136,6 +137,7 @@ export function TextSection({ clip }: { clip: TextClip }) {
         step={0.05}
         format={pct}
         entry={PERCENT_ENTRY}
+        defaultValue={DEFAULT_TEXT_WIDTH_FRAC}
         onChange={(v) => setText({ widthFrac: v })}
       />
     </div>

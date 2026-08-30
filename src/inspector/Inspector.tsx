@@ -279,6 +279,8 @@ function InspectorBody({
           step={0.05}
           format={(v) => (v === 1 ? t('inspector.zoomAnim.off') : `→${Math.round(v * 100)}%`)}
           entry={PERCENT_ENTRY}
+          // 1 is the "off" end of this slider: no push in, no pull out.
+          defaultValue={1}
           onChange={(v) => updateClip(clip.id, { zoomEnd: v })}
         />
       )}

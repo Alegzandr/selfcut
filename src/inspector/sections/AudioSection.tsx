@@ -13,8 +13,10 @@ import {
   faderToGainStepped,
   gainToDb,
   gainToFader,
+  UNITY_FADER,
 } from '../../lib/gain';
 import { useVolumeEntry } from '../../ui/VolumeEntry';
+import { DEFAULT_FX_AMOUNT } from '../../effects/catalog';
 
 /**
  * The volume row stores a fader position, which is meaningless to type: the
@@ -76,6 +78,8 @@ export function AudioSection({ clip }: { clip: Clip }) {
           // drag, not to a value that was spelled out.
           onCommit: (pos) => updateClip(clip.id, { volume: faderToGain(pos) }),
         }}
+        // Unity gain, the fader position 0 dB sits at.
+        defaultValue={UNITY_FADER}
         onChange={(p) => updateClip(clip.id, { volume: faderToGainStepped(p) })}
         onContextMenu={volumeEntry.onContextMenu}
       />
@@ -90,6 +94,7 @@ export function AudioSection({ clip }: { clip: Clip }) {
         step={0.01}
         format={pan}
         entry={PERCENT_ENTRY}
+        defaultValue={0}
         onChange={(v) => updateClip(clip.id, { pan: v })}
       />
       <div className="flex items-center gap-3 text-xs text-zinc-400">
@@ -129,6 +134,7 @@ export function AudioSection({ clip }: { clip: Clip }) {
                   step={0.01}
                   format={(v) => `${Math.round(v * 100)}%`}
                   entry={PERCENT_ENTRY}
+                  defaultValue={DEFAULT_FX_AMOUNT}
                   onChange={(v) => setFxAmount(fx.type, v)}
                 />
               </div>

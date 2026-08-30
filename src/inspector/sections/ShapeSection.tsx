@@ -6,6 +6,10 @@ import { PERCENT_ENTRY, SliderRow, scaledEntry } from '../SliderRow';
 import { Clip, ClipShape, ShapeClip } from '../../types';
 
 const KINDS = ['rect', 'ellipse', 'polygon'] as const;
+/** What a freshly drawn shape carries, and what a double-click returns to. */
+const DEFAULT_STROKE_WIDTH = 0;
+const DEFAULT_RADIUS = 0;
+const DEFAULT_SIDES = 5;
 /** Stroke width is a fraction of the output height; this caps it at 5%. */
 const MAX_STROKE = 0.05;
 
@@ -79,6 +83,7 @@ export function ShapeSection({ clip }: { clip: ShapeClip }) {
         step={0.001}
         format={(v) => (v <= 0 ? t('inspector.shape.noStroke') : `${(v * 100).toFixed(1)} %`)}
         entry={PERCENT_ENTRY}
+        defaultValue={DEFAULT_STROKE_WIDTH}
         onChange={(v) => setShape((s) => ({ strokeWidth: v, stroke: s.stroke ?? s.fill }))}
       />
 
@@ -93,6 +98,7 @@ export function ShapeSection({ clip }: { clip: ShapeClip }) {
           step={0.01}
           format={(v) => `${Math.round((v / 0.5) * 100)} %`}
           entry={scaledEntry(200)}
+          defaultValue={DEFAULT_RADIUS}
           onChange={(v) => setShape({ radius: v })}
         />
       )}
@@ -105,6 +111,7 @@ export function ShapeSection({ clip }: { clip: ShapeClip }) {
           max={12}
           step={1}
           format={(v) => String(Math.round(v))}
+          defaultValue={DEFAULT_SIDES}
           onChange={(v) => setShape({ sides: Math.round(v) })}
         />
       )}

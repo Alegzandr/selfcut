@@ -203,6 +203,12 @@ export interface EditorState {
    * so it survives the remount when a drag crosses onto another track.
    */
   dragBadge: { clipId: string; text: string } | null;
+  /**
+   * `linkId` of the A/V group the pointer is currently over, or null. Held here
+   * rather than in the hovered clip because the point of it is to light up the
+   * PARTNER clips, which live on other track rows.
+   */
+  hoveredLinkId: string | null;
   /** Footprint of the drag currently hovering the timeline, or null when none is. */
   dropPreview: DropPreview | null;
   /**
@@ -663,6 +669,8 @@ export interface EditorState {
   setSnapGuide: (ms: number | null) => void;
   /** Publish/clear the floating drag readout for a clip. */
   setDragBadge: (badge: { clipId: string; text: string } | null) => void;
+  /** Publish/clear the highlight of an A/V link group (null = none hovered). */
+  setHoveredLinkId: (linkId: string | null) => void;
   /** Publish/clear the ghost showing where a hovering drag would drop. */
   setDropPreview: (preview: DropPreview | null) => void;
   /** Point the preview at a time other than the playhead (null = follow the playhead). */

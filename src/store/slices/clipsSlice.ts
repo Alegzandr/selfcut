@@ -15,6 +15,7 @@ import {
   isTrackPlayable,
 } from '../../types';
 import {
+  DEFAULT_TEXT_SIZE_FRAC,
   DEFAULT_TRANSFORM,
   animatedProps,
   clipDurationMs,
@@ -361,7 +362,7 @@ export function createClipsSlice(
           volume: 1,
           fadeInMs: 0,
           fadeOutMs: 0,
-          text: { content: translate('clip.defaultText'), color: '#ffffff', sizeFrac: 0.08, bold: true },
+          text: { content: translate('clip.defaultText'), color: '#ffffff', sizeFrac: DEFAULT_TEXT_SIZE_FRAC, bold: true },
         });
       }, newClipId);
       set({ selectedClipId: newClipId, selectedClipIds: [newClipId] });

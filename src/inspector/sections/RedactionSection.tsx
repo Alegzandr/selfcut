@@ -38,6 +38,9 @@ const BOX_AXES: { prop: 'x' | 'y' | 'w' | 'h'; labelKey: ParseKeys; min: number 
   { prop: 'h', labelKey: 'inspector.mask.height', min: 0.02 },
 ];
 
+/** What a fresh region carries: where a double-clicked slider lands back on. */
+const REGION_DEFAULTS = defaultRedaction();
+
 export function RedactionSection({ clip }: { clip: Clip }) {
   const { t } = useTranslation();
   const regions = clip.redactions ?? [];
@@ -161,6 +164,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                   step={0.01}
                   format={(v) => `${Math.round(v * 100)}%`}
                   entry={PERCENT_ENTRY}
+                  defaultValue={REGION_DEFAULTS.amount}
                   onChange={(v) => set({ amount: v })}
                 />
 
@@ -218,6 +222,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                       step={0.005}
                       format={(v) => `${Math.round(v * 100)}%`}
                       entry={PERCENT_ENTRY}
+                      defaultValue={REGION_DEFAULTS[axis.prop]}
                       onChange={(v) => set({ [axis.prop]: v })}
                     />
                   ))}
@@ -230,6 +235,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                   step={0.005}
                   format={(v) => `${Math.round(v * 100)}%`}
                   entry={PERCENT_ENTRY}
+                  defaultValue={REGION_DEFAULTS.feather}
                   onChange={(v) => set({ feather: v })}
                 />
                 <label className="flex items-center justify-between text-xs text-zinc-400">

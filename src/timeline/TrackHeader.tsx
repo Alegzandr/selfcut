@@ -273,7 +273,11 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
                   onChange={(e) =>
                     updateTrack(track.id, { volume: faderToGainStepped(Number(e.target.value)) })
                   }
-                  onDoubleClick={() => updateTrack(track.id, { volume: 1 })}
+                  onDoubleClick={() => {
+                    beginGesture();
+                    updateTrack(track.id, { volume: 1 });
+                    endGesture();
+                  }}
                   onContextMenu={volumeEntry.onContextMenu}
                 />
                 {volumeEntry.entry}
@@ -304,7 +308,11 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
                   onPointerCancel={() => setBadgeAt(null)}
                   onBlur={() => setBadgeAt(null)}
                   onChange={(e) => updateTrack(track.id, { opacity: Number(e.target.value) })}
-                  onDoubleClick={() => updateTrack(track.id, { opacity: 1 })}
+                  onDoubleClick={() => {
+                    beginGesture();
+                    updateTrack(track.id, { opacity: 1 });
+                    endGesture();
+                  }}
                 />
               </div>
             )}

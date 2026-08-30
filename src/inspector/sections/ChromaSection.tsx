@@ -77,6 +77,7 @@ export function ChromaSection({ clip }: { clip: Clip }) {
             step={0.01}
             format={(v) => `${Math.round(v * 100)}%`}
             entry={PERCENT_ENTRY}
+            defaultValue={DEFAULT_KEY.similarity}
             onChange={(v) => set({ similarity: v })}
           />
           <SliderRow
@@ -87,6 +88,7 @@ export function ChromaSection({ clip }: { clip: Clip }) {
             step={0.01}
             format={(v) => `${Math.round(v * 100)}%`}
             entry={PERCENT_ENTRY}
+            defaultValue={DEFAULT_KEY.smoothness}
             onChange={(v) => set({ smoothness: v })}
           />
           <SliderRow
@@ -97,6 +99,7 @@ export function ChromaSection({ clip }: { clip: Clip }) {
             step={0.01}
             format={(v) => `${Math.round(v * 100)}%`}
             entry={PERCENT_ENTRY}
+            defaultValue={DEFAULT_KEY.spill}
             onChange={(v) => set({ spill: v })}
           />
         </>

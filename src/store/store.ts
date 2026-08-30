@@ -225,6 +225,7 @@ export const useStore = create<EditorState>((set, get) => {
     snapEnabled: true,
     snapGuideMs: null,
     dragBadge: null,
+    hoveredLinkId: null,
     dropPreview: null,
     previewOverrideMs: null,
     inspectorOpen: false,

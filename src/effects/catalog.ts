@@ -56,7 +56,7 @@ function carriesAudio(_clip: Clip, asset: MediaAsset | undefined): boolean {
 }
 
 /** Intensity a freshly applied audio effect starts at (matches the inspector). */
-const DEFAULT_FX_AMOUNT = 0.5;
+export const DEFAULT_FX_AMOUNT = 0.5;
 
 /**
  * One-tap looks. Identical grades to the inspector's filter row, so applying

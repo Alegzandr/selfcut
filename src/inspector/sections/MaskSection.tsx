@@ -115,6 +115,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 step={0.005}
                 format={(v) => `${Math.round(v * 100)}%`}
                 entry={PERCENT_ENTRY}
+                defaultValue={DEFAULT_MASK.x}
                 onChange={(v) => set({ x: v })}
               />
               <SliderRow
@@ -125,6 +126,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 step={0.005}
                 format={(v) => `${Math.round(v * 100)}%`}
                 entry={PERCENT_ENTRY}
+                defaultValue={DEFAULT_MASK.y}
                 onChange={(v) => set({ y: v })}
               />
               <SliderRow
@@ -135,6 +137,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 step={0.005}
                 format={(v) => `${Math.round(v * 100)}%`}
                 entry={PERCENT_ENTRY}
+                defaultValue={DEFAULT_MASK.w}
                 onChange={(v) => set({ w: v })}
               />
               <SliderRow
@@ -145,6 +148,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 step={0.005}
                 format={(v) => `${Math.round(v * 100)}%`}
                 entry={PERCENT_ENTRY}
+                defaultValue={DEFAULT_MASK.h}
                 onChange={(v) => set({ h: v })}
               />
             </>
@@ -157,6 +161,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
             step={0.005}
             format={(v) => `${Math.round(v * 100)}%`}
             entry={PERCENT_ENTRY}
+            defaultValue={DEFAULT_MASK.feather}
             onChange={(v) => set({ feather: v })}
           />
           <label className="flex items-center justify-between text-xs text-zinc-400">

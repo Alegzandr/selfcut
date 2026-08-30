@@ -22,10 +22,10 @@ export function CropSection({ clip }: { clip: Clip }) {
 
   return (
     <>
-      <SliderRow label={t('inspector.cropLeft')} value={tf.crop.x} min={0} max={0.9} step={0.01} format={pct} entry={PERCENT_ENTRY} onChange={(v) => setCrop((cr) => ({ x: v, w: Math.min(cr.w, 1 - v) }))} />
-      <SliderRow label={t('inspector.cropTop')} value={tf.crop.y} min={0} max={0.9} step={0.01} format={pct} entry={PERCENT_ENTRY} onChange={(v) => setCrop((cr) => ({ y: v, h: Math.min(cr.h, 1 - v) }))} />
-      <SliderRow label={t('inspector.cropWidth')} value={tf.crop.w} min={0.05} max={1} step={0.01} format={pct} entry={PERCENT_ENTRY} onChange={(v) => setCrop((cr) => ({ w: Math.min(v, 1 - cr.x) }))} />
-      <SliderRow label={t('inspector.cropHeight')} value={tf.crop.h} min={0.05} max={1} step={0.01} format={pct} entry={PERCENT_ENTRY} onChange={(v) => setCrop((cr) => ({ h: Math.min(v, 1 - cr.y) }))} />
+      <SliderRow label={t('inspector.cropLeft')} value={tf.crop.x} min={0} max={0.9} step={0.01} format={pct} entry={PERCENT_ENTRY} defaultValue={DEFAULT_TRANSFORM.crop.x} onChange={(v) => setCrop((cr) => ({ x: v, w: Math.min(cr.w, 1 - v) }))} />
+      <SliderRow label={t('inspector.cropTop')} value={tf.crop.y} min={0} max={0.9} step={0.01} format={pct} entry={PERCENT_ENTRY} defaultValue={DEFAULT_TRANSFORM.crop.y} onChange={(v) => setCrop((cr) => ({ y: v, h: Math.min(cr.h, 1 - v) }))} />
+      <SliderRow label={t('inspector.cropWidth')} value={tf.crop.w} min={0.05} max={1} step={0.01} format={pct} entry={PERCENT_ENTRY} defaultValue={DEFAULT_TRANSFORM.crop.w} onChange={(v) => setCrop((cr) => ({ w: Math.min(v, 1 - cr.x) }))} />
+      <SliderRow label={t('inspector.cropHeight')} value={tf.crop.h} min={0.05} max={1} step={0.01} format={pct} entry={PERCENT_ENTRY} defaultValue={DEFAULT_TRANSFORM.crop.h} onChange={(v) => setCrop((cr) => ({ h: Math.min(v, 1 - cr.y) }))} />
     </>
   );
 }

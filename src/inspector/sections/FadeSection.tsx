@@ -17,6 +17,7 @@ export function FadeSection({ clip }: { clip: Clip }) {
         step={100}
         format={seconds}
         entry={SECONDS_ENTRY}
+        defaultValue={0}
         onChange={(v) => updateClip(clip.id, { fadeInMs: v })}
       />
       <SliderRow
@@ -27,6 +28,7 @@ export function FadeSection({ clip }: { clip: Clip }) {
         step={100}
         format={seconds}
         entry={SECONDS_ENTRY}
+        defaultValue={0}
         onChange={(v) => updateClip(clip.id, { fadeOutMs: v })}
       />
     </>

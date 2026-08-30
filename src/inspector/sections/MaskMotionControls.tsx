@@ -135,6 +135,7 @@ export function MaskMotionControls({
             step={axis.step}
             format={axis.fmt}
             entry={axis.entry}
+            defaultValue={axis.def}
             onChange={(v) => onLive(axis.prop, v)}
             keyframe={motionKf(axis.prop, label)}
           />

@@ -37,6 +37,9 @@ export const DEFAULT_TRANSFORM: ClipTransform = {
  */
 export const DEFAULT_TEXT_WIDTH_FRAC = 0.9;
 
+/** Size a new text clip starts at, as a fraction of the output height. */
+export const DEFAULT_TEXT_SIZE_FRAC = 0.08;
+
 /** A clip that renders generated text instead of a media asset. */
 export function isTextClip(clip: Clip): clip is TextClip {
   return clip.kind === 'text';
