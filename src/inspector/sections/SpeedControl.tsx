@@ -3,17 +3,24 @@ import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/store';
 import { ToggleButton } from '../../ui/ToggleButton';
 import { Clip } from '../../types';
+import { MAX_CLIP_SPEED, MIN_CLIP_SPEED } from '../../app/config';
 
 export function SpeedControl({ clip }: { clip: Clip }) {
   const { t } = useTranslation();
   const { updateClipCommitted } = useStore.getState();
-  const [text, setText] = useState(String(clip.speed));
-  useEffect(() => setText(String(clip.speed)), [clip.id, clip.speed]);
+  // A rate stretch on the timeline lands on no round number, and the field is
+  // an editable value, not a read-out: show it at the precision someone would
+  // type back, not the drag's full float.
+  const shown = (v: number) => String(Math.round(v * 100) / 100);
+  const [text, setText] = useState(shown(clip.speed));
+  useEffect(() => setText(shown(clip.speed)), [clip.id, clip.speed]);
 
   const commit = () => {
     const v = parseFloat(text.replace(',', '.'));
-    if (isFinite(v) && v >= 0.1 && v <= 8) updateClipCommitted(clip.id, { speed: v });
-    else setText(String(clip.speed));
+    if (isFinite(v) && v >= MIN_CLIP_SPEED && v <= MAX_CLIP_SPEED) {
+      updateClipCommitted(clip.id, { speed: v });
+    }
+    else setText(shown(clip.speed));
   };
 
   return (
@@ -33,8 +40,8 @@ export function SpeedControl({ clip }: { clip: Clip }) {
           <input
             type="number"
             inputMode="decimal"
-            min={0.1}
-            max={8}
+            min={MIN_CLIP_SPEED}
+            max={MAX_CLIP_SPEED}
             step={0.1}
             value={text}
             onChange={(e) => setText(e.target.value)}

@@ -283,6 +283,7 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
       origFader: gainToFader(clip.volume),
       origSourceInMs: clip.sourceInMs,
       origSourceOutMs: clip.sourceOutMs,
+      stretch: false,
       ripple: null,
       roll: null,
       rowsEl: el.closest<HTMLElement>('[data-rowbg]')?.parentElement ?? null,
@@ -351,15 +352,28 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
       }
     }
     const isTrim = mode === 'trim-left' || mode === 'trim-right';
-    // Ctrl on a trim handle: ripple trim - downstream clips on this track follow
-    // the edited edge, keeping their distance to it (their partners tag along).
+    const ctrl = e.ctrlKey || e.metaKey;
+    // Ctrl on a trim handle: rate stretch - the edge moves but nothing is cut,
+    // the same media just plays over a longer (slow motion) or shorter (fast
+    // forward) span. Only timed media has a rate; anything else plainly trims.
+    const stretch =
+      !coarse &&
+      ctrl &&
+      !e.altKey &&
+      isTrim &&
+      clip.kind === 'media' &&
+      !!asset &&
+      asset.kind !== 'image';
+    // Ctrl+Alt on a trim handle: ripple trim - downstream clips on this track
+    // follow the edited edge, keeping their distance to it (their partners tag
+    // along).
     const ripple =
-      !coarse && (e.ctrlKey || e.metaKey) && isTrim ? rippleForTrim(state.project, clip) : null;
-    // Alt on a trim handle: roll edit - the cut point between this clip and its
-    // neighbor moves, one side lengthens exactly as the other shortens. Only a
-    // true edit point rolls (adjacent or crossfading neighbor); Ctrl wins.
+      !coarse && ctrl && e.altKey && isTrim ? rippleForTrim(state.project, clip) : null;
+    // Alt alone on a trim handle: roll edit - the cut point between this clip
+    // and its neighbor moves, one side lengthens exactly as the other shortens.
+    // Only a true edit point rolls (adjacent or crossfading neighbor).
     const roll: DragState['roll'] =
-      !coarse && e.altKey && !ripple && isTrim
+      !coarse && e.altKey && !ctrl && isTrim
         ? rollForTrim(state.project, state.assets, clip, mode)
         : null;
     // Time under the pointer at press: a plain click (no drag) on a clip moves
@@ -392,6 +406,7 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
       origFader: gainToFader(clip.volume),
       origSourceInMs: clip.sourceInMs,
       origSourceOutMs: clip.sourceOutMs,
+      stretch,
       ripple,
       roll,
       rowsEl: el.closest<HTMLElement>('[data-rowbg]')?.parentElement ?? null,

@@ -433,6 +433,7 @@
   "shortcuts.edit.rangeSelect": "Bereich bis zu diesem Clip auswählen",
   "shortcuts.edit.marquee": "Clips und Keyframes per Rahmen auswählen",
   "shortcuts.edit.slip": "Slip: Medien im Clip verschieben",
+  "shortcuts.edit.rateStretch": "Geschwindigkeit dehnen (Zeitlupe / Zeitraffer)",
   "shortcuts.edit.rippleTrim": "Ripple-Trimmen (nachfolgende Clips folgen)",
   "shortcuts.edit.rollEdit": "Schnittpunkt rollen (beide Clips)",
   "shortcuts.edit.selectAll": "Alle Clips auswählen",

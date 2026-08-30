@@ -32,3 +32,12 @@ export const seconds = (ms: number) =>
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   }).format(ms / 1000);
+
+/**
+ * Playback rate as the "×" read-out an editor reads a speed in: 0.5 -> "0,5×",
+ * 2 -> "2×". Two decimals at most, none on a whole rate - a rate stretched by
+ * dragging an edge lands on no round number, and the badge has to say which
+ * side of 1× it is on to the frame.
+ */
+export const speedX = (v: number) =>
+  `${new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 }).format(v)}×`;

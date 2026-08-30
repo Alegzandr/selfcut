@@ -433,6 +433,7 @@
   "shortcuts.edit.rangeSelect": "Seleccionar el rango hasta este clip",
   "shortcuts.edit.marquee": "Selección con rectángulo: clips y fotogramas clave",
   "shortcuts.edit.slip": "Slip: deslizar el medio dentro del clip",
+  "shortcuts.edit.rateStretch": "Estirar la velocidad (cámara lenta / rápida)",
   "shortcuts.edit.rippleTrim": "Recorte ripple (los clips siguientes se desplazan)",
   "shortcuts.edit.rollEdit": "Roll: mover el punto de corte (ambos clips)",
   "shortcuts.edit.selectAll": "Seleccionar todos los clips",

@@ -184,3 +184,61 @@ export function removeKeyframe(channel: Channel, t: number): Channel {
   const remaining = channel.filter((k) => k !== removed);
   return remaining.length ? remaining : removed.value;
 }
+
+/**
+ * Shift every keyframe of a channel by `deltaMs` — what an edit that moves the
+ * clip's local origin (a left trim, the right half of a split) owes its
+ * animation, so the motion stays welded to the frames it was authored on
+ * instead of sliding against them.
+ */
+export function shiftChannel(channel: Channel, deltaMs: number): Channel {
+  if (!Array.isArray(channel) || deltaMs === 0) return channel;
+  return channel.map((k) => ({ ...k, t: k.t + deltaMs }));
+}
+
+/**
+ * The part of a channel that falls inside the clip-local window
+ * `[startMs, endMs]`, rebased so `startMs` becomes t = 0 — the razor applied to
+ * an animation. Each half of a split keeps only its own keys, and boundary keys
+ * are synthesized from the sampled value so neither half jumps at the cut: what
+ * played before the split plays after it, on both sides.
+ *
+ * The synthesized key inherits the easing of the segment it lands in, which is
+ * an approximation — half of a cubic-Bezier is not that same Bezier — but it
+ * keeps the shape of the motion, and the values at both ends are exact.
+ */
+export function sliceChannel(channel: Channel, startMs: number, endMs: number): Channel {
+  if (!Array.isArray(channel) || channel.length === 0) return channel;
+  const inWindow = (t: number) => t > startMs + KEYFRAME_EPSILON_MS && t < endMs - KEYFRAME_EPSILON_MS;
+  // The key governing the segment each boundary falls in, for its easing.
+  const governing = (t: number) =>
+    channel.filter((k) => k.t <= t + KEYFRAME_EPSILON_MS).at(-1) ?? channel[0]!;
+  const boundary = (t: number): Keyframe => {
+    const exact = channel.find((k) => Math.abs(k.t - t) < KEYFRAME_EPSILON_MS);
+    if (exact) return { ...exact, t: t - startMs };
+    const src = governing(t);
+    const key: Keyframe = { t: t - startMs, value: sampleChannel(channel, t) };
+    if (src.bezier) key.bezier = [...src.bezier];
+    else if (src.ease) key.ease = src.ease;
+    return key;
+  };
+  const keys: Keyframe[] = channel.filter((k) => inWindow(k.t)).map((k) => ({ ...k, t: k.t - startMs }));
+  // Boundary keys only where the animation actually crosses the edge. A window
+  // that starts before the first key (or ends after the last) already holds
+  // that value on its own, and a spurious flat key would just clutter the lane.
+  if (channel.some((k) => k.t <= startMs + KEYFRAME_EPSILON_MS)) keys.unshift(boundary(startMs));
+  if (channel.some((k) => k.t >= endMs - KEYFRAME_EPSILON_MS)) keys.push(boundary(endMs));
+  return keys.length ? keys : channel[0]!.value;
+}
+
+/**
+ * Scale every keyframe time by `factor` — what a speed change owes its
+ * animation. Clip-local time is post-speed, so halving a clip's speed doubles
+ * the stretch its keys span; scaling them keeps each key on the media frame it
+ * was authored on, and the motion slows down with the picture instead of
+ * finishing early and freezing.
+ */
+export function scaleChannel(channel: Channel, factor: number): Channel {
+  if (!Array.isArray(channel) || factor === 1) return channel;
+  return channel.map((k) => ({ ...k, t: k.t * factor }));
+}

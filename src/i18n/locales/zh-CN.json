@@ -433,6 +433,7 @@
   "shortcuts.edit.rangeSelect": "选中到这个片段为止的一段",
   "shortcuts.edit.marquee": "框选片段和关键帧",
   "shortcuts.edit.slip": "滑动：在片段内平移素材",
+  "shortcuts.edit.rateStretch": "速度伸缩（慢动作 / 快进）",
   "shortcuts.edit.rippleTrim": "波纹修剪（后面的片段跟着走）",
   "shortcuts.edit.rollEdit": "滚动剪切点（两个片段同时）",
   "shortcuts.edit.selectAll": "选中所有片段",

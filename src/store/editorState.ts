@@ -459,6 +459,13 @@ export interface EditorState {
   moveClips: (entries: { clipId: string; timelineStartMs: number }[]) => void;
   trimClip: (clipId: string, edge: 'left' | 'right', timelineMs: number) => void;
   /**
+   * Rate stretch (Ctrl+drag on a trim handle): drag an edge to move the clip's
+   * end to `timelineMs` WITHOUT trimming - the whole source window still plays,
+   * it just plays slower or faster. Live - wrap with begin/endGesture. Linked
+   * partners take the same speed so picture and sound stay together.
+   */
+  stretchClip: (clipId: string, edge: 'left' | 'right', timelineMs: number) => void;
+  /**
    * Slip edit (Alt+drag on a clip body): slide the source window while the
    * clip's timeline position and duration stay fixed. Live - wrap with
    * begin/endGesture. Linked partners slip in lockstep.

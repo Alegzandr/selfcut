@@ -433,6 +433,7 @@
   "shortcuts.edit.rangeSelect": "Sélectionner la plage jusqu'à ce clip",
   "shortcuts.edit.marquee": "Sélection rectangulaire : clips et images clés",
   "shortcuts.edit.slip": "Slip : faire glisser le média dans le clip",
+  "shortcuts.edit.rateStretch": "Étirement temporel (ralenti / accéléré)",
   "shortcuts.edit.rippleTrim": "Rognage ripple (les clips suivants suivent)",
   "shortcuts.edit.rollEdit": "Roll : déplacer le point de coupe (les deux clips)",
   "shortcuts.edit.selectAll": "Sélectionner tous les clips",

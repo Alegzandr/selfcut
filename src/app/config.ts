@@ -141,3 +141,12 @@ export const RULER_HEIGHT_PX = 24;
 /** Shortest loop region a drag can create - below that the drag reads as a click (clears it). */
 export const MIN_REGION_MS = 40;
 
+/**
+ * Playback-speed bounds a clip can be pushed to, by the inspector's field or by
+ * a Ctrl+drag on a trim handle. The floor keeps an extreme slow motion from
+ * stretching a short clip across the whole project (and the decoder from
+ * holding one frame for minutes); the ceiling stops at the point where a
+ * fast-forward stops reading as motion and starts reading as a glitch.
+ */
+export const MIN_CLIP_SPEED = 0.1;
+export const MAX_CLIP_SPEED = 8;

@@ -433,6 +433,7 @@
   "shortcuts.edit.rangeSelect": "このクリップまでをまとめて選択",
   "shortcuts.edit.marquee": "クリップとキーフレームを矩形選択",
   "shortcuts.edit.slip": "スリップ：クリップ内の素材をずらす",
+  "shortcuts.edit.rateStretch": "速度ストレッチ（スロー／早送り）",
   "shortcuts.edit.rippleTrim": "リップルトリム（後続のクリップも動く）",
   "shortcuts.edit.rollEdit": "カット点をロール（両方のクリップ）",
   "shortcuts.edit.selectAll": "すべてのクリップを選択",

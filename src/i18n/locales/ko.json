@@ -433,6 +433,7 @@
   "shortcuts.edit.rangeSelect": "이 클립까지 한 번에 선택",
   "shortcuts.edit.marquee": "클립과 키프레임을 상자로 선택",
   "shortcuts.edit.slip": "슬립: 클립 안에서 소스를 밀기",
+  "shortcuts.edit.rateStretch": "속도 스트레치(슬로 모션 / 빨리 감기)",
   "shortcuts.edit.rippleTrim": "리플 트리밍(뒤 클립이 따라옴)",
   "shortcuts.edit.rollEdit": "컷 지점 롤(양쪽 클립 함께)",
   "shortcuts.edit.selectAll": "모든 클립 선택",

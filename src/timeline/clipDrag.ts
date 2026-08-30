@@ -12,7 +12,7 @@ import { snapMove, snapTime } from './snapping';
 import { msFromClientX, msFromContentX } from './coords';
 import { MIN_CLIP_DURATION_MS, SNAP_THRESHOLD_PX } from '../app/config';
 import { clamp, formatTime } from '../lib/time';
-import { gainDb } from '../inspector/format';
+import { gainDb, speedX } from '../inspector/format';
 import {
   faderToGain,
   faderToGainStepped,
@@ -48,7 +48,13 @@ export interface DragState {
   /** Source window at press (slip / ripple math works from these, not live state). */
   origSourceInMs: number;
   origSourceOutMs: number;
-  /** Ripple trim (Ctrl on a trim handle): same-track downstream clips and their original starts. */
+  /**
+   * Rate stretch (Ctrl on a trim handle): the edge moves without trimming -
+   * the same media plays over a longer or shorter span, so the clip's speed
+   * changes. Only timed media stretches; a still or a generated clip trims.
+   */
+  stretch: boolean;
+  /** Ripple trim (Ctrl+Alt on a trim handle): same-track downstream clips and their original starts. */
   ripple: { id: string; startMs: number }[] | null;
   /**
    * Roll edit (Alt on a trim handle at a true edit point): the two clips
@@ -92,7 +98,7 @@ const VOLUME_DRAG_TRAVEL_PX = 220;
 const signedMs = (v: number) => `${v < 0 ? '−' : '+'}${formatTime(Math.abs(v))}`;
 
 /**
- * Ripple trim capture (Ctrl on a trim handle): downstream clips on this track
+ * Ripple trim capture (Ctrl+Alt on a trim handle): downstream clips on this track
  * follow the edited edge, keeping their distance to it (their partners tag
  * along). Their original starts are recorded at press so each move is absolute.
  */
@@ -299,6 +305,27 @@ export const applyClipDrag = (
     }
     const tMs = hapticOnSnap(raw, snapTime(raw, d.points, snapThresholdMs), d);
     state.setSnapGuide(tMs !== raw ? tMs : null);
+    if (d.stretch) {
+      // Rate stretch: no frame is cut, the whole source window just plays over
+      // the span the pointer asks for - slow motion by pulling an edge out,
+      // fast forward by pushing it in. Absolute per step (the source window
+      // never moves), so the drag cannot drift.
+      state.stretchClip(clip.id, d.mode === 'trim-left' ? 'left' : 'right', tMs);
+      const stretched = findLive(clip.id);
+      if (stretched) {
+        const dur = clipDurationMs(stretched);
+        state.setDragBadge({
+          clipId: clip.id,
+          text: `${speedX(stretched.speed)} · ${formatTime(dur)} (${signedMs(dur - d.durMs)})`,
+        });
+        state.setPreviewOverride(
+          d.mode === 'trim-left'
+            ? stretched.timelineStartMs
+            : Math.max(stretched.timelineStartMs, clipEndMs(stretched) - 1),
+        );
+      }
+      return;
+    }
     // Badge + preview frame, both read from the post-trim clip. The preview
     // shows the edge under the pointer: the new first frame when trimming from
     // the left, the new last one from the right (`clipsAt` is half-open at the

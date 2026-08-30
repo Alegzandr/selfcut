@@ -1,17 +1,19 @@
 import {
   AnimatableProp,
   AudioTrackInfo,
+  Channel,
   Clip,
   ClipAnimation,
   ClipMask,
   ClipTransform,
+  Keyframe,
   MediaAsset,
   ShapeClip,
   SolidClip,
   TextClip,
   isTrackPlayable,
 } from '../types';
-import { sampleChannel } from './animation';
+import { sampleChannel, scaleChannel, shiftChannel, sliceChannel } from './animation';
 import { buildCurveTexture, curvesAreIdentity } from './curves';
 
 /**
@@ -327,4 +329,67 @@ export function clipEnvelopeGainAt(
   if (fadeIn > 0) gain = Math.min(gain, local / fadeIn);
   if (fadeOut > 0) gain = Math.min(gain, (dur - local) / fadeOut);
   return Math.max(0, Math.min(1, gain));
+}
+
+/**
+ * Apply `fn` to every keyframable channel a clip carries — transform animation,
+ * colour grading, and the motion of its mask and of each redaction. One place
+ * knows the full list, so an edit that moves clip-local time (split, left trim)
+ * cannot silently forget a family of keyframes.
+ *
+ * Returns a copy; the clip passed in is left untouched.
+ */
+export function mapClipChannels<T extends Clip>(clip: T, fn: (ch: Channel) => Channel): T {
+  const next = cloneClip(clip);
+  if (next.animation) {
+    for (const [prop, keys] of Object.entries(next.animation) as [AnimatableProp, Keyframe[]][]) {
+      const sliced = fn(keys);
+      // A transform prop has a static counterpart to fall back on, but the
+      // constant a slice collapses to is not that value: keep it as one key.
+      next.animation[prop] = Array.isArray(sliced) ? sliced : [{ t: 0, value: sliced }];
+    }
+  }
+  if (next.color) {
+    for (const [prop, ch] of Object.entries(next.color)) {
+      if (typeof ch === 'number' || Array.isArray(ch)) {
+        (next.color as Record<string, Channel>)[prop] = fn(ch as Channel);
+      }
+    }
+  }
+  const motions = [next.mask?.motion, ...(next.redactions ?? []).map((r) => r.motion)];
+  for (const motion of motions) {
+    if (!motion) continue;
+    for (const [prop, ch] of Object.entries(motion)) {
+      if (ch != null) (motion as Record<string, Channel>)[prop] = fn(ch as Channel);
+    }
+  }
+  return next;
+}
+
+/**
+ * Move a clip's animation by `deltaMs` of clip-local time — for an edit that
+ * moves the local origin without dropping frames (a left trim). Keyframes then
+ * stay on the frames they were authored on.
+ */
+export function shiftClipAnimation<T extends Clip>(clip: T, deltaMs: number): T {
+  return deltaMs === 0 ? clip : mapClipChannels(clip, (ch) => shiftChannel(ch, deltaMs));
+}
+
+/**
+ * Keep only the animation inside the clip-local window `[startMs, endMs]`,
+ * rebased to `startMs` — the razor applied to a clip's keyframes. Both halves of
+ * a split then animate exactly the stretch they actually cover, instead of each
+ * replaying the whole original animation.
+ */
+export function sliceClipAnimation<T extends Clip>(clip: T, startMs: number, endMs: number): T {
+  return mapClipChannels(clip, (ch) => sliceChannel(ch, startMs, endMs));
+}
+
+/**
+ * Stretch a clip's animation by `factor` of clip-local time — for an edit that
+ * changes how long the same media takes to play (a speed change). Keyframes
+ * then stay on the frames they were authored on.
+ */
+export function scaleClipAnimation<T extends Clip>(clip: T, factor: number): T {
+  return factor === 1 ? clip : mapClipChannels(clip, (ch) => scaleChannel(ch, factor));
 }

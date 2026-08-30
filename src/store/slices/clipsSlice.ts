@@ -21,12 +21,15 @@ import {
   clipDurationMs,
   clipEndMs,
   cloneClip,
+  shiftClipAnimation,
+  sliceClipAnimation,
   curvesAreIdentity,
   delegatedLinkIds,
   keyframesOf,
   outputDimensions,
   removeKeyframe,
   sampleChannel,
+  scaleClipAnimation,
   setKeyframe,
   staticValueOf,
   timelineToSourceMs,
@@ -44,7 +47,7 @@ import {
 } from '../projectOps';
 import { clamp } from '../../lib/time';
 import { announce } from '../../lib/a11yBus';
-import { MIN_CLIP_DURATION_MS } from '../../app/config';
+import { MAX_CLIP_SPEED, MIN_CLIP_DURATION_MS, MIN_CLIP_SPEED } from '../../app/config';
 import type { SubtitleVAlign } from '../../lib/subtitles';
 
 /**
@@ -155,6 +158,7 @@ export function createClipsSlice(
   | 'moveClip'
   | 'moveClips'
   | 'trimClip'
+  | 'stretchClip'
   | 'slipClip'
   | 'cloneClipsForDrag'
   | 'splitAtPlayhead'
@@ -890,20 +894,29 @@ export function createClipsSlice(
             const endMs = clipEndMs(clip);
             const start = Math.min(proposed, endMs - MIN_CLIP_DURATION_MS);
             if (start === clip.timelineStartMs) return clip;
-            return {
-              ...clip,
-              timelineStartMs: start,
-              sourceInMs: 0,
-              sourceOutMs: (endMs - start) * clip.speed,
-            };
+            // Clip-local t = 0 moves with the left edge, so the animation moves
+            // the other way to stay on the frames it was authored on.
+            return shiftClipAnimation(
+              {
+                ...clip,
+                timelineStartMs: start,
+                sourceInMs: 0,
+                sourceOutMs: (endMs - start) * clip.speed,
+              },
+              clip.timelineStartMs - start,
+            );
           }
           const clamped = clamp(sourceIn, 0, clip.sourceOutMs - minSourceSpan);
           if (clamped === clip.sourceInMs) return clip;
-          return {
-            ...clip,
-            timelineStartMs: clip.timelineStartMs + (clamped - clip.sourceInMs) / clip.speed,
-            sourceInMs: clamped,
-          };
+          const shift = (clamped - clip.sourceInMs) / clip.speed;
+          return shiftClipAnimation(
+            {
+              ...clip,
+              timelineStartMs: clip.timelineStartMs + shift,
+              sourceInMs: clamped,
+            },
+            -shift,
+          );
         }
         let sourceOut = clip.sourceInMs + (timelineMs - clip.timelineStartMs) * clip.speed;
         // A still has no intrinsic duration: its clips stretch without bound.
@@ -915,6 +928,58 @@ export function createClipsSlice(
       const p = get().project;
       // Linked partners share the source geometry, so the same edit trims the
       // extracted audio in lockstep with the video (and vice versa).
+      const edits = new Map<string, (c: Clip) => Clip>([[clipId, edit]]);
+      for (const id of sourceLinkedIds(p, clipId)) edits.set(id, edit);
+      set({ project: patchClips(p, edits) });
+    },
+
+    stretchClip: (clipId, edge, timelineMs) => {
+      const p = get().project;
+      const found = findClip(p, clipId);
+      if (!found) return;
+      const base = found.clip;
+      const asset = get().assets[base.assetId];
+      // Only timed media has a rate to stretch. A still or a generated clip has
+      // no media clock behind it - its length is already free under a plain
+      // trim, and "playing it slower" would mean nothing.
+      if (base.kind !== 'media' || !asset || asset.kind === 'image') return;
+      // The source window is untouched: the whole of it still plays, the drag
+      // only decides how long that takes. Hence speed = source span / span
+      // asked for on the timeline.
+      const span = base.sourceOutMs - base.sourceInMs;
+      const wantedMs =
+        edge === 'right'
+          ? timelineMs - base.timelineStartMs
+          : clipEndMs(base) - Math.max(0, timelineMs);
+      const speed = clamp(
+        span / Math.max(wantedMs, MIN_CLIP_DURATION_MS),
+        MIN_CLIP_SPEED,
+        MAX_CLIP_SPEED,
+      );
+      if (speed === base.speed) return;
+      const edit = (clip: Clip): Clip => {
+        // Clip-local time is post-speed, so a rate change rescales everything
+        // measured in it: the keyframes, and the fade ramps, which keep
+        // covering the same stretch of media.
+        const factor = clip.speed / speed;
+        const dur = (clip.sourceOutMs - clip.sourceInMs) / speed;
+        // A left-edge stretch pins the clip's END - the media under the pointer
+        // stays where it is and the head moves, like a left trim.
+        const timelineStartMs =
+          edge === 'right' ? clip.timelineStartMs : Math.max(0, clipEndMs(clip) - dur);
+        return scaleClipAnimation(
+          {
+            ...clip,
+            speed,
+            timelineStartMs,
+            fadeInMs: Math.min(clip.fadeInMs * factor, dur),
+            fadeOutMs: Math.min(clip.fadeOutMs * factor, dur),
+          },
+          factor,
+        );
+      };
+      // Linked partners share the source geometry: the extracted audio has to
+      // take the same rate, or the sound drifts off the picture.
       const edits = new Map<string, (c: Clip) => Clip>([[clipId, edit]]);
       for (const id of sourceLinkedIds(p, clipId)) edits.set(id, edit);
       set({ project: patchClips(p, edits) });
@@ -1019,13 +1084,24 @@ export function createClipsSlice(
           for (const clip of track.clips) {
             if (!targetSet.has(clip.id)) continue;
             const splitSource = timelineToSourceMs(clip, currentTimeMs);
+            // Keyframes are clip-local, so each half keeps only the stretch of
+            // animation it actually covers - the right half rebased to its own
+            // start. Copying the whole animation to both halves would make each
+            // one replay the full move in its own, shorter span.
+            const cut = currentTimeMs - clip.timelineStartMs;
+            const durationMs = clipDurationMs(clip);
             const right: Clip = {
-              ...cloneClip(clip),
+              ...sliceClipAnimation(cloneClip(clip), cut, durationMs),
               id: uid('clip'),
               timelineStartMs: currentTimeMs,
               sourceInMs: splitSource,
               fadeInMs: 0,
             };
+            const left = sliceClipAnimation(cloneClip(clip), 0, cut);
+            if (left.animation) clip.animation = left.animation;
+            if (left.color) clip.color = left.color;
+            if (left.mask) clip.mask = left.mask;
+            if (left.redactions) clip.redactions = left.redactions;
             if (clip.linkId) {
               let nextLink = relink.get(clip.linkId);
               if (!nextLink) {

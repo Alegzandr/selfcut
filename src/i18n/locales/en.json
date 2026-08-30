@@ -433,6 +433,7 @@
   "shortcuts.edit.rangeSelect": "Select the range up to this clip",
   "shortcuts.edit.marquee": "Box-select clips and keyframes",
   "shortcuts.edit.slip": "Slip: slide the media inside the clip",
+  "shortcuts.edit.rateStretch": "Rate stretch (slow motion / fast forward)",
   "shortcuts.edit.rippleTrim": "Ripple trim (downstream clips follow)",
   "shortcuts.edit.rollEdit": "Roll the cut point (both clips)",
   "shortcuts.edit.selectAll": "Select every clip",

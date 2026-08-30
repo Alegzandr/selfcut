@@ -13,7 +13,7 @@ import { peaksJobKey, thumbnailsJobKey } from '../media/visualJobs';
 import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { clamp, formatTime } from '../lib/time';
-import { gainDb } from '../inspector/format';
+import { gainDb, speedX } from '../inspector/format';
 import { UNITY_FADER, gainToFader } from '../lib/gain';
 import { useVolumeEntry } from '../ui/VolumeEntry';
 import { useIsCoarsePointer } from '../lib/device';
@@ -301,7 +301,7 @@ export const ClipView = memo(function ClipView({
       {/* Speed / volume badge */}
       {(clip.speed !== 1 || clip.volume !== 1) && (
         <div className="pointer-events-none absolute right-1 top-0.5 rounded bg-black/60 px-1 text-4xs text-zinc-200">
-          {clip.speed !== 1 ? `${clip.speed}×` : ''}
+          {clip.speed !== 1 ? speedX(clip.speed) : ''}
           {clip.speed !== 1 && clip.volume !== 1 ? ' · ' : ''}
           {clip.volume !== 1 ? gainDb(clip.volume) : ''}
         </div>
