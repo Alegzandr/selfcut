@@ -114,6 +114,12 @@ test('J runs the transport backwards, with a picture', async ({ page }) => {
   // black is a decoder producing nothing at all rather than a slow machine.
   expect(probe.black).toBeLessThan(probe.frames / 4);
 
+  // The probe leaves the transport wherever the run got to - still going
+  // backwards, or already stopped at the origin - so park it before reading the
+  // ladder, which starts from a stopped transport.
+  await page.keyboard.press('k');
+  expect(await transport()).toMatchObject({ playing: false, playbackRate: 1 });
+
   // A second J doubles the reverse rate; K stops and puts the shuttle back to 1x.
   await seek(2500);
   await page.keyboard.press('j');
