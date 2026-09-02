@@ -50,3 +50,6 @@ export const PREVIEW_MUTED_KEY = 'selfcut.previewMuted';
 
 /** localStorage key for the persisted monitor guide overlay (safe zones, thirds…). */
 export const PREVIEW_GUIDES_KEY = 'selfcut.previewGuides';
+
+/** localStorage key for the persisted ripple scope (this track, or every track). */
+export const RIPPLE_ACROSS_TRACKS_KEY = 'selfcut.rippleAcrossTracks';

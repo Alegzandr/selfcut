@@ -203,6 +203,19 @@ function TimelineViewTools() {
 }
 
 /**
+ * The shuttle badge's text: "2×", "0.5×", "-2×".
+ *
+ * The magnitude is what gets the fractional treatment (a slow rung is 0.5 or
+ * 0.25, never 0.50) and the sign is carried in front of it, because a rate is
+ * signed by its direction of travel.
+ */
+function shuttleLabel(rate: number): string {
+  const speed = Math.abs(rate);
+  const shown = speed < 1 ? speed.toFixed(2).replace(/0$/, "") : String(speed);
+  return `${rate < 0 ? "-" : ""}${shown}×`;
+}
+
+/**
  * The transport is a pure *playback* control (back-to-start, play/pause,
  * timecode, loop), centred in the bar. Its right end carries the timeline's
  * view controls, which belong next to the timeline rather than in the top bar.
@@ -247,13 +260,12 @@ export function Transport() {
             ) : (
               <PlayIcon className="h-4 w-4 translate-x-px" />
             )}
-            {/* Shuttle badge: visible while J/L drive playback at a non-1× rate. */}
+            {/* Shuttle badge: visible while J/L drive playback at a non-1× rate,
+                and while J runs it backwards at any rate - "-1×" is the only
+                thing on screen that says the transport is in reverse. */}
             {playing && playbackRate !== 1 && (
               <span className="absolute -right-1.5 -top-1.5 rounded-full bg-brand-600 px-1 text-4xs font-bold leading-4 text-white">
-                {playbackRate < 1
-                  ? playbackRate.toFixed(2).replace(/0$/, "")
-                  : playbackRate}
-                ×
+                {shuttleLabel(playbackRate)}
               </span>
             )}
           </button>

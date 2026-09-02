@@ -30,6 +30,7 @@ const RENDER_SPECS = [
   /perf\.spec\.ts/,
   /playbackEdit\.spec\.ts/,
   /previewCuts\.spec\.ts/,
+  /reversePlay\.spec\.ts/,
   /transcode.*\.spec\.ts/,
   // Excluded from every default run (see EXCLUDED), but they render harder than
   // anything else here, so when PROBE=1 lets one through it belongs on the

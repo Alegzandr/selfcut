@@ -260,3 +260,31 @@ export function gapAt(track: Track, timeMs: number): TrackGap | null {
   if (!isFinite(nextStart) || nextStart - prevEnd <= 0) return null;
   return { startMs: prevEnd, endMs: nextStart };
 }
+
+/**
+ * The gap under `timeMs` across the WHOLE timeline: the span in which every
+ * unlocked track is empty, or null when any of them is playing something there
+ * (or when nothing follows on any of them).
+ *
+ * What "close the gap" means when the ripple runs on every track: the only span
+ * that can be taken out of the timeline without shoving one track's content
+ * over another's is the one where nothing at all is playing. Locked tracks are
+ * left out of the reckoning for the same reason they are left out of the
+ * shift - they are pinned, so what they hold is not the timeline's to close.
+ */
+export function timelineGapAt(project: Project, timeMs: number): TrackGap | null {
+  let prevEnd = 0;
+  let nextStart = Infinity;
+  for (const track of project.tracks) {
+    if (track.locked) continue;
+    for (const clip of track.clips) {
+      const start = clip.timelineStartMs;
+      const end = clipEndMs(clip);
+      if (start <= timeMs && end > timeMs) return null;
+      if (end <= timeMs) prevEnd = Math.max(prevEnd, end);
+      else nextStart = Math.min(nextStart, start);
+    }
+  }
+  if (!isFinite(nextStart) || nextStart - prevEnd <= 0) return null;
+  return { startMs: prevEnd, endMs: nextStart };
+}

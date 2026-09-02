@@ -5,6 +5,7 @@ import { EASE_IDS } from '../model';
 import { focusIsKeyboardDriven } from '../lib/focusModality';
 import { openProject, saveProject } from './projectActions';
 import { PLAYBACK_SKIP_BACK_MS, PLAYBACK_SKIP_FORWARD_MS } from '../app/config';
+import { shuttleStep } from '../lib/shuttle';
 
 /**
  * Jump to the previous/next edit point (clip edges, markers, region corners,
@@ -58,6 +59,21 @@ function trimSelectedToPlayhead(edge: 'left' | 'right') {
 function stepBy(ms: number) {
   const s = useStore.getState();
   s.seek(s.currentTimeMs + ms);
+}
+
+/**
+ * One press of J (-1) or L (1): take the ladder's next rung and run.
+ *
+ * The rate is set before the transport starts, so the engine's first tick after
+ * the press already anchors itself on the direction that was asked for - a play
+ * that started forwards and turned round a frame later is a jump backwards on
+ * screen and a click in the sound.
+ */
+function shuttle(dir: -1 | 1) {
+  const s = useStore.getState();
+  const next = shuttleStep(s.playbackRate, s.playing, dir);
+  s.setPlaybackRate(next.rate);
+  if (next.playing !== s.playing) s.setPlaying(next.playing);
 }
 
 /** One frame of the timeline, in ms - at the footage's rate, not the project ceiling. */
@@ -470,10 +486,11 @@ export function useEditorHotkeys() {
         case 'z':
           s.setPreviewTool('zoom');
           return;
+        // J and L are one ladder read in two directions (see `shuttleStep`):
+        // J plays backwards, L forwards, and each pressed against the current
+        // direction of travel slows the transport down before turning it round.
         case 'j':
-          // Playing: halve the shuttle rate (slow review). Paused: step back 1s.
-          if (s.playing) s.setPlaybackRate(s.playbackRate / 2);
-          else stepBy(-1000);
+          shuttle(-1);
           return;
         case 'k':
           // Always stops AND drops the shuttle back to 1x, as in Premiere and
@@ -482,9 +499,7 @@ export function useEditorHotkeys() {
           s.setPlaying(false);
           return;
         case 'l':
-          // First press plays at 1×, repeats double the shuttle rate (up to 8×).
-          if (!s.playing) s.setPlaying(true);
-          else s.setPlaybackRate(s.playbackRate < 1 ? 1 : s.playbackRate * 2);
+          shuttle(1);
           return;
       }
     };
