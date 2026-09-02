@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -65,6 +65,7 @@ function VolumeEntryPanel({
 }) {
   const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const db = gainToDb(gain);
   const [text, setText] = useState(isFinite(db) ? String(Math.round(db * 10) / 10) : String(MIN_DB));
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -80,12 +81,42 @@ function VolumeEntryPanel({
     });
   }, [x, y]);
 
+  // Focus once the panel is placed and visible. `autoFocus` cannot do it: the
+  // element is mounted hidden (see the `visibility` below) and a hidden
+  // element refuses focus, which left the field unfocused, so neither blur nor
+  // Escape ever reached it and the panel stayed on screen for good.
+  useEffect(() => {
+    if (pos) inputRef.current?.focus();
+  }, [pos]);
+
+  // The outside press and the blur it causes both commit: only the first counts,
+  // or the gain would land twice on the undo stack.
+  const done = useRef(false);
   const commit = () => {
+    if (done.current) return;
+    done.current = true;
     // Comma is the decimal separator on most of the locales we ship.
     const v = parseFloat(text.replace(',', '.'));
     if (isFinite(v)) onCommit(dbToGain(Math.min(maxDb, v)));
     onClose();
   };
+
+  // A press anywhere outside applies and closes, Escape anywhere discards -
+  // whether or not the field ever held focus. Same contract as a menu panel.
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) commit();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  });
 
   return createPortal(
     <div
@@ -101,9 +132,9 @@ function VolumeEntryPanel({
     >
       <div className="flex items-center gap-1.5">
         <input
+          ref={inputRef}
           type="number"
           inputMode="decimal"
-          autoFocus
           min={MIN_DB}
           max={maxDb}
           step={0.1}

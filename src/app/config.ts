@@ -112,14 +112,15 @@ export const TRACK_HEIGHT_PX = 64;
 export const MIN_TRACK_HEIGHT_PX = 36;
 export const MAX_TRACK_HEIGHT_PX = 160;
 /** Width of the fixed track-header pane (desktop: sliders + meter; coarse: buttons only). */
-export const TRACK_HEADER_WIDTH_PX = 168;
+export const TRACK_HEADER_WIDTH_PX = 192;
 export const TRACK_HEADER_WIDTH_COARSE_PX = 44;
 /**
  * Resize bounds for the header pane. MIN fits the header's identity line whole
- * - chevron, name, three toggles, overflow - with a couple of characters left
- * for the name; MAX stops the pane from eating the timeline on a narrow window.
+ * - chevron, name, four toggles (mute, solo, hide, lock), overflow - with a
+ * few characters left for a track's own name; MAX stops the pane from eating
+ * the timeline on a narrow window.
  */
-export const MIN_TRACK_HEADER_WIDTH_PX = 136;
+export const MIN_TRACK_HEADER_WIDTH_PX = 152;
 export const MAX_TRACK_HEADER_WIDTH_PX = 360;
 
 /** Docked side panels (desktop): default width and resize bounds. */

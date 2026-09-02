@@ -1,6 +1,6 @@
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny';
 import type { Clip, Project } from '../types';
-import { isTextClip, shouldBlendFrames, timelineToSourceMs } from '../model';
+import { isTextClip, isTrackVisible, shouldBlendFrames, timelineToSourceMs } from '../model';
 import { drawClip, forEachVisibleVideoClip, invalidateResampling } from '../preview/compositor';
 import { syncLuts } from '../preview/colorPass';
 import { loadFonts } from '../lib/fonts';
@@ -163,7 +163,7 @@ export class FrameRenderer {
     for (let t = project.tracks.length - 1; t >= 0; t--) {
       const track = project.tracks[t]!;
       const alphaMul = track.opacity ?? 1;
-      if (alphaMul <= 0) continue;
+      if (alphaMul <= 0 || !isTrackVisible(track, project)) continue;
       forEachVisibleVideoClip(track, tMs, (clip, xfadeInMs) => {
         layers.push({ clip, xfadeInMs, alphaMul, sample: null });
       });

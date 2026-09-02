@@ -7,6 +7,7 @@ import {
   ChevronLeftIcon,
   FrameIcon,
   CircleIcon,
+  GridIcon,
   Pencil1Icon,
   SquareIcon,
   TrashIcon,
@@ -16,6 +17,7 @@ import {
 import { useStore, getSelectedClip, getSelectedTrackKind, getLinkTargets } from '../store/store';
 import { useIsCoarsePointer } from '../lib/device';
 import { useEditorCommands } from './commands';
+import { PREVIEW_GUIDE_MODES } from '../preview/guides';
 
 /**
  * CapCut-style bottom bar (touch only). It is a persistent flow element - the
@@ -177,7 +179,8 @@ function PreviewRail({ onBack }: { onBack: () => void }) {
   const previewTool = useStore((s) => s.previewTool);
   const shapeKind = useStore((s) => s.previewShapeKind);
   const hasSelection = useStore((s) => s.selectedClipId !== null);
-  const { setPreviewTool, setPreviewShapeKind } = useStore.getState();
+  const guides = useStore((s) => s.previewGuides);
+  const { setPreviewTool, setPreviewShapeKind, setPreviewGuides } = useStore.getState();
 
   const shapes = [
     { kind: 'rect' as const, icon: SquareIcon, labelKey: 'preview.shape.rect' as ParseKeys },
@@ -220,6 +223,18 @@ function PreviewRail({ onBack }: { onBack: () => void }) {
           }}
         />
       ))}
+      {/* Guides cycle on a tap: off, safe, thirds, the platform's chrome. The
+          tile names the mode it is showing, so a cycle reads as a state. */}
+      <RailTile
+        icon={GridIcon}
+        label={t(`preview.guides.${guides}` as ParseKeys)}
+        active={guides !== 'off'}
+        onClick={() =>
+          setPreviewGuides(
+            PREVIEW_GUIDE_MODES[(PREVIEW_GUIDE_MODES.indexOf(guides) + 1) % PREVIEW_GUIDE_MODES.length]!,
+          )
+        }
+      />
       {/* A mask belongs to a clip, so this one is dead without a selection -
           same rule the desktop pen button follows. */}
       <RailTile

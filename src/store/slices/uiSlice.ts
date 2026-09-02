@@ -24,6 +24,7 @@ import {
   PREVIEW_VOLUME_KEY,
   PREVIEW_MUTED_KEY,
   SCOPES_MODE_KEY,
+  PREVIEW_GUIDES_KEY,
   PREVIEW_BACKGROUND_KEY,
 } from '../constants';
 
@@ -100,6 +101,8 @@ export function createUiSlice(
   | 'resetPreviewView'
   | 'setPreviewResolution'
   | 'setScopesMode'
+  | 'setRenamingTrack'
+  | 'setPreviewGuides'
   | 'setPreviewBackground'
   | 'setCurrentProjectId'
   | 'setProjects'
@@ -220,6 +223,16 @@ export function createUiSlice(
       if (get().contextMenu) set({ contextMenu: null });
     },
     setRenamingMarker: (markerId) => set({ renamingMarkerId: markerId }),
+    setRenamingTrack: (trackId) => set({ renamingTrackId: trackId }),
+    setPreviewGuides: (mode) => {
+      if (get().previewGuides === mode) return;
+      try {
+        localStorage.setItem(PREVIEW_GUIDES_KEY, mode);
+      } catch {
+        /* private mode / no storage - the choice just won't persist */
+      }
+      set({ previewGuides: mode });
+    },
     setTrackSettingsTrack: (trackId) => set({ trackSettingsTrackId: trackId }),
 
     requestConfirm: (options) =>

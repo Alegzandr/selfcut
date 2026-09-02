@@ -6,6 +6,8 @@ import {
   shouldBlendFrames,
   delegatedLinkIds,
   isTextClip,
+  isTrackAudible,
+  isTrackVisible,
   outputDimensions,
   projectDurationMs,
   timelineToSourceMs,
@@ -438,7 +440,7 @@ export class PlaybackEngine {
     const until = tMs + AUDIO_PREFETCH_AHEAD_MS * (this.wasPlaying ? this.rate : 1);
     const delegated = delegatedLinkIds(state.project);
     for (const track of state.project.tracks) {
-      if (track.muted) continue;
+      if (!isTrackAudible(track, state.project)) continue;
       for (const clip of track.clips) {
         // A linked video clip delegates its sound to its audio partners and is
         // never scheduled (see audioMix): decoding its primary track here would
@@ -695,7 +697,7 @@ export class PlaybackEngine {
     for (let t = tracks.length - 1; t >= 0; t--) {
       const track = tracks[t]!;
       const alphaMul = track.opacity ?? 1;
-      if (alphaMul <= 0) continue;
+      if (alphaMul <= 0 || !isTrackVisible(track, state.project)) continue;
       forEachVisibleVideoClip(track, tMs, (clip, xfadeInMs) => {
         let sample: DrawableFrame | null = null;
         if (clip.kind === 'media') {
@@ -814,7 +816,7 @@ export class PlaybackEngine {
     const candidates = this.prewarmScratch;
     candidates.length = 0;
     for (const track of state.project.tracks) {
-      if ((track.opacity ?? 1) <= 0) continue;
+      if ((track.opacity ?? 1) <= 0 || !isTrackVisible(track, state.project)) continue;
       forEachUpcomingVideoClip(track, tMs, lead, (clip) => {
         if (clip.kind !== 'media') return;
         const asset = state.assets[clip.assetId];
@@ -887,7 +889,7 @@ export class PlaybackEngine {
     const room = Math.min(PREWARM_MAX_CLIPS, this.cursorCap() - this.cursors.size);
     const wanted = new Set<string>();
     for (const track of state.project.tracks) {
-      if ((track.opacity ?? 1) <= 0) continue;
+      if ((track.opacity ?? 1) <= 0 || !isTrackVisible(track, state.project)) continue;
       forEachVisibleVideoClip(track, timelineMs, (clip) => {
         if (clip.kind !== 'media') return;
         const asset = state.assets[clip.assetId];

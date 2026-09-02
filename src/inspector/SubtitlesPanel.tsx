@@ -9,7 +9,7 @@ import {
   TextIcon,
   TrashIcon,
 } from "@radix-ui/react-icons";
-import { useStore } from "../store/store";
+import { useStore, getTimelineFps } from "../store/store";
 import { Tooltip } from "../ui/Tooltip";
 import { openSubtitlePicker } from "../ui/mediaPicker";
 import { useImport } from "../ui/useImport";
@@ -531,7 +531,7 @@ function CueTime({
   onCommit: (ms: number) => void;
 }) {
   const { t } = useTranslation();
-  const fps = useStore((s) => s.project.fps);
+  const fps = useStore(getTimelineFps);
   const [draft, setDraft] = useState<string | null>(null);
   const [invalid, setInvalid] = useState(false);
 

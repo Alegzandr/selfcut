@@ -5,6 +5,7 @@ import {
   delegatedLinkIds,
   hasVelocity,
   isGeneratedClip,
+  isTrackAudible,
   trackCrossfades,
 } from '../model';
 import type { AudioSegment } from '../media/audioSegments';
@@ -89,7 +90,7 @@ export class MixScheduler {
     const delegated = delegatedLinkIds(project);
 
     for (const track of project.tracks) {
-      if (track.muted) continue;
+      if (!isTrackAudible(track, project)) continue;
       const trackVolume = track.volume ?? 1;
       if (trackVolume <= 0) continue;
       const xfades = trackCrossfades(track.clips);
@@ -343,6 +344,7 @@ export function sameAudioMix(a: Project, b: Project): boolean {
       ta.id !== tb.id ||
       ta.kind !== tb.kind ||
       !!ta.muted !== !!tb.muted ||
+      !!ta.solo !== !!tb.solo ||
       (ta.volume ?? 1) !== (tb.volume ?? 1) ||
       ta.clips.length !== tb.clips.length
     ) {

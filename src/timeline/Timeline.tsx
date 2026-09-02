@@ -476,7 +476,18 @@ export function Timeline() {
                 if (coarse || (bg.dataset.rowbg === undefined && bg.dataset.clipLane === undefined))
                   return;
                 e.preventDefault();
-                useStore.getState().openContextMenu(e.clientX, e.clientY, { kind: 'timeline' });
+                // The spot pressed: the menu offers to close the gap under it.
+                const rowsEl = e.currentTarget as HTMLElement;
+                const content = timelineContentEl(rowsEl);
+                const s = useStore.getState();
+                const tops = trackTops(s.project.tracks, s.trackHeightPx, new Set(s.expandedTrackIds));
+                const row = trackIndexAtY(tops, e.clientY - rowsEl.getBoundingClientRect().top);
+                const track = s.project.tracks[row];
+                useStore.getState().openContextMenu(e.clientX, e.clientY, {
+                  kind: 'timeline',
+                  trackId: track?.id,
+                  timeMs: content ? Math.max(0, msFromContentX(content, e.clientX)) : undefined,
+                });
               }}
             >
               {project.tracks.map((track) => (

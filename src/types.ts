@@ -55,12 +55,21 @@ export interface ProjectSummary {
   updatedAt?: number;
 }
 
+/**
+ * Marker colours, the way every NLE lets a cut room sort its cues (notes for
+ * the client, music hits, b-roll wanted…). `cyan` is the default and is what a
+ * marker without a colour renders as.
+ */
+export type MarkerColor = 'cyan' | 'red' | 'amber' | 'green' | 'violet' | 'pink';
+
 /** A named point on the timeline (cue). */
 export interface Marker {
   id: string;
   timeMs: number;
   /** Empty label: the marker shows its number only. */
   label: string;
+  /** Absent on markers saved before colours existed: renders as `cyan`. */
+  color?: MarkerColor;
 }
 
 /**
@@ -76,8 +85,21 @@ export interface Track {
   id: string;
   kind: 'video' | 'audio';
   clips: Clip[];
+  /**
+   * User-given name ("VO", "Music", "B-roll"). Absent: the header shows the
+   * positional "V1" / "A2" every NLE falls back to.
+   */
+  name?: string;
   muted?: boolean;
   hidden?: boolean;
+  /**
+   * Solo: while any track of a kind is soloed, only the soloed tracks of that
+   * kind play (audio) or show (video). A monitoring state like mute and hide,
+   * and like them saved with the project, so a cut reopens the way it was
+   * being listened to. Resolved by `isTrackAudible` / `isTrackVisible`, never
+   * read raw by the mix or the compositor.
+   */
+  solo?: boolean;
   /**
    * Locked tracks still play and export; their clips just cannot be selected,
    * so nothing can move, trim or delete them. Enforced in the selection slice
