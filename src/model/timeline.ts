@@ -1,4 +1,7 @@
-import { AspectRatio, Clip, Marker, Project } from '../types';
+import { AspectRatio, Clip, Marker, MarkerColor, MediaAsset, Project, Track } from '../types';
+
+/** Every marker colour, in the order the colour menu lists them. */
+export const MARKER_COLORS: readonly MarkerColor[] = ['cyan', 'red', 'amber', 'green', 'violet', 'pink'];
 import { clipDurationMs, clipEndMs, isTextClip } from './clip';
 
 /**
@@ -129,4 +132,131 @@ export function supersededCueIds(project: Project, fromMs: number, toMs: number)
     .flatMap((track) => track.clips)
     .filter((clip) => clip.timelineStartMs < toMs && clipEndMs(clip) > fromMs)
     .map((clip) => clip.id);
+}
+
+/**
+ * Frame rates the timeline counts in. The measured source rate is snapped to
+ * the nearest rung, so 29.97 footage steps and reads as 30 and 23.976 as 24:
+ * the drift over a frame is far below what a preview can show, and a timecode
+ * that counts "23.976 frames" a second is one nobody can type back in.
+ */
+const TIMELINE_FPS_LADDER = [24, 25, 30, 50, 60, 100, 120] as const;
+
+interface TimelineFpsEntry {
+  assets: Record<string, MediaAsset>;
+  fps: number;
+}
+const timelineFpsCache = new WeakMap<Project, TimelineFpsEntry>();
+
+/**
+ * The frame rate the timeline is edited at: the fastest measured source rate
+ * among the video clips on it, snapped to the ladder above, or the project's
+ * own (60) when nothing on the timeline states one.
+ *
+ * Every frame-sized gesture reads this - arrow-key stepping, the nudge keys,
+ * the transport's frame counter, the ruler's fine ticks, the scrub's frame
+ * quantization. The project rate is a rendering ceiling, not a frame: stepping
+ * 30 fps footage by 1/60 s shows every frame twice and counts to 59 on a clock
+ * whose picture only ever changes 30 times, which is the one thing a monteur
+ * cannot work with.
+ *
+ * Memoized per project identity (the assets map is compared by reference too,
+ * since a probe landing a frame rate replaces the map): the readout asks 60
+ * times a second during playback.
+ */
+export function timelineFps(project: Project, assets: Record<string, MediaAsset>): number {
+  const cached = timelineFpsCache.get(project);
+  if (cached && cached.assets === assets) return cached.fps;
+  let fastest = 0;
+  for (const track of project.tracks) {
+    if (track.kind !== 'video') continue;
+    for (const clip of track.clips) {
+      if (clip.kind !== 'media') continue;
+      const fps = assets[clip.assetId]?.fps;
+      if (fps && fps > fastest) fastest = fps;
+    }
+  }
+  const fps =
+    fastest > 0
+      ? TIMELINE_FPS_LADDER.reduce((best, rate) =>
+          Math.abs(rate - fastest) < Math.abs(best - fastest) ? rate : best,
+        )
+      : project.fps;
+  timelineFpsCache.set(project, { assets, fps });
+  return fps;
+}
+
+interface SoloState {
+  audio: boolean;
+  video: boolean;
+}
+const soloCache = new WeakMap<Project, SoloState>();
+
+/** Whether any track of each kind is soloed - the switch that arms solo at all. */
+function soloState(project: Project): SoloState {
+  const cached = soloCache.get(project);
+  if (cached) return cached;
+  const state: SoloState = { audio: false, video: false };
+  for (const track of project.tracks) {
+    if (track.solo) state[track.kind] = true;
+  }
+  soloCache.set(project, state);
+  return state;
+}
+
+/**
+ * Whether a track's sound reaches the mix: not muted, and - while any AUDIO
+ * track is soloed - soloed itself. Solo is scoped to the audio lanes: soloing a
+ * video track to check its picture must not silence the voice-over under it,
+ * and a video track's own sound (an unlinked clip with audio) keeps playing
+ * against a soloed audio lane only if it is soloed too.
+ */
+export function isTrackAudible(track: Track, project: Project): boolean {
+  if (track.muted) return false;
+  if (!soloState(project).audio) return true;
+  return !!track.solo;
+}
+
+/**
+ * Whether a video track is composited: not hidden, and - while any VIDEO track
+ * is soloed - soloed itself. Non-video tracks are never visible.
+ */
+export function isTrackVisible(track: Track, project: Project): boolean {
+  if (track.kind !== 'video' || track.hidden) return false;
+  if (!soloState(project).video) return true;
+  return !!track.solo;
+}
+
+/**
+ * Whether a track is currently silenced or hidden BY SOMEONE ELSE'S solo - the
+ * state the timeline dims a row for, so a lane that went quiet says why.
+ */
+export function isTrackSoloedOut(track: Track, project: Project): boolean {
+  const solo = soloState(project);
+  return !track.solo && (track.kind === 'audio' ? solo.audio : solo.video);
+}
+
+/** An empty span on a track, between the clip before it and the clip after it. */
+export interface TrackGap {
+  startMs: number;
+  endMs: number;
+}
+
+/**
+ * The gap on a track under `timeMs`, or null when a clip covers that instant or
+ * when nothing follows it (the empty run after the last clip is not a gap to
+ * close, it is the end of the cut).
+ */
+export function gapAt(track: Track, timeMs: number): TrackGap | null {
+  let prevEnd = 0;
+  let nextStart = Infinity;
+  for (const clip of track.clips) {
+    const start = clip.timelineStartMs;
+    const end = clipEndMs(clip);
+    if (start <= timeMs && end > timeMs) return null;
+    if (end <= timeMs) prevEnd = Math.max(prevEnd, end);
+    else nextStart = Math.min(nextStart, start);
+  }
+  if (!isFinite(nextStart) || nextStart - prevEnd <= 0) return null;
+  return { startMs: prevEnd, endMs: nextStart };
 }

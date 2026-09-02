@@ -9,6 +9,12 @@ import {
   ChatBubbleIcon,
   CheckboxIcon,
   ClipboardIcon,
+  ColumnSpacingIcon,
+  DoubleArrowRightIcon,
+  GridIcon,
+  PinRightIcon,
+  TrackNextIcon,
+  WidthIcon,
   CopyIcon,
   CursorArrowIcon,
   DiscIcon,
@@ -50,7 +56,7 @@ import {
   ZoomOutIcon,
 } from '@radix-ui/react-icons';
 import { useStore, getSelectedClip, getSelectedTrackKind, getLinkTargets } from '../store/store';
-import { defaultRedaction, isTextClip } from '../model';
+import { defaultRedaction, isTextClip, sortedMarkers } from '../model';
 import type { LibraryTab } from '../store/editorState';
 import { useImport } from './useImport';
 import { openMediaPicker, openSubtitlePicker } from './mediaPicker';
@@ -61,7 +67,8 @@ import { unbindProjectFile } from '../lib/projectFile';
 import { applyPresetToClips, exportClipPreset, importPreset } from './presetActions';
 import { clipDisplayName } from './clipName';
 import { t } from '../i18n';
-import { zoomAtPlayhead } from '../timeline/zoom';
+import { zoomAtPlayhead, zoomToFit } from '../timeline/zoom';
+import { PREVIEW_GUIDE_MODES } from '../preview/guides';
 import { isViewReset } from '../preview/view';
 
 /**
@@ -144,6 +151,8 @@ export function useEditorCommands(): Record<string, Command> {
     s.project.tracks.some((track) => track.clips.some(isTextClip)),
   );
   const libraryTab = useStore((s) => s.libraryTab);
+  const previewGuides = useStore((s) => s.previewGuides);
+  const hasMarkers = useStore((s) => s.project.markers.length > 0);
 
   const st = useStore.getState;
 
@@ -162,6 +171,17 @@ export function useEditorCommands(): Record<string, Command> {
     const showing = st().inspectorTab === 'subtitles';
     st().setInspectorTab(showing ? 'clip' : 'subtitles');
     st().setInspectorOpen(!showing);
+  };
+
+  /** Cue to the next / previous marker (the keyboard's Shift+M pair). */
+  const jumpMarker = (dir: -1 | 1) => {
+    const s = st();
+    const markers = sortedMarkers(s.project);
+    const target =
+      dir === 1
+        ? markers.find((m) => m.timeMs > s.currentTimeMs + 1)
+        : [...markers].reverse().find((m) => m.timeMs < s.currentTimeMs - 1);
+    if (target) s.seek(target.timeMs);
   };
 
   const list: Command[] = [
@@ -231,7 +251,14 @@ export function useEditorCommands(): Record<string, Command> {
     { id: 'edit.cut', labelKey: 'menu.edit.cut', icon: ScissorsIcon, shortcut: 'Ctrl+X', disabled: !hasSelection, onClick: () => st().cutClips(st().selectedClipIds) },
     { id: 'edit.copy', labelKey: 'menu.edit.copy', icon: CopyIcon, shortcut: 'Ctrl+C', disabled: !hasSelection, onClick: () => st().copyClips(st().selectedClipIds) },
     { id: 'edit.paste', labelKey: 'menu.edit.paste', icon: ClipboardIcon, shortcut: 'Ctrl+V', disabled: !hasClipboard, onClick: () => st().pasteAtPlayhead() },
+    // Insert rather than overlap: what was at the playhead slides right to
+    // make room, the Vegas "Paste Insert" and Premiere's plain paste.
+    { id: 'edit.pasteInsert', labelKey: 'menu.edit.pasteInsert', hintKey: 'menu.edit.pasteInsert.hint', icon: PinRightIcon, shortcut: 'Ctrl+Shift+V', disabled: !hasClipboard, onClick: () => st().pasteInsertAtPlayhead() },
+    // The empty space under the playhead, on every track that has one there:
+    // the cut-room move after a plain delete left a hole.
+    { id: 'edit.closeGap', labelKey: 'menu.edit.closeGap', hintKey: 'menu.edit.closeGap.hint', icon: ColumnSpacingIcon, shortcut: 'Ctrl+Backspace', onClick: () => st().closeGapsAtPlayhead() },
     { id: 'edit.selectAll', labelKey: 'menu.edit.selectAll', icon: CheckboxIcon, shortcut: 'Ctrl+A', onClick: () => st().selectAllClips() },
+    { id: 'edit.selectForward', labelKey: 'menu.edit.selectForward', hintKey: 'menu.edit.selectForward.hint', icon: DoubleArrowRightIcon, shortcut: 'Ctrl+Shift+A', onClick: () => st().selectClipsAfterPlayhead() },
     { id: 'edit.preferences', labelKey: 'menu.edit.preferences', icon: GearIcon, onClick: () => st().setPreferencesOpen(true) },
 
     // ── Insert ────────────────────────────────────────────────────────────
@@ -298,6 +325,15 @@ export function useEditorCommands(): Record<string, Command> {
     // ── View ──────────────────────────────────────────────────────────────
     { id: 'view.zoomIn', labelKey: 'menu.view.zoomIn', icon: ZoomInIcon, shortcut: '+', onClick: () => zoomAtPlayhead(1.25) },
     { id: 'view.zoomOut', labelKey: 'menu.view.zoomOut', icon: ZoomOutIcon, shortcut: '−', onClick: () => zoomAtPlayhead(1 / 1.25) },
+    { id: 'view.zoomFit', labelKey: 'menu.view.zoomFit', icon: WidthIcon, shortcut: 'Shift+Z', onClick: () => zoomToFit() },
+    // The monitor's guide overlays: a radio group like the preview tools.
+    ...PREVIEW_GUIDE_MODES.map((mode): Command => ({
+      id: `view.guides.${mode}`,
+      labelKey: `preview.guides.${mode}` as ParseKeys,
+      icon: GridIcon,
+      checked: previewGuides === mode,
+      onClick: () => st().setPreviewGuides(mode),
+    })),
     { id: 'view.subtitles', labelKey: 'menu.view.subtitles', icon: ChatBubbleIcon, checked: inspectorTab === 'subtitles', onClick: () => toggleSubtitlesPane() },
     // The library's three bins. Desktop docks the column permanently, so these
     // only pick a tab; on mobile they also raise the drawer that holds it.
@@ -312,6 +348,8 @@ export function useEditorCommands(): Record<string, Command> {
     { id: 'playback.loop', labelKey: 'menu.playback.loop', icon: LoopIcon, shortcut: 'Q', checked: loopEnabled, onClick: () => st().toggleLoopEnabled() },
     { id: 'playback.regionIn', labelKey: 'menu.playback.regionIn', icon: SewingPinIcon, shortcut: 'I', onClick: () => st().setRegionEdgeAtPlayhead('in') },
     { id: 'playback.regionOut', labelKey: 'menu.playback.regionOut', icon: SewingPinIcon, shortcut: 'O', onClick: () => st().setRegionEdgeAtPlayhead('out') },
+    { id: 'playback.nextMarker', labelKey: 'menu.playback.nextMarker', icon: TrackNextIcon, shortcut: 'Shift+M', disabled: !hasMarkers, onClick: () => jumpMarker(1) },
+    { id: 'playback.prevMarker', labelKey: 'menu.playback.prevMarker', icon: TrackPreviousIcon, shortcut: 'Ctrl+Shift+M', disabled: !hasMarkers, onClick: () => jumpMarker(-1) },
 
     // ── Help ──────────────────────────────────────────────────────────────
     { id: 'help.shortcuts', labelKey: 'menu.help.shortcuts', icon: KeyboardIcon, shortcut: '?', onClick: () => st().setShortcutsOpen(true) },

@@ -16,6 +16,8 @@ export function createTracksSlice(
   | 'toggleTrackMuted'
   | 'toggleTrackHidden'
   | 'toggleTrackLocked'
+  | 'toggleTrackSolo'
+  | 'renameTrack'
   | 'toggleTrackExpanded'
 > {
   return {
@@ -76,6 +78,21 @@ export function createTracksSlice(
       const ids = get().selectedClipIds.filter((id) => !locked.has(id));
       if (ids.length !== get().selectedClipIds.length) get().setSelectedClips(ids);
     },
+
+    toggleTrackSolo: (trackId) =>
+      withHistory((p) => {
+        const track = p.tracks.find((tr) => tr.id === trackId);
+        if (track) track.solo = !track.solo;
+      }),
+
+    renameTrack: (trackId, name) =>
+      withHistory((p) => {
+        const track = p.tracks.find((tr) => tr.id === trackId);
+        if (!track) return;
+        const trimmed = name.trim();
+        if (trimmed) track.name = trimmed;
+        else delete track.name;
+      }),
 
     updateTrack: (trackId, patch) => {
       const p = get().project;

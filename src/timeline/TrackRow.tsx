@@ -1,7 +1,8 @@
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Track } from '../types';
-import { trackCrossfades } from '../model';
+import { isTrackSoloedOut, trackCrossfades } from '../model';
+import { trackDisplayName } from './trackName';
 import { ClipView } from './ClipView';
 import { useStore } from '../store/store';
 import { TrackKeyframeLanes } from './TrackKeyframeLanes';
@@ -23,13 +24,18 @@ export const TrackRow = memo(function TrackRow({ track, ordinal, pxPerMs }: Prop
   const xfades = trackCrossfades(track.clips);
   const baseHeightPx = useStore((s) => s.trackHeightPx);
   const expanded = useStore((s) => s.expandedTrackIds.includes(track.id));
+  const soloedOut = useStore((s) => isTrackSoloedOut(track, s.project));
   const rowHeight = trackRowHeightPx(track, baseHeightPx, expanded);
 
   // "Video track 2, muted, locked" - the row's name plus its toggled states,
   // so a screen reader hears why the clips inside refuse to change.
+  const kindLabel = t(track.kind === 'video' ? 'a11y.track.video' : 'a11y.track.audio', { n: ordinal });
   const rowLabel = [
-    t(track.kind === 'video' ? 'a11y.track.video' : 'a11y.track.audio', { n: ordinal }),
+    // A named lane reads as "Music (audio track 2)": the name first, the
+    // position kept so the count still matches the header.
+    track.name ? `${trackDisplayName(track, ordinal, t)} (${kindLabel})` : kindLabel,
     track.muted ? t('a11y.track.state.muted') : null,
+    track.solo ? t('a11y.track.state.solo') : null,
     track.hidden ? t('a11y.track.state.hidden') : null,
     track.locked ? t('a11y.track.state.locked') : null,
   ]
@@ -40,7 +46,7 @@ export const TrackRow = memo(function TrackRow({ track, ordinal, pxPerMs }: Prop
     <div
       role="listitem"
       aria-label={rowLabel}
-      className={`relative border-b border-zinc-800/80 ${track.hidden ? 'opacity-40' : ''}`}
+      className={`relative border-b border-zinc-800/80 ${track.hidden || soloedOut ? 'opacity-40' : ''}`}
       style={{ height: rowHeight }}
       data-rowbg
       data-track-id={track.id}

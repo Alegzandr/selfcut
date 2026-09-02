@@ -8,7 +8,12 @@ export function createSelectionSlice(
   _helpers: SliceHelpers,
 ): Pick<
   EditorState,
-  'selectClip' | 'selectAllClips' | 'toggleSelectClip' | 'setSelectedClips' | 'selectClipRange'
+  | 'selectClip'
+  | 'selectAllClips'
+  | 'selectClipsAfterPlayhead'
+  | 'toggleSelectClip'
+  | 'setSelectedClips'
+  | 'selectClipRange'
 > {
   /**
    * The single gate a locked track needs: every edit path (delete, nudge, drag,
@@ -43,6 +48,22 @@ export function createSelectionSlice(
     selectAllClips: () => {
       const ids = selectable(get().project.tracks.flatMap((t) => t.clips.map((c) => c.id)));
       set({ selectedClipIds: ids, selectedClipId: ids[ids.length - 1] ?? null });
+    },
+
+    selectClipsAfterPlayhead: () => {
+      const { project, currentTimeMs } = get();
+      const ids = selectable(
+        project.tracks.flatMap((t) =>
+          t.clips.filter((c) => clipEndMs(c) > currentTimeMs).map((c) => c.id),
+        ),
+      );
+      set({
+        selectedClipIds: ids,
+        selectedClipId: ids[ids.length - 1] ?? null,
+        cropEditing: false,
+        selectedRedactionId: null,
+        ...(ids.length === 0 ? { inspectorOpen: false } : {}),
+      });
     },
 
     toggleSelectClip: (id) => {

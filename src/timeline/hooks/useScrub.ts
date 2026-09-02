@@ -13,11 +13,11 @@
  * seek already do, and what a monteur expects coming from Premiere or CapCut.
  */
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
-import { useStore } from '../../store/store';
+import { useStore, getTimelineFps } from '../../store/store';
 import { msFromContentX, timelineContentEl } from '../coords';
 import { collectSnapPoints, snapTime } from '../snapping';
 import { hapticOnSnap, type SnapHapticState } from '../../lib/haptics';
-import { FRAME_MS, SNAP_THRESHOLD_PX } from '../../app/config';
+import { SNAP_THRESHOLD_PX } from '../../app/config';
 
 /** Distance from the scroller edge where autoscroll kicks in, and its per-frame cap. */
 const EDGE_PX = 40;
@@ -71,7 +71,10 @@ function seekTimeAt(
   const snapActive = shiftKey ? !state.snapEnabled : state.snapEnabled;
   const thresholdMs = snapActive ? SNAP_THRESHOLD_PX / (state.pxPerSec / 1000) : 0;
   const snapped = hapticOnSnap(raw, snapTime(raw, points, thresholdMs), haptics);
-  return snapped === raw ? Math.round(raw / FRAME_MS) * FRAME_MS : snapped;
+  // A frame of the footage, not of the 60 fps project ceiling: on 30 fps
+  // rushes half the ceiling's frames show the same picture.
+  const frameMs = 1000 / getTimelineFps(state);
+  return snapped === raw ? Math.round(raw / frameMs) * frameMs : snapped;
 }
 
 /**
