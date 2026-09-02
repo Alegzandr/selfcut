@@ -35,6 +35,7 @@ import {
   hasVelocity,
   shiftVelocity,
   gapAt,
+  timelineGapAt,
   type TrackGap,
 } from '../../model';
 import { uid } from '../../lib/id';
@@ -71,6 +72,26 @@ const CAPTION_Y: Record<AspectRatio, Record<SubtitleVAlign, number>> = {
   '4:5': { top: 0.13, middle: 0.5, bottom: 0.83 },
 };
 import { t as translate } from '../../i18n';
+
+/**
+ * Overlapping (and touching) spans folded into one, latest first.
+ *
+ * Two clips deleted over the same seconds on two lanes are ONE span of timeline
+ * to remove, not two: shifting by the sum would pull everything after the edit
+ * a whole clip too far left. Latest first because the callers apply them in
+ * that order - a span removed on the right leaves everything to its left where
+ * it was measured.
+ */
+function mergeSpans(spans: TrackGap[]): TrackGap[] {
+  const sorted = [...spans].sort((a, b) => a.startMs - b.startMs);
+  const merged: TrackGap[] = [];
+  for (const span of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && span.startMs <= last.endMs) last.endMs = Math.max(last.endMs, span.endMs);
+    else merged.push({ ...span });
+  }
+  return merged.reverse();
+}
 
 /**
  * The `laneIndex`-th audio track of the project, creating enough audio tracks to
@@ -218,6 +239,41 @@ export function createClipsSlice(
       }
     });
     announce('a11y.announce.gapClosed', { count: gaps.length });
+  };
+
+  /**
+   * Take a span out of the whole timeline: every clip on every unlocked track
+   * that starts at or after `startMs` slides left by the span's length.
+   *
+   * The all-tracks half of the ripple preference (see `rippleAcrossTracks`).
+   * Every one of them moves by the SAME amount, which is the whole point: two
+   * lanes that were in step with each other before the edit still are after it.
+   * That is also why nothing is clamped to the edit point - a clip that was
+   * running while the deleted span played keeps its distance to what follows
+   * it, and if that lands it on top of something earlier on its own lane, the
+   * overlap policy every committed edit goes through settles it.
+   *
+   * Applied right-to-left by the callers that remove several spans at once, so
+   * each span is still measured in the timeline the one before it left behind.
+   * Locked tracks are pinned by definition and never move.
+   */
+  const removeSpan = (p: Project, startMs: number, endMs: number): void => {
+    const span = endMs - startMs;
+    if (span <= 0) return;
+    for (const track of p.tracks) {
+      if (track.locked) continue;
+      for (const clip of track.clips) {
+        if (clip.timelineStartMs >= startMs) {
+          clip.timelineStartMs = Math.max(0, clip.timelineStartMs - span);
+        }
+      }
+    }
+  };
+
+  /** `closeGaps` for the all-tracks ripple: one span, every unlocked track. */
+  const closeTimelineGap = (gap: TrackGap): void => {
+    withHistory((p) => removeSpan(p, gap.startMs, gap.endMs));
+    announce('a11y.announce.gapClosed', { count: 1 });
   };
 
   return {
@@ -1152,15 +1208,25 @@ export function createClipsSlice(
     },
 
     closeGap: (trackId, timeMs) => {
-      const track = get().project.tracks.find((tr) => tr.id === trackId);
+      const { project, rippleAcrossTracks } = get();
+      const track = project.tracks.find((tr) => tr.id === trackId);
       if (!track || track.locked) return;
-      const gap = gapAt(track, timeMs);
+      // With the ripple on every track, the span that can be closed is the one
+      // the WHOLE timeline is empty over: closing this lane's gap alone would
+      // slide the others past content that is still playing there.
+      const gap = rippleAcrossTracks ? timelineGapAt(project, timeMs) : gapAt(track, timeMs);
       if (!gap) return;
-      closeGaps([{ trackId, gap }]);
+      if (rippleAcrossTracks) closeTimelineGap(gap);
+      else closeGaps([{ trackId, gap }]);
     },
 
     closeGapsAtPlayhead: () => {
-      const { project, currentTimeMs } = get();
+      const { project, currentTimeMs, rippleAcrossTracks } = get();
+      if (rippleAcrossTracks) {
+        const gap = timelineGapAt(project, currentTimeMs);
+        if (gap) closeTimelineGap(gap);
+        return;
+      }
       const gaps: { trackId: string; gap: TrackGap }[] = [];
       for (const track of project.tracks) {
         if (track.locked) continue;
@@ -1213,7 +1279,12 @@ export function createClipsSlice(
       if (clipIds.length === 0) return;
       // Deleting one side of an A/V link removes its partner too.
       const targets = withLinkedIds(get().project, clipIds);
+      // Premiere's ripple, when the preference asks for it: the deleted spans
+      // come out of the whole timeline instead of out of their own lanes, so
+      // the tracks that were in sync still are afterwards.
+      const acrossTracks = ripple && get().rippleAcrossTracks;
       withHistory((p) => {
+        const removed: TrackGap[] = [];
         for (const track of p.tracks) {
           // Right-to-left so each ripple shift leaves the earlier targets in place.
           const doomed = track.clips
@@ -1223,7 +1294,9 @@ export function createClipsSlice(
             const start = clip.timelineStartMs;
             const gap = clipDurationMs(clip);
             track.clips = track.clips.filter((c) => c.id !== clip.id);
-            if (ripple) {
+            if (acrossTracks) {
+              removed.push({ startMs: start, endMs: start + gap });
+            } else if (ripple) {
               for (const c of track.clips) {
                 if (c.timelineStartMs >= start) {
                   c.timelineStartMs = Math.max(0, c.timelineStartMs - gap);
@@ -1232,6 +1305,11 @@ export function createClipsSlice(
             }
           }
         }
+        // Merged, because two clips deleted on two lanes over the same seconds
+        // take that time out of the timeline ONCE - shifting by the sum would
+        // pull the rest of the cut a whole clip too far left. Right-to-left, so
+        // every span is still expressed in the timeline it was measured in.
+        for (const span of mergeSpans(removed)) removeSpan(p, span.startMs, span.endMs);
       });
       pruneSelection();
       announce('a11y.announce.deleted', { count: targets.length });

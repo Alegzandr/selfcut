@@ -36,6 +36,7 @@ import {
   SCOPES_MODE_KEY,
   PREVIEW_BACKGROUND_KEY,
   PREVIEW_GUIDES_KEY,
+  RIPPLE_ACROSS_TRACKS_KEY,
 } from './constants';
 import { PREVIEW_GUIDE_MODES, type PreviewGuides } from '../preview/guides';
 import { DEFAULT_PREVIEW_BACKGROUND } from '../lib/palette';
@@ -64,6 +65,20 @@ function loadTimeFormat(): TimeFormat {
     /* private mode / no storage - fall through to the default */
   }
   return 'timecode';
+}
+
+/**
+ * Whether ripple edits move every track. Off unless the user has said so: the
+ * per-track ripple is what the app has always done, and a preference read from
+ * an empty store must not change how a delete behaves.
+ */
+function loadRippleAcrossTracks(): boolean {
+  try {
+    return localStorage.getItem(RIPPLE_ACROSS_TRACKS_KEY) === '1';
+  } catch {
+    /* private mode / no storage - fall through to the default */
+  }
+  return false;
 }
 
 function loadTrackHeight(): number {
@@ -274,6 +289,7 @@ export const useStore = create<EditorState>((set, get) => {
       INSPECTOR_WIDTH_PX,
     ),
     timeFormat: loadTimeFormat(),
+    rippleAcrossTracks: loadRippleAcrossTracks(),
     previewResolution: loadPreviewResolution(),
     scopesMode: loadScopesMode(),
     previewGuides: loadPreviewGuides(),

@@ -117,6 +117,20 @@ const PREWARM_MAX_CLIPS = 2;
 const LOOP_PREROLL_LEAD_MS = 900;
 
 /**
+ * Where a backwards pass re-enters an armed loop: one frame inside the out
+ * point, not on it.
+ *
+ * The out point is the instant the region stops covering, so a clip that ends
+ * there is no longer on screen at it - wrapping onto it exactly would show the
+ * backdrop for a tick before the first frame of the pass. Shared by the wrap
+ * and by the decoder parked for it, so the parked frame IS the frame the wrap
+ * asks for.
+ */
+function reverseLoopEntry(startMs: number, endMs: number): number {
+  return Math.max(startMs, endMs - FRAME_MS);
+}
+
+/**
  * How still the playhead must be before a PAUSED preview parks a decoder for
  * the playback that has not been asked for yet.
  *
@@ -267,7 +281,12 @@ export class PlaybackEngine {
   private lastProject: Project;
   private anchorCtxTime = 0;
   private anchorMediaMs = 0;
-  /** Shuttle rate captured at the last (re)start - timeline advances at ctx-time × rate. */
+  /**
+   * Shuttle rate captured at the last (re)start - timeline advances at
+   * ctx-time × rate. Negative while the transport runs backwards (J), which is
+   * the one state where nothing is scheduled on the audio graph: see
+   * `restartAt`.
+   */
   private rate = 1;
 
   /**
@@ -384,14 +403,24 @@ export class PlaybackEngine {
     this.anchorCtxTime = startCtx;
     this.anchorMediaMs = fromMs;
     this.rate = state.playbackRate;
-    this.mix = new MixScheduler(
-      this.audioCtx,
-      (trackId) => this.busFor(trackId).gain,
-      peekAudioRange,
-      fromMs,
-      startCtx,
-      this.rate,
-    );
+    this.mix = null;
+    // Backwards: the picture runs, the sound does not. A buffer source plays
+    // one way only, so reversed audio means reversed COPIES of every decoded
+    // segment, scheduled back to front with their envelopes mirrored - a piece
+    // of engine of its own, and one whose output at anything but -1x is noise.
+    // The transport still moves, which is what J is for; silence is the honest
+    // answer until that engine exists. The context clock goes on running, so it
+    // stays the timebase either way.
+    if (this.rate > 0) {
+      this.mix = new MixScheduler(
+        this.audioCtx,
+        (trackId) => this.busFor(trackId).gain,
+        peekAudioRange,
+        fromMs,
+        startCtx,
+        this.rate,
+      );
+    }
     // Zeroed so the first extension of the new schedule is never rate-limited.
     this.lastExtendAt = 0;
     // Ask for the audio around the new position before scheduling: a seek into
@@ -436,8 +465,14 @@ export class PlaybackEngine {
     if (!force && now - this.lastPrefetchAt < AUDIO_PREFETCH_INTERVAL_MS) return;
     this.lastPrefetchAt = now;
 
-    const from = Math.max(0, tMs - AUDIO_PREFETCH_BEHIND_MS);
-    const until = tMs + AUDIO_PREFETCH_AHEAD_MS * (this.wasPlaying ? this.rate : 1);
+    // The lead is spent on the side the playhead is heading for: running
+    // backwards, what is "ahead" is behind. Nothing is scheduled in reverse,
+    // but the decoded audio is what makes the K that stops there instant.
+    const speed = this.wasPlaying ? Math.abs(this.rate) : 1;
+    const lead = AUDIO_PREFETCH_AHEAD_MS * speed;
+    const backwards = this.wasPlaying && this.rate < 0;
+    const from = Math.max(0, tMs - (backwards ? lead : AUDIO_PREFETCH_BEHIND_MS));
+    const until = tMs + (backwards ? AUDIO_PREFETCH_BEHIND_MS : lead);
     const delegated = delegatedLinkIds(state.project);
     for (const track of state.project.tracks) {
       if (!isTrackAudible(track, state.project)) continue;
@@ -547,15 +582,22 @@ export class PlaybackEngine {
     if (this.wasPlaying) {
       t = this.playbackTimeMs(state);
       const duration = projectDurationMs(state.project);
-      // Loop region armed: wrap back to its in point instead of running to the end.
       const loop = state.loopEnabled ? state.loopRegion : null;
       const loopEnd = loop ? Math.min(loop.endMs, duration) : 0;
-      if (loop && loopEnd > loop.startMs && t >= loopEnd) {
-        t = loop.startMs;
+      // A wrap is the same edit in both directions: leave by one edge of the
+      // region, come back in at the other. Null while the region is not armed,
+      // or not left yet.
+      let wrapTo: number | null = null;
+      if (loop && loopEnd > loop.startMs && (this.rate > 0 ? t >= loopEnd : t <= loop.startMs)) {
+        wrapTo = this.rate > 0 ? loop.startMs : reverseLoopEntry(loop.startMs, loopEnd);
+      }
+      if (wrapTo !== null) {
+        t = wrapTo;
         this.promotePrerollsAt(t);
         this.restartAt(state, t);
-      } else if (t >= duration) {
-        t = duration;
+      } else if (this.rate > 0 ? t >= duration : t <= 0) {
+        // Each direction has its own end of the timeline to stop against.
+        t = this.rate > 0 ? duration : 0;
         this.wasPlaying = false;
         this.stopAudio();
         state.setPlaying(false);
@@ -721,7 +763,11 @@ export class PlaybackEngine {
             liveClipIds.add(clip.id);
             cursor.request(
               timelineToSourceMs(clip, tMs) / 1000,
-              this.wasPlaying,
+              // Sequential decoding is a reader walking forward. Backwards,
+              // every frame is behind the last one it produced, which the
+              // worker answers by restarting its iterator: asking for a seek
+              // outright is the same work without the iterator churn.
+              this.wasPlaying && this.rate > 0,
               shouldBlendFrames(clip, tMs),
             );
             sample = cursor.sample;
@@ -806,6 +852,11 @@ export class PlaybackEngine {
    */
   private prewarmUpcoming(state: EditorState, tMs: number, live: Set<string>): void {
     if (!this.wasPlaying) return;
+    // Running backwards, the clips the playhead is about to reach are the ones
+    // BEHIND it, and every frame it asks for is a seek anyway (see the request
+    // in `draw`): a decoder parked on the head of a clip that will be entered
+    // from its tail warms the wrong frame. Nothing is warmed in reverse.
+    if (this.rate < 0) return;
     // `live` holds the clips drawn this frame - what is on screen always comes
     // first, so a stack deep enough to fill the pool simply gets no prewarm.
     const room = Math.min(PREWARM_MAX_CLIPS, this.cursorCap() - live.size);
@@ -870,7 +921,15 @@ export class PlaybackEngine {
       }
       // Shuttling covers the same lead in less wall-clock time, so the window
       // grows with the rate - same reasoning as the prewarm window.
-      if (tMs < loopEnd - LOOP_PREROLL_LEAD_MS * Math.max(1, this.rate)) return;
+      const lead = LOOP_PREROLL_LEAD_MS * Math.max(1, Math.abs(this.rate));
+      if (this.rate < 0) {
+        // Backwards the region is left by its in point and re-entered at its
+        // out point, so that is the frame the seek has to be paid for early.
+        if (tMs > loop.startMs + lead) return;
+        this.parkAt(state, reverseLoopEntry(loop.startMs, loopEnd));
+        return;
+      }
+      if (tMs < loopEnd - lead) return;
       this.parkAt(state, loop.startMs);
       return;
     }

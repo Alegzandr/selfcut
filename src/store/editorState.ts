@@ -271,6 +271,17 @@ export interface EditorState {
   trackSettingsTrackId: string | null;
   /** How the transport spells time out (persisted). */
   timeFormat: TimeFormat;
+  /**
+   * How far a ripple edit reaches (persisted).
+   *
+   * False - the default, and what this editor grew up doing - is the Vegas
+   * rule: a ripple delete, a ripple trim or a closed gap moves the clips that
+   * follow ON THAT TRACK, and every other lane keeps its timing. True is
+   * Premiere's: the span comes out of the whole timeline, so the tracks stay in
+   * sync with each other and the cut downstream keeps its shape. Neither is
+   * more correct than the other - which is why it is a preference.
+   */
+  rippleAcrossTracks: boolean;
   /** Preview playback resolution the user picked (persisted). */
   previewResolution: PreviewResolutionMode;
   /** Which video scope the monitor overlays, or 'off' (persisted). Desktop only. */
@@ -799,6 +810,7 @@ export interface EditorState {
   setPreviewGuides: (mode: PreviewGuides) => void;
   setTrackSettingsTrack: (trackId: string | null) => void;
   setTimeFormat: (format: TimeFormat) => void;
+  setRippleAcrossTracks: (on: boolean) => void;
   setPreviewTool: (tool: PreviewTool) => void;
   /** Move/scale the preview camera; the caller clamps via `clampView`. */
   setPreviewView: (view: PreviewView) => void;

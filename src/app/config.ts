@@ -34,6 +34,18 @@ export const MIN_CLIP_DURATION_MS = FRAME_MS;
 export const PLAYBACK_SKIP_FORWARD_MS = 10_000;
 export const PLAYBACK_SKIP_BACK_MS = 5_000;
 
+/**
+ * Slowest and fastest shuttle the J/L keys reach, as a multiple of real time.
+ *
+ * The sign of `playbackRate` carries the direction - a negative rate runs the
+ * transport backwards - so these bound its MAGNITUDE. A quarter speed is the
+ * slow review an editor uses to find the exact frame of an action; eight times
+ * is the point past which a shuttle stops reading as motion, and is also where
+ * the decoder starts spending the whole frame budget seeking.
+ */
+export const MIN_SHUTTLE_RATE = 0.25;
+export const MAX_SHUTTLE_RATE = 8;
+
 /** Default timeline duration of a still-image clip (a still has no intrinsic length). */
 export const IMAGE_CLIP_DEFAULT_MS = 5000;
 

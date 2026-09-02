@@ -39,17 +39,51 @@ async function liveCursors(page: Page): Promise<number> {
   }, url);
 }
 
-/** Import the fixture and razor it into `count` clips. */
+/**
+ * Import the fixture and razor it into `count` clips.
+ *
+ * The step is derived from the app rather than assumed: an arrow key is ONE
+ * FRAME of the timeline, and the timeline's frame rate follows the footage
+ * (see `timelineFps`), so a fixed number of presses is a different distance on
+ * every source. A hard-coded six presses was 100 ms while the timeline counted
+ * in the 60 fps project ceiling and became 200 ms the day it started counting
+ * in the fixture's 30 - which walked the playhead off the end of a 3 s clip
+ * after fourteen cuts and left this spec asking for 20 clips and finding 15.
+ *
+ * Reading the rate and the duration back from the running store keeps the walk
+ * inside the clip whatever either of them becomes next.
+ */
 async function importAndSplit(page: Page, count: number): Promise<void> {
   await page.goto(EDITOR_URL);
   await page.setInputFiles('input[type="file"]', FIXTURE_MP4);
   await expect(page.locator('[data-clip-id]')).toHaveCount(1);
 
+  const { frameMs, durationMs } = await page.evaluate(async (mod) => {
+    // Structurally typed, not DOM-typed: this file compiles under the Node
+    // tsconfig, and the store's own types are not reachable from here.
+    type State = { project: unknown };
+    const { useStore, getTimelineFps, projectDurationMs } = (await import(mod)) as {
+      useStore: { getState: () => State };
+      getTimelineFps: (state: State) => number;
+      projectDurationMs: (project: unknown) => number;
+    };
+    const state = useStore.getState();
+    return {
+      frameMs: 1000 / getTimelineFps(state),
+      durationMs: projectDurationMs(state.project),
+    };
+  }, await appModuleUrl(page, STORE_MODULE));
+
+  // Every cut has to land inside what is left of the clip, so the whole walk
+  // has to fit in it: `count - 1` cuts, one step apart, with the last one short
+  // of the end.
+  const stepFrames = Math.max(1, Math.floor(durationMs / count / frameMs));
+
   // The razor cuts at the playhead, so walk it forward a few frames at a time
   // and cut repeatedly: each cut turns the clip under the playhead into two.
   await page.keyboard.press('Home');
   for (let i = 1; i < count; i++) {
-    for (let f = 0; f < 6; f++) await page.keyboard.press('ArrowRight');
+    for (let f = 0; f < stepFrames; f++) await page.keyboard.press('ArrowRight');
     await page.keyboard.press('s');
   }
   await expect(page.locator('[data-clip-id]')).toHaveCount(count);
