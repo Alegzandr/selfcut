@@ -57,13 +57,13 @@ describe('supersededCueIds', () => {
         text('late', 5000, 6000, 'captions'),
       ]),
     );
-    expect(supersededCueIds(p, 1000, 3000)).toEqual(['inside']);
+    expect(supersededCueIds(p.tracks, 1000, 3000)).toEqual(['inside']);
   });
 
   it('leaves a cue that only touches the boundary alone', () => {
     // A cue ending exactly where the span starts shares no frame with it.
     const p = project(lane('captions', [text('before', 0, 1000, 'captions')]));
-    expect(supersededCueIds(p, 1000, 3000)).toEqual([]);
+    expect(supersededCueIds(p.tracks, 1000, 3000)).toEqual([]);
   });
 
   it('spares a title card sharing its lane with footage', () => {
@@ -72,7 +72,7 @@ describe('supersededCueIds', () => {
     const p = project(
       lane('mixed', [media('shot', 0, 5000, 'mixed'), text('title', 500, 1500, 'mixed')]),
     );
-    expect(supersededCueIds(p, 0, 5000)).toEqual([]);
+    expect(supersededCueIds(p.tracks, 0, 5000)).toEqual([]);
   });
 
   it('collects cues across several caption lanes', () => {
@@ -80,6 +80,6 @@ describe('supersededCueIds', () => {
       lane('fr', [text('fr1', 0, 1000, 'fr')]),
       lane('en', [text('en1', 0, 1000, 'en')]),
     );
-    expect(supersededCueIds(p, 0, 1000).sort()).toEqual(['en1', 'fr1']);
+    expect(supersededCueIds(p.tracks, 0, 1000).sort()).toEqual(['en1', 'fr1']);
   });
 });

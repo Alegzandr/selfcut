@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { CropIcon, ResetIcon, ViewHorizontalIcon } from '@radix-ui/react-icons';
-import { useStore } from '../../store/store';
+import { useStore, getLanes } from '../../store/store';
 import { Tooltip } from '../../ui/Tooltip';
 import { AnimatableProp, Clip, EaseId } from '../../types';
 import { DEFAULT_TRANSFORM, EASE_IDS, keyframesOf, resolveTransform } from '../../model';
@@ -70,7 +70,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
     let common: EaseId | null = null;
     for (const ref of selectedKeyframes) {
       let found: EaseId | undefined;
-      for (const track of useStore.getState().project.tracks) {
+      for (const track of getLanes(useStore.getState())) {
         const c = track.clips.find((cc) => cc.id === ref.clipId);
         const k = c && keyframesOf(c, ref.prop)?.find((kk) => Math.abs(kk.t - ref.t) < ON_KEY_EPSILON_MS);
         if (k) {

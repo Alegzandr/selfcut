@@ -99,6 +99,13 @@ export const DEFAULT_PREVIEW_RESOLUTION: PreviewResolutionMode = 'half';
 
 /** DataTransfer type used to drag an asset from the media library to the timeline. */
 export const ASSET_DRAG_MIME = 'application/x-selfcut-asset';
+
+/**
+ * A composition dragged out of the library onto the timeline. Its own type, not
+ * the asset one: the drop has to lay down a comp clip rather than look the id up
+ * in a media library that will never hold it.
+ */
+export const COMP_DRAG_MIME = 'application/x-selfcut-comp';
 /** DataTransfer type used to drag an effect preset from the library onto a clip. */
 export const EFFECT_DRAG_MIME = 'application/x-selfcut-effect';
 /** DataTransfer type used to drag a transition from the library onto a clip. */

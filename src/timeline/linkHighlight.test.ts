@@ -12,6 +12,9 @@ function state(selectedClipIds: string[], hoveredLinkId: string | null = null): 
   return {
     selectedClipIds,
     hoveredLinkId,
+    // The root timeline: the highlight reads the lanes of the composition the
+    // editor is standing in, and `null` is the project's own.
+    activeCompId: null,
     project: {
       tracks: [
         { clips: [{ id: 'v1', linkId: 'L1' }, { id: 'v2' }] },

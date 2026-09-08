@@ -8,6 +8,7 @@ import { extractSubtitleTracks, subtitleKey } from '../../media/extractSubtitles
 import { loadTranscodedAudio, saveTranscodedAudio } from '../../lib/audioCache';
 import { loadSubtitleCues, saveSubtitleCues } from '../../lib/subtitleCache';
 import type { SubtitleCue } from '../../lib/subtitles';
+import { forEachTrackSet } from '../../model';
 import { t } from '../../i18n';
 
 /**
@@ -35,7 +36,7 @@ function clearProgress(set: StoreSet, get: StoreGet, key: string): void {
 export function createAssetsSlice(
   set: StoreSet,
   get: StoreGet,
-  { withHistory, pruneSelection }: SliceHelpers,
+  { withHistory, pruneSelection, lanes }: SliceHelpers,
 ): Pick<
   EditorState,
   | 'addAsset'
@@ -70,8 +71,8 @@ export function createAssetsSlice(
         // The replacement need not line up with the original: a shorter file
         // leaves clips trimmed past its end, a different kind changes what they
         // render. Warn before committing and let the user keep the original.
-        const overrun = get()
-          .project.tracks.flatMap((tr) => tr.clips)
+        const overrun = lanes(get().project)
+          .flatMap((tr) => tr.clips)
           .filter((c) => c.assetId === assetId && c.sourceOutMs > probed.durationMs);
         const message =
           probed.kind !== existing.kind
@@ -109,7 +110,7 @@ export function createAssetsSlice(
         if (overrun.length > 0) {
           const ids = new Set(overrun.map((c) => c.id));
           withHistory((p) => {
-            for (const track of p.tracks) {
+            for (const track of lanes(p)) {
               for (const clip of track.clips) {
                 if (!ids.has(clip.id)) continue;
                 clip.sourceOutMs = probed.durationMs;
@@ -150,9 +151,14 @@ export function createAssetsSlice(
 
     removeAsset: (assetId) => {
       withHistory((p) => {
-        for (const track of p.tracks) {
-          track.clips = track.clips.filter((c) => c.assetId !== assetId);
-        }
+        // Every timeline in the project, compositions included: a clip left
+        // pointing at a source that is gone renders black forever, and the one
+        // inside a precomp is the one nobody would think to look for.
+        forEachTrackSet(p, (tracks) => {
+          for (const track of tracks) {
+            track.clips = track.clips.filter((c) => c.assetId !== assetId);
+          }
+        });
       });
       const assets = { ...get().assets };
       delete assets[assetId];
@@ -214,7 +220,7 @@ export function createAssetsSlice(
         // arrives with every audible lane, this one included. Transcoding is
         // the user saying they want that sound - handing them a silent library
         // card and a second click to place it is not the ask.
-        const placed = get().project.tracks.some((tr) =>
+        const placed = lanes(get().project).some((tr) =>
           tr.clips.some((c) => c.assetId === assetId),
         );
         if (placed) get().attachAudioTrack(assetId, audioTrackIndex);
@@ -356,7 +362,7 @@ export function createAssetsSlice(
         // Captions over nothing are not an edit. When the footage they were
         // pulled out of is still library-only, it lands on the timeline first
         // so the caption track has the picture it belongs to underneath it.
-        const onTimeline = get().project.tracks.some((tr) =>
+        const onTimeline = lanes(get().project).some((tr) =>
           tr.clips.some((c) => c.assetId === assetId),
         );
         // Footage + captions are one undo step, and so are several tracks

@@ -6,48 +6,48 @@ import { sortedMarkers } from '../../model';
 export function createMarkersSlice(
   set: StoreSet,
   get: StoreGet,
-  { withHistory }: SliceHelpers,
+  { withHistory, cues, setCues, withCues }: SliceHelpers,
 ): Pick<EditorState, 'addMarkerAtPlayhead' | 'moveMarker' | 'renameMarker' | 'removeMarker' | 'setMarkerColor' | 'removeAllMarkers'> {
   return {
     addMarkerAtPlayhead: () => {
       const { currentTimeMs, project } = get();
       if (sortedMarkers(project).some((m) => Math.abs(m.timeMs - currentTimeMs) < 1)) return;
       withHistory((p) => {
-        p.markers = [
-          ...p.markers,
+        setCues(p, [
+          ...cues(p),
           { id: uid('marker'), timeMs: Math.max(0, currentTimeMs), label: '' },
-        ];
+        ]);
       });
     },
 
     moveMarker: (markerId, timeMs) => {
       const p = get().project;
       const at = Math.max(0, timeMs);
-      const markers = p.markers.map((m) => (m.id === markerId ? { ...m, timeMs: at } : m));
-      set({ project: { ...p, markers } });
+      const markers = cues(p).map((m) => (m.id === markerId ? { ...m, timeMs: at } : m));
+      set({ project: withCues(p, markers) });
     },
 
     renameMarker: (markerId, label) =>
       withHistory((p) => {
-        const marker = p.markers.find((m) => m.id === markerId);
+        const marker = cues(p).find((m) => m.id === markerId);
         if (marker) marker.label = label;
       }),
 
     removeMarker: (markerId) =>
       withHistory((p) => {
-        p.markers = p.markers.filter((m) => m.id !== markerId);
+        setCues(p, cues(p).filter((m) => m.id !== markerId));
       }),
 
     setMarkerColor: (markerId, color) =>
       withHistory((p) => {
-        const marker = p.markers.find((m) => m.id === markerId);
+        const marker = cues(p).find((m) => m.id === markerId);
         if (marker) marker.color = color;
       }),
 
     removeAllMarkers: () => {
-      if (get().project.markers.length === 0) return;
+      if (cues(get().project).length === 0) return;
       withHistory((p) => {
-        p.markers = [];
+        setCues(p, []);
       });
     },
   };

@@ -1,6 +1,8 @@
 import type { ComponentType } from 'react';
 import type { ParseKeys } from 'i18next';
 import {
+  EnterIcon,
+  ExitIcon,
   ArchiveIcon,
   BlendingModeIcon,
   BookmarkIcon,
@@ -56,8 +58,15 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from '@radix-ui/react-icons';
-import { useStore, getSelectedClip, getSelectedTrackKind, getLinkTargets } from '../store/store';
-import { defaultLocalAdjust, defaultRedaction, isTextClip, sortedMarkers } from '../model';
+import { useStore, getSelectedClip, getSelectedTrackKind, getLinkTargets, getLanes, getCues } from '../store/store';
+import {
+  compPath,
+  defaultLocalAdjust,
+  defaultRedaction,
+  isCompClip,
+  isTextClip,
+  sortedMarkers,
+} from '../model';
 import type { LibraryTab } from '../store/editorState';
 import { useImport } from './useImport';
 import { openMediaPicker, openSubtitlePicker } from './mediaPicker';
@@ -67,6 +76,7 @@ import { createNewProject, refreshProjects } from './projectLibraryActions';
 import { unbindProjectFile } from '../lib/projectFile';
 import { applyPresetToClips, exportClipPreset, importPreset } from './presetActions';
 import { clipDisplayName } from './clipName';
+import { decomposeWithConfirm } from './compActions';
 import { t } from '../i18n';
 import { zoomAtPlayhead, zoomToFit } from '../timeline/zoom';
 import { PREVIEW_GUIDE_MODES } from '../preview/guides';
@@ -149,13 +159,35 @@ export function useEditorCommands(): Record<string, Command> {
   // Exporting needs something to write: subscribe to the boolean, not the cue
   // list, so a typo in one caption does not re-render every menu.
   const hasCues = useStore((s) =>
-    s.project.tracks.some((track) => track.clips.some(isTextClip)),
+    getLanes(s).some((track) => track.clips.some(isTextClip)),
   );
   const libraryTab = useStore((s) => s.libraryTab);
   const previewGuides = useStore((s) => s.previewGuides);
-  const hasMarkers = useStore((s) => s.project.markers.length > 0);
+  const hasMarkers = useStore((s) => getCues(s).length > 0);
+
+  // The comp clip the selection is standing on, if it is one - what "open" and
+  // "un-precompose" act upon. A boolean, so the menus do not re-render when the
+  // composition behind it is edited.
+  const selectedComp = useStore((s) => {
+    const clip = getSelectedClip(s);
+    return clip && isCompClip(clip) ? clip.compId : null;
+  });
+  const insideComp = useStore((s) => s.activeCompId !== null);
 
   const st = useStore.getState;
+
+  /**
+   * Wrap the selection in a composition and step into it.
+   *
+   * Stepping in is the point: precomposing is something you do BECAUSE you want
+   * to work on those clips as a unit, and leaving the user on the parent
+   * timeline staring at one collapsed layer would make them find the way in
+   * themselves, every single time.
+   */
+  const precomposeSelection = () => {
+    const compId = st().precompose();
+    if (compId) st().openComp(compId);
+  };
 
   /** Show a library bin: pick its tab, and on mobile raise the drawer holding it. */
   const showLibraryTab = (tab: LibraryTab) => {
@@ -177,7 +209,7 @@ export function useEditorCommands(): Record<string, Command> {
   /** Cue to the next / previous marker (the keyboard's Shift+M pair). */
   const jumpMarker = (dir: -1 | 1) => {
     const s = st();
-    const markers = sortedMarkers(s.project);
+    const markers = sortedMarkers(getCues(s));
     const target =
       dir === 1
         ? markers.find((m) => m.timeMs > s.currentTimeMs + 1)
@@ -241,7 +273,7 @@ export function useEditorCommands(): Record<string, Command> {
       onClick: () => {
         const clip = getSelectedClip(st());
         if (!clip) return;
-        exportClipPreset(clip.id, clipDisplayName(clip, st().assets[clip.assetId], t));
+        exportClipPreset(clip.id, clipDisplayName(clip, st().assets[clip.assetId], t, st().project));
       },
     },
     { id: 'file.export', labelKey: 'menu.file.export', icon: DownloadIcon, shortcut: 'Ctrl+E', onClick: () => st().setExportOpen(true) },
@@ -269,6 +301,44 @@ export function useEditorCommands(): Record<string, Command> {
     { id: 'insert.videoTrack', labelKey: 'menu.insert.videoTrack', icon: VideoIcon, onClick: () => st().addTrack('video') },
     { id: 'insert.audioTrack', labelKey: 'menu.insert.audioTrack', icon: SpeakerLoudIcon, onClick: () => st().addTrack('audio') },
     { id: 'insert.marker', labelKey: 'menu.insert.marker', icon: BookmarkIcon, shortcut: 'M', onClick: () => st().addMarkerAtPlayhead() },
+
+    // ── Composition ───────────────────────────────────────────────────────
+    {
+      id: 'clip.precompose',
+      labelKey: 'comp.precompose',
+      icon: StackIcon,
+      shortcut: 'Ctrl+Shift+C',
+      disabled: !hasSelection,
+      onClick: precomposeSelection,
+    },
+    {
+      id: 'comp.open',
+      labelKey: 'comp.open',
+      icon: EnterIcon,
+      disabled: !selectedComp,
+      onClick: () => selectedComp && st().openComp(selectedComp),
+    },
+    {
+      id: 'comp.decompose',
+      labelKey: 'comp.decompose',
+      icon: ExitIcon,
+      disabled: !selectedComp || !selectedId,
+      onClick: () => selectedId && void decomposeWithConfirm(selectedId),
+    },
+    {
+      id: 'comp.up',
+      labelKey: 'comp.up',
+      icon: ExitIcon,
+      shortcut: 'Esc',
+      disabled: !insideComp,
+      onClick: () => {
+        // One step up the trail the user actually walked in - which is not
+        // always the root: a precomp inside a precomp goes back to its parent.
+        const state = st();
+        const trail = compPath(state.project, state.activeCompId, '');
+        st().openComp(trail[trail.length - 2]?.compId ?? null);
+      },
+    },
 
     // ── Clip ──────────────────────────────────────────────────────────────
     { id: 'clip.split', labelKey: 'menu.clip.split', icon: ViewVerticalIcon, shortcut: 'S', onClick: () => st().splitAtPlayhead() },

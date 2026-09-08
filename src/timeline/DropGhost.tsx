@@ -1,4 +1,4 @@
-import { useStore } from '../store/store';
+import { useStore, getLanes } from '../store/store';
 import { MARKER_BAR_HEIGHT_PX, RULER_HEIGHT_PX } from '../app/config';
 import { trackTops } from './trackHeight';
 
@@ -17,7 +17,7 @@ import { trackTops } from './trackHeight';
  */
 export function DropGhost({ pxPerMs }: { pxPerMs: number }) {
   const preview = useStore((s) => s.dropPreview);
-  const tracks = useStore((s) => s.project.tracks);
+  const tracks = useStore((s) => getLanes(s));
   const padLeft = useStore((s) => s.timelinePadLeft);
   const baseHeightPx = useStore((s) => s.trackHeightPx);
   const expandedTrackIds = useStore((s) => s.expandedTrackIds);

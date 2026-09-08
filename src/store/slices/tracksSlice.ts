@@ -8,7 +8,7 @@ import { trackEffectPatch } from '../../effects/apply';
 export function createTracksSlice(
   set: StoreSet,
   get: StoreGet,
-  { withHistory, pruneSelection }: SliceHelpers,
+  { withHistory, pruneSelection, lanes, setLanes, withLanes, host }: SliceHelpers,
 ): Pick<
   EditorState,
   | 'addTrack'
@@ -37,28 +37,28 @@ export function createTracksSlice(
    */
   const patchTrackLive = (trackId: string, fn: (track: Track) => Partial<Track>) => {
     const p = get().project;
-    const tracks = p.tracks.map((tr) => (tr.id === trackId ? { ...tr, ...fn(tr) } : tr));
-    set({ project: { ...p, tracks } });
+    const tracks = lanes(p).map((tr) => (tr.id === trackId ? { ...tr, ...fn(tr) } : tr));
+    set({ project: withLanes(p, tracks) });
   };
 
   return {
     addTrack: (kind) =>
       withHistory((p) => {
-        insertTrack(p, { id: uid('track'), kind, clips: [] });
+        insertTrack(host(p), { id: uid('track'), kind, clips: [] });
       }),
 
     removeTrack: (trackId) => {
       withHistory((p) => {
-        p.tracks = p.tracks.filter((t) => t.id !== trackId);
+        setLanes(p, lanes(p).filter((t) => t.id !== trackId));
         // Dissolve the A/V links the removal left partnerless: an orphaned
         // linkId keeps delegating a video's audio to a clip that no longer
         // exists (silent forever, and neither Unlink nor Link applies). A link
         // still shared by 2+ clips (multi-lane audio group) stays intact.
         const linkCounts = new Map<string, number>();
-        for (const track of p.tracks)
+        for (const track of lanes(p))
           for (const clip of track.clips)
             if (clip.linkId) linkCounts.set(clip.linkId, (linkCounts.get(clip.linkId) ?? 0) + 1);
-        for (const track of p.tracks)
+        for (const track of lanes(p))
           for (const clip of track.clips)
             if (clip.linkId && (linkCounts.get(clip.linkId) ?? 0) < 2) delete clip.linkId;
       });
@@ -67,33 +67,33 @@ export function createTracksSlice(
 
     moveTrack: (trackId, dir) =>
       withHistory((p) => {
-        const i = p.tracks.findIndex((t) => t.id === trackId);
+        const i = lanes(p).findIndex((t) => t.id === trackId);
         const j = i + dir;
-        if (i === -1 || j < 0 || j >= p.tracks.length) return;
-        [p.tracks[i], p.tracks[j]] = [p.tracks[j]!, p.tracks[i]!];
+        if (i === -1 || j < 0 || j >= lanes(p).length) return;
+        [lanes(p)[i], lanes(p)[j]] = [lanes(p)[j]!, lanes(p)[i]!];
       }),
 
     toggleTrackMuted: (trackId) =>
       withHistory((p) => {
-        const track = p.tracks.find((tr) => tr.id === trackId);
+        const track = lanes(p).find((tr) => tr.id === trackId);
         if (track) track.muted = !track.muted;
       }),
 
     toggleTrackHidden: (trackId) =>
       withHistory((p) => {
-        const track = p.tracks.find((tr) => tr.id === trackId);
+        const track = lanes(p).find((tr) => tr.id === trackId);
         if (track) track.hidden = !track.hidden;
       }),
 
     toggleTrackLocked: (trackId) => {
       withHistory((p) => {
-        const track = p.tracks.find((tr) => tr.id === trackId);
+        const track = lanes(p).find((tr) => tr.id === trackId);
         if (track) track.locked = !track.locked;
       });
       // Locking a track with a live selection on it would leave clips selected
       // that no longer accept edits: drop them now.
       const locked = new Set<string>();
-      for (const track of get().project.tracks) {
+      for (const track of lanes(get().project)) {
         if (track.locked) for (const clip of track.clips) locked.add(clip.id);
       }
       const ids = get().selectedClipIds.filter((id) => !locked.has(id));
@@ -102,13 +102,13 @@ export function createTracksSlice(
 
     toggleTrackSolo: (trackId) =>
       withHistory((p) => {
-        const track = p.tracks.find((tr) => tr.id === trackId);
+        const track = lanes(p).find((tr) => tr.id === trackId);
         if (track) track.solo = !track.solo;
       }),
 
     renameTrack: (trackId, name) =>
       withHistory((p) => {
-        const track = p.tracks.find((tr) => tr.id === trackId);
+        const track = lanes(p).find((tr) => tr.id === trackId);
         if (!track) return;
         const trimmed = name.trim();
         if (trimmed) track.name = trimmed;
@@ -117,19 +117,19 @@ export function createTracksSlice(
 
     updateTrack: (trackId, patch) => {
       const p = get().project;
-      const tracks = p.tracks.map((t) => (t.id === trackId ? { ...t, ...patch } : t));
-      set({ project: { ...p, tracks } });
+      const tracks = lanes(p).map((t) => (t.id === trackId ? { ...t, ...patch } : t));
+      set({ project: withLanes(p, tracks) });
     },
 
     applyEffectToTrack: (trackId, effectId) => {
-      const track = get().project.tracks.find((tr) => tr.id === trackId);
+      const track = lanes(get().project).find((tr) => tr.id === trackId);
       if (!track) return false;
       const patch = trackEffectPatch(track, effectId);
       // Refused by the lane, or already there: no undo step for a no-op, and a
       // false the caller can turn into a word about why nothing happened.
       if (!patch) return false;
       withHistory((p) => {
-        const target = p.tracks.find((tr) => tr.id === trackId);
+        const target = lanes(p).find((tr) => tr.id === trackId);
         if (target) Object.assign(target, patch);
       });
       return true;
@@ -140,7 +140,7 @@ export function createTracksSlice(
 
     setTrackLut: (trackId, lutId) =>
       withHistory((p) => {
-        const track = p.tracks.find((tr) => tr.id === trackId);
+        const track = lanes(p).find((tr) => tr.id === trackId);
         if (!track) return;
         if (!lutId) {
           if (track.color) delete track.color.lut;
@@ -160,7 +160,7 @@ export function createTracksSlice(
 
     resetTrackColor: (trackId) =>
       withHistory((p) => {
-        const track = p.tracks.find((tr) => tr.id === trackId);
+        const track = lanes(p).find((tr) => tr.id === trackId);
         if (track) delete track.color;
       }),
 
@@ -171,7 +171,7 @@ export function createTracksSlice(
 
     removeTrackAudioFx: (trackId, type) =>
       withHistory((p) => {
-        const track = p.tracks.find((tr) => tr.id === trackId);
+        const track = lanes(p).find((tr) => tr.id === trackId);
         if (!track) return;
         const next = (track.audioFx ?? []).filter((fx) => fx.type !== type);
         // An empty chain is no chain: leaving `[]` behind would make every

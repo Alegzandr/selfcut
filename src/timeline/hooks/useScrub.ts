@@ -13,7 +13,7 @@
  * seek already do, and what a monteur expects coming from Premiere or CapCut.
  */
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
-import { useStore, getTimelineFps } from '../../store/store';
+import { useStore, getTimelineFps, getTimeline } from '../../store/store';
 import { msFromContentX, timelineContentEl } from '../coords';
 import { collectSnapPoints, snapTime } from '../snapping';
 import { hapticOnSnap, type SnapHapticState } from '../../lib/haptics';
@@ -47,7 +47,7 @@ interface Options {
 /** Snap targets for a seek, minus the one the playhead already occupies. */
 function seekSnapPoints(fromMs: number): number[] {
   const s = useStore.getState();
-  return collectSnapPoints(s.project, [], fromMs, s.loopRegion).filter(
+  return collectSnapPoints(getTimeline(s), [], fromMs, s.loopRegion).filter(
     (p) => Math.abs(p - fromMs) > 0.5,
   );
 }

@@ -10,9 +10,16 @@ import { clipDurationMs, clipEndMs, isTextClip } from './clip';
  * shared by preview, export and the timeline UI.
  */
 
-/** Markers in timeline order - the order that numbers them (1, 2, 3…). */
-export function sortedMarkers(project: Project): Marker[] {
-  return [...project.markers].sort((a, b) => a.timeMs - b.timeMs);
+/**
+ * Markers in timeline order - the order that numbers them (1, 2, 3…).
+ *
+ * Takes a list rather than the project so a nested composition's own cues sort
+ * the same way the project's do; passing a `Project` is the shorthand for its
+ * own markers, which is what every root-level caller means.
+ */
+export function sortedMarkers(scope: Project | Marker[]): Marker[] {
+  const markers = Array.isArray(scope) ? scope : scope.markers;
+  return [...markers].sort((a, b) => a.timeMs - b.timeMs);
 }
 
 // Memoized by project identity: copy-on-write means an unchanged project keeps
@@ -36,7 +43,23 @@ export function projectDurationMs(project: Project): number {
   return max;
 }
 
-const delegatedLinksCache = new WeakMap<Project, Set<string>>();
+/**
+ * What a project-wide question is asked about: the project (meaning its own
+ * timeline) or a bare track list.
+ *
+ * Nested compositions are why the second form exists. Solo, mute delegation and
+ * visibility are properties of ONE stack of tracks - a lane soloed inside a
+ * precomp must not silence the parent's music - so every such answer is scoped
+ * to the tracks it is about, and a `Project` is simply the shorthand for its own.
+ */
+export type TrackScope = Project | Track[];
+
+/** The track list a scope stands for. */
+export function scopeTracks(scope: TrackScope): Track[] {
+  return Array.isArray(scope) ? scope : scope.tracks;
+}
+
+const delegatedLinksCache = new WeakMap<Track[], Set<string>>();
 
 /**
  * The link groups whose video side must stay silent in the mix: those holding
@@ -44,20 +67,21 @@ const delegatedLinksCache = new WeakMap<Project, Set<string>>();
  * playing the video side too would double it. A group made of video clips alone
  * is absent from the set, so it keeps its own audio.
  *
- * Built in one pass and cached per project: the mix loops over every clip, and
- * scanning the project once per clip would be quadratic.
+ * Built in one pass and cached per track list: the mix loops over every clip,
+ * and scanning them once per clip would be quadratic.
  */
-export function delegatedLinkIds(project: Project): Set<string> {
-  const cached = delegatedLinksCache.get(project);
+export function delegatedLinkIds(scope: TrackScope): Set<string> {
+  const tracks = scopeTracks(scope);
+  const cached = delegatedLinksCache.get(tracks);
   if (cached !== undefined) return cached;
   const out = new Set<string>();
-  for (const track of project.tracks) {
+  for (const track of tracks) {
     if (track.kind !== 'audio') continue;
     for (const clip of track.clips) {
       if (clip.linkId != null) out.add(clip.linkId);
     }
   }
-  delegatedLinksCache.set(project, out);
+  delegatedLinksCache.set(tracks, out);
   return out;
 }
 
@@ -126,8 +150,8 @@ export function outputDimensions(aspect: AspectRatio): { width: number; height: 
  * gets a lane of its own. It stays a heuristic, so callers state the count and
  * ask - replacing is offered, never done silently.
  */
-export function supersededCueIds(project: Project, fromMs: number, toMs: number): string[] {
-  return project.tracks
+export function supersededCueIds(tracks: Track[], fromMs: number, toMs: number): string[] {
+  return tracks
     .filter((track) => track.clips.length > 0 && track.clips.every(isTextClip))
     .flatMap((track) => track.clips)
     .filter((clip) => clip.timelineStartMs < toMs && clipEndMs(clip) > fromMs)
@@ -144,6 +168,7 @@ const TIMELINE_FPS_LADDER = [24, 25, 30, 50, 60, 100, 120] as const;
 
 interface TimelineFpsEntry {
   assets: Record<string, MediaAsset>;
+  tracks: Track[];
   fps: number;
 }
 const timelineFpsCache = new WeakMap<Project, TimelineFpsEntry>();
@@ -164,11 +189,20 @@ const timelineFpsCache = new WeakMap<Project, TimelineFpsEntry>();
  * since a probe landing a frame rate replaces the map): the readout asks 60
  * times a second during playback.
  */
-export function timelineFps(project: Project, assets: Record<string, MediaAsset>): number {
+export function timelineFps(
+  project: Project,
+  assets: Record<string, MediaAsset>,
+  /**
+   * The lanes to measure. Defaults to the project's own; the editor passes the
+   * open composition's, so stepping inside a precomp counts ITS footage rather
+   * than the main timeline's - which may hold no video at all.
+   */
+  tracks: Track[] = project.tracks,
+): number {
   const cached = timelineFpsCache.get(project);
-  if (cached && cached.assets === assets) return cached.fps;
+  if (cached && cached.assets === assets && cached.tracks === tracks) return cached.fps;
   let fastest = 0;
-  for (const track of project.tracks) {
+  for (const track of tracks) {
     if (track.kind !== 'video') continue;
     for (const clip of track.clips) {
       if (clip.kind !== 'media') continue;
@@ -182,7 +216,7 @@ export function timelineFps(project: Project, assets: Record<string, MediaAsset>
           Math.abs(rate - fastest) < Math.abs(best - fastest) ? rate : best,
         )
       : project.fps;
-  timelineFpsCache.set(project, { assets, fps });
+  timelineFpsCache.set(project, { assets, tracks, fps });
   return fps;
 }
 
@@ -190,17 +224,18 @@ interface SoloState {
   audio: boolean;
   video: boolean;
 }
-const soloCache = new WeakMap<Project, SoloState>();
+const soloCache = new WeakMap<Track[], SoloState>();
 
 /** Whether any track of each kind is soloed - the switch that arms solo at all. */
-function soloState(project: Project): SoloState {
-  const cached = soloCache.get(project);
+function soloState(scope: TrackScope): SoloState {
+  const tracks = scopeTracks(scope);
+  const cached = soloCache.get(tracks);
   if (cached) return cached;
   const state: SoloState = { audio: false, video: false };
-  for (const track of project.tracks) {
+  for (const track of tracks) {
     if (track.solo) state[track.kind] = true;
   }
-  soloCache.set(project, state);
+  soloCache.set(tracks, state);
   return state;
 }
 
@@ -211,9 +246,9 @@ function soloState(project: Project): SoloState {
  * and a video track's own sound (an unlinked clip with audio) keeps playing
  * against a soloed audio lane only if it is soloed too.
  */
-export function isTrackAudible(track: Track, project: Project): boolean {
+export function isTrackAudible(track: Track, scope: TrackScope): boolean {
   if (track.muted) return false;
-  if (!soloState(project).audio) return true;
+  if (!soloState(scope).audio) return true;
   return !!track.solo;
 }
 
@@ -221,9 +256,9 @@ export function isTrackAudible(track: Track, project: Project): boolean {
  * Whether a video track is composited: not hidden, and - while any VIDEO track
  * is soloed - soloed itself. Non-video tracks are never visible.
  */
-export function isTrackVisible(track: Track, project: Project): boolean {
+export function isTrackVisible(track: Track, scope: TrackScope): boolean {
   if (track.kind !== 'video' || track.hidden) return false;
-  if (!soloState(project).video) return true;
+  if (!soloState(scope).video) return true;
   return !!track.solo;
 }
 
@@ -231,8 +266,8 @@ export function isTrackVisible(track: Track, project: Project): boolean {
  * Whether a track is currently silenced or hidden BY SOMEONE ELSE'S solo - the
  * state the timeline dims a row for, so a lane that went quiet says why.
  */
-export function isTrackSoloedOut(track: Track, project: Project): boolean {
-  const solo = soloState(project);
+export function isTrackSoloedOut(track: Track, scope: TrackScope): boolean {
+  const solo = soloState(scope);
   return !track.solo && (track.kind === 'audio' ? solo.audio : solo.video);
 }
 

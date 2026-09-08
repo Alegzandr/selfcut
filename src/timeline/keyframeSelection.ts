@@ -7,8 +7,8 @@
  * Times are compared with the same 1ms tolerance the store's keyframe actions
  * use, so a key found by the box is the key those actions will edit.
  */
-import type { Clip, EaseId, Keyframe, KeyframeRef, Project, Track } from '../types';
-import { DEFAULT_EASE, clipDurationMs, keyBezier, keyframesOf } from '../model';
+import type { Clip, EaseId, Keyframe, KeyframeRef, Track } from '../types';
+import { DEFAULT_EASE, clipDurationMs, keyBezier, keyframesOf, type TimelineView } from '../model';
 import {
   KEYFRAME_LANE_HEIGHT_PX,
   KEYFRAME_LANES_GAP_PX,
@@ -90,12 +90,12 @@ export function keyframesInBox(
  * delta, so it imposes no constraint. The tightest bound across the set wins,
  * which keeps relative spacing intact — the set slides, it never compresses.
  */
-export function selectionDragBounds(project: Project, refs: KeyframeRef[]): [number, number] {
+export function selectionDragBounds(timeline: TimelineView, refs: KeyframeRef[]): [number, number] {
   const selected = keyframeKeySet(refs);
   let minDelta = -Infinity;
   let maxDelta = Infinity;
   const clips = new Map<string, Clip>();
-  for (const track of project.tracks) {
+  for (const track of timeline.tracks) {
     for (const clip of track.clips) clips.set(clip.id, clip);
   }
   for (const ref of refs) {
@@ -128,9 +128,9 @@ export function selectionDragBounds(project: Project, refs: KeyframeRef[]): [num
 
 
 /** Every selected keyframe, resolved against the project (missing refs dropped). */
-export function selectedKeys(project: Project, refs: KeyframeRef[]): Keyframe[] {
+export function selectedKeys(timeline: TimelineView, refs: KeyframeRef[]): Keyframe[] {
   const clips = new Map<string, Clip>();
-  for (const track of project.tracks) {
+  for (const track of timeline.tracks) {
     for (const clip of track.clips) clips.set(clip.id, clip);
   }
   const out: Keyframe[] = [];
@@ -152,10 +152,10 @@ export function selectedKeys(project: Project, refs: KeyframeRef[]): Keyframe[] 
  * half the keys hold would be lying about what a second click would undo.
  */
 export function selectionEase(
-  project: Project,
+  timeline: TimelineView,
   refs: KeyframeRef[],
 ): EaseId | 'custom' | null {
-  const keys = selectedKeys(project, refs);
+  const keys = selectedKeys(timeline, refs);
   if (!keys.length) return null;
   const idOf = (k: Keyframe) => (k.bezier ? `b:${k.bezier.join(',')}` : `e:${k.ease ?? DEFAULT_EASE}`);
   const first = idOf(keys[0]!);
@@ -169,10 +169,10 @@ export function selectionEase(
  * easing has no curve (`linear`, `hold`).
  */
 export function selectionBezier(
-  project: Project,
+  timeline: TimelineView,
   refs: KeyframeRef[],
 ): [number, number, number, number] | null {
-  const keys = selectedKeys(project, refs);
+  const keys = selectedKeys(timeline, refs);
   if (!keys.length) return null;
   const first = keyBezier(keys[0]!);
   if (!first) return null;

@@ -27,6 +27,7 @@ import type { PreviewTool, PreviewView } from '../preview/view';
 import type { ScopeMode } from '../preview/scopes';
 import type { PreviewGuides } from '../preview/guides';
 import type { Framing } from '../model/reframe';
+import type { CompId } from '../model/comp';
 import type { SubtitleCue } from '../lib/subtitles';
 import type { FFmpegProgress } from '../media/ffmpeg';
 import type { PresetLook } from '../effects/presetFile';
@@ -93,6 +94,8 @@ export type ContextTarget =
   | { kind: 'marker'; markerId: string }
   | { kind: 'track'; trackId: string }
   | { kind: 'asset'; assetId: string }
+  /** A composition card in the library (never a comp CLIP - that is a `clip`). */
+  | { kind: 'comp'; compId: string }
   | { kind: 'keyframe'; ref: KeyframeRef };
 
 export interface ContextMenuState {
@@ -355,6 +358,22 @@ export interface EditorState {
   past: HistoryEntry[];
   future: HistoryEntry[];
   gestureSnapshot: HistoryEntry | null;
+  /**
+   * The composition the editor is standing in: `null` for the project's own
+   * timeline, a `Composition.id` when the user has opened a precomp.
+   *
+   * Session state, not project data - which composition you were last looking at
+   * is not part of the cut. Everything that shows or edits a timeline (the
+   * lanes, the preview, the mix, the transport's duration, the ruler, the
+   * markers) resolves through it, so opening a precomp really is opening a
+   * project inside the project rather than a different view of the same one.
+   */
+  activeCompId: CompId;
+  /**
+   * The composition whose name is being typed in the library card. Mirrors
+   * `renamingTrackId`: the rename happens in place, not behind a dialog.
+   */
+  renamingCompId: string | null;
 
   /**
    * Change the output ratio. `framing` decides what happens to the clips still
@@ -855,6 +874,56 @@ export interface EditorState {
   toggleLoopEnabled: () => void;
 
   /** Drop a marker at the playhead (no-op if one already sits there). */
+  /**
+   * Open a composition (`null` = back to the project's own timeline).
+   *
+   * Clears the clip selection and parks the playhead at 0 the first time a
+   * composition is entered, then remembers where the playhead was left in each
+   * one: stepping in and out of a precomp to check a frame must not lose the
+   * place you were working at on either side.
+   */
+  openComp: (compId: CompId) => void;
+  /**
+   * Wrap clips into a new composition and leave a single comp clip in their
+   * place - After Effects' "Pre-compose", and the only way a composition is
+   * created from the timeline.
+   *
+   * Defaults to the current selection. The clips keep their relative timing and
+   * their lanes; the earliest of them becomes time 0 inside the composition, and
+   * the comp clip lands exactly where they started, so the cut looks unchanged
+   * the instant after. Returns the new composition's id, or null when there was
+   * nothing to wrap.
+   */
+  precompose: (clipIds?: string[], name?: string) => string | null;
+  /**
+   * The inverse: dissolve a comp clip and lay its composition's clips back onto
+   * the parent timeline where the clip was playing them.
+   *
+   * The comp clip's own attributes (its grade, mask, transform, fades, speed)
+   * have nowhere to go once there is no single layer carrying them, so they are
+   * dropped - the caller is expected to have asked first (`compAttributesLost`).
+   */
+  decompose: (clipId: string) => void;
+  /** Whether decomposing this clip would throw away attributes it carries. */
+  compAttributesLost: (clipId: string) => boolean;
+  renameComp: (compId: string, name: string) => void;
+  setCompColor: (compId: string, color: MarkerColor) => void;
+  /** Copy a composition (fresh ids for every track and clip inside it). */
+  duplicateComp: (compId: string) => string | null;
+  /** Delete a composition and every clip that was playing it. */
+  removeComp: (compId: string) => void;
+  /** Append a comp clip for this composition, the way the library adds an asset. */
+  addCompClip: (compId: string) => void;
+  /** Drop a comp clip at a precise instant (and lane), like an asset drop. */
+  addCompClipAt: (compId: string, timelineMs: number, targetTrackId?: string) => void;
+  /**
+   * Navigate to wherever a clip lives and select it - what the breadcrumb, the
+   * "used N times" list and a jump from the library all need. Nothing happens
+   * when the clip is gone.
+   */
+  revealClip: (clipId: string) => void;
+  setRenamingComp: (compId: string | null) => void;
+
   addMarkerAtPlayhead: () => void;
   /** Live marker drag - wrap with begin/endGesture. */
   moveMarker: (markerId: string, timeMs: number) => void;

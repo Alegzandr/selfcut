@@ -1,7 +1,7 @@
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny';
-import type { Clip, Project, Track } from '../types';
-import { isTextClip, isTrackVisible, shouldBlendFrames, timelineToSourceMs } from '../model';
-import { drawClip, drawTrackLayer, forEachVisibleVideoClip, invalidateResampling } from '../preview/compositor';
+import type { Clip, Project } from '../types';
+import { findComp, isTextClip, shouldBlendFrames, timelineToSourceMs } from '../model';
+import { drawTracks, forEachActiveMediaClip, invalidateResampling } from '../preview/compositor';
 import { syncLuts } from '../preview/colorPass';
 import { loadFonts } from '../lib/fonts';
 import { StillFrame, type DrawableFrame } from '../media/stillImage';
@@ -23,19 +23,18 @@ import { endSpan, span } from '../perf/probe';
  * the frames go.
  */
 
-/** One clip to composite into the current frame, with its decoded source frame. */
-interface FrameLayer {
+/**
+ * One media clip this frame has to decode, and where in ITS OWN timeline.
+ *
+ * Flat, whatever the nesting: a clip three precomps deep decodes exactly like
+ * one on the timeline, and the whole frame's decodes go out in one `Promise.all`
+ * so N stacked layers cost one wait instead of N.
+ */
+interface FrameDecode {
   clip: Clip;
-  xfadeInMs: number;
-  alphaMul: number;
+  /** Timeline ms inside the composition holding the clip (its own local time). */
+  atMs: number;
   sample: DrawableFrame | null;
-  /**
-   * The lane the clip came off. Carried on the layer rather than looked up
-   * again at composite time: the list is flat so every clip in the frame can be
-   * decoded in one `Promise.all`, and the composite still has to hand each
-   * lane's run of clips to `drawTrackLayer` in one go for its track FX.
-   */
-  track: Track;
 }
 
 export interface FrameRendererOptions {
@@ -73,7 +72,7 @@ export class FrameRenderer {
    */
   private readonly readers = new Map<string, ClipReader>();
   /** Reused across frames: the layer list was garbage on every one of them. */
-  private readonly layers: FrameLayer[] = [];
+  private readonly decodes: FrameDecode[] = [];
 
   constructor(private readonly opts: FrameRendererOptions) {
     // Register the project's LUTs on this thread's colour pass, exactly as the
@@ -162,62 +161,52 @@ export class FrameRenderer {
     // a region shifts what we read, never where the frame lands in the file.
     const tMs = startMs + (index * 1000) / fps;
 
-    // Bottom-up over tracks so the timeline's top lane paints last, then
-    // earliest-first within a track: during a crossfade the incoming clip
-    // composites over the outgoing one with rising alpha (same as preview).
-    const layers = this.layers;
-    layers.length = 0;
-    for (let t = project.tracks.length - 1; t >= 0; t--) {
-      const track = project.tracks[t]!;
-      const alphaMul = track.opacity ?? 1;
-      if (alphaMul <= 0 || !isTrackVisible(track, project)) continue;
-      forEachVisibleVideoClip(track, tMs, (clip, xfadeInMs) => {
-        layers.push({ clip, xfadeInMs, alphaMul, sample: null, track });
-      });
-    }
+    const compTracks = (compId: string) => findComp(project, compId)?.tracks ?? null;
 
-    // Decode every visible media clip concurrently: the readers are
-    // independent, so N stacked tracks cost one decode wait instead of N.
+    // Everything this frame needs decoded, at any nesting depth, gathered before
+    // anything is drawn: the composite below is synchronous, so a frame inside a
+    // precomp cannot be awaited in the middle of it.
+    const decodes = this.decodes;
+    decodes.length = 0;
+    forEachActiveMediaClip(project.tracks, tMs, compTracks, (clip, atMs) => {
+      decodes.push({ clip, atMs, sample: null });
+    });
+
+    // Decoded concurrently: the readers are independent, so N stacked layers
+    // cost one decode wait instead of N.
     const decodeStarted = span();
     await Promise.all(
-      layers.map(async (layer) => {
-        const { clip } = layer;
-        if (clip.kind !== 'media') return;
+      decodes.map(async (entry) => {
+        const { clip, atMs } = entry;
         const still = this.stills.get(clip.assetId);
         if (still) {
           // A still is the same frame at every output time - nothing to decode.
-          layer.sample = still;
+          entry.sample = still;
           return;
         }
-        layer.sample = await this.reader(clip).frameAt(
-          timelineToSourceMs(clip, tMs) / 1000,
-          shouldBlendFrames(clip, tMs),
+        entry.sample = await this.reader(clip).frameAt(
+          timelineToSourceMs(clip, atMs) / 1000,
+          shouldBlendFrames(clip, atMs),
         );
       }),
     );
     endSpan('decode', decodeStarted);
 
+    const samples = new Map<string, DrawableFrame | null>();
+    for (const entry of decodes) samples.set(entry.clip.id, entry.sample);
+
     const compositeStarted = span();
     this.ctx.globalAlpha = 1;
     this.ctx.fillStyle = '#000';
     this.ctx.fillRect(0, 0, width, height);
-    // Layers were pushed lane by lane, so one lane's clips are a contiguous
-    // run: walking the runs hands each track its own clips in one call, which
-    // is what lets a track grade see the lane composited rather than each clip
-    // separately. Identical to the preview's loop, one track at a time.
-    for (let i = 0; i < layers.length; ) {
-      const { track } = layers[i]!;
-      let end = i + 1;
-      while (end < layers.length && layers[end]!.track === track) end++;
-      const from = i;
-      drawTrackLayer(this.ctx, track, width, height, (target) => {
-        for (let j = from; j < end; j++) {
-          const { clip, xfadeInMs, alphaMul, sample } = layers[j]!;
-          drawClip(target, clip, width, height, tMs, alphaMul, xfadeInMs, sample);
-        }
-      });
-      i = end;
-    }
+    // The preview's own routine, called with frames that came from files rather
+    // than from decode cursors. Track order, crossfades, track FX and nested
+    // compositions are then not "the same as the preview" by agreement, they are
+    // the same code.
+    drawTracks(this.ctx, project.tracks, tMs, width, height, {
+      compTracks,
+      sample: (clip) => samples.get(clip.id) ?? null,
+    });
     endSpan('composite', compositeStarted);
   }
 
@@ -228,7 +217,7 @@ export class FrameRenderer {
    * frames these readers own, and it is the capture that copies them out.
    */
   async releaseFinishedReaders(): Promise<void> {
-    const visible = new Set(this.layers.map((layer) => layer.clip.id));
+    const visible = new Set(this.decodes.map((entry) => entry.clip.id));
     for (const [clipId, reader] of [...this.readers]) {
       if (visible.has(clipId)) continue;
       this.readers.delete(clipId);

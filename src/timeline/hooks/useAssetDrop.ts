@@ -1,8 +1,9 @@
 import { useEffect, useState, type DragEvent } from 'react';
-import { useStore } from '../../store/store';
+import { useStore, getLanes, getTimeline } from '../../store/store';
 import { msFromContentX, timelineContentEl } from '../coords';
 import {
   ASSET_DRAG_MIME,
+  COMP_DRAG_MIME,
   EFFECT_DRAG_MIME,
   MARKER_BAR_HEIGHT_PX,
   PRESET_DRAG_MIME,
@@ -16,7 +17,8 @@ import { t } from '../../i18n';
 import { NEW_TRACK_TARGET, resolveTargetTrack } from '../../store/projectOps';
 import { trackTops } from '../trackHeight';
 import { collectSnapPoints, snapMove, snapTime } from '../snapping';
-import { draggedAssetId, setDraggedAssetId } from '../dragSource';
+import { draggedAssetId, draggedComp, setDraggedAssetId, setDraggedComp } from '../dragSource';
+import { findComp, tracksDurationMs } from '../../model';
 import { useImport } from '../../ui/useImport';
 import type { Track } from '../../types';
 
@@ -25,9 +27,9 @@ function belowTracks(e: DragEvent): boolean {
   const content = timelineContentEl(e.currentTarget as HTMLElement);
   if (!content) return false;
   const s = useStore.getState();
-  const n = s.project.tracks.length;
+  const n = getLanes(s).length;
   if (n === 0) return false;
-  const totalH = trackTops(s.project.tracks, s.trackHeightPx, new Set(s.expandedTrackIds))[n]!;
+  const totalH = trackTops(getLanes(s), s.trackHeightPx, new Set(s.expandedTrackIds))[n]!;
   const rowsBottom =
     content.getBoundingClientRect().top + MARKER_BAR_HEIGHT_PX + RULER_HEIGHT_PX + totalH;
   return e.clientY >= rowsBottom;
@@ -73,7 +75,7 @@ function resolveDrop(
   if (!s.snapEnabled) return { startMs: raw, trackId, track };
   // Magnetism, like a clip drag: the dropped media grabs clip edges, markers,
   // the playhead and the origin, so a drop can build a butt cut by eye.
-  const points = collectSnapPoints(s.project, [], s.currentTimeMs, s.loopRegion);
+  const points = collectSnapPoints(getTimeline(s), [], s.currentTimeMs, s.loopRegion);
   const thresholdMs = SNAP_THRESHOLD_PX / (s.pxPerSec / 1000);
   const snapped =
     durationMs != null
@@ -106,6 +108,7 @@ export function useAssetDrop() {
     const clear = () => {
       setNewTrackDragOver(false);
       setDraggedAssetId(null);
+      setDraggedComp(null, 0);
       useStore.getState().setDropPreview(null);
     };
     window.addEventListener('drop', clear, { capture: true });
@@ -122,7 +125,21 @@ export function useAssetDrop() {
     const s = useStore.getState();
     // Nothing to ghost onto on an empty project: that state is one big dropzone
     // with its own invitation, and the app's import overlay stays on top of it.
-    if (s.project.tracks.length === 0) return;
+    if (getLanes(s).length === 0) return;
+    // A composition being dragged in from the library: it has no asset behind
+    // it, but it does have a name and a length, which is everything the ghost
+    // needs to promise where it will land.
+    const comp = draggedComp();
+    if (comp) {
+      const { startMs, trackId, track } = resolveDrop(e, 'video', comp.durationMs);
+      s.setDropPreview({
+        startMs,
+        durationMs: comp.durationMs,
+        trackId: track?.id ?? (trackId === NEW_TRACK_TARGET ? null : (trackId ?? null)),
+        label: findComp(s.project, comp.id)?.name ?? '',
+      });
+      return;
+    }
     const asset = draggedAssetId() ? s.assets[draggedAssetId()!] : undefined;
     // Files have no duration and no name until they are read: `items` still
     // gives their count during the drag, which is all the label needs.
@@ -146,7 +163,7 @@ export function useAssetDrop() {
 
   const onAssetDragOver = (e: DragEvent) => {
     const types = e.dataTransfer.types;
-    if (types.includes(ASSET_DRAG_MIME) || hasFiles(e)) {
+    if (types.includes(ASSET_DRAG_MIME) || types.includes(COMP_DRAG_MIME) || hasFiles(e)) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
       setNewTrackDragOver(belowTracks(e));
@@ -199,6 +216,21 @@ export function useAssetDrop() {
         // predecessor to transition from, or a gap it refuses to close.
         s.setNotice(t('library.transitions.rejected'));
       }
+      return;
+    }
+    const compId = e.dataTransfer.getData(COMP_DRAG_MIME);
+    if (compId) {
+      const comp = findComp(s.project, compId);
+      if (!comp) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Laid down as a video layer whenever the composition has any picture in
+      // it; an audio-only precomp lands on an audio lane, where its waveform
+      // belongs. The store refuses the drop outright if it would put the
+      // composition inside itself.
+      const kind = comp.tracks.some((tr) => tr.kind === 'video') ? 'video' : 'audio';
+      const { startMs, trackId } = resolveDrop(e, kind, tracksDurationMs(comp.tracks));
+      s.addCompClipAt(compId, startMs, trackId);
       return;
     }
     const assetId = e.dataTransfer.getData(ASSET_DRAG_MIME);

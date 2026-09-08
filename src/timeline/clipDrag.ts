@@ -5,9 +5,9 @@
  * fade / volume). The session plumbing that feeds it lives in
  * `hooks/useClipDrag.ts`.
  */
-import { Clip, MediaAsset, Project } from '../types';
-import { clipDurationMs, clipEndMs } from '../model';
-import { useStore } from '../store/store';
+import { Clip, MediaAsset } from '../types';
+import { clipDurationMs, clipEndMs, type TimelineView } from '../model';
+import { useStore, getLanes } from '../store/store';
 import { snapMove, snapTime } from './snapping';
 import { msFromClientX, msFromContentX } from './coords';
 import { MIN_CLIP_DURATION_MS, SNAP_THRESHOLD_PX } from '../app/config';
@@ -111,15 +111,15 @@ const signedMs = (v: number) => `${v < 0 ? '−' : '+'}${formatTime(Math.abs(v))
  * step with the picture it belongs to.
  */
 export const rippleForTrim = (
-  project: Project,
+  timeline: TimelineView,
   clip: Clip,
   edge: 'left' | 'right',
   acrossTracks = false,
 ): { id: string; startMs: number }[] => {
-  const own = project.tracks.find((tr) => tr.id === clip.trackId);
+  const own = timeline.tracks.find((tr) => tr.id === clip.trackId);
   const captured: { id: string; startMs: number }[] = [];
   const editPoint = edge === 'left' ? clip.timelineStartMs : clipEndMs(clip);
-  for (const track of project.tracks) {
+  for (const track of timeline.tracks) {
     if (track === own) {
       for (const c of track.clips) {
         if (c.id !== clip.id && c.timelineStartMs > clip.timelineStartMs) {
@@ -142,12 +142,12 @@ export const rippleForTrim = (
  * yields null and the press falls back to a plain trim.
  */
 export const rollForTrim = (
-  project: Project,
+  timeline: TimelineView,
   assets: Record<string, MediaAsset>,
   clip: Clip,
   mode: DragState['mode'],
 ): DragState['roll'] => {
-  const siblings = project.tracks.find((tr) => tr.id === clip.trackId)?.clips ?? [];
+  const siblings = timeline.tracks.find((tr) => tr.id === clip.trackId)?.clips ?? [];
   const neighbor =
     mode === 'trim-right'
       ? siblings
@@ -210,9 +210,8 @@ export const applyClipDrag = (
   // Post-edit clip values for the badge, read fresh from the store (the
   // `clip` prop can be a stale snapshot after a cross-track remount).
   const findLive = (id: string) =>
-    useStore
-      .getState()
-      .project.tracks.flatMap((tr) => tr.clips)
+    getLanes(useStore.getState())
+      .flatMap((tr) => tr.clips)
       .find((c) => c.id === id);
 
   if (d.mode === 'move') {
@@ -242,7 +241,7 @@ export const applyClipDrag = (
       // Target track = the row under the pointer, resolved content-relative
       // so vertical autoscroll (rect moves, pointer doesn't) stays correct.
       let targetTrackId: string | undefined;
-      const tracks = state.project.tracks;
+      const tracks = getLanes(state);
       const rowsRect = d.rowsEl?.getBoundingClientRect();
       const targetIdx = rowsRect
         ? clamp(
@@ -406,7 +405,7 @@ export const applyClipDrag = (
       // the live store state (the `clip` prop can lag a render), then pull the
       // trimmed clip back to its original start - ripple keeps the edit point
       // still, the downstream content moves instead.
-      const live = state.project.tracks
+      const live = getLanes(state)
         .flatMap((tr) => tr.clips)
         .find((c) => c.id === clip.id);
       if (!live) return;

@@ -30,6 +30,7 @@ import { JobProgress } from './JobProgress';
 import { TrackPickerDialog, type PickerTrack } from './TrackPickerDialog';
 import { useImport } from './useImport';
 import { EffectsPane, TransitionsPane } from './EffectLibrary';
+import { CompsPane } from './CompCard';
 import { setDraggedAssetId } from '../timeline/dragSource';
 import type { LibraryTab } from '../store/editorState';
 
@@ -97,6 +98,10 @@ export function MediaLibrary() {
 
   const mediaPane = (
     <>
+      {/* Above the footage, and only once there is one: a precomp is a source
+          the user MADE, so it belongs in the bin - but an empty section would
+          be a heading explaining a feature nobody has reached for yet. */}
+      <CompsPane />
       <div className="flex h-7 flex-none items-center gap-1.5 px-2 text-2xs font-semibold uppercase tracking-wide text-zinc-400">
         <ArchiveIcon className="h-3.5 w-3.5" />
         {/* Bare count badge: no unit to translate, but it needs a spoken label. */}

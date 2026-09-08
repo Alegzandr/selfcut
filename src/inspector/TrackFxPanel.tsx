@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Cross2Icon, ResetIcon } from '@radix-ui/react-icons';
-import { useStore } from '../store/store';
+import { useStore, getLanes } from '../store/store';
 import { AudioFxType, Track } from '../types';
 import { COLOR_PROPS, sampleChannel } from '../model';
 import { PERCENT_ENTRY, SliderRow } from './SliderRow';
@@ -29,7 +29,7 @@ export function TrackFxPanel({ track }: { track: Track }) {
   const { t } = useTranslation();
   const { setFxTrack, resetTrackColor } = useStore.getState();
   const ordinal = useStore((s) => {
-    const list = s.project.tracks.filter((tr) => tr.kind === track.kind);
+    const list = getLanes(s).filter((tr) => tr.kind === track.kind);
     return list.findIndex((tr) => tr.id === track.id) + 1;
   });
   const video = track.kind === 'video';

@@ -6,7 +6,7 @@ import {
   PlayIcon,
   TrackPreviousIcon,
 } from "@radix-ui/react-icons";
-import { useStore, getTimelineFps, projectDurationMs } from "../store/store";
+import { useStore, getTimelineFps, getDurationMs } from '../store/store';
 import { Tooltip } from "./Tooltip";
 import { useEditorCommands } from "./commands";
 import { TrackHeightMenu } from "./TrackHeightMenu";
@@ -38,7 +38,7 @@ function TimeReadout() {
     if (draft !== null) return;
     const apply = () => {
       const s = useStore.getState();
-      const durationMs = projectDurationMs(s.project);
+      const durationMs = getDurationMs(s);
       const fps = getTimelineFps(s);
       const cur = formatClockParts(s.currentTimeMs, fps, s.timeFormat);
       const rightMs = remainingRef.current

@@ -6,9 +6,24 @@
  */
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ImageIcon, Link2Icon, SpeakerLoudIcon, TextIcon, VideoIcon } from '@radix-ui/react-icons';
+import {
+  EnterIcon,
+  ImageIcon,
+  Link2Icon,
+  SpeakerLoudIcon,
+  StackIcon,
+  TextIcon,
+  VideoIcon,
+} from '@radix-ui/react-icons';
 import { Clip } from '../types';
-import { audioTrackForClip, clipDurationMs, hasVelocity, rampRange } from '../model';
+import {
+  audioTrackForClip,
+  clipDurationMs,
+  findComp,
+  hasVelocity,
+  isCompClip,
+  rampRange,
+} from '../model';
 import { peaksJobKey, thumbnailsJobKey } from '../media/visualJobs';
 import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
@@ -28,6 +43,7 @@ import { ClipVolumeLine } from './ClipVolumeLine';
 import { ClipVelocityLine } from './ClipVelocityLine';
 import { useClipDrag } from './hooks/useClipDrag';
 import { linkGroupActive } from './linkHighlight';
+import { compColorClass } from './compColors';
 
 interface Props {
   clip: Clip;
@@ -63,6 +79,11 @@ export const ClipView = memo(function ClipView({
   const dragBadgeText = useStore((s) =>
     s.dragBadge?.clipId === clip.id ? s.dragBadge.text : null,
   );
+
+  // The composition a comp clip plays. Subscribed to by id so renaming it, or
+  // adding a lane inside it, repaints the clip that carries it - a precomp whose
+  // label lies about what is in it is worse than no label.
+  const comp = useStore((s) => (isCompClip(clip) ? (findComp(s.project, clip.compId) ?? null) : null));
 
   const durMs = clipDurationMs(clip);
   const left = padLeft + clip.timelineStartMs * pxPerMs;
@@ -165,7 +186,9 @@ export const ClipView = memo(function ClipView({
               ? t(`clip.solid.${clip.solid.kind}`)
               : clip.kind === 'shape'
                 ? t(`clip.shape.${clip.shape.kind}`)
-                : (asset?.file.name ?? ''),
+                : isCompClip(clip)
+                  ? t('comp.clipAria', { name: comp?.name ?? '' })
+                  : (asset?.file.name ?? ''),
         start: formatTime(clip.timelineStartMs),
         end: formatTime(clip.timelineStartMs + durMs),
         track: trackNumber,
@@ -200,6 +223,15 @@ export const ClipView = memo(function ClipView({
       onDoubleClick={(e) => {
         if (coarse) return;
         e.stopPropagation();
+        // A comp clip opens what it plays - the gesture every editor that nests
+        // sequences uses, and the one people try first. It wins over the loop
+        // region here because a precomp's bounds are one keystroke away (the
+        // loop region is still on the plain clips beside it), while stepping
+        // inside has no other single-gesture way in.
+        if (isCompClip(clip)) {
+          useStore.getState().openComp(clip.compId);
+          return;
+        }
         // Vegas-style: double-click turns the clip's bounds into the selection
         // region (yellow corners) - ready to loop, review or export that span.
         useStore
@@ -217,7 +249,32 @@ export const ClipView = memo(function ClipView({
         state.openContextMenu(e.clientX, e.clientY, { kind: 'clip', clipId: clip.id });
       }}
     >
-      {clip.kind === 'text' ? (
+      {isCompClip(clip) ? (
+        (() => {
+          const colors = compColorClass(comp?.color);
+          return (
+            <div
+              className={`pointer-events-none flex h-full w-full items-center gap-1.5 px-1.5 ${colors.body}`}
+            >
+              {/* Two stacked plates rather than one icon: a precomp is a
+                  timeline standing in for many layers, and the stack is what
+                  says so before a single word is read. */}
+              <StackIcon className={`h-3.5 w-3.5 flex-none ${colors.ink}`} />
+              <span className={`truncate text-2xs font-medium ${colors.ink}`}>
+                {comp?.name ?? t('comp.defaultName')}
+              </span>
+              {comp && width > 130 && (
+                <span className="ml-auto flex flex-none items-center gap-1 text-3xs text-white/45">
+                  {t('comp.layers', { count: comp.tracks.length })}
+                  {/* The way in, spelled out on the clip itself while there is
+                      room: nothing else on a timeline opens on double-click. */}
+                  <EnterIcon className="h-2.5 w-2.5" aria-hidden />
+                </span>
+              )}
+            </div>
+          );
+        })()
+      ) : clip.kind === 'text' ? (
         <div className="pointer-events-none flex h-full w-full items-center gap-1 bg-gradient-to-b from-brand-900/60 to-brand-950 px-1.5">
           <TextIcon className="h-3 w-3 flex-none text-brand-300" />
           <span className="truncate text-2xs font-medium text-brand-100">

@@ -1,7 +1,7 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
 import { MediaAsset } from '../../types';
-import { isGeneratedClip, outputDimensions, reframedTransform } from '../../model';
+import { forEachTrackSet, isGeneratedClip, outputDimensions, reframedTransform } from '../../model';
 import { createEmptyProject } from '../projectOps';
 import { disposeAssetResources } from '../../media/mediaCache';
 import { clearTranscodedAudio } from '../../lib/audioCache';
@@ -39,17 +39,23 @@ export function createProjectSlice(
       let reframed = 0;
       withHistory((p) => {
         p.aspectRatio = a;
-        for (const track of p.tracks) {
-          if (track.kind !== 'video') continue;
-          for (const clip of track.clips) {
-            if (isGeneratedClip(clip)) continue;
-            const next = reframedTransform(clip, assets[clip.assetId], from, to, framing);
-            if (next) {
-              clip.transform = next;
-              reframed++;
+        // Every timeline in the project, compositions included: the output
+        // frame is the project's, so a precomp is reframed by the same change
+        // that reframes the main cut - and a comp clip carries the result up
+        // without being reframed itself (it already fills the new frame).
+        forEachTrackSet(p, (tracks) => {
+          for (const track of tracks) {
+            if (track.kind !== 'video') continue;
+            for (const clip of track.clips) {
+              if (isGeneratedClip(clip) || clip.kind === 'comp') continue;
+              const next = reframedTransform(clip, assets[clip.assetId], from, to, framing);
+              if (next) {
+                clip.transform = next;
+                reframed++;
+              }
             }
           }
-        }
+        });
       });
       return reframed;
     },
@@ -70,6 +76,10 @@ export function createProjectSlice(
         // open project's id. Set here, atomically, so the persistence layer sees
         // a switch (and adopts the new library instead of diff-deleting the old).
         currentProjectId: project.id,
+        // A different project has different compositions: whatever the editor
+        // was standing in belonged to the one being closed.
+        activeCompId: null,
+        renamingCompId: null,
         assets: map,
         past: [],
         future: [],
@@ -96,6 +106,9 @@ export function createProjectSlice(
       set({
         project: fresh,
         currentProjectId: fresh.id,
+        // An empty project has no compositions to be standing in.
+        activeCompId: null,
+        renamingCompId: null,
         assets: {},
         past: [],
         future: [],

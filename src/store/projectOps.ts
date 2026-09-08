@@ -1,5 +1,11 @@
 import { AspectRatio, Clip, Project, Track } from '../types';
-import { clipDurationMs, clipEndMs } from '../model';
+import {
+  clipDurationMs,
+  clipEndMs,
+  forEachTrackSet,
+  type TrackHost,
+  tracksHolding,
+} from '../model';
 import { uid } from '../lib/id';
 import { MIN_CLIP_DURATION_MS, PROJECT_FPS } from '../app/config';
 
@@ -10,10 +16,20 @@ import { MIN_CLIP_DURATION_MS, PROJECT_FPS } from '../app/config';
  * draft) and return/mutate it, which keeps them unit-testable in isolation.
  */
 
+export type { TrackHost };
+
 const DEFAULT_ASPECT: AspectRatio = '16:9';
 
 export function createEmptyProject(): Project {
-  return { id: uid('proj'), aspectRatio: DEFAULT_ASPECT, fps: PROJECT_FPS, tracks: [], markers: [], luts: [] };
+  return {
+    id: uid('proj'),
+    aspectRatio: DEFAULT_ASPECT,
+    fps: PROJECT_FPS,
+    tracks: [],
+    markers: [],
+    luts: [],
+    comps: [],
+  };
 }
 
 /**
@@ -24,16 +40,16 @@ export function createEmptyProject(): Project {
  * without the user having to reorder tracks. Mutates `p` (called on the
  * withHistory draft).
  */
-export function insertTrack(p: Project, track: Track, opts?: { atTop?: boolean }): void {
+export function insertTrack(host: TrackHost, track: Track, opts?: { atTop?: boolean }): void {
   if (opts?.atTop) {
-    p.tracks.unshift(track);
+    host.tracks.unshift(track);
     return;
   }
   if (track.kind === 'video') {
-    const lastVideoIdx = p.tracks.map((t) => t.kind).lastIndexOf('video');
-    p.tracks.splice(lastVideoIdx + 1, 0, track);
+    const lastVideoIdx = host.tracks.map((t) => t.kind).lastIndexOf('video');
+    host.tracks.splice(lastVideoIdx + 1, 0, track);
   } else {
-    p.tracks.push(track);
+    host.tracks.push(track);
   }
 }
 
@@ -48,8 +64,29 @@ export function insertTrack(p: Project, track: Track, opts?: { atTop?: boolean }
  * untouched tracks/clips keep their identity.
  */
 export function resolveOverlaps(p: Project, priorityClipId?: string | null): Project {
-  let projectChanged = false;
-  const tracks = p.tracks.map((track) => {
+  const tracks = settleTracks(p.tracks, priorityClipId);
+  // Nested compositions are settled too: an edit inside a precomp lands on its
+  // own lanes, and a layout left illegal there would surface as an overlap the
+  // user cannot see from the timeline they are standing on.
+  let comps = p.comps;
+  if (comps && comps.length > 0) {
+    let compsChanged = false;
+    const next = comps.map((comp) => {
+      const settled = settleTracks(comp.tracks, priorityClipId);
+      if (settled === comp.tracks) return comp;
+      compsChanged = true;
+      return { ...comp, tracks: settled };
+    });
+    if (compsChanged) comps = next;
+  }
+  if (tracks === p.tracks && comps === p.comps) return p;
+  return { ...p, tracks, comps };
+}
+
+/** One stack of lanes settled; the same array back when nothing had to move. */
+function settleTracks(input: Track[], priorityClipId?: string | null): Track[] {
+  let changed = false;
+  const tracks = input.map((track) => {
     const sorted = [...track.clips].sort((a, b) => {
       if (a.timelineStartMs !== b.timelineStartMs) return a.timelineStartMs - b.timelineStartMs;
       if (a.id === priorityClipId) return -1;
@@ -71,7 +108,7 @@ export function resolveOverlaps(p: Project, priorityClipId?: string | null): Pro
       prev = { start, end: start + clipDurationMs(c) };
     }
     if (movedTo.size === 0) return track;
-    projectChanged = true;
+    changed = true;
     return {
       ...track,
       clips: track.clips.map((c) =>
@@ -79,7 +116,7 @@ export function resolveOverlaps(p: Project, priorityClipId?: string | null): Pro
       ),
     };
   });
-  return projectChanged ? { ...p, tracks } : p;
+  return changed ? tracks : input;
 }
 
 /**
@@ -89,8 +126,31 @@ export function resolveOverlaps(p: Project, priorityClipId?: string | null): Pro
  * Project reference comes back.
  */
 export function patchClips(p: Project, edits: Map<string, (c: Clip) => Clip>): Project {
-  let projectChanged = false;
-  const tracks = p.tracks.map((track) => {
+  const tracks = patchTracks(p.tracks, edits);
+  // Clip ids are unique across the whole project, so a patch is applied
+  // everywhere rather than only to the composition the user has open: an edit
+  // that names a clip by id is about THAT clip, and having to also say which
+  // composition holds it would be a second source of truth waiting to disagree
+  // with the first. Untouched compositions keep their identity.
+  let comps = p.comps;
+  if (comps && comps.length > 0) {
+    let compsChanged = false;
+    const next = comps.map((comp) => {
+      const patched = patchTracks(comp.tracks, edits);
+      if (patched === comp.tracks) return comp;
+      compsChanged = true;
+      return { ...comp, tracks: patched };
+    });
+    if (compsChanged) comps = next;
+  }
+  if (tracks === p.tracks && comps === p.comps) return p;
+  return { ...p, tracks, comps };
+}
+
+/** One stack of lanes patched; the same array back when no clip was touched. */
+function patchTracks(input: Track[], edits: Map<string, (c: Clip) => Clip>): Track[] {
+  let changed = false;
+  const tracks = input.map((track) => {
     let trackChanged = false;
     const clips = track.clips.map((c) => {
       const edit = edits.get(c.id);
@@ -101,10 +161,10 @@ export function patchClips(p: Project, edits: Map<string, (c: Clip) => Clip>): P
       return next;
     });
     if (!trackChanged) return track;
-    projectChanged = true;
+    changed = true;
     return { ...track, clips };
   });
-  return projectChanged ? { ...p, tracks } : p;
+  return changed ? tracks : input;
 }
 
 /**
@@ -120,44 +180,69 @@ export const NEW_TRACK_TARGET = '__new-track__';
  * promise a row the drop then refuses.
  */
 export function resolveTargetTrack(
-  p: Project,
+  host: TrackHost,
   kind: Track['kind'],
   preferredTrackId?: string,
 ): Track | null {
   if (preferredTrackId === NEW_TRACK_TARGET) return null;
-  const preferred = preferredTrackId ? p.tracks.find((t) => t.id === preferredTrackId) : undefined;
+  const preferred = preferredTrackId
+    ? host.tracks.find((t) => t.id === preferredTrackId)
+    : undefined;
   if (preferred && preferred.kind === kind && !preferred.locked) return preferred;
   // A locked track accepts no new clips: fall through to the next free one, or
   // to a fresh track, rather than dropping content onto a track the user froze.
-  return p.tracks.find((t) => t.kind === kind && !t.locked) ?? null;
+  return host.tracks.find((t) => t.kind === kind && !t.locked) ?? null;
 }
 
-/** Find (or create) the track a clip of the given kind should land on. Mutates `p`. */
-export function ensureTrack(p: Project, kind: Track['kind'], preferredTrackId?: string): Track {
-  const existing = resolveTargetTrack(p, kind, preferredTrackId);
+/** Find (or create) the track a clip of the given kind should land on. Mutates `host`. */
+export function ensureTrack(
+  host: TrackHost,
+  kind: Track['kind'],
+  preferredTrackId?: string,
+): Track {
+  const existing = resolveTargetTrack(host, kind, preferredTrackId);
   if (existing) return existing;
   const track: Track = { id: uid('track'), kind, clips: [] };
-  insertTrack(p, track);
+  insertTrack(host, track);
   return track;
 }
 
+/**
+ * The clip with this id, anywhere in the project - inside a nested composition
+ * included, since clip ids are unique project-wide.
+ *
+ * Searching everywhere rather than only the open composition is deliberate: an
+ * edit that names a clip by id is about THAT clip, and having to also say which
+ * composition holds it would be a second source of truth waiting to disagree
+ * with the first.
+ */
 export function findClip(
   project: Project,
   clipId: string,
 ): { track: Track; clip: Clip; index: number } | null {
-  for (const track of project.tracks) {
-    const index = track.clips.findIndex((c) => c.id === clipId);
-    if (index !== -1) return { track, clip: track.clips[index]!, index };
-  }
-  return null;
+  let found: { track: Track; clip: Clip; index: number } | null = null;
+  forEachTrackSet(project, (tracks) => {
+    if (found) return;
+    for (const track of tracks) {
+      const index = track.clips.findIndex((c) => c.id === clipId);
+      if (index !== -1) {
+        found = { track, clip: track.clips[index]!, index };
+        return;
+      }
+    }
+  });
+  return found;
 }
 
 /** Ids of the clips A/V-linked to `clipId` (same non-empty `linkId`), excluding it. */
 export function linkedPartnerIds(project: Project, clipId: string): string[] {
-  const linkId = findClip(project, clipId)?.clip.linkId;
-  if (!linkId) return [];
+  const found = findClip(project, clipId);
+  const linkId = found?.clip.linkId;
+  if (!found || !linkId) return [];
   const out: string[] = [];
-  for (const track of project.tracks) {
+  // Scoped to the clip's own composition, like `linkCandidates`: a link group
+  // never straddles two timelines.
+  for (const track of tracksHolding(project, found.track.id)) {
     for (const c of track.clips) {
       if (c.id !== clipId && c.linkId === linkId) out.push(c.id);
     }
@@ -207,10 +292,14 @@ export function linkCandidates(project: Project, clipId: string): string[] {
   const { clip, track } = found;
   if (clip.linkId != null || clip.kind !== 'media' || clip.assetId === '') return [];
   const wantKind: Track['kind'] = track.kind === 'video' ? 'audio' : 'video';
+  // Candidates come from the clip's OWN composition: a link group is a set of
+  // clips that move together on one timeline, and there is no gesture that could
+  // move a clip in a precomp and one in its parent as a unit.
+  const siblings = tracksHolding(project, track.id);
   const start = clip.timelineStartMs;
   const end = clipEndMs(clip);
   const perTrack: { id: string; overlap: number; gap: number; linkId?: string }[] = [];
-  for (const t of project.tracks) {
+  for (const t of siblings) {
     if (t.kind !== wantKind) continue;
     let best: { id: string; overlap: number; gap: number; linkId?: string } | null = null;
     for (const c of t.clips) {
@@ -233,7 +322,7 @@ export function linkCandidates(project: Project, clipId: string): string[] {
     // candidate of their own, so the result is the full merged set.
     const linkId = [...groups][0]!;
     const out = new Set(perTrack.map((c) => c.id));
-    for (const t of project.tracks) {
+    for (const t of siblings) {
       for (const c of t.clips) {
         if (c.linkId === linkId) out.add(c.id);
       }
@@ -270,7 +359,7 @@ export function linkableSelection(project: Project, selectedClipIds: string[]): 
     // group stays whole rather than splitting off a subset.
     const linkId = [...groups][0]!;
     const out = new Set(selectedClipIds);
-    for (const track of project.tracks) {
+    for (const track of tracksHolding(project, findClip(project, selectedClipIds[0]!)!.track.id)) {
       for (const c of track.clips) {
         if (c.linkId === linkId) out.add(c.id);
       }

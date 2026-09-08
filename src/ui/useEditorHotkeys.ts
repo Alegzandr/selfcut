@@ -1,7 +1,17 @@
 import { useEffect } from 'react';
-import { useStore, getTimelineFps, projectDurationMs, clipEndMs, sortedMarkers } from '../store/store';
+import {
+  useStore,
+  getTimelineFps,
+  clipEndMs,
+  sortedMarkers,
+  getLanes,
+  getCues,
+  getDurationMs,
+  getSelectedClip,
+} from '../store/store';
+import type { EditorState } from '../store/editorState';
 import { zoomAtPlayhead, zoomToFit } from '../timeline/zoom';
-import { EASE_IDS } from '../model';
+import { compPath, EASE_IDS, isCompClip } from '../model';
 import { focusIsKeyboardDriven } from '../lib/focusModality';
 import { openProject, saveProject } from './projectActions';
 import { PLAYBACK_SKIP_BACK_MS, PLAYBACK_SKIP_FORWARD_MS } from '../app/config';
@@ -13,14 +23,14 @@ import { shuttleStep } from '../lib/shuttle';
  */
 function jumpToEdge(dir: -1 | 1) {
   const s = useStore.getState();
-  const points = new Set<number>([0, projectDurationMs(s.project)]);
-  for (const track of s.project.tracks) {
+  const points = new Set<number>([0, getDurationMs(s)]);
+  for (const track of getLanes(s)) {
     for (const clip of track.clips) {
       points.add(clip.timelineStartMs);
       points.add(clipEndMs(clip));
     }
   }
-  for (const marker of sortedMarkers(s.project)) points.add(marker.timeMs);
+  for (const marker of sortedMarkers(getCues(s))) points.add(marker.timeMs);
   if (s.loopRegion) {
     points.add(s.loopRegion.startMs);
     points.add(s.loopRegion.endMs);
@@ -42,7 +52,7 @@ function jumpToEdge(dir: -1 | 1) {
 function trimSelectedToPlayhead(edge: 'left' | 'right') {
   const s = useStore.getState();
   const selected = new Set(s.selectedClipIds);
-  const targets = s.project.tracks
+  const targets = getLanes(s)
     .flatMap((tr) => tr.clips)
     .filter(
       (clip) =>
@@ -84,7 +94,7 @@ function frameMs(): number {
 /** Cue the playhead to the next (1) or previous (-1) marker, Premiere's Shift+M pair. */
 function jumpToMarker(dir: -1 | 1) {
   const s = useStore.getState();
-  const markers = sortedMarkers(s.project);
+  const markers = sortedMarkers(getCues(s));
   const target =
     dir === 1
       ? markers.find((m) => m.timeMs > s.currentTimeMs + 1)
@@ -102,10 +112,10 @@ function toggleTrackExpansion() {
   const s = useStore.getState();
   const targets: string[] = [];
   if (s.selectedClipIds.length === 0) {
-    for (const track of s.project.tracks) targets.push(track.id);
+    for (const track of getLanes(s)) targets.push(track.id);
   } else {
     const selected = new Set(s.selectedClipIds);
-    for (const track of s.project.tracks) {
+    for (const track of getLanes(s)) {
       if (track.clips.some((c) => selected.has(c.id))) targets.push(track.id);
     }
   }
@@ -126,7 +136,7 @@ function nudgeSelected(frames: number) {
   if (s.selectedClipIds.length === 0) return;
   const step = frameMs() * frames;
   const entries: { clipId: string; timelineStartMs: number }[] = [];
-  for (const track of s.project.tracks) {
+  for (const track of getLanes(s)) {
     for (const clip of track.clips) {
       if (s.selectedClipIds.includes(clip.id)) {
         entries.push({ clipId: clip.id, timelineStartMs: clip.timelineStartMs + step });
@@ -150,6 +160,15 @@ function nudgeSelected(frames: number) {
 function keyboardFocusedButton(el: HTMLElement): boolean {
   if (!el.closest?.('button')) return false;
   return focusIsKeyboardDriven();
+}
+
+/**
+ * One step up the trail the user actually walked in - not always the root, since
+ * a composition can hold another one.
+ */
+function parentCompId(s: EditorState): string | null {
+  const trail = compPath(s.project, s.activeCompId, '');
+  return trail[trail.length - 2]?.compId ?? null;
 }
 
 export function useEditorHotkeys() {
@@ -257,10 +276,18 @@ export function useEditorHotkeys() {
             s.redo();
             return;
           case 'c':
-            if (s.selectedClipIds.length) {
-              e.preventDefault();
-              s.copyClips(s.selectedClipIds);
+            if (!s.selectedClipIds.length) return;
+            e.preventDefault();
+            // Ctrl+Shift+C is After Effects' own Pre-compose, which is exactly
+            // the muscle memory anyone reaching for this feature arrives with.
+            // It steps into the new composition, because wanting to work on
+            // those clips as a unit is the reason to have wrapped them.
+            if (e.shiftKey) {
+              const compId = s.precompose();
+              if (compId) s.openComp(compId);
+              return;
             }
+            s.copyClips(s.selectedClipIds);
             return;
           case 'x':
             if (s.selectedClipIds.length) {
@@ -326,7 +353,7 @@ export function useEditorHotkeys() {
       // is "&", "é", …), plus the numpad.
       const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
       if (digit) {
-        const marker = sortedMarkers(s.project)[Number(digit[1]) - 1];
+        const marker = sortedMarkers(getCues(s))[Number(digit[1]) - 1];
         if (marker) s.seek(marker.timeMs);
         return;
       }
@@ -370,7 +397,7 @@ export function useEditorHotkeys() {
           return;
         case 'End':
           e.preventDefault();
-          s.seek(projectDurationMs(s.project));
+          s.seek(getDurationMs(s));
           return;
         case '+':
         case '=':
@@ -389,10 +416,25 @@ export function useEditorHotkeys() {
         case '?':
           s.setShortcutsOpen(!s.shortcutsOpen);
           return;
+        case 'Enter': {
+          // The keyboard's way in, mirroring the double-click on the clip. Only
+          // ever on a comp clip, so Enter keeps meaning nothing everywhere else.
+          const clip = getSelectedClip(s);
+          if (clip && isCompClip(clip)) {
+            e.preventDefault();
+            s.openComp(clip.compId);
+          }
+          return;
+        }
         case 'Escape':
           if (s.shortcutsOpen) s.setShortcutsOpen(false);
           else if (s.inspectorOpen) s.setInspectorOpen(false);
-          else s.selectClip(null);
+          // Nothing left to dismiss and standing inside a precomp: Escape walks
+          // back out. Last in the chain on purpose - it is the biggest thing
+          // Escape can do here, and it must never fire while a panel is still
+          // open over the timeline.
+          else if (s.selectedClipIds.length) s.selectClip(null);
+          else if (s.activeCompId !== null) s.openComp(parentCompId(s));
           return;
         case 'Delete':
         case 'Backspace':

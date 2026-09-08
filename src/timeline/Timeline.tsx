@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { PlusIcon } from '@radix-ui/react-icons';
-import { useStore, projectDurationMs } from '../store/store';
+import { useStore, getActiveComp, getLanes } from '../store/store';
+import { CompBreadcrumb } from './CompBreadcrumb';
+import { compColorClass } from './compColors';
+import { compDurationMs } from '../model';
 import { TrackRow } from './TrackRow';
 import { Ruler } from './Ruler';
 import { Playhead } from './Playhead';
@@ -80,6 +83,12 @@ function CurveEditorToggle() {
 export function Timeline() {
   const { t } = useTranslation();
   const project = useStore((s) => s.project);
+  // The lanes on screen: the project's own timeline, or those of the nested
+  // composition the user has opened. Everything below reads this, so the whole
+  // timeline surface renders a precomp exactly as it renders the main cut.
+  const lanes = useStore(getLanes);
+  const activeCompId = useStore((s) => s.activeCompId);
+  const activeComp = useStore(getActiveComp);
   const pxPerSec = useStore((s) => s.pxPerSec);
   const trackHeightPx = useStore((s) => s.trackHeightPx);
   const trackHeaderWidthPx = useStore((s) => s.trackHeaderWidthPx);
@@ -141,12 +150,12 @@ export function Timeline() {
   // map, and the header's visible name matches the row's accessible one.
   const trackOrdinals = useMemo(() => {
     const seen = { video: 0, audio: 0 };
-    return new Map(project.tracks.map((tr) => [tr.id, (seen[tr.kind] += 1)]));
-  }, [project.tracks]);
+    return new Map(lanes.map((tr) => [tr.id, (seen[tr.kind] += 1)]));
+  }, [lanes]);
 
-  const empty = project.tracks.length === 0;
+  const empty = lanes.length === 0;
   const pxPerMs = pxPerSec / 1000;
-  const durationMs = projectDurationMs(project);
+  const durationMs = compDurationMs(project, activeCompId);
   // Mobile: half the viewport on both sides so t=0 and the end can sit under the
   // fixed center playhead. Desktop: fixed pad + room to drag clips past the end.
   const padLeft = coarse ? halfW : TIMELINE_PAD_LEFT;
@@ -301,23 +310,23 @@ export function Timeline() {
     const keyframes = [...mq.baseKeyframes];
     const seenKeys = new Set(keyframes.map(keyframeKey));
     const top = rowsEl.getBoundingClientRect().top;
-    const n = s.project.tracks.length;
+    const n = getLanes(s).length;
     // Variable row heights: sum the tops once, then walk to find the two rows
     // the marquee touches instead of dividing by a fixed height.
     const expanded = new Set(s.expandedTrackIds);
-    const tops = trackTops(s.project.tracks, s.trackHeightPx, expanded);
+    const tops = trackTops(getLanes(s), s.trackHeightPx, expanded);
     const totalH = tops[n]!;
     if (maxY >= top && minY <= top + totalH) {
       const r0 = clamp(trackIndexAtY(tops, minY - top), 0, n - 1);
       const r1 = clamp(trackIndexAtY(tops, maxY - top), 0, n - 1);
       const t0 = msFromContentX(content, Math.min(mq.x0, clientX));
       const t1 = msFromContentX(content, Math.max(mq.x0, clientX));
-      for (const track of s.project.tracks.slice(r0, r1 + 1)) {
+      for (const track of getLanes(s).slice(r0, r1 + 1)) {
         for (const clip of track.clips) {
           if (clip.timelineStartMs < t1 && clipEndMs(clip) > t0) ids.add(clip.id);
         }
       }
-      for (const ref of keyframesInBox(s.project.tracks, expanded, tops, {
+      for (const ref of keyframesInBox(getLanes(s), expanded, tops, {
         minY: minY - top,
         maxY: maxY - top,
         t0,
@@ -393,12 +402,17 @@ export function Timeline() {
   };
 
   return (
+    // A column, so the composition trail can sit ABOVE both panes: it names the
+    // timeline as a whole, headers included, and a strip that started after the
+    // header gutter would read as belonging to the tracks.
     <div
-      className="relative flex min-h-0 flex-1"
+      className="relative flex min-h-0 flex-1 flex-col"
       onDragOver={onAssetDragOver}
       onDragLeave={onAssetDragLeave}
       onDrop={onAssetDrop}
     >
+      <CompBreadcrumb />
+      <div className="relative flex min-h-0 flex-1">
       {/* Floats over the panes rather than scrolling with them: it edits the
           selection, not a place on the timeline. */}
       <CurveEditor />
@@ -421,7 +435,7 @@ export function Timeline() {
           {/* Translated to mirror the scroller's vertical offset - the pane has
               no scroll of its own, so the two can never drift apart. */}
           <div ref={headersRef} className="will-change-transform">
-            {project.tracks.map((track) => (
+            {lanes.map((track) => (
               <TrackHeader
                 key={track.id}
                 track={track}
@@ -480,9 +494,9 @@ export function Timeline() {
                 const rowsEl = e.currentTarget as HTMLElement;
                 const content = timelineContentEl(rowsEl);
                 const s = useStore.getState();
-                const tops = trackTops(s.project.tracks, s.trackHeightPx, new Set(s.expandedTrackIds));
+                const tops = trackTops(getLanes(s), s.trackHeightPx, new Set(s.expandedTrackIds));
                 const row = trackIndexAtY(tops, e.clientY - rowsEl.getBoundingClientRect().top);
-                const track = s.project.tracks[row];
+                const track = getLanes(s)[row];
                 useStore.getState().openContextMenu(e.clientX, e.clientY, {
                   kind: 'timeline',
                   trackId: track?.id,
@@ -490,7 +504,7 @@ export function Timeline() {
                 });
               }}
             >
-              {project.tracks.map((track) => (
+              {lanes.map((track) => (
                 <TrackRow
                   key={track.id}
                   track={track}
@@ -512,7 +526,7 @@ export function Timeline() {
               </div>
             )}
             {/* Region shading + marker lines: after the tracks, so they paint over the clips. */}
-            <TimelineOverlay pxPerMs={pxPerMs} trackCount={project.tracks.length} />
+            <TimelineOverlay pxPerMs={pxPerMs} trackCount={lanes.length} />
             <SnapGuide />
             {/* Where the hovering drag would land - painted over the clips it
                 would sit next to, so the fit can be judged before letting go. */}
@@ -560,6 +574,17 @@ export function Timeline() {
             <div className="absolute -left-[5px] top-0 h-0 w-0 border-x-[6px] border-t-[7px] border-x-transparent border-t-red-500" />
           </div>
         )}
+        {/* A hairline in the composition's own colour down the left edge of the
+            lanes while one is open. Peripheral on purpose: it says "not the main
+            cut" from the corner of the eye, at every scroll position, without
+            ever competing with the clips for attention. */}
+        {activeCompId !== null && (
+          <div
+            className={`pointer-events-none absolute inset-y-0 left-0 z-30 w-0.5 ${compColorClass(activeComp?.color).dot}`}
+            aria-hidden
+          />
+        )}
+      </div>
       </div>
     </div>
   );

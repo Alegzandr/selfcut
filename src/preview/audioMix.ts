@@ -1,13 +1,20 @@
-import { AudioFx, Clip, Project, Track } from '../types';
+import { AudioFx, Clip, CompClip, Project, Track } from '../types';
 import {
   clipEndMs,
   clipEnvelopeGainAt,
+  cloneClip,
+  type CompId,
   delegatedLinkIds,
+  findComp,
   hasVelocity,
+  isCompClip,
   isGeneratedClip,
   isTrackAudible,
+  MAX_COMP_DEPTH,
   trackCrossfades,
+  tracksOf,
 } from '../model';
+import { MIN_CLIP_DURATION_MS } from '../app/config';
 import type { AudioSegment } from '../media/audioSegments';
 import { buildAudioFxChain, type AudioFxChain } from './audioFx';
 
@@ -26,6 +33,34 @@ export type SegmentLookup = (
   fromMs: number,
   toMs: number,
 ) => AudioSegment[];
+
+/**
+ * How a nested composition's own timeline maps onto the ROOT one being played.
+ *
+ * The map is affine at every level (`rootMs = offsetMs + compMs * scale`), so
+ * nesting composes into one more affine map rather than into a stack of them:
+ * a clip three precomps deep is scheduled by projecting it into root time once
+ * and then handing it to exactly the code that schedules a clip on the timeline.
+ *
+ * `prefix` keeps ids unique. A composition used twice plays the same clips at
+ * two different instants, and every chain and every "already placed" mark is
+ * keyed by clip id - without a per-instance prefix the second use would find
+ * the first one's chain and schedule nothing.
+ *
+ * `destination` is the comp clip's own gain node, so the composition's whole
+ * sound passes through the fades, volume, pan and effects applied to the clip
+ * that plays it. `visFrom`/`visTo` are its extent in root ms: nothing outside
+ * the window the comp clip actually plays may be heard.
+ */
+interface CompFrame {
+  offsetMs: number;
+  scale: number;
+  prefix: string;
+  destination: AudioNode;
+  visFromMs: number;
+  visToMs: number;
+  depth: number;
+}
 
 /** The per-clip node chain, built once and fed by every segment of that clip. */
 interface ClipChain {
@@ -94,29 +129,119 @@ export class MixScheduler {
    * yet. Idempotent: calling it again with the same or an overlapping window
    * adds only what is new, which is what makes it safe to call every tick.
    */
-  extend(project: Project, fromMs: number, untilMs: number): void {
+  extend(project: Project, fromMs: number, untilMs: number, compId: CompId = null): void {
     if (this.stopped || !(untilMs > fromMs)) return;
-    const delegated = delegatedLinkIds(project);
+    this.extendTracks(project, tracksOf(project, compId), fromMs, untilMs, null);
+  }
 
-    for (const track of project.tracks) {
-      if (!isTrackAudible(track, project)) continue;
+  /**
+   * Schedule one stack of lanes, either the timeline itself (`frame` null) or a
+   * composition nested inside it.
+   *
+   * Solo, mute and link delegation are resolved against THESE lanes: a lane
+   * soloed inside a precomp silences its neighbours in there and nothing else,
+   * which is the only reading that lets a precomp be worked on without the
+   * parent's mix changing under it.
+   */
+  private extendTracks(
+    project: Project,
+    tracks: Track[],
+    fromMs: number,
+    untilMs: number,
+    frame: CompFrame | null,
+  ): void {
+    if (this.stopped || !(untilMs > fromMs)) return;
+    const delegated = delegatedLinkIds(tracks);
+
+    for (const track of tracks) {
+      if (!isTrackAudible(track, tracks)) continue;
       const trackVolume = track.volume ?? 1;
       if (trackVolume <= 0) continue;
       const xfades = trackCrossfades(track.clips);
-      const bus = typeof this.destination === 'function' ? this.destination(track.id) : this.destination;
-      const dest = this.trackInput(track, bus);
+      // Inside a composition every lane feeds the comp clip's own chain, so the
+      // group is faded, panned and metered as the one layer the parent sees.
+      const bus = frame
+        ? frame.destination
+        : typeof this.destination === 'function'
+          ? this.destination(track.id)
+          : this.destination;
+      const dest = this.trackInput(track, bus, frame?.prefix ?? '');
       for (const clip of track.clips) {
+        if (clip.volume <= 0) continue;
+        if (isCompClip(clip)) {
+          this.extendComp(project, clip, dest, trackVolume, fromMs, untilMs, frame);
+          continue;
+        }
         if (isGeneratedClip(clip)) continue;
         // The video side of a link delegates its audio to the group's audio
         // clips; playing it here too would double the source. A group without
         // any audio-track member delegates nothing and stays audible.
         if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
-        if (clip.volume <= 0) continue;
-        if (clipEndMs(clip) <= fromMs || clip.timelineStartMs >= untilMs) continue;
+        const scheduled = frame ? projectClip(clip, frame) : clip;
+        if (!scheduled) continue;
+        if (clipEndMs(scheduled) <= fromMs || scheduled.timelineStartMs >= untilMs) continue;
+        const scale = frame ? frame.scale : 1;
         const xf = xfades.get(clip.id) ?? { inMs: 0, outMs: 0 };
-        this.extendClip(clip, dest, trackVolume, xf.inMs, xf.outMs, fromMs, untilMs);
+        this.extendClip(
+          scheduled,
+          dest,
+          trackVolume,
+          xf.inMs * scale,
+          xf.outMs * scale,
+          fromMs,
+          untilMs,
+        );
       }
     }
+  }
+
+  /**
+   * Schedule the composition a comp clip plays, through the clip's own chain.
+   *
+   * The clip is projected into root time first, exactly like a media clip, and
+   * given a chain of its own - so its volume, fades, pan, mono and effects
+   * process the composition's whole sound rather than any one layer of it. Its
+   * extent becomes the window nothing inside may be heard outside of.
+   *
+   * A velocity ramp mutes it, for the same reason it mutes a media clip: a
+   * buffer source plays at one rate for its whole life, and nothing here can
+   * make a whole composition swoop in pitch.
+   */
+  private extendComp(
+    project: Project,
+    clip: CompClip,
+    destination: AudioNode,
+    trackVolume: number,
+    fromMs: number,
+    untilMs: number,
+    frame: CompFrame | null,
+  ): void {
+    if (hasVelocity(clip)) return;
+    const depth = (frame?.depth ?? 0) + 1;
+    if (depth > MAX_COMP_DEPTH) return;
+    const comp = findComp(project, clip.compId);
+    if (!comp || comp.tracks.length === 0) return;
+    const scheduled = frame ? projectClip(clip, frame) : clip;
+    if (!scheduled) return;
+    const startMs = scheduled.timelineStartMs;
+    const endMs = clipEndMs(scheduled);
+    if (endMs <= fromMs || startMs >= untilMs) return;
+
+    const prefix = `${frame?.prefix ?? ''}${clip.id}/`;
+    const chain = this.chainFor(scheduled, destination, trackVolume, 0, 0, Math.max(fromMs, startMs));
+    // Composition ms -> root ms. `scheduled.speed` is already source (here:
+    // composition) ms per ROOT ms, so its reciprocal is the scale, and the
+    // origin is where composition time 0 would fall.
+    const scale = 1 / (scheduled.speed || 1);
+    this.extendTracks(project, comp.tracks, Math.max(fromMs, startMs), Math.min(untilMs, endMs), {
+      offsetMs: startMs - scheduled.sourceInMs * scale,
+      scale,
+      prefix,
+      destination: chain.input,
+      visFromMs: startMs,
+      visToMs: endMs,
+      depth,
+    });
   }
 
   /**
@@ -128,13 +253,18 @@ export class MixScheduler {
    * read the processed lane - what the export will contain - rather than the
    * raw sum with the effect hanging off the side.
    */
-  private trackInput(track: Track, bus: AudioNode): AudioNode {
-    const built = this.trackFx.get(track.id);
+  private trackInput(track: Track, bus: AudioNode, prefix: string): AudioNode {
+    // Keyed with the composition instance, not by track id alone: one
+    // composition used twice is two lanes feeding two different comp chains,
+    // and sharing one effect chain between them would route the second use into
+    // the first one's fader.
+    const key = `${prefix}${track.id}`;
+    const built = this.trackFx.get(key);
     if (built) return built.input;
     const chain = buildAudioFxChain(this.ctx, track.audioFx);
     if (!chain) return bus;
     chain.output.connect(bus);
-    this.trackFx.set(track.id, chain);
+    this.trackFx.set(key, chain);
     return chain.input;
   }
 
@@ -331,6 +461,112 @@ export class MixScheduler {
 }
 
 /**
+ * A clip from inside a composition, rewritten as a clip on the ROOT timeline.
+ *
+ * Everything the scheduler needs is affine in time, so one projection is enough:
+ * the start moves, the rate becomes source ms per ROOT ms, and the fades stretch
+ * with the same factor. The trim is then cut back to the window the comp clip
+ * actually plays, because the scheduler places a segment ONCE and reads the
+ * clip's own in/out points to decide how much of it to play - a clip left
+ * sticking out of the window would be heard past the end of the layer.
+ *
+ * Returns null for a clip the comp clip never reaches, and for a ramped one: a
+ * velocity ramp is silent everywhere else too.
+ */
+function projectClip<T extends Clip>(clip: T, frame: CompFrame): T | null {
+  if (hasVelocity(clip)) return null;
+  const rawStart = frame.offsetMs + clip.timelineStartMs * frame.scale;
+  const rawEnd = frame.offsetMs + clipEndMs(clip) * frame.scale;
+  const start = Math.max(rawStart, frame.visFromMs);
+  const end = Math.min(rawEnd, frame.visToMs);
+  if (end - start < MIN_CLIP_DURATION_MS) return null;
+
+  const out = cloneClip(clip);
+  out.id = `${frame.prefix}${clip.id}`;
+  // Source ms per ROOT ms: the clip's own rate against its composition, divided
+  // by how much slower (or faster) that composition itself runs.
+  out.speed = clip.speed / frame.scale;
+  out.sourceInMs = clip.sourceInMs + (start - rawStart) * out.speed;
+  out.sourceOutMs = clip.sourceOutMs - (rawEnd - end) * out.speed;
+  out.timelineStartMs = start;
+  out.fadeInMs = clip.fadeInMs * frame.scale;
+  out.fadeOutMs = clip.fadeOutMs * frame.scale;
+  return out;
+}
+
+/**
+ * Every clip that can be HEARD in `[fromMs, untilMs)`, projected onto the root
+ * timeline - nested compositions flattened out, each clip carrying the start,
+ * trim and rate it plays at from where the listener stands.
+ *
+ * The export uses it to decide what to decode and whether there is any sound at
+ * all. It applies exactly the rules `extendTracks` above schedules by (mute,
+ * solo, lane and clip gain, link delegation, ramped clips silenced), because a
+ * clip the mix will play and this misses is a slice of the file that comes out
+ * silent - and one it lists and the mix skips is a silent AAC track forced into
+ * a file that should have had none. Change one, change the other.
+ */
+export function flattenAudibleClips(
+  project: Project,
+  fromMs: number,
+  untilMs: number,
+  compId: CompId = null,
+): Clip[] {
+  const out: Clip[] = [];
+  collectAudible(project, tracksOf(project, compId), fromMs, untilMs, null, out);
+  return out;
+}
+
+function collectAudible(
+  project: Project,
+  tracks: Track[],
+  fromMs: number,
+  untilMs: number,
+  frame: CompFrame | null,
+  out: Clip[],
+): void {
+  if ((frame?.depth ?? 0) > MAX_COMP_DEPTH) return;
+  const delegated = delegatedLinkIds(tracks);
+  for (const track of tracks) {
+    if (!isTrackAudible(track, tracks)) continue;
+    if ((track.volume ?? 1) <= 0) continue;
+    for (const clip of track.clips) {
+      if (clip.volume <= 0 || hasVelocity(clip)) continue;
+      const scheduled = frame ? projectClip(clip, frame) : clip;
+      if (!scheduled) continue;
+      if (clipEndMs(scheduled) <= fromMs || scheduled.timelineStartMs >= untilMs) continue;
+      if (isCompClip(scheduled)) {
+        const comp = findComp(project, scheduled.compId);
+        if (!comp) continue;
+        const scale = 1 / (scheduled.speed || 1);
+        collectAudible(
+          project,
+          comp.tracks,
+          Math.max(fromMs, scheduled.timelineStartMs),
+          Math.min(untilMs, clipEndMs(scheduled)),
+          {
+            offsetMs: scheduled.timelineStartMs - scheduled.sourceInMs * scale,
+            scale,
+            prefix: `${frame?.prefix ?? ''}${clip.id}/`,
+            // Never read on this path: nothing is wired up, only listed.
+            destination: null as unknown as AudioNode,
+            visFromMs: scheduled.timelineStartMs,
+            visToMs: clipEndMs(scheduled),
+            depth: (frame?.depth ?? 0) + 1,
+          },
+          out,
+        );
+        continue;
+      }
+      if (isGeneratedClip(scheduled)) continue;
+      // The video side of a link delegates its sound to the group's audio clips.
+      if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
+      out.push(scheduled);
+    }
+  }
+}
+
+/**
  * Schedule a whole span of a project in one call.
  *
  * What the export uses: it renders a slice at a time into an
@@ -347,9 +583,11 @@ export function scheduleProjectAudio(
   startAtCtxTime: number,
   durationMs: number,
   rate = 1,
+  /** Which timeline to mix: the project's own, or a composition being auditioned. */
+  compId: CompId = null,
 ): MixScheduler {
   const scheduler = new MixScheduler(ctx, destination, getSegments, fromMs, startAtCtxTime, rate);
-  scheduler.extend(project, fromMs, fromMs + durationMs);
+  scheduler.extend(project, fromMs, fromMs + durationMs, compId);
   return scheduler;
 }
 
@@ -371,10 +609,26 @@ export function scheduleProjectAudio(
  */
 export function sameAudioMix(a: Project, b: Project): boolean {
   if (a === b) return true;
-  if (a.tracks.length !== b.tracks.length) return false;
-  for (let i = 0; i < a.tracks.length; i++) {
-    const ta = a.tracks[i]!;
-    const tb = b.tracks[i]!;
+  // Compositions carry sound of their own, so an edit two precomps deep changes
+  // the mix exactly as an edit on the timeline does. Compared by identity first,
+  // which copy-on-write makes free for every composition the edit did not touch.
+  const ca = a.comps ?? [];
+  const cb = b.comps ?? [];
+  if (ca.length !== cb.length) return false;
+  for (let i = 0; i < ca.length; i++) {
+    if (ca[i] === cb[i]) continue;
+    if (ca[i]!.id !== cb[i]!.id) return false;
+    if (!sameLaneAudio(ca[i]!.tracks, cb[i]!.tracks)) return false;
+  }
+  return sameLaneAudio(a.tracks, b.tracks);
+}
+
+/** The per-lane half of `sameAudioMix`, shared by the timeline and every comp. */
+function sameLaneAudio(la: Track[], lb: Track[]): boolean {
+  if (la.length !== lb.length) return false;
+  for (let i = 0; i < la.length; i++) {
+    const ta = la[i]!;
+    const tb = lb[i]!;
     if (ta === tb) continue;
     if (
       ta.id !== tb.id ||
@@ -388,10 +642,10 @@ export function sameAudioMix(a: Project, b: Project): boolean {
       return false;
     }
     for (let j = 0; j < ta.clips.length; j++) {
-      const ca = ta.clips[j]!;
-      const cb = tb.clips[j]!;
-      if (ca === cb) continue;
-      if (!sameAudioClip(ca, cb)) return false;
+      const clipA = ta.clips[j]!;
+      const clipB = tb.clips[j]!;
+      if (clipA === clipB) continue;
+      if (!sameAudioClip(clipA, clipB)) return false;
     }
   }
   return true;
@@ -402,6 +656,7 @@ function sameAudioClip(a: Clip, b: Clip): boolean {
     a.id === b.id &&
     a.kind === b.kind &&
     a.assetId === b.assetId &&
+    (a.kind !== 'comp' || a.compId === (b as typeof a).compId) &&
     a.audioTrackIndex === b.audioTrackIndex &&
     a.linkId === b.linkId &&
     a.volume === b.volume &&

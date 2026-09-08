@@ -1,5 +1,5 @@
 import { RefObject, useEffect, useRef } from 'react';
-import { useStore } from '../store/store';
+import { useStore, getLanes } from '../store/store';
 import { MARKER_BAR_HEIGHT_PX, RULER_HEIGHT_PX } from '../app/config';
 import { trackRowHeightPx } from './trackHeight';
 import { useScrub } from './hooks/useScrub';
@@ -25,7 +25,7 @@ export function Playhead({ scrollerRef }: Props) {
   const totalHeight = useStore((s) => {
     const expanded = new Set(s.expandedTrackIds);
     let h = 0;
-    for (const t of s.project.tracks) h += trackRowHeightPx(t, s.trackHeightPx, expanded.has(t.id));
+    for (const t of getLanes(s)) h += trackRowHeightPx(t, s.trackHeightPx, expanded.has(t.id));
     return h;
   });
 

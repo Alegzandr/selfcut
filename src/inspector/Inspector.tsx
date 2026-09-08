@@ -3,7 +3,7 @@ import { AnimatePresence, m } from 'framer-motion';
 import { useEnterMotion } from '../ui/motion';
 import { useTranslation } from 'react-i18next';
 import { Cross2Icon, TrashIcon } from '@radix-ui/react-icons';
-import { useStore, getSelectedClip } from '../store/store';
+import { useStore, getSelectedClip, getLanes } from '../store/store';
 import type { InspectorTab } from '../store/editorState';
 import { SubtitlesPanel } from './SubtitlesPanel';
 import { useCaptionJob } from '../media/captionJob';
@@ -14,6 +14,8 @@ import { useIsCoarsePointer } from '../lib/device';
 import { ResizeHandle } from '../ui/ResizeHandle';
 import { INSPECTOR_WIDTH_PX } from '../app/config';
 import { PERCENT_ENTRY, SliderRow } from './SliderRow';
+import { compCarriesAudio } from '../model';
+import { CompSection } from './sections/CompSection';
 import { TextSection } from './sections/TextSection';
 import { SolidSection } from './sections/SolidSection';
 import { ShapeSection } from './sections/ShapeSection';
@@ -108,6 +110,9 @@ export function Inspector() {
   const sheet = useEnterMotion({ y: '110%' });
   const clip = useStore(getSelectedClip);
   const asset = useStore((s) => (clip ? s.assets[clip.assetId] : undefined));
+  // Only for naming a comp clip after the composition it plays: everything else
+  // in this column reads the lanes, never the whole project.
+  const project = useStore((s) => s.project);
   const coarse = useIsCoarsePointer();
   const inspectorOpen = useStore((s) => s.inspectorOpen);
   const tab = useStore((s) => s.inspectorTab);
@@ -119,11 +124,11 @@ export function Inspector() {
   // clicked (see `fxTrackId`). A track deleted under an open pane resolves to
   // nothing here and the column falls back to the clip it was showing.
   const fxTrack = useStore((s) =>
-    s.fxTrackId ? (s.project.tracks.find((tr) => tr.id === s.fxTrackId) ?? null) : null,
+    s.fxTrackId ? (getLanes(s).find((tr) => tr.id === s.fxTrackId) ?? null) : null,
   );
   // Counted here rather than in the panel: the tab badge has to state how many
   // cues the project holds even while the clip pane is the one on screen.
-  const tracks = useStore((s) => s.project.tracks);
+  const tracks = useStore((s) => getLanes(s));
   const cueCount = useMemo(
     () => tracks.reduce((n, track) => n + track.clips.filter(isTextClip).length, 0),
     [tracks],
@@ -131,28 +136,41 @@ export function Inspector() {
   // A linked video clip delegates its sound to the audio clip on the lane
   // below (it is silent in the mix): audio edits must target that partner,
   // otherwise the volume/balance controls are dead knobs.
-  // Derived from `project` rather than inside a selector: a store selector runs
-  // on every set(), and the playback engine writes the current time 60 times a
+  // Derived in a memo rather than inside a selector: a store selector runs on
+  // every set(), and the playback engine writes the current time 60 times a
   // second, so this track scan used to run once per frame during playback.
-  const project = useStore((s) => s.project);
   // Which lane the clip sits on: the audio half of a linked pair shares the
   // video asset of its partner, so `asset.kind` alone would hand it the picture
   // sections (transform, colour, blur) for a waveform.
   const onVideoTrack = useMemo(
     () =>
       !clip ||
-      project.tracks.find((tr) => tr.clips.some((c) => c.id === clip.id))?.kind !== 'audio',
-    [project, clip],
+      tracks.find((tr) => tr.clips.some((c) => c.id === clip.id))?.kind !== 'audio',
+    [tracks, clip],
   );
   const audioClip = useMemo(() => {
     if (!clip?.linkId) return clip;
-    for (const track of project.tracks) {
+    for (const track of tracks) {
       if (track.kind !== 'audio') continue;
       const partner = track.clips.find((c) => c.linkId === clip.linkId && c.id !== clip.id);
       if (partner) return partner;
     }
     return clip;
-  }, [project, clip]);
+  }, [tracks, clip]);
+
+  // A comp clip is a picture layer like footage is: it hands the compositor a
+  // finished frame, so every picture control (transform, mask, grade, curves)
+  // applies to it - and to the whole composition at once, which is the point of
+  // having wrapped those clips in the first place.
+  const pictureLayer =
+    onVideoTrack && (clip?.kind === 'comp' || (!!asset && asset.kind !== 'audio'));
+  // And it carries sound whenever anything inside it does, however deep. Asked
+  // of the composition rather than of an asset, because a comp clip has none.
+  const carriesAudio = useStore((s) => {
+    if (!clip) return false;
+    if (clip.kind !== 'comp') return asset?.hasAudio ?? false;
+    return compCarriesAudio(s.project, clip.compId, s.assets);
+  });
 
   // Desktop: docked column next to the preview - it must never cover the
   // timeline, that is where the cutting happens. Mobile: bottom sheet opened
@@ -189,9 +207,9 @@ export function Inspector() {
               <InspectorBody
                 clip={clip}
                 audioClip={audioClip ?? clip}
-                isVideo={onVideoTrack && !!asset && asset.kind !== 'audio'}
-                hasAudio={asset?.hasAudio ?? false}
-                name={clipDisplayName(clip, asset, t)}
+                isVideo={pictureLayer}
+                hasAudio={carriesAudio}
+                name={clipDisplayName(clip, asset, t, project)}
               />
             )
           )}
@@ -220,9 +238,9 @@ export function Inspector() {
               <InspectorBody
                 clip={clip}
                 audioClip={audioClip ?? clip}
-                isVideo={onVideoTrack && !!asset && asset.kind !== 'audio'}
-                hasAudio={asset?.hasAudio ?? false}
-                name={clipDisplayName(clip, asset, t)}
+                isVideo={pictureLayer}
+                hasAudio={carriesAudio}
+                name={clipDisplayName(clip, asset, t, project)}
               />
             )
           )}
@@ -276,6 +294,7 @@ function InspectorBody({
         </Tooltip>
       </div>
 
+      {clip.kind === 'comp' && <CompSection clip={clip} />}
       {clip.kind === 'text' && <TextSection clip={clip} />}
       {clip.kind === 'solid' && <SolidSection clip={clip} />}
       {clip.kind === 'shape' && <ShapeSection clip={clip} />}

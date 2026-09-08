@@ -1,15 +1,18 @@
 import { useStore, EditorState } from '../store/store';
-import { MediaAsset, MediaClip, Project } from '../types';
+import { Clip, MediaAsset, MediaClip, Project, Track } from '../types';
 import {
   clipEndMs,
+  compDurationMs,
+  compTimeAt,
   hasVelocity,
   shouldBlendFrames,
   delegatedLinkIds,
+  findComp,
+  isCompClip,
   isTextClip,
   isTrackAudible,
-  isTrackVisible,
+  tracksOf,
   outputDimensions,
-  projectDurationMs,
   timelineToSourceMs,
 } from '../model';
 import { loadFonts, onFontLoaded } from '../lib/fonts';
@@ -19,10 +22,9 @@ import type { DrawableFrame } from '../media/stillImage';
 import { FrameCursor } from './FrameCursor';
 import { frameBytes, maxLiveCursors, selectCursorEvictions } from './cursorPool';
 import {
-  drawClip,
-  forEachUpcomingVideoClip,
-  drawTrackLayer,
-  forEachVisibleVideoClip,
+  drawTracks,
+  forEachActiveMediaClip,
+  forEachUpcomingMediaClip,
   invalidateResampling,
 } from './compositor';
 import { count, endFrame, endSpan, perfEnabled, record, span } from '../perf/probe';
@@ -213,6 +215,15 @@ interface TrackBus {
  * Real-time preview: a rAF loop draws visible video frames on the canvas,
  * audio plays through a Web Audio graph. Entirely separate from the export pipeline.
  */
+/**
+ * The lanes of a nested composition, for the compositor's recursion. A
+ * composition that has just been deleted answers null, and the comp clips still
+ * pointing at it draw nothing for the one frame before the edit lands.
+ */
+function compLanes(state: EditorState, compId: string): Track[] | null {
+  return findComp(state.project, compId)?.tracks ?? null;
+}
+
 export class PlaybackEngine {
   private ctx: CanvasRenderingContext2D;
   private audioCtx: AudioContext | null = null;
@@ -312,6 +323,8 @@ export class PlaybackEngine {
 
   /** Reused buffer of prewarm candidates, so the per-frame array is not garbage. */
   private prewarmScratch: { clip: MediaClip; asset: MediaAsset }[] = [];
+  /** The composition the last tick rendered, to notice a navigation. */
+  private lastCompId: string | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -447,7 +460,7 @@ export class PlaybackEngine {
     // The window always starts at the playhead rather than at the last edge:
     // a segment that landed late belongs to a window already passed, and only
     // a window that still contains it can catch it.
-    this.mix.extend(state.project, tMs, tMs + AUDIO_SCHEDULE_HORIZON_MS);
+    this.mix.extend(state.project, tMs, tMs + AUDIO_SCHEDULE_HORIZON_MS, state.activeCompId);
   }
 
   /**
@@ -474,20 +487,50 @@ export class PlaybackEngine {
     const backwards = this.wasPlaying && this.rate < 0;
     const from = Math.max(0, tMs - (backwards ? lead : AUDIO_PREFETCH_BEHIND_MS));
     const until = tMs + (backwards ? AUDIO_PREFETCH_BEHIND_MS : lead);
-    const delegated = delegatedLinkIds(state.project);
-    for (const track of state.project.tracks) {
-      if (!isTrackAudible(track, state.project)) continue;
+    this.prefetchTracks(state, tracksOf(state.project, state.activeCompId), from, until, 0);
+  }
+
+  /**
+   * One stack of lanes prefetched, recursing through the comp clips on it.
+   *
+   * The window is mapped into each composition's own time as it goes down, so a
+   * precomp running at half speed prefetches half as much source per second of
+   * parent time - which is exactly how much of it will be played.
+   */
+  private prefetchTracks(
+    state: EditorState,
+    tracks: Track[],
+    from: number,
+    until: number,
+    depth: number,
+  ): void {
+    if (depth > 8) return;
+    const delegated = delegatedLinkIds(tracks);
+    for (const track of tracks) {
+      if (!isTrackAudible(track, tracks)) continue;
       for (const clip of track.clips) {
-        // A linked video clip delegates its sound to its audio partners and is
-        // never scheduled (see audioMix): decoding its primary track here would
-        // hold the same audio twice.
-        if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
         if (clip.volume <= 0) continue;
         // A ramped clip is silent (see audioMix), so decoding its audio would
         // fill the cache with sound nothing will ever schedule.
         if (hasVelocity(clip)) continue;
         const clipEnd = clipEndMs(clip);
         if (clipEnd <= from || clip.timelineStartMs >= until) continue;
+        if (isCompClip(clip)) {
+          const comp = findComp(state.project, clip.compId);
+          if (!comp) continue;
+          this.prefetchTracks(
+            state,
+            comp.tracks,
+            compTimeAt(clip, Math.max(from, clip.timelineStartMs)),
+            compTimeAt(clip, Math.min(until, clipEnd)),
+            depth + 1,
+          );
+          continue;
+        }
+        // A linked video clip delegates its sound to its audio partners and is
+        // never scheduled (see audioMix): decoding its primary track here would
+        // hold the same audio twice.
+        if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
         const asset = state.assets[clip.assetId];
         if (!asset?.hasAudio) continue;
         const windowFrom = Math.max(from, clip.timelineStartMs);
@@ -556,6 +599,17 @@ export class PlaybackEngine {
       this.restartAt(state, this.playbackTimeMs(state));
     }
 
+    // Stepping into (or out of) a composition swaps the whole timeline under
+    // the engine: what is decoded, what is scheduled and what is on screen all
+    // belong to the one being left.
+    if (state.activeCompId !== this.lastCompId) {
+      this.lastCompId = state.activeCompId;
+      this.videoDirty = true;
+      this.stopAudio();
+      this.dropPrerolls();
+      this.parkedAtMs = NaN;
+    }
+
     if (state.project !== this.lastProject) {
       const previous = this.lastProject;
       this.lastProject = state.project;
@@ -582,7 +636,7 @@ export class PlaybackEngine {
     let t = state.currentTimeMs;
     if (this.wasPlaying) {
       t = this.playbackTimeMs(state);
-      const duration = projectDurationMs(state.project);
+      const duration = compDurationMs(state.project, state.activeCompId);
       const loop = state.loopEnabled ? state.loopRegion : null;
       const loopEnd = loop ? Math.min(loop.endMs, duration) : 0;
       // A wrap is the same edit in both directions: leave by one edge of the
@@ -724,75 +778,19 @@ export class PlaybackEngine {
     this.ctx.fillStyle = '#000';
     this.ctx.fillRect(0, 0, w, h);
 
-    // Track order defines z-order the way the timeline shows it: the first
-    // track is the top lane, so tracks paint bottom-up and the top lane lands
-    // last, over the others. Within a track, an overlapping pair draws
-    // earliest-first - the incoming clip composites over the outgoing one with
-    // rising alpha (crossfade).
     // Clips that hold a cursor this frame - either drawn, or warming up for a
     // cut that is about to happen. Never eviction candidates, however long ago
-    // the last one was created (see trimCursors).
+    // the last one was created (see trimCursors). Nested compositions feed it
+    // too: the pool is flat, so a clip two precomps deep is kept alive by
+    // exactly the same bookkeeping as one on the timeline in front of the user.
     const liveClipIds = new Set<string>();
     // Re-measured every pass: a clip that has no decoded frame yet is what
     // keeps the retry above alive, and it must stop the moment one lands.
     this.awaitingFrame = false;
-    const tracks = state.project.tracks;
-    for (let t = tracks.length - 1; t >= 0; t--) {
-      const track = tracks[t]!;
-      const alphaMul = track.opacity ?? 1;
-      if (alphaMul <= 0 || !isTrackVisible(track, state.project)) continue;
-      // The lane's clips go onto whatever surface its FX need - the canvas
-      // itself when it has none, a scratch to be graded as one picture when it
-      // does. Nothing below cares which: it draws into `target`.
-      drawTrackLayer(this.ctx, track, w, h, (target) => {
-        forEachVisibleVideoClip(track, tMs, (clip, xfadeInMs) => {
-          let sample: DrawableFrame | null = null;
-          if (clip.kind === 'media') {
-            const asset = state.assets[clip.assetId];
-            if (!asset) return;
-            if (asset.kind === 'image') {
-              sample = this.ensureStill(asset);
-            } else {
-              let cursor = this.cursors.get(clip.id);
-              if (!cursor) {
-                cursor = new FrameCursor(asset, () => {
-                  this.videoDirty = true;
-                  this.frameRetries = 0;
-                });
-              } else {
-                // Delete before re-inserting: a Map keeps insertion order, so
-                // this is what moves the clip to the young end of the ranking.
-                this.cursors.delete(clip.id);
-              }
-              this.cursors.set(clip.id, cursor);
-              liveClipIds.add(clip.id);
-              cursor.request(
-                timelineToSourceMs(clip, tMs) / 1000,
-                // Sequential decoding is a reader walking forward. Backwards,
-                // every frame is behind the last one it produced, which the
-                // worker answers by restarting its iterator: asking for a seek
-                // outright is the same work without the iterator churn.
-                this.wasPlaying && this.rate > 0,
-                shouldBlendFrames(clip, tMs),
-              );
-              sample = cursor.sample;
-              if (!sample) this.awaitingFrame = true;
-              // What the pool's memory cap is actually measured against. Taken
-              // from the decoded frame rather than from the asset's declared
-              // size, so a source that decodes to something unexpected is still
-              // budgeted for what it really costs.
-              if (sample) {
-                this.largestFrameBytes = Math.max(
-                  this.largestFrameBytes,
-                  frameBytes(sample.displayWidth, sample.displayHeight),
-                );
-              }
-            }
-          }
-          drawClip(target, clip, w, h, tMs, alphaMul, xfadeInMs, sample);
-        });
-      });
-    }
+    drawTracks(this.ctx, tracksOf(state.project, state.activeCompId), tMs, w, h, {
+      compTracks: (compId) => compLanes(state, compId),
+      sample: (clip, atMs) => this.sampleFor(state, clip, atMs, liveClipIds),
+    });
 
     this.prewarmUpcoming(state, tMs, liveClipIds);
     this.trimCursors(liveClipIds);
@@ -802,6 +800,63 @@ export class PlaybackEngine {
       this.publishScope(w, h);
       endSpan('scopes', started);
     }
+  }
+
+  /**
+   * The decoded picture for one media clip, and the decode bookkeeping that goes
+   * with asking for it: the cursor is created or promoted to the young end of
+   * the pool, the clip is marked live so it survives eviction, and the frame's
+   * real size feeds the pool's memory budget.
+   *
+   * Handed to the compositor as a callback so the SAME routine draws the
+   * timeline and every composition nested inside it - the frames just come from
+   * here whatever depth asked for them.
+   */
+  private sampleFor(
+    state: EditorState,
+    clip: Clip,
+    tMs: number,
+    live: Set<string>,
+  ): DrawableFrame | null {
+    if (clip.kind !== 'media') return null;
+    const asset = state.assets[clip.assetId];
+    if (!asset) return null;
+    if (asset.kind === 'image') return this.ensureStill(asset);
+    let cursor = this.cursors.get(clip.id);
+    if (!cursor) {
+      cursor = new FrameCursor(asset, () => {
+        this.videoDirty = true;
+        this.frameRetries = 0;
+      });
+    } else {
+      // Delete before re-inserting: a Map keeps insertion order, so this is
+      // what moves the clip to the young end of the ranking.
+      this.cursors.delete(clip.id);
+    }
+    this.cursors.set(clip.id, cursor);
+    live.add(clip.id);
+    cursor.request(
+      timelineToSourceMs(clip, tMs) / 1000,
+      // Sequential decoding is a reader walking forward. Backwards, every frame
+      // is behind the last one it produced, which the worker answers by
+      // restarting its iterator: asking for a seek outright is the same work
+      // without the iterator churn.
+      this.wasPlaying && this.rate > 0,
+      shouldBlendFrames(clip, tMs),
+    );
+    const sample = cursor.sample;
+    if (!sample) {
+      this.awaitingFrame = true;
+      return null;
+    }
+    // What the pool's memory cap is actually measured against. Taken from the
+    // decoded frame rather than from the asset's declared size, so a source that
+    // decodes to something unexpected is still budgeted for what it really costs.
+    this.largestFrameBytes = Math.max(
+      this.largestFrameBytes,
+      frameBytes(sample.displayWidth, sample.displayHeight),
+    );
+    return sample;
   }
 
   /**
@@ -872,18 +927,23 @@ export class PlaybackEngine {
     const lead = PREWARM_LEAD_MS * Math.max(1, this.rate);
     const candidates = this.prewarmScratch;
     candidates.length = 0;
-    for (const track of state.project.tracks) {
-      if ((track.opacity ?? 1) <= 0 || !isTrackVisible(track, state.project)) continue;
-      forEachUpcomingVideoClip(track, tMs, lead, (clip) => {
-        if (clip.kind !== 'media') return;
+    // Into nested compositions too: a cut inside a precomp is a cut the picture
+    // will show, and a decoder that has not been opened for it is the same black
+    // flash it would be on the timeline in front of the user.
+    forEachUpcomingMediaClip(
+      tracksOf(state.project, state.activeCompId),
+      tMs,
+      lead,
+      (compId) => compLanes(state, compId),
+      (clip) => {
         const asset = state.assets[clip.assetId];
         if (!asset) return;
         // A still costs a bitmap in a per-asset cache, not a decoder: no cap
         // needed, and warming it is what keeps a photo from cutting in black.
         if (asset.kind === 'image') this.ensureStill(asset);
-        else candidates.push({ clip, asset });
-      });
-    }
+        else candidates.push({ clip: clip as MediaClip, asset });
+      },
+    );
     // The nearest cuts win the room there is: a fast-cut sequence can hold a
     // dozen clips in the lead window, and the ones after the next are not what
     // the next boundary needs decoded.
@@ -920,7 +980,9 @@ export class PlaybackEngine {
   private schedulePrerolls(state: EditorState, tMs: number, now: number): void {
     if (this.wasPlaying) {
       const loop = state.loopEnabled ? state.loopRegion : null;
-      const loopEnd = loop ? Math.min(loop.endMs, projectDurationMs(state.project)) : 0;
+      const loopEnd = loop
+        ? Math.min(loop.endMs, compDurationMs(state.project, state.activeCompId))
+        : 0;
       if (!loop || loopEnd <= loop.startMs) {
         this.dropPrerolls();
         return;
@@ -953,10 +1015,11 @@ export class PlaybackEngine {
     // has left, and never more clips than the prewarm window allows.
     const room = Math.min(PREWARM_MAX_CLIPS, this.cursorCap() - this.cursors.size);
     const wanted = new Set<string>();
-    for (const track of state.project.tracks) {
-      if ((track.opacity ?? 1) <= 0 || !isTrackVisible(track, state.project)) continue;
-      forEachVisibleVideoClip(track, timelineMs, (clip) => {
-        if (clip.kind !== 'media') return;
+    forEachActiveMediaClip(
+      tracksOf(state.project, state.activeCompId),
+      timelineMs,
+      (compId) => compLanes(state, compId),
+      (clip, atMs) => {
         const asset = state.assets[clip.assetId];
         // A still is a bitmap in a per-asset cache, not a decoder: nothing to park.
         if (!asset || asset.kind === 'image') return;
@@ -975,10 +1038,10 @@ export class PlaybackEngine {
         // `prewarm`, not `request`: the worker leaves its iterator open on that
         // frame, so the frames after the jump come from a reader that never has
         // to seek either.
-        cursor.prewarm(timelineToSourceMs(clip, timelineMs) / 1000);
+        cursor.prewarm(timelineToSourceMs(clip, atMs) / 1000);
         this.prerolls.set(clip.id, { cursor, timelineMs });
-      });
-    }
+      },
+    );
     for (const [clipId, parked] of this.prerolls) {
       if (!wanted.has(clipId)) {
         parked.cursor.dispose();

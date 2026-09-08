@@ -28,6 +28,47 @@ export interface Project {
    * it verbatim. Optional because projects saved before LUTs existed have none.
    */
   luts?: Lut[];
+  /**
+   * Nested compositions ("precomps"): timelines of their own that the main
+   * timeline - or another composition - plays back as a single clip, the way
+   * After Effects nests a comp inside a comp.
+   *
+   * Flat list rather than a tree, keyed by id: nesting is expressed by the
+   * `CompClip`s that reference a composition, so the same composition can be
+   * used twice (or in two different parents) without being copied, and moving
+   * one around never has to re-parent anything. `src/model/comp.ts` walks the
+   * references and is the only place allowed to answer "what contains what".
+   *
+   * Optional: projects saved before precompositions existed have none.
+   */
+  comps?: Composition[];
+}
+
+/**
+ * A nested composition: its own stack of tracks, played by the parent timeline
+ * through a `CompClip`.
+ *
+ * A composition renders at the PROJECT's output size - it has no dimensions of
+ * its own. That is what lets a precomp be dropped into any parent without a fit
+ * decision, and it matches the default an editor picks when it precomposes a
+ * selection ("move all attributes into the new composition").
+ *
+ * A composition has no stored duration either: it lasts exactly as long as its
+ * content (`compDurationMs`). A comp clip trimmed to the full length follows the
+ * composition as it grows; one the user has trimmed keeps its trim.
+ */
+export interface Composition {
+  id: string;
+  /** User-facing name, shown in the breadcrumb and on the library card. */
+  name: string;
+  tracks: Track[];
+  /** Cues inside the composition - the parent's markers stay the parent's. */
+  markers: Marker[];
+  /**
+   * Accent colour of the composition's card and of the clips that play it, so a
+   * cut room can tell three precomps apart at a glance. Absent = `violet`.
+   */
+  color?: MarkerColor;
 }
 
 /**
@@ -827,6 +868,21 @@ export interface ShapeClip extends BaseClip {
 }
 
 /**
+ * A clip that plays a nested composition instead of a media asset.
+ *
+ * It is a clip like any other: it trims, moves, ramps, grades, masks and
+ * keyframes exactly as footage does, because what it hands the compositor is a
+ * finished picture. `sourceInMs`/`sourceOutMs` are a window into the
+ * composition's OWN timeline, and `speed` maps parent time to composition time -
+ * so slowing a precomp slows everything inside it, transitions included.
+ */
+export interface CompClip extends BaseClip {
+  kind: 'comp';
+  /** The `Composition.id` this clip plays. Never its own ancestor (see `wouldNest`). */
+  compId: string;
+}
+
+/**
  * Discriminated on `kind`: `text` exists only on a TextClip, `solid` only on a
  * SolidClip and `shape` only on a ShapeClip, so a narrowed clip needs no
  * non-null assertion to read them.
@@ -834,4 +890,4 @@ export interface ShapeClip extends BaseClip {
  * The model math (durations, fades, crossfades, output geometry) lives in
  * `src/model/` — this module is types only.
  */
-export type Clip = MediaClip | TextClip | SolidClip | ShapeClip;
+export type Clip = MediaClip | TextClip | SolidClip | ShapeClip | CompClip;

@@ -20,3 +20,24 @@ export function setDraggedAssetId(id: string | null): void {
 export function draggedAssetId(): string | null {
   return draggedId;
 }
+
+/**
+ * The composition a drag is currently carrying, and how long it runs.
+ *
+ * Same reason as `draggedAssetId`: a DataTransfer's payload is unreadable during
+ * `dragover`, so the timeline cannot ask the event which composition is coming -
+ * and therefore how wide the clip it would create is. The length rides along
+ * because, unlike an asset, a composition's duration is not a field the drop
+ * target could look up without walking its lanes.
+ */
+let draggedCompId: string | null = null;
+let draggedCompMs = 0;
+
+export function setDraggedComp(id: string | null, durationMs: number): void {
+  draggedCompId = id;
+  draggedCompMs = durationMs;
+}
+
+export function draggedComp(): { id: string; durationMs: number } | null {
+  return draggedCompId ? { id: draggedCompId, durationMs: draggedCompMs } : null;
+}

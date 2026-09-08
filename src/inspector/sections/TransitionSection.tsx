@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useStore } from '../../store/store';
+import { useStore, getLanes } from '../../store/store';
 import { Clip } from '../../types';
 import { trackCrossfades } from '../../model';
 import { seconds } from '../format';
@@ -15,9 +15,9 @@ import { seconds } from '../format';
  */
 export function TransitionSection({ clip }: { clip: Clip }) {
   const { t } = useTranslation();
-  const project = useStore((s) => s.project);
+  const lanes = useStore(getLanes);
 
-  const track = project.tracks.find((tr) => tr.clips.some((c) => c.id === clip.id));
+  const track = lanes.find((tr) => tr.clips.some((c) => c.id === clip.id));
   const inMs = track ? trackCrossfades(track.clips).get(clip.id)?.inMs ?? 0 : 0;
 
   return (

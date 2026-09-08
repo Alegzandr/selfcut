@@ -1,4 +1,4 @@
-import { BezierPoint, Clip, ClipLocalAdjust, ClipMask, ClipRedaction, ClipShape, ClipText, ShapeClip, SolidClip, TextClip, Track, TransitionType } from '../types';
+import { BezierPoint, Clip, ClipLocalAdjust, ClipMask, ClipRedaction, ClipShape, ClipText, CompClip, ShapeClip, SolidClip, TextClip, Track, TransitionType } from '../types';
 import {
   DEFAULT_TEXT_WIDTH_FRAC,
   DEFAULT_TRANSFORM,
@@ -19,6 +19,10 @@ import {
   resolveTransform,
   trackCrossfades,
   trackHasPictureFx,
+  compTimeAt,
+  isCompClip,
+  isTrackVisible,
+  MAX_COMP_DEPTH,
 } from '../model';
 import { gradeFrame } from './colorPass';
 import { drawBlurred } from './blur';
@@ -676,12 +680,19 @@ export function drawTrackLayer(
   outW: number,
   outH: number,
   paint: (target: Ctx2D) => void,
+  /**
+   * How many nested compositions deep this lane sits. It picks the scratch slot,
+   * and it has to: a lane inside a precomp is painted WHILE its parent's lane
+   * scratch is still holding the parent's half-drawn picture, so sharing one
+   * slot would have the inner composite clear the outer one out from under it.
+   */
+  depth = 0,
 ): void {
   if (!trackHasPictureFx(track)) {
     paint(ctx);
     return;
   }
-  const scratch = getScratch('track', outW, outH);
+  const scratch = getScratch(`track:${depth}`, outW, outH);
   // No OffscreenCanvas: the lane draws ungraded rather than not at all, the
   // same degradation the WebGL grade already falls back to.
   if (!scratch) {
@@ -702,6 +713,177 @@ export function drawTrackLayer(
   });
   count('trackLayers');
   endSpan('trackFx', started);
+}
+
+/**
+ * Where a frame comes from, so one compositing routine can serve the preview and
+ * the export without knowing which of them is asking.
+ *
+ * The preview answers `sample` out of its live decode cursors, the export out of
+ * its sequential readers - and both hand back a nested composition's lanes the
+ * same way, which is what lets a precomp render identically on screen and in the
+ * file.
+ */
+export interface CompositeSource {
+  /** The decoded picture for a media clip at this time, or null when it is not ready. */
+  sample: (clip: Clip, timelineMs: number) => DrawableFrame | null;
+  /** The lanes of a nested composition, or null when it has been deleted. */
+  compTracks: (compId: string) => Track[] | null;
+}
+
+/**
+ * Composite a whole stack of lanes onto a context: the one routine that turns a
+ * timeline into a frame, for the preview and the export alike.
+ *
+ * Track order is z-order the way the timeline shows it - the first track is the
+ * TOP lane, so lanes paint bottom-up and the top one lands last. Within a lane,
+ * an overlapping pair draws earliest-first, so the incoming clip composites over
+ * the outgoing one with rising alpha (the crossfade).
+ *
+ * A comp clip recurses: its composition is rendered whole onto a scratch of the
+ * output size, at the instant the clip's trim and speed map this one to, and the
+ * result is then drawn as that clip's picture. So everything a clip can do - a
+ * grade, a mask, a fade, a transform, keyframes - applies to the finished
+ * composite rather than to any one layer inside it, which is the whole point of
+ * precomposing.
+ */
+export function drawTracks(
+  ctx: Ctx2D,
+  tracks: Track[],
+  tMs: number,
+  outW: number,
+  outH: number,
+  source: CompositeSource,
+  depth = 0,
+): void {
+  for (let t = tracks.length - 1; t >= 0; t--) {
+    const track = tracks[t]!;
+    const alphaMul = track.opacity ?? 1;
+    // Solo and hide are scoped to THIS stack of lanes: a lane soloed inside a
+    // precomp must not blank the parent's lanes, and vice versa.
+    if (alphaMul <= 0 || !isTrackVisible(track, tracks)) continue;
+    drawTrackLayer(
+      ctx,
+      track,
+      outW,
+      outH,
+      (target) => {
+        forEachVisibleVideoClip(track, tMs, (clip, xfadeInMs) => {
+          const sample = isCompClip(clip)
+            ? renderCompFrame(clip, tMs, outW, outH, source, depth)
+            : source.sample(clip, tMs);
+          drawClip(target, clip, outW, outH, tMs, alphaMul, xfadeInMs, sample);
+        });
+      },
+      depth,
+    );
+  }
+}
+
+/**
+ * Render the composition a comp clip plays, at the instant this one maps to, and
+ * hand it back as a drawable frame.
+ *
+ * The scratch is per depth and reused across frames: the picture is drawn from
+ * immediately by the caller and never held, exactly like the one `gradeFrame`
+ * returns. Two comp clips crossfading on one lane take turns in the same slot,
+ * because each is composited before the next is rendered.
+ *
+ * Returns null past `MAX_COMP_DEPTH`, on a composition that no longer exists, or
+ * where the platform has no OffscreenCanvas - all of which draw nothing rather
+ * than something wrong.
+ */
+function renderCompFrame(
+  clip: CompClip,
+  tMs: number,
+  outW: number,
+  outH: number,
+  source: CompositeSource,
+  depth: number,
+): DrawableFrame | null {
+  if (depth >= MAX_COMP_DEPTH) return null;
+  const tracks = source.compTracks(clip.compId);
+  if (!tracks || tracks.length === 0) return null;
+  const scratch = getScratch(`comp:${depth}`, outW, outH);
+  if (!scratch) return null;
+  const started = span();
+  scratch.ctx.clearRect(0, 0, outW, outH);
+  drawTracks(scratch.ctx, tracks, compTimeAt(clip, tMs), outW, outH, source, depth + 1);
+  count('compLayers');
+  endSpan('comp', started);
+  return canvasAsFrame(scratch.canvas);
+}
+
+/**
+ * Visit every MEDIA clip that has to be decoded to draw `tMs`, at any nesting
+ * depth, each with the time in its own composition.
+ *
+ * The decode pool is flat - one cursor per clip id, wherever the clip lives - so
+ * everything that manages it (keeping a drawn clip alive, warming the next cut,
+ * parking a decoder before a jump) has to see through precomps. Lanes that are
+ * hidden, soloed out or fully transparent are skipped, exactly as the composite
+ * skips them: a decoder for a picture nobody will see is a decoder taken from
+ * one that will.
+ */
+export function forEachActiveMediaClip(
+  tracks: Track[],
+  tMs: number,
+  compTracks: (compId: string) => Track[] | null,
+  fn: (clip: Clip, atMs: number) => void,
+  depth = 0,
+): void {
+  if (depth >= MAX_COMP_DEPTH) return;
+  for (const track of tracks) {
+    if ((track.opacity ?? 1) <= 0 || !isTrackVisible(track, tracks)) continue;
+    forEachVisibleVideoClip(track, tMs, (clip) => {
+      if (isCompClip(clip)) {
+        const inner = compTracks(clip.compId);
+        if (inner) forEachActiveMediaClip(inner, compTimeAt(clip, tMs), compTracks, fn, depth + 1);
+        return;
+      }
+      if (clip.kind === 'media') fn(clip, tMs);
+    });
+  }
+}
+
+/**
+ * The same walk over the clips a cut is ABOUT to reach, `windowMs` ahead - what
+ * the prewarm needs so a decoder is open before the playhead arrives.
+ *
+ * Inside a precomp the window is scaled by the comp clip's speed, since a second
+ * of parent time is `speed` seconds in there: a precomp running at 4x reaches
+ * its next cut four times sooner.
+ */
+export function forEachUpcomingMediaClip(
+  tracks: Track[],
+  tMs: number,
+  windowMs: number,
+  compTracks: (compId: string) => Track[] | null,
+  fn: (clip: Clip, atMs: number) => void,
+  depth = 0,
+): void {
+  if (depth >= MAX_COMP_DEPTH) return;
+  for (const track of tracks) {
+    if ((track.opacity ?? 1) <= 0 || !isTrackVisible(track, tracks)) continue;
+    forEachUpcomingVideoClip(track, tMs, windowMs, (clip) => {
+      if (clip.kind === 'media') fn(clip, clip.timelineStartMs);
+    });
+    // A composition already on screen has its own upcoming cuts inside it, and
+    // they are the ones the playhead will actually hit next.
+    forEachVisibleVideoClip(track, tMs, (clip) => {
+      if (!isCompClip(clip)) return;
+      const inner = compTracks(clip.compId);
+      if (!inner) return;
+      forEachUpcomingMediaClip(
+        inner,
+        compTimeAt(clip, tMs),
+        windowMs * clip.speed,
+        compTracks,
+        fn,
+        depth + 1,
+      );
+    });
+  }
 }
 
 /** Pixel geometry of a mask on an `outW × outH` frame: top-left box and centre. */

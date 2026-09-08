@@ -1,6 +1,6 @@
 import type { DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useStore } from '../store/store';
+import { useStore, getLanes } from '../store/store';
 import type { TransitionType } from '../types';
 import { EFFECTS, TRANSITIONS, type EffectGroup } from '../effects/catalog';
 import { resolveEffectTargets, trackAcceptsEffect } from '../effects/apply';
@@ -177,13 +177,13 @@ function LutsGroup({ coarse }: { coarse: boolean }) {
   const { t } = useTranslation();
   const luts = useStore((s) => s.project.luts) ?? [];
   const assets = useStore((s) => s.assets);
-  const project = useStore((s) => s.project);
+  const lanes = useStore(getLanes);
   const selectedClipIds = useStore((s) => s.selectedClipIds);
 
   // Selected clips that actually paint: generated clips always do, a media clip
   // does when its asset is not pure audio. The same gate the effect catalogue uses.
   const pictureIds = selectedClipIds.filter((id) => {
-    for (const track of project.tracks) {
+    for (const track of lanes) {
       const clip = track.clips.find((c) => c.id === id);
       if (!clip) continue;
       return clip.kind !== 'media' || (!!assets[clip.assetId] && assets[clip.assetId]!.kind !== 'audio');
@@ -261,7 +261,7 @@ export function EffectsPane() {
   // time. Touch has no drag gesture at all, so without this a phone could open
   // a lane's pane and have no way to put anything in it.
   const fxTrack = useStore((s) =>
-    s.fxTrackId ? (s.project.tracks.find((tr) => tr.id === s.fxTrackId) ?? null) : null,
+    s.fxTrackId ? (getLanes(s).find((tr) => tr.id === s.fxTrackId) ?? null) : null,
   );
 
   const apply = (effectId: string) => {

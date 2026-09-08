@@ -1,5 +1,6 @@
 import { AspectRatio, MediaAsset, Project } from '../types';
-import { audioTrackForClip, isTrackAudible } from '../model';
+import { audioTrackForClip } from '../model';
+import { flattenAudibleClips } from '../preview/audioMix';
 import { APP_NAME, PROJECT_FPS } from '../app/config';
 import type { ParseKeys } from 'i18next';
 
@@ -694,23 +695,23 @@ export function audioBitrateForProject(
   assets: Record<string, MediaAsset>,
 ): number {
   let audible = false;
-  for (const track of project.tracks) {
-    if (!isTrackAudible(track, project)) continue;
-    for (const clip of track.clips) {
-      if (clip.kind !== 'media' || clip.volume <= 0) continue;
-      const asset = assets[clip.assetId];
-      if (!asset?.hasAudio) continue;
-      audible = true;
-      // Panned: the channels differ however mono the source was.
-      if (clip.pan) return presetBitrate;
-      if (clip.mono) continue;
-      // Through the shared helper, never a hand-rolled lookup: it is what the
-      // mix itself resolves a clip's track with, and a preset that disagreed
-      // would describe a different track than the one being encoded.
-      const source = audioTrackForClip(asset, clip);
-      // Unknown track, or more than one channel: assume a real stereo image.
-      if (!source || source.channels > 1) return presetBitrate;
-    }
+  // The whole project, precomps flattened in: sound inside a composition is
+  // sound in the file, and a mix judged mono because it only looked at the top
+  // timeline would encode a stereo music bed at half the bitrate.
+  for (const clip of flattenAudibleClips(project, 0, Infinity)) {
+    if (clip.kind !== 'media') continue;
+    const asset = assets[clip.assetId];
+    if (!asset?.hasAudio) continue;
+    audible = true;
+    // Panned: the channels differ however mono the source was.
+    if (clip.pan) return presetBitrate;
+    if (clip.mono) continue;
+    // Through the shared helper, never a hand-rolled lookup: it is what the
+    // mix itself resolves a clip's track with, and a preset that disagreed
+    // would describe a different track than the one being encoded.
+    const source = audioTrackForClip(asset, clip);
+    // Unknown track, or more than one channel: assume a real stereo image.
+    if (!source || source.channels > 1) return presetBitrate;
   }
   return audible ? Math.round(presetBitrate * MONO_AUDIO_SCALE) : presetBitrate;
 }

@@ -1,5 +1,6 @@
 export * from './animation';
 export * from './clip';
+export * from './comp';
 export * from './curves';
 export * from './redaction';
 export * from './localAdjust';

@@ -42,7 +42,7 @@ export const MENUS: readonly AppMenu[] = [
   },
   {
     titleKey: 'menu.clip',
-    items: ['clip.split', 'clip.duplicate', '---', 'clip.punchIn', 'clip.stream', 'clip.blurRegion', 'clip.maskedFx', 'clip.captions', 'clip.link', 'clip.unlink', '---', 'clip.delete', 'clip.rippleDelete'],
+    items: ['clip.split', 'clip.duplicate', '---', 'clip.precompose', 'comp.open', 'comp.decompose', 'comp.up', '---', 'clip.punchIn', 'clip.stream', 'clip.blurRegion', 'clip.maskedFx', 'clip.captions', 'clip.link', 'clip.unlink', '---', 'clip.delete', 'clip.rippleDelete'],
   },
   {
     titleKey: 'menu.view',

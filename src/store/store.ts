@@ -1,7 +1,21 @@
 import { create } from 'zustand';
 import { produce, setAutoFreeze } from 'immer';
-import { Clip, LoopRegion, Marker, Project, Track } from '../types';
-import { clipDurationMs, clipEndMs, projectDurationMs, sortedMarkers, timelineFps } from '../model';
+import { Clip, Composition, LoopRegion, Marker, Project, Track } from '../types';
+import {
+  clipDurationMs,
+  clipEndMs,
+  compDurationMs,
+  compHost,
+  findComp,
+  markersOf,
+  projectDurationMs,
+  setMarkersOf,
+  setTracksOf,
+  sortedMarkers,
+  syncCompClips,
+  timelineFps,
+  tracksOf,
+} from '../model';
 import { createEmptyProject, linkableSelection, resolveOverlaps } from './projectOps';
 import { editTargets } from './editTargets';
 import { type TimeFormat } from '../lib/time';
@@ -56,6 +70,7 @@ import { createMarkersSlice } from './slices/markersSlice';
 import { createHistorySlice } from './slices/historySlice';
 import { createClipboardSlice } from './slices/clipboardSlice';
 import { createUiSlice } from './slices/uiSlice';
+import { createCompsSlice } from './slices/compsSlice';
 
 function loadTimeFormat(): TimeFormat {
   try {
@@ -185,9 +200,14 @@ export const useStore = create<EditorState>((set, get) => {
     // tracks/clips get a new identity - no full deep clone of the project per
     // edit, and `prev` stays intact for undo.
     const mutated = produce(prev, fn);
+    // An edit INSIDE a composition changes how long the clips that PLAY it are,
+    // everywhere else in the project - which no single action can know about
+    // itself. Settled here, against the project as it was, before overlaps are
+    // resolved: a comp clip that just grew has to be laid out at its new length.
+    const grown = produce(mutated, (draft) => syncCompClips(prev, draft));
     // Every committed edit leaves the tracks in a legal layout (pairwise crossfades only).
     const next = resolveOverlaps(
-      mutated,
+      grown,
       priorityClipId !== undefined ? priorityClipId : get().selectedClipId,
     );
     // Inside a gesture the whole sequence is one undo step: endGesture pushes
@@ -203,10 +223,41 @@ export const useStore = create<EditorState>((set, get) => {
     });
   };
 
+  /**
+   * The lanes every edit lands on: the project's own, or the nested composition
+   * the user has open. One place resolves it, so no slice has to.
+   */
+  const lanes = (p: Project): Track[] => tracksOf(p, get().activeCompId);
+  const setLanes = (p: Project, tracks: Track[]): void =>
+    setTracksOf(p, get().activeCompId, tracks);
+  const withLanes = (p: Project, tracks: Track[]): Project => {
+    const compId = get().activeCompId;
+    if (compId === null) return { ...p, tracks };
+    return {
+      ...p,
+      comps: (p.comps ?? []).map((comp) => (comp.id === compId ? { ...comp, tracks } : comp)),
+    };
+  };
+  const host = (p: Project) => compHost(p, get().activeCompId);
+  const cues = (p: Project): Marker[] => markersOf(p, get().activeCompId);
+  const setCues = (p: Project, markers: Marker[]): void =>
+    setMarkersOf(p, get().activeCompId, markers);
+  const withCues = (p: Project, markers: Marker[]): Project => {
+    const compId = get().activeCompId;
+    if (compId === null) return { ...p, markers };
+    return {
+      ...p,
+      comps: (p.comps ?? []).map((comp) => (comp.id === compId ? { ...comp, markers } : comp)),
+    };
+  };
+
   /** Drop any selected ids - clips and boxed keyframes - whose clip is gone. */
   const pruneSelection = () => {
     const live = new Set<string>();
-    for (const t of get().project.tracks) for (const c of t.clips) live.add(c.id);
+    // Scoped to the open composition: a clip that is still alive elsewhere in
+    // the project is not selectable from here, so it must not survive in the
+    // selection either.
+    for (const t of lanes(get().project)) for (const c of t.clips) live.add(c.id);
     const ids = get().selectedClipIds.filter((id) => live.has(id));
     if (ids.length !== get().selectedClipIds.length) {
       set({
@@ -228,12 +279,25 @@ export const useStore = create<EditorState>((set, get) => {
    */
   const targetsOf = (clipId: string) => editTargets(get().project, get().selectedClipIds, clipId);
 
-  const helpers = { withHistory, pruneSelection, targetsOf };
+  const helpers = {
+    withHistory,
+    pruneSelection,
+    targetsOf,
+    lanes,
+    setLanes,
+    withLanes,
+    host,
+    cues,
+    setCues,
+    withCues,
+  };
 
   const initialProject = createEmptyProject();
 
   return {
     project: initialProject,
+    activeCompId: null,
+    renamingCompId: null,
     currentProjectId: initialProject.id,
     projects: [],
     projectLibraryOpen: false,
@@ -329,6 +393,7 @@ export const useStore = create<EditorState>((set, get) => {
     ...createHistorySlice(set, get, helpers),
     ...createClipboardSlice(set, get, helpers),
     ...createUiSlice(set, get, helpers),
+    ...createCompsSlice(set, get, helpers),
   };
 });
 
@@ -340,6 +405,46 @@ export const useStore = create<EditorState>((set, get) => {
 // the project actually changes. Every consumer sees the same state object per
 // commit, so a single slot serves them all. Correctness is guaranteed by the
 // identity checks: a miss simply recomputes.
+/**
+ * The lanes the editor is showing and editing: the project's own timeline, or
+ * those of the composition the user has opened.
+ *
+ * The selector every component reads instead of `project.tracks`. Returns the
+ * live array, so it stays reference-stable across the 60 commits a second
+ * playback makes and memoized rows keep skipping their re-render.
+ */
+export function getLanes(state: EditorState): Track[] {
+  return tracksOf(state.project, state.activeCompId);
+}
+
+/**
+ * The timeline on screen, as one object: the project itself at the root, the
+ * open composition otherwise. What the pure timeline helpers take (snap points,
+ * keyframe bounds, a ripple), so none of them has to know which it is.
+ */
+export function getTimeline(state: EditorState): Project | Composition {
+  return compHost(state.project, state.activeCompId);
+}
+
+/** The cues of the timeline on screen - a composition keeps its own. */
+export function getCues(state: EditorState): Marker[] {
+  return markersOf(state.project, state.activeCompId);
+}
+
+/**
+ * How long the timeline on screen runs. The transport, the ruler and the seek
+ * clamp all read this, so entering a precomp really does rescale the timeline
+ * rather than leaving the parent's length behind.
+ */
+export function getDurationMs(state: EditorState): number {
+  return compDurationMs(state.project, state.activeCompId);
+}
+
+/** The composition on screen, or null at the root. */
+export function getActiveComp(state: EditorState) {
+  return state.activeCompId ? (findComp(state.project, state.activeCompId) ?? null) : null;
+}
+
 let selectedClipCache: { project: Project; id: string | null; clip: Clip | null } | null = null;
 
 /** Selector: the currently selected clip (or null). */
@@ -354,7 +459,7 @@ export function getSelectedClip(state: EditorState): Clip | null {
   }
   let clip: Clip | null = null;
   if (selectedClipId) {
-    for (const track of project.tracks) {
+    for (const track of getLanes(state)) {
       const found = track.clips.find((c) => c.id === selectedClipId);
       if (found) {
         clip = found;
@@ -385,7 +490,7 @@ export function getSelectedTrackKind(state: EditorState): Track['kind'] | null {
   }
   let kind: Track['kind'] | null = null;
   if (selectedClipId) {
-    for (const track of project.tracks) {
+    for (const track of getLanes(state)) {
       if (track.clips.some((c) => c.id === selectedClipId)) {
         kind = track.kind;
         break;
@@ -421,4 +526,5 @@ export { clipDurationMs, clipEndMs, projectDurationMs, sortedMarkers };
 export type { LoopRegion, Marker };
 
 /** The frame rate the timeline steps and counts in (see `timelineFps`). */
-export const getTimelineFps = (s: EditorState): number => timelineFps(s.project, s.assets);
+export const getTimelineFps = (s: EditorState): number =>
+  timelineFps(s.project, s.assets, getLanes(s));

@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { Clip, MediaAsset } from '../../types';
-import { useStore } from '../../store/store';
+import { useStore, getLanes, getTimeline } from '../../store/store';
 import { linkedPartnerIds } from '../../store/projectOps';
 import { collectSnapPoints } from '../snapping';
 import { msFromContentX, timelineContentEl } from '../coords';
@@ -265,7 +265,7 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
       startY: clientY,
       origStartMs: clip.timelineStartMs,
       durMs,
-      origTrackIndex: state.project.tracks.findIndex((tr) => tr.id === clip.trackId),
+      origTrackIndex: getLanes(state).findIndex((tr) => tr.id === clip.trackId),
       // Linked partners move along with the clip: their edges must not be snap
       // targets or the drag keeps sticking to its own starting position.
       points: collectSnapPoints(
@@ -346,7 +346,7 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
         ? state.selectedClipIds
         : [clip.id];
     const groupStarts = new Map<string, number>();
-    for (const tr of state.project.tracks) {
+    for (const tr of getLanes(state)) {
       for (const c of tr.clips) {
         if (groupIds.includes(c.id)) groupStarts.set(c.id, c.timelineStartMs);
       }
@@ -370,7 +370,7 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
     const ripple =
       !coarse && ctrl && e.altKey && isTrim
         ? rippleForTrim(
-            state.project,
+            getTimeline(state),
             clip,
             mode === 'trim-left' ? 'left' : 'right',
             state.rippleAcrossTracks,
@@ -381,7 +381,7 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
     // Only a true edit point rolls (adjacent or crossfading neighbor).
     const roll: DragState['roll'] =
       !coarse && e.altKey && !ctrl && isTrim
-        ? rollForTrim(state.project, state.assets, clip, mode)
+        ? rollForTrim(getTimeline(state), state.assets, clip, mode)
         : null;
     // Time under the pointer at press: a plain click (no drag) on a clip moves
     // the playhead there, like a classic NLE.
@@ -402,8 +402,8 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
       startY: e.clientY,
       origStartMs: clip.timelineStartMs,
       durMs,
-      origTrackIndex: state.project.tracks.findIndex((tr) => tr.id === clip.trackId),
-      points: collectSnapPoints(state.project, excluded, state.currentTimeMs, state.loopRegion),
+      origTrackIndex: getLanes(state).findIndex((tr) => tr.id === clip.trackId),
+      points: collectSnapPoints(getTimeline(state), excluded, state.currentTimeMs, state.loopRegion),
       moved: false,
       lastSnap: null,
       groupStarts,

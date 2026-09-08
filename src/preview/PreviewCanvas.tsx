@@ -10,8 +10,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import { LinkBreak1Icon } from '@radix-ui/react-icons';
 import { PlaybackEngine } from './PlaybackEngine';
-import { useStore, getSelectedClip } from '../store/store';
-import { Clip, ClipTransform, MediaAsset, Project } from '../types';
+import { useStore, getLanes, getSelectedClip } from '../store/store';
+import { Clip, ClipTransform, MediaAsset, Track } from '../types';
 import {
   DEFAULT_TRANSFORM,
   clipEndMs,
@@ -22,6 +22,7 @@ import {
   outputDimensions,
   resolveTransform,
   timelineToSourceMs,
+  isCompClip,
 } from '../model';
 import {
   DestRect,
@@ -368,9 +369,9 @@ function normPointIn(rect: DOMRect, e: React.PointerEvent): { nx: number; ny: nu
   return { nx: (e.clientX - rect.left) / rect.width, ny: (e.clientY - rect.top) / rect.height };
 }
 
-/** The clip with this id, without flattening every track on each lookup. */
-function findClip(project: Project, clipId: string): Clip | null {
-  for (const track of project.tracks) {
+/** The clip with this id, without flattening every lane on each lookup. */
+function findClip(tracks: Track[], clipId: string): Clip | null {
+  for (const track of tracks) {
     for (const clip of track.clips) {
       if (clip.id === clipId) return clip;
     }
@@ -408,6 +409,11 @@ function clipRectAt(
   if (isTextClip(clip)) return textClipRect(clip, outW, outH, timeMs);
   if (clip.kind === 'shape') return shapeClipRect(clip, outW, outH, timeMs);
   if (clip.kind === 'solid') return { dx: 0, dy: 0, dw: outW, dh: outH };
+  // A composition renders at the project's own output size - that is what makes
+  // a precomp droppable anywhere without a fit decision - so its clip is framed
+  // against the frame itself, and every transform on it reads exactly as it
+  // does on footage that already fills the picture.
+  if (isCompClip(clip)) return clipDestRect(clip, outW, outH, outW, outH, timeMs);
   const asset = assets[clip.assetId];
   // The dest rect only depends on the source aspect ratio, known from the probe.
   if (!asset?.width || !asset?.height) return null;
@@ -422,7 +428,7 @@ function clipRectAt(
  * `Playhead` and the transport timecode already avoid per-frame React work.
  */
 function PreviewOverlays({
-  project,
+  lanes,
   assets,
   selectedClip,
   cropping,
@@ -432,7 +438,8 @@ function PreviewOverlays({
   viewportRef,
   onGuides,
 }: {
-  project: Project;
+  /** The lanes on screen: the project's own, or the open composition's. */
+  lanes: Track[];
   assets: Record<string, MediaAsset>;
   selectedClip: Clip | null;
   cropping: boolean;
@@ -485,9 +492,9 @@ function PreviewOverlays({
   // (no sort/alloc) since it runs every frame.
   const disconnectedNow =
     !cropping &&
-    project.tracks.some(
+    lanes.some(
       (tr) =>
-        isTrackVisible(tr, project) &&
+        isTrackVisible(tr, lanes) &&
         tr.clips.some(
           (c) =>
             !isGeneratedClip(c) &&
@@ -504,8 +511,8 @@ function PreviewOverlays({
     selectedClip &&
     currentTimeMs >= selectedClip.timelineStartMs &&
     currentTimeMs < clipEndMs(selectedClip) &&
-    project.tracks.some(
-      (tr) => isTrackVisible(tr, project) && tr.clips.some((c) => c.id === selectedClip.id),
+    lanes.some(
+      (tr) => isTrackVisible(tr, lanes) && tr.clips.some((c) => c.id === selectedClip.id),
     )
       ? clipRectAt(selectedClip, assets, outW, outH, currentTimeMs)
       : null;
@@ -560,7 +567,7 @@ function PreviewOverlays({
     const { nx, ny } = normPointIn(s.rect, e);
     const local = unrotatePoint((nx - s.centerNx) * outW, (ny - s.centerNy) * outH, s.rotationDeg, 0, 0);
     const state = useStore.getState();
-    const clip = findClip(state.project, s.clipId);
+    const clip = findClip(getLanes(state), s.clipId);
     if (!clip) return;
     const rt = resolveTransform(clip, state.currentTimeMs);
     const snapping = state.snapEnabled !== e.shiftKey;
@@ -657,7 +664,7 @@ function PreviewOverlays({
     const dist = Math.hypot(nx - r.centerNx, ny - r.centerNy);
     const raw = Math.min(8, Math.max(0.05, (r.origScale * dist) / r.startDist));
     const state = useStore.getState();
-    const clip = findClip(state.project, r.clipId);
+    const clip = findClip(getLanes(state), r.clipId);
     if (!clip) return;
     const rt = resolveTransform(clip, state.currentTimeMs);
 
@@ -727,7 +734,7 @@ function PreviewOverlays({
     const { nx, ny } = normPointIn(r.rect, e);
     const raw = r.origRotation + (angleFromCenter(nx, ny, r.centerNx, r.centerNy, outW, outH) - r.startAngle);
     const state = useStore.getState();
-    const clip = findClip(state.project, r.clipId);
+    const clip = findClip(getLanes(state), r.clipId);
     if (!clip) return;
     // Detents every 15°: the uprights and the diagonals, plus the slight-tilt
     // angles. Shift inverts the snap toggle, exactly like the other gestures.
@@ -910,6 +917,10 @@ export function PreviewCanvas() {
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
 
   const project = useStore((s) => s.project);
+  // The timeline on screen: the project's own lanes, or those of the composition
+  // the user has stepped into. Hit-testing, the selection outline and the
+  // disconnected-source warning are all about what the preview is showing.
+  const lanes = useStore(getLanes);
   const assets = useStore((s) => s.assets);
   const selectedClip = useStore(getSelectedClip);
   const cropEditing = useStore((s) => s.cropEditing);
@@ -949,8 +960,8 @@ export function PreviewCanvas() {
     const px = nx * outW;
     const py = ny * outH;
     // Top lane paints last, so scan tracks top-down to hit the frontmost clip.
-    for (const track of project.tracks) {
-      if (!isTrackVisible(track, project) || (track.opacity ?? 1) <= 0) continue;
+    for (const track of lanes) {
+      if (!isTrackVisible(track, lanes) || (track.opacity ?? 1) <= 0) continue;
       const visible = clipsAt(track.clips, timeMs);
       for (let i = visible.length - 1; i >= 0; i--) {
         const clip = visible[i]!;
@@ -1007,7 +1018,7 @@ export function PreviewCanvas() {
     if (!d.moved && Math.abs(nx - d.startNx) < 0.004 && Math.abs(ny - d.startNy) < 0.004) return;
     d.moved = true;
     const state = useStore.getState();
-    const clip = findClip(state.project, d.clipId);
+    const clip = findClip(getLanes(state), d.clipId);
     if (!clip) return;
     let x = d.origX + (nx - d.startNx);
     let y = d.origY + (ny - d.startNy);
@@ -1352,7 +1363,7 @@ export function PreviewCanvas() {
         )}
         {!rendering && (
           <PreviewOverlays
-            project={project}
+            lanes={lanes}
             assets={assets}
             selectedClip={selectedClip}
             cropping={croppingClip !== null}

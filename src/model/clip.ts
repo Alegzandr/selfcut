@@ -87,9 +87,17 @@ export function isShapeClip(clip: Clip): clip is ShapeClip {
   return clip.kind === 'shape';
 }
 
-/** A clip with no backing media asset (text, solid or shape). */
+/**
+ * A clip the renderer draws from its own data, with neither a media asset nor a
+ * nested composition behind it (text, solid or shape).
+ *
+ * Tested by kind rather than by "not media": a comp clip has no `assetId`
+ * either, but it very much has a source - a whole timeline of it - and the
+ * callers that skip generated clips (the mix, the crop tool, the reframe pass)
+ * must reach into it, not past it.
+ */
 export function isGeneratedClip(clip: Clip): clip is TextClip | SolidClip | ShapeClip {
-  return clip.kind !== 'media';
+  return clip.kind === 'text' || clip.kind === 'solid' || clip.kind === 'shape';
 }
 
 /**

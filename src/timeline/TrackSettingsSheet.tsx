@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
 import { useEnterMotion } from '../ui/motion';
 import { BlendingModeIcon, Cross2Icon, Pencil1Icon, SpeakerLoudIcon } from '@radix-ui/react-icons';
-import { useStore } from '../store/store';
+import { useStore, getLanes } from '../store/store';
 import { gainDb } from '../inspector/format';
 import { faderToGainStepped, gainToFader } from '../lib/gain';
 
@@ -21,10 +21,10 @@ export function TrackSettingsSheet() {
   const { t } = useTranslation();
   const sheet = useEnterMotion({ y: '100%' });
   const trackId = useStore((s) => s.trackSettingsTrackId);
-  const track = useStore((s) => s.project.tracks.find((tr) => tr.id === trackId) ?? null);
+  const track = useStore((s) => getLanes(s).find((tr) => tr.id === trackId) ?? null);
   const { setTrackSettingsTrack, updateTrack, renameTrack, beginGesture, endGesture } = useStore.getState();
   const ordinal = useStore((s) => {
-    const list = s.project.tracks.filter((tr) => tr.kind === track?.kind);
+    const list = getLanes(s).filter((tr) => tr.kind === track?.kind);
     return list.findIndex((tr) => tr.id === trackId) + 1;
   });
   const close = () => setTrackSettingsTrack(null);

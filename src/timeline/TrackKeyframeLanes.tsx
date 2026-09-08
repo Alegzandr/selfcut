@@ -19,7 +19,7 @@ import { memo, useRef } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Clip, Keyframe, KeyframeProp, KeyframeRef, Track } from '../types';
-import { useStore } from '../store/store';
+import { useStore, getTimeline } from '../store/store';
 import { formatTime } from '../lib/time';
 import { KEYFRAME_LANE_HEIGHT_PX, KEYFRAME_LANES_GAP_PX, lanesHeightPx, trackLanes } from './trackHeight';
 import { DEFAULT_EASE, keyframesOf, keyShape } from '../model';
@@ -78,7 +78,7 @@ export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
     // one inside keeps the set, so a box-select can be dragged as a block.
     const dragging = selectedKeys.has(keyframeKey(ref)) ? selectedKeyframes : [ref];
     if (dragging.length === 1) state.setSelectedKeyframes(dragging);
-    const [lo, hi] = selectionDragBounds(state.project, dragging);
+    const [lo, hi] = selectionDragBounds(getTimeline(state), dragging);
     state.beginGesture();
     drag.current = { ref, startX: e.clientX, appliedMs: 0, lo, hi, moved: false };
   };

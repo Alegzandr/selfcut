@@ -169,9 +169,31 @@ export function isValidProject(p: unknown): p is Project {
     typeof proj.fps === 'number' &&
     // Absent on projects saved before markers existed - hydrate() defaults it.
     (proj.markers === undefined || Array.isArray(proj.markers)) &&
-    Array.isArray(proj.tracks) &&
-    proj.tracks.every(
-      (tr) => typeof tr?.id === 'string' && Array.isArray(tr.clips) && tr.clips.every((c) => typeof c?.id === 'string'),
+    isValidLanes(proj.tracks) &&
+    // Absent on projects saved before precompositions existed. Each composition
+    // is checked as strictly as the project's own timeline: a comp with a
+    // malformed lane would render as a black layer nobody could open.
+    (proj.comps === undefined ||
+      (Array.isArray(proj.comps) &&
+        proj.comps.every(
+          (c) =>
+            typeof c?.id === 'string' &&
+            typeof c.name === 'string' &&
+            Array.isArray(c.markers) &&
+            isValidLanes(c.tracks),
+        )))
+  );
+}
+
+/** One stack of lanes: ids present, clips an array, every clip identifiable. */
+function isValidLanes(tracks: unknown): boolean {
+  return (
+    Array.isArray(tracks) &&
+    tracks.every(
+      (tr) =>
+        typeof tr?.id === 'string' &&
+        Array.isArray(tr.clips) &&
+        tr.clips.every((c: unknown) => typeof (c as { id?: unknown })?.id === 'string'),
     )
   );
 }

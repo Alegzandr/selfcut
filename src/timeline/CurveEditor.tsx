@@ -19,7 +19,7 @@
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Cross2Icon } from '@radix-ui/react-icons';
-import { useStore } from '../store/store';
+import { useStore, getTimeline } from '../store/store';
 import { EASE_IDS, easeAt } from '../model';
 import type { EaseId, Keyframe } from '../types';
 import { selectedKeys, selectionBezier, selectionEase } from './keyframeSelection';
@@ -60,7 +60,7 @@ function curvePath(key: Keyframe): string {
 export function CurveEditor() {
   const { t } = useTranslation();
   const open = useStore((s) => s.curveEditorOpen);
-  const project = useStore((s) => s.project);
+  const timeline = useStore(getTimeline);
   const refs = useStore((s) => s.selectedKeyframes);
   const svgRef = useRef<SVGSVGElement>(null);
   // Which handle is being dragged, if any. A ref, not state: the drag writes
@@ -69,9 +69,9 @@ export function CurveEditor() {
 
   if (!open) return null;
 
-  const keys = selectedKeys(project, refs);
-  const ease = selectionEase(project, refs);
-  const bezier = selectionBezier(project, refs);
+  const keys = selectedKeys(timeline, refs);
+  const ease = selectionEase(timeline, refs);
+  const bezier = selectionBezier(timeline, refs);
   const close = () => useStore.getState().setCurveEditorOpen(false);
 
   /** Pointer position in local SVG units (viewBox space), from a client point. */

@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useStore } from '../store/store';
+import { useStore, getLanes, getCues, getTimeline } from '../store/store';
 import { useIsCoarsePointer } from '../lib/device';
 import { Tooltip } from '../ui/Tooltip';
 import { Marker } from '../types';
@@ -57,7 +57,7 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
   const loopEnabled = useStore((s) => s.loopEnabled);
   // Subscribe to the markers only (not the whole project): a clip drag must not
   // re-render + re-sort the marker bar on every frame.
-  const markerList = useStore((s) => s.project.markers);
+  const markerList = useStore((s) => getCues(s));
   const renamingMarkerId = useStore((s) => s.renamingMarkerId);
   const coarse = useIsCoarsePointer();
   const drag = useRef<Drag | null>(null);
@@ -81,7 +81,7 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
   /** Snap points, minus the position the drag currently owns (it must not stick to itself). */
   const snapPointsExcept = (ownMs: number | null): number[] => {
     const s = useStore.getState();
-    const points = collectSnapPoints(s.project, [], s.currentTimeMs, s.loopRegion);
+    const points = collectSnapPoints(getTimeline(s), [], s.currentTimeMs, s.loopRegion);
     return ownMs === null ? points : points.filter((p) => Math.abs(p - ownMs) > 0.5);
   };
 
@@ -133,7 +133,7 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
       // of a double-click is left alone, so the rename can undo the first cue.
       if (!d.moved && e.detail < 2) {
         seekUndo.current = { id: d.id, fromMs: s.currentTimeMs };
-        s.seek(s.project.markers.find((m) => m.id === d.id)?.timeMs ?? s.currentTimeMs);
+        s.seek(getCues(s).find((m) => m.id === d.id)?.timeMs ?? s.currentTimeMs);
       }
       return;
     }
@@ -317,13 +317,13 @@ export const TimelineOverlay = memo(function TimelineOverlay({
 }) {
   const padLeft = useStore((s) => s.timelinePadLeft);
   const region = useStore((s) => s.loopRegion);
-  const markers = useStore((s) => s.project.markers);
+  const markers = useStore((s) => getCues(s));
   // Sum-over-tracks height: an expanded track adds its keyframe lanes, so the
   // overlay reads its size off the same source of truth as the row layout.
   const totalHeight = useStore((s) => {
     const expanded = new Set(s.expandedTrackIds);
     let h = 0;
-    for (const t of s.project.tracks) h += trackRowHeightPx(t, s.trackHeightPx, expanded.has(t.id));
+    for (const t of getLanes(s)) h += trackRowHeightPx(t, s.trackHeightPx, expanded.has(t.id));
     return h;
   });
 

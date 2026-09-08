@@ -1,11 +1,11 @@
 import { Clip, LoopRegion, MediaAsset, Project } from '../types';
-import { clipEndMs, delegatedLinkIds, hasVelocity, isTrackAudible, projectDurationMs } from '../model';
+import { clipEndMs, forEachProjectClip, projectDurationMs } from '../model';
 import { AUDIO_SAMPLE_RATE } from '../app/config';
 import { t } from '../i18n';
 import { audioKey, getAudioRange } from '../media/mediaCache';
 import { AudioSegment, segmentIndexes } from '../media/audioSegments';
 import { decodeImageFile } from '../media/stillImage';
-import { scheduleProjectAudio } from '../preview/audioMix';
+import { flattenAudibleClips, scheduleProjectAudio } from '../preview/audioMix';
 import { firstUncloneable } from '../lib/cloneable';
 import { openExportScratch, readExportScratch } from '../lib/opfs';
 import { flushProjectSave } from '../lib/persistence';
@@ -244,12 +244,10 @@ export function startExport(
     // a clear message. Cheap scan, so it runs for every preset. Checked before
     // the save picker so a doomed export never asks where to put its output.
     const disconnected = new Set<string>();
-    for (const track of project.tracks) {
-      for (const clip of track.clips) {
-        const asset = assets[clip.assetId];
-        if (asset?.disconnected) disconnected.add(asset.file.name);
-      }
-    }
+    forEachProjectClip(project, (clip) => {
+      const asset = assets[clip.assetId];
+      if (asset?.disconnected) disconnected.add(asset.file.name);
+    });
     if (disconnected.size > 0) {
       throw new Error(
         t('errors.export.disconnectedSources', { names: [...disconnected].join(', ') }),
@@ -312,21 +310,29 @@ export function startExport(
     const stills: Record<string, ImageBitmap> = {};
     if (resolvedPreset.kind === 'mp4') {
       try {
-        for (const track of project.tracks) {
-          for (const clip of track.clips) {
-            if (canceled) throw new Error(t('errors.export.canceled'));
-            const asset = assets[clip.assetId];
-            if (!asset) continue;
-            files[asset.id] = asset.file;
-            // Stills are rasterized here (SVG needs the DOM, unavailable in the
-            // worker) and transferred as bitmaps. A still that fails to decode is
-            // skipped: its clips render nothing rather than killing the export.
-            if (asset.kind === 'image' && !(asset.id in stills)) {
-              try {
-                stills[asset.id] = await decodeImageFile(asset.file);
-              } catch {
-                // Fall through - the worker simply has no bitmap for this asset.
-              }
+        // Every clip in the project, compositions included: a source used only
+        // inside a precomp is still a source the worker has to be handed, and
+        // one missing from this map renders as a black layer in the file.
+        const sources: MediaAsset[] = [];
+        const seen = new Set<string>();
+        forEachProjectClip(project, (clip) => {
+          const asset = assets[clip.assetId];
+          if (asset && !seen.has(asset.id)) {
+            seen.add(asset.id);
+            sources.push(asset);
+          }
+        });
+        for (const asset of sources) {
+          if (canceled) throw new Error(t('errors.export.canceled'));
+          files[asset.id] = asset.file;
+          // Stills are rasterized here (SVG needs the DOM, unavailable in the
+          // worker) and transferred as bitmaps. A still that fails to decode is
+          // skipped: its clips render nothing rather than killing the export.
+          if (asset.kind === 'image' && !(asset.id in stills)) {
+            try {
+              stills[asset.id] = await decodeImageFile(asset.file);
+            } catch {
+              // Fall through - the worker simply has no bitmap for this asset.
             }
           }
         }
@@ -596,25 +602,13 @@ function audibleClips(
   durationMs: number,
 ): { clip: Clip; asset: MediaAsset }[] {
   const out: { clip: Clip; asset: MediaAsset }[] = [];
-  const delegated = delegatedLinkIds(project);
-  for (const track of project.tracks) {
-    if (!isTrackAudible(track, project)) continue;
-    for (const clip of track.clips) {
-      // A linked video clip delegates its sound to its audio partners: the mix
-      // never schedules it, so don't decode its track (twice) nor let it count
-      // as audible (it would force a silent AAC track into the file).
-      if (track.kind === 'video' && clip.linkId && delegated.has(clip.linkId)) continue;
-      // A velocity ramp silences the clip (see audioMix): it must not be
-      // decoded, and must not count as audible either - one ramped clip alone
-      // on the timeline would otherwise force a silent AAC track into the file.
-      if (hasVelocity(clip)) continue;
-      // Clips ending before the span, or starting after it, are silent here.
-      if (clip.volume <= 0 || clipEndMs(clip) <= startMs) continue;
-      if (clip.timelineStartMs >= startMs + durationMs) continue;
-      const asset = assets[clip.assetId];
-      if (!asset?.hasAudio) continue;
-      out.push({ clip, asset });
-    }
+  // Flattened through the mix's own walker, so a clip inside a precomp is
+  // decoded at the rate and the trim it will actually be played at - and the
+  // rules that decide what is audible live in exactly one place.
+  for (const clip of flattenAudibleClips(project, startMs, startMs + durationMs)) {
+    const asset = assets[clip.assetId];
+    if (!asset?.hasAudio) continue;
+    out.push({ clip, asset });
   }
   return out;
 }

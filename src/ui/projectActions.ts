@@ -1,4 +1,5 @@
 import { useStore } from '../store/store';
+import { forEachProjectClip } from '../model';
 import {
   ProjectFileError,
   SaveCanceledError,
@@ -69,9 +70,13 @@ export function openProject(): void {
         return;
       }
 
-      const hasWork = useStore
-        .getState()
-        .project.tracks.some((tr) => tr.clips.length > 0);
+      // Anywhere in the project, precomps included: a cut collapsed into one
+      // composition is still work, and "you have nothing open" would be a lie
+      // that costs the user their timeline.
+      let hasWork = false;
+      forEachProjectClip(useStore.getState().project, () => {
+        hasWork = true;
+      });
       if (
         hasWork &&
         !(await useStore.getState().requestConfirm({

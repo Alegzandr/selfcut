@@ -1,9 +1,21 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
+import type { Project } from '../../types';
+import { findComp } from '../../model';
 import { resolveOverlaps } from '../projectOps';
 import { disposeUnreachableAssets, reviveAssets } from '../assetLifecycle';
 import { announce } from '../../lib/a11yBus';
 import { HISTORY_LIMIT } from '../constants';
+
+/**
+ * The composition the editor may keep standing in across a history step: the one
+ * it is in, when that project version still has it, and the root otherwise.
+ */
+function standingIn(state: EditorState, project: Project): string | null {
+  const compId = state.activeCompId;
+  if (compId === null) return null;
+  return findComp(project, compId) ? compId : null;
+}
 
 export function createHistorySlice(
   set: StoreSet,
@@ -55,6 +67,10 @@ export function createHistorySlice(
         selectedClipId: null,
         selectedClipIds: [],
         inspectorOpen: false,
+        // Undoing the precompose that created the composition you are standing
+        // in leaves the editor inside a timeline that no longer exists. Walk it
+        // back to the root rather than render an empty one.
+        activeCompId: standingIn(get(), prev.project),
       });
       disposeUnreachableAssets(Object.keys(assets), get());
       announce('a11y.announce.undo');
@@ -72,6 +88,7 @@ export function createHistorySlice(
         selectedClipId: null,
         selectedClipIds: [],
         inspectorOpen: false,
+        activeCompId: standingIn(get(), next.project),
       });
       disposeUnreachableAssets(Object.keys(assets), get());
       announce('a11y.announce.redo');

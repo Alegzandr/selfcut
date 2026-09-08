@@ -2,6 +2,7 @@ import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
 import type { Clip } from '../../types';
 import type { ParsedCube } from '../../effects/lut';
+import { forEachProjectClip, forEachTrackSet } from '../../model';
 import { patchClips } from '../projectOps';
 import { uid } from '../../lib/id';
 
@@ -42,24 +43,24 @@ export function createLutsSlice(
         // Strip the reference from every clip pointing at it, or those clips
         // would keep a dangling id (harmless at render time, but confusing in
         // the inspector, which would show a LUT that no longer exists).
-        for (const track of p.tracks) {
-          for (const clip of track.clips) {
-            if (clip.color?.lut?.id === id) delete clip.color.lut;
+        forEachTrackSet(p, (tracks) => {
+          for (const track of tracks) {
+            for (const clip of track.clips) {
+              if (clip.color?.lut?.id === id) delete clip.color.lut;
+            }
           }
-        }
+        });
       }),
 
     setClipsLut: (clipIds, lutId) =>
       withHistory((p) => {
-        for (const track of p.tracks) {
-          for (const clip of track.clips) {
-            if (!clipIds.includes(clip.id)) continue;
-            // Keep the current intensity when re-picking a LUT on a clip that
-            // already had one, so swapping tables doesn't reset the strength.
-            const intensity = clip.color?.lut?.intensity ?? 1;
-            clip.color = { ...clip.color, lut: { id: lutId, intensity } };
-          }
-        }
+        forEachProjectClip(p, (clip) => {
+          if (!clipIds.includes(clip.id)) return;
+          // Keep the current intensity when re-picking a LUT on a clip that
+          // already had one, so swapping tables doesn't reset the strength.
+          const intensity = clip.color?.lut?.intensity ?? 1;
+          clip.color = { ...clip.color, lut: { id: lutId, intensity } };
+        });
       }),
 
     setClipLutIntensity: (clipId, intensity) => {
@@ -81,11 +82,9 @@ export function createLutsSlice(
     clearClipLut: (clipId) => {
       const ids = new Set(targetsOf(clipId));
       withHistory((p) => {
-        for (const track of p.tracks) {
-          for (const clip of track.clips) {
-            if (ids.has(clip.id) && clip.color?.lut) delete clip.color.lut;
-          }
-        }
+        forEachProjectClip(p, (clip) => {
+          if (ids.has(clip.id) && clip.color?.lut) delete clip.color.lut;
+        });
       });
     },
   };

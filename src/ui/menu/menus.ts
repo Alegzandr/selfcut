@@ -9,6 +9,8 @@ import {
   LinkBreak1Icon,
   LockOpen1Icon,
   MagicWandIcon,
+  CardStackPlusIcon,
+  EnterIcon,
   Pencil2Icon,
   PlusIcon,
   SliderIcon,
@@ -17,8 +19,15 @@ import {
   TrashIcon,
 } from '@radix-ui/react-icons';
 import { useTranslation } from 'react-i18next';
-import { useStore, getLinkTargets } from '../../store/store';
-import { EASE_IDS, gapAt, MARKER_COLORS, sortedMarkers } from '../../model';
+import { useStore, getLinkTargets, getLanes, getCues, getTimeline } from '../../store/store';
+import {
+  EASE_IDS,
+  findComp,
+  gapAt,
+  isCompClip,
+  MARKER_COLORS,
+  sortedMarkers,
+} from '../../model';
 import { markerSwatchIcon } from '../../timeline/MarkerSwatch';
 import { trackDisplayName } from '../../timeline/trackName';
 import { selectionEase } from '../../timeline/keyframeSelection';
@@ -26,6 +35,7 @@ import { CurveIcon } from '../../timeline/KeyframeIcon';
 import { audioKey } from '../../media/mediaCache';
 import type { ContextTarget } from '../../store/editorState';
 import { reconnectAssetViaPicker } from '../MediaLibrary';
+import { removeCompWithConfirm } from '../compActions';
 import { useEditorCommands, type Command } from '../commands';
 import { useIsCoarsePointer } from '../../lib/device';
 import type { MenuEntry } from './MenuList';
@@ -45,7 +55,7 @@ import type { MenuEntry } from './MenuList';
 export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
   const { t } = useTranslation();
   const commands = useEditorCommands();
-  const tracks = useStore((s) => s.project.tracks);
+  const tracks = useStore((s) => getLanes(s));
   const transcodes = useStore((s) => s.transcodes);
   const assets = useStore((s) => s.assets);
   const canLink = useStore((s) => getLinkTargets(s) !== null);
@@ -85,10 +95,19 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         disabled: audioKey(asset!.id, tr.index) in transcodes,
         onClick: () => void st().transcodeAudioTrack(asset!.id, tr.index),
       }));
+      // A comp clip is a doorway before it is a clip: opening it and undoing it
+      // come first, above the edits that treat it as one layer.
+      const compRows = clip && isCompClip(clip) ? ['comp.open', 'comp.decompose', '---'] : [];
       return resolve([
+        ...compRows,
         'edit.cut',
         'edit.copy',
         'clip.duplicate',
+        '---',
+        // Wrapping the selection into a composition of its own: right where cut,
+        // copy and duplicate are, because it is the same kind of act - what
+        // happens to the clips you have selected.
+        'clip.precompose',
         '---',
         'clip.split',
         ...(picture ? ['clip.punchIn', 'clip.stream', 'clip.blurRegion', 'clip.maskedFx'] : []),
@@ -125,7 +144,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
             '---',
           ]
         : [];
-      const markerRows: MenuEntry[] = st().project.markers.length
+      const markerRows: MenuEntry[] = getCues(st()).length
         ? [
             {
               id: 'ctx.timeline.removeAllMarkers',
@@ -153,7 +172,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
           labelKey: 'ctx.marker.goto',
           icon: BookmarkIcon,
           onClick: () => {
-            const marker = st().project.markers.find((m) => m.id === id);
+            const marker = getCues(st()).find((m) => m.id === id);
             if (marker) st().seek(marker.timeMs);
           },
         },
@@ -167,7 +186,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         // One row per colour, the swatch standing in for the icon: a cut room
         // sorts its cues by colour before it reads a single label.
         ...MARKER_COLORS.map((color): MenuEntry => {
-          const marker = sortedMarkers(st().project).find((m) => m.id === id);
+          const marker = sortedMarkers(getCues(st())).find((m) => m.id === id);
           const current = marker?.color ?? 'cyan';
           return {
             id: `ctx.marker.color.${color}`,
@@ -319,7 +338,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
     // boxed run a single gesture rather than one menu per key.
     case 'keyframe': {
       const refs = st().selectedKeyframes;
-      const current = selectionEase(st().project, refs);
+      const current = selectionEase(getTimeline(st()), refs);
       const items: MenuEntry[] = EASE_IDS.map((ease) => ({
         id: `ctx.keyframe.ease.${ease}`,
         labelKey: `inspector.easing.${ease}` as const,
@@ -341,6 +360,59 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         danger: true,
         onClick: () => st().deleteSelectedKeyframes(),
       });
+      return items;
+    }
+
+    case 'comp': {
+      const id = target.compId;
+      const comp = findComp(st().project, id);
+      const items: MenuEntry[] = [
+        {
+          id: 'ctx.comp.open',
+          labelKey: 'comp.open',
+          icon: EnterIcon,
+          onClick: () => st().openComp(id),
+        },
+        {
+          id: 'ctx.comp.add',
+          labelKey: 'comp.add',
+          icon: PlusIcon,
+          onClick: () => st().addCompClip(id),
+        },
+        '---',
+        {
+          id: 'ctx.comp.rename',
+          labelKey: 'comp.rename',
+          icon: Pencil1Icon,
+          onClick: () => st().setRenamingComp(id),
+        },
+        {
+          id: 'ctx.comp.duplicate',
+          labelKey: 'comp.duplicate',
+          icon: CardStackPlusIcon,
+          onClick: () => st().duplicateComp(id),
+        },
+        '---',
+        // The same six hues markers use, so a cut room sorts its precomps the
+        // way it already sorts its cues.
+        ...MARKER_COLORS.map((color): MenuEntry => ({
+          id: `ctx.comp.color.${color}`,
+          labelKey: `marker.color.${color}` as const,
+          icon: markerSwatchIcon(color),
+          checked: (comp?.color ?? 'violet') === color,
+          onClick: () => st().setCompColor(id, color),
+        })),
+        '---',
+        {
+          id: 'ctx.comp.delete',
+          labelKey: 'comp.delete',
+          icon: TrashIcon,
+          danger: true,
+          // Deleting a composition takes every clip playing it with it: the
+          // count is stated before anything happens (see `compActions`).
+          onClick: () => void removeCompWithConfirm(id),
+        },
+      ];
       return items;
     }
 

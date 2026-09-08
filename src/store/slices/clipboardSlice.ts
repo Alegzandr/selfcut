@@ -8,7 +8,7 @@ import { insertRoom } from '../razor';
 export function createClipboardSlice(
   set: StoreSet,
   get: StoreGet,
-  { withHistory }: SliceHelpers,
+  { withHistory, host }: SliceHelpers,
 ): Pick<EditorState, 'copyClips' | 'cutClips' | 'pasteAtPlayhead' | 'pasteInsertAtPlayhead'> {
   return {
     copyClips: (clipIds) => {
@@ -68,7 +68,7 @@ export function createClipboardSlice(
     withHistory((p) => {
       if (insert) insertRoom(p, currentTimeMs, spanMs);
       clipboard.items.forEach((item, i) => {
-        const track = ensureTrack(p, item.kind, item.clip.trackId);
+        const track = ensureTrack(host(p), item.kind, item.clip.trackId);
         const clip = structuredClone(item.clip);
         if (clip.linkId) {
           const next = linkIds.get(clip.linkId) ?? uid('link');

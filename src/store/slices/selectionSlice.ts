@@ -5,7 +5,7 @@ import { clipEndMs } from '../../model';
 export function createSelectionSlice(
   set: StoreSet,
   get: StoreGet,
-  _helpers: SliceHelpers,
+  { lanes }: SliceHelpers,
 ): Pick<
   EditorState,
   | 'selectClip'
@@ -22,7 +22,7 @@ export function createSelectionSlice(
    */
   const selectable = (ids: string[]): string[] => {
     const locked = new Set<string>();
-    for (const track of get().project.tracks) {
+    for (const track of lanes(get().project)) {
       if (track.locked) for (const clip of track.clips) locked.add(clip.id);
     }
     return locked.size === 0 ? ids : ids.filter((id) => !locked.has(id));
@@ -51,14 +51,14 @@ export function createSelectionSlice(
     },
 
     selectAllClips: () => {
-      const ids = selectable(get().project.tracks.flatMap((t) => t.clips.map((c) => c.id)));
+      const ids = selectable(lanes(get().project).flatMap((t) => t.clips.map((c) => c.id)));
       set({ selectedClipIds: ids, selectedClipId: ids[ids.length - 1] ?? null, fxTrackId: null });
     },
 
     selectClipsAfterPlayhead: () => {
       const { project, currentTimeMs } = get();
       const ids = selectable(
-        project.tracks.flatMap((t) =>
+        lanes(project).flatMap((t) =>
           t.clips.filter((c) => clipEndMs(c) > currentTimeMs).map((c) => c.id),
         ),
       );
@@ -100,7 +100,7 @@ export function createSelectionSlice(
     },
 
     selectClipRange: (anchorId, targetId) => {
-      const tracks = get().project.tracks;
+      const tracks = lanes(get().project);
       const locate = (id: string) => {
         for (let row = 0; row < tracks.length; row++) {
           const clip = tracks[row]!.clips.find((c) => c.id === id);

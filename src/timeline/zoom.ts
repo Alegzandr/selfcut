@@ -1,4 +1,4 @@
-import { useStore, projectDurationMs } from '../store/store';
+import { useStore, getDurationMs } from '../store/store';
 import { clamp } from '../lib/time';
 
 /** Zoom keeping the playhead at the same screen position (falls back to plain zoom). */
@@ -28,7 +28,7 @@ export function zoomToFit(): void {
   const s = useStore.getState();
   const scroller = document.querySelector<HTMLElement>('.timeline-scroller');
   if (!scroller) return;
-  const durationMs = projectDurationMs(s.project);
+  const durationMs = getDurationMs(s);
   if (durationMs <= 0) return;
   // The pad is the mobile half-width on a coarse pointer (the fixed centre
   // playhead needs the room on both sides), 0 on desktop; the fit is measured

@@ -17,7 +17,7 @@
  */
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useStore } from '../../store/store';
+import { useStore, getLanes } from '../../store/store';
 import { MAX_CLIP_SPEED, MIN_CLIP_SPEED } from '../../app/config';
 import type { Clip, EaseId, Keyframe } from '../../types';
 import { EASE_IDS, keyShape, rateAt, removeKeyframe, sampleChannel, setKeyframe } from '../../model';
@@ -100,8 +100,9 @@ export function RampEditor({ clip }: { clip: Clip & { velocity: Keyframe[] } }) 
     dragging.current = null;
     // The live writes hold the values already; one committed write is what makes
     // the whole drag a single undo step.
-    const project = useStore.getState().project;
-    const found = project.tracks.flatMap((tr) => tr.clips).find((c) => c.id === clip.id);
+    const found = getLanes(useStore.getState())
+      .flatMap((tr) => tr.clips)
+      .find((c) => c.id === clip.id);
     if (found?.velocity) write(found.velocity, true);
   };
 

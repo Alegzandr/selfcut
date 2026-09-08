@@ -40,6 +40,7 @@ import {
   timelineGapAt,
   type TrackGap,
 } from '../../model';
+import type { TrackHost } from '../projectOps';
 import { uid } from '../../lib/id';
 import { razorClip } from '../razor';
 import {
@@ -96,16 +97,16 @@ function mergeSpans(spans: TrackGap[]): TrackGap[] {
 }
 
 /**
- * The `laneIndex`-th audio track of the project, creating enough audio tracks to
+ * The `laneIndex`-th audio track of a timeline, creating enough audio tracks to
  * reach it. A multi-track video explodes onto parallel audio lanes (one per
  * source track), so its extracted clips never overlap or fight for a lane.
- * Mutates `p` (called on the withHistory draft).
+ * Mutates `host` (called on the withHistory draft).
  */
-function ensureAudioLane(p: Project, laneIndex: number): Track {
-  let audioTracks = p.tracks.filter((t) => t.kind === 'audio');
+function ensureAudioLane(host: TrackHost, laneIndex: number): Track {
+  let audioTracks = host.tracks.filter((t) => t.kind === 'audio');
   while (audioTracks.length <= laneIndex) {
-    insertTrack(p, { id: uid('track'), kind: 'audio', clips: [] });
-    audioTracks = p.tracks.filter((t) => t.kind === 'audio');
+    insertTrack(host, { id: uid('track'), kind: 'audio', clips: [] });
+    audioTracks = host.tracks.filter((t) => t.kind === 'audio');
   }
   return audioTracks[laneIndex]!;
 }
@@ -156,7 +157,7 @@ function resolvePatch(patch: ClipPatch, clip: Clip): Partial<Clip> {
 export function createClipsSlice(
   set: StoreSet,
   get: StoreGet,
-  { withHistory, pruneSelection, targetsOf }: SliceHelpers,
+  { withHistory, pruneSelection, targetsOf, lanes, setLanes, withLanes, host }: SliceHelpers,
 ): Pick<
   EditorState,
   | 'addClipFromAsset'
@@ -264,7 +265,7 @@ export function createClipsSlice(
     if (gaps.length === 0) return;
     withHistory((p) => {
       for (const { trackId, gap } of gaps) {
-        const track = p.tracks.find((tr) => tr.id === trackId);
+        const track = lanes(p).find((tr) => tr.id === trackId);
         if (!track) continue;
         const span = gap.endMs - gap.startMs;
         for (const clip of track.clips) {
@@ -294,7 +295,7 @@ export function createClipsSlice(
   const removeSpan = (p: Project, startMs: number, endMs: number): void => {
     const span = endMs - startMs;
     if (span <= 0) return;
-    for (const track of p.tracks) {
+    for (const track of lanes(p)) {
       if (track.locked) continue;
       for (const clip of track.clips) {
         if (clip.timelineStartMs >= startMs) {
@@ -327,12 +328,12 @@ export function createClipsSlice(
       withHistory((p) => {
         const trackEnd = (t: Track) => t.clips.reduce((max, c) => Math.max(max, clipEndMs(c)), 0);
         // Stills are picture content: they land on video tracks like footage.
-        const track = ensureTrack(p, asset.kind === 'audio' ? 'audio' : 'video');
-        const lanes = splitAudio ? audioTracks.map((_, i) => ensureAudioLane(p, i)) : [];
+        const track = ensureTrack(host(p), asset.kind === 'audio' ? 'audio' : 'video');
+        const audioLanes = splitAudio ? audioTracks.map((_, i) => ensureAudioLane(host(p), i)) : [];
         // The group shares one start, placed past the end of the video track AND
         // every audio lane it touches, so no side overlaps and gets nudged
         // independently (which would desync the group).
-        const start = Math.max(trackEnd(track), ...lanes.map(trackEnd));
+        const start = Math.max(trackEnd(track), ...audioLanes.map(trackEnd));
         const linkId = splitAudio ? uid('link') : undefined;
         const clip: Clip = {
           kind: 'media',
@@ -352,8 +353,8 @@ export function createClipsSlice(
         track.clips.push(clip);
         if (splitAudio && linkId) {
           audioTracks.forEach((info, i) => {
-            lanes[i]!.clips.push(
-              buildAudioClip(assetId, lanes[i]!.id, start, asset.durationMs, linkId, info.index),
+            audioLanes[i]!.clips.push(
+              buildAudioClip(assetId, audioLanes[i]!.id, start, asset.durationMs, linkId, info.index),
             );
           });
         }
@@ -370,7 +371,7 @@ export function createClipsSlice(
       const start = Math.max(0, timelineMs);
       // The dropped clip keeps its position (priority) when overlaps settle.
       withHistory((p) => {
-        const track = ensureTrack(p, asset.kind === 'audio' ? 'audio' : 'video', targetTrackId);
+        const track = ensureTrack(host(p), asset.kind === 'audio' ? 'audio' : 'video', targetTrackId);
         const linkId = splitAudio ? uid('link') : undefined;
         track.clips.push({
           kind: 'media',
@@ -390,7 +391,7 @@ export function createClipsSlice(
           // Every extracted audio track drops at the same instant, each on its
           // own lane so a multi-track source lands as parallel audio clips.
           audioTracks.forEach((info, i) => {
-            const lane = ensureAudioLane(p, i);
+            const lane = ensureAudioLane(host(p), i);
             lane.clips.push(
               buildAudioClip(assetId, lane.id, start, asset.durationMs, linkId, info.index),
             );
@@ -414,20 +415,20 @@ export function createClipsSlice(
           c.kind === 'media' && c.assetId === assetId;
         // Snapshot the picture clips first: pushing into a lane while iterating
         // would revisit the clips being added.
-        const placed = p.tracks
+        const placed = lanes(p)
           .filter((tr) => tr.kind === 'video')
           .flatMap((tr) => tr.clips)
           .filter(isThisAsset);
         if (placed.length === 0) return;
         // Re-running a transcode must not lay a second copy of the same sound.
         const existing = new Set(
-          p.tracks
+          lanes(p)
             .filter((tr) => tr.kind === 'audio')
             .flatMap((tr) => tr.clips)
             .filter(isThisAsset)
             .map((c) => `${c.linkId ?? ''}#${c.audioTrackIndex ?? ''}`),
         );
-        const laneTrack = ensureAudioLane(p, lane);
+        const laneTrack = ensureAudioLane(host(p), lane);
         for (const clip of placed) {
           // An unlinked picture clip gets a group id now so its new sound stays
           // tied to it through moves and trims.
@@ -462,14 +463,14 @@ export function createClipsSlice(
         // Topmost video track with the interval free - a text clip is an overlay,
         // it must not crossfade with the footage it sits on. Otherwise stack a
         // new track at the top so the overlay is visible without reordering.
-        let track = p.tracks.find(
+        let track = lanes(p).find(
           (t) =>
             t.kind === 'video' &&
             t.clips.every((c) => clipEndMs(c) <= start || c.timelineStartMs >= start + durMs),
         );
         if (!track) {
           track = { id: uid('track'), kind: 'video', clips: [] };
-          insertTrack(p, track, { atTop: true });
+          insertTrack(host(p), track, { atTop: true });
         }
         track.clips.push({
           kind: 'text',
@@ -497,14 +498,14 @@ export function createClipsSlice(
         const start = Math.max(0, currentTimeMs);
         // Overlay: topmost free video lane, or a fresh track at the top so the
         // new clip is visible without the user reordering tracks.
-        let track = p.tracks.find(
+        let track = lanes(p).find(
           (t) =>
             t.kind === 'video' &&
             t.clips.every((c) => clipEndMs(c) <= start || c.timelineStartMs >= start + durMs),
         );
         if (!track) {
           track = { id: uid('track'), kind: 'video', clips: [] };
-          insertTrack(p, track, { atTop: true });
+          insertTrack(host(p), track, { atTop: true });
         }
         track.clips.push({
           kind: 'solid',
@@ -537,14 +538,14 @@ export function createClipsSlice(
         // playhead, so take the first free lane from the top rather than
         // reusing a busy one. When none is free, stack a fresh track at the
         // top so the shape is visible without reordering.
-        let track = p.tracks.find(
+        let track = lanes(p).find(
           (t) =>
             t.kind === 'video' &&
             t.clips.every((c) => clipEndMs(c) <= start || c.timelineStartMs >= start + durMs),
         );
         if (!track) {
           track = { id: uid('track'), kind: 'video', clips: [] };
-          insertTrack(p, track, { atTop: true });
+          insertTrack(host(p), track, { atTop: true });
         }
         track.clips.push({
           kind: 'shape',
@@ -1111,16 +1112,16 @@ export function createClipsSlice(
       const shiftBy = shiftEdits(linkedPartnerIds(p, clipId), delta);
       const target =
         targetTrackId && targetTrackId !== found.track.id
-          ? p.tracks.find((t) => t.id === targetTrackId)
+          ? lanes(p).find((t) => t.id === targetTrackId)
           : undefined;
       if (target && target.kind === found.track.kind) {
         const moved: Clip = { ...found.clip, timelineStartMs: start, trackId: target.id };
-        const tracks = p.tracks.map((t) => {
+        const tracks = lanes(p).map((t) => {
           if (t.id === found.track.id) return { ...t, clips: t.clips.filter((c) => c.id !== clipId) };
           if (t.id === target.id) return { ...t, clips: [...t.clips, moved] };
           return t;
         });
-        const next: Project = { ...p, tracks };
+        const next: Project = withLanes(p, tracks);
         set({ project: shiftBy.size ? patchClips(next, shiftBy) : next });
         return;
       }
@@ -1300,7 +1301,7 @@ export function createClipsSlice(
       const all = withLinkedIds(p, clipIds);
       const idMap: Record<string, string> = {};
       const linkMap = new Map<string, string>();
-      const tracks = p.tracks.map((track) => {
+      const tracks = lanes(p).map((track) => {
         const copies: Clip[] = [];
         for (const clip of track.clips) {
           if (!all.includes(clip.id)) continue;
@@ -1320,7 +1321,7 @@ export function createClipsSlice(
       });
       const primaries = clipIds.map((id) => idMap[id]).filter((id): id is string => !!id);
       set({
-        project: { ...p, tracks },
+        project: withLanes(p, tracks),
         selectedClipIds: primaries,
         selectedClipId: primaries[primaries.length - 1] ?? null,
         cropEditing: false,
@@ -1344,7 +1345,7 @@ export function createClipsSlice(
       // stacked selection razors as one), otherwise every clip under it.
       const collect = (onlySelected: boolean): string[] => {
         const out: string[] = [];
-        for (const track of project.tracks) {
+        for (const track of lanes(project)) {
           for (const clip of track.clips) {
             if (crosses(clip) && (!onlySelected || selected.has(clip.id))) out.push(clip.id);
           }
@@ -1367,7 +1368,7 @@ export function createClipsSlice(
         // Each linked group's right halves get one fresh linkId, so a split pair
         // stays paired with its own side instead of all four sharing one link.
         const relink = new Map<string, string>();
-        for (const track of p.tracks) {
+        for (const track of lanes(p)) {
           const additions: Clip[] = [];
           for (const clip of track.clips) {
             if (targetSet.has(clip.id)) additions.push(razorClip(clip, currentTimeMs, relink));
@@ -1380,7 +1381,7 @@ export function createClipsSlice(
 
     closeGap: (trackId, timeMs) => {
       const { project, rippleAcrossTracks } = get();
-      const track = project.tracks.find((tr) => tr.id === trackId);
+      const track = lanes(project).find((tr) => tr.id === trackId);
       if (!track || track.locked) return;
       // With the ripple on every track, the span that can be closed is the one
       // the WHOLE timeline is empty over: closing this lane's gap alone would
@@ -1399,7 +1400,7 @@ export function createClipsSlice(
         return;
       }
       const gaps: { trackId: string; gap: TrackGap }[] = [];
-      for (const track of project.tracks) {
+      for (const track of lanes(project)) {
         if (track.locked) continue;
         const gap = gapAt(track, currentTimeMs);
         if (gap) gaps.push({ trackId: track.id, gap });
@@ -1415,12 +1416,12 @@ export function createClipsSlice(
       // direction. Resolved before touching anything, so a clip with nowhere
       // to go vetoes the whole move - a group must never split.
       const plan = new Map<string, string>();
-      for (let i = 0; i < project.tracks.length; i++) {
-        const track = project.tracks[i]!;
+      for (let i = 0; i < lanes(project).length; i++) {
+        const track = lanes(project)[i]!;
         if (!track.clips.some((c) => moving.has(c.id))) continue;
         let target: Track | undefined;
-        for (let j = i + dir; j >= 0 && j < project.tracks.length; j += dir) {
-          const candidate = project.tracks[j]!;
+        for (let j = i + dir; j >= 0 && j < lanes(project).length; j += dir) {
+          const candidate = lanes(project)[j]!;
           if (candidate.kind === track.kind && !candidate.locked) {
             target = candidate;
             break;
@@ -1431,7 +1432,7 @@ export function createClipsSlice(
       }
       withHistory((p) => {
         const lifted: Clip[] = [];
-        for (const track of p.tracks) {
+        for (const track of lanes(p)) {
           const keep: Clip[] = [];
           for (const clip of track.clips) {
             const to = plan.get(clip.id);
@@ -1440,7 +1441,7 @@ export function createClipsSlice(
           }
           track.clips = keep;
         }
-        for (const clip of lifted) p.tracks.find((tr) => tr.id === clip.trackId)!.clips.push(clip);
+        for (const clip of lifted) lanes(p).find((tr) => tr.id === clip.trackId)!.clips.push(clip);
       });
     },
 
@@ -1456,7 +1457,7 @@ export function createClipsSlice(
       const acrossTracks = ripple && get().rippleAcrossTracks;
       withHistory((p) => {
         const removed: TrackGap[] = [];
-        for (const track of p.tracks) {
+        for (const track of lanes(p)) {
           // Right-to-left so each ripple shift leaves the earlier targets in place.
           const doomed = track.clips
             .filter((c) => targets.includes(c.id))
@@ -1542,7 +1543,7 @@ export function createClipsSlice(
         findClip(get().project, clipId)!.clip.linkId!,
       );
       withHistory((p) => {
-        for (const track of p.tracks) {
+        for (const track of lanes(p)) {
           for (const clip of track.clips) {
             if (!ids.has(clip.id)) continue;
             // The extracted audio stays on the audio clips, so silence the video
@@ -1567,7 +1568,7 @@ export function createClipsSlice(
       // volume change is needed here - if the video was silenced by a prior
       // unlink it simply stays delegated.
       const existing = new Set<string>();
-      for (const track of get().project.tracks) {
+      for (const track of lanes(get().project)) {
         for (const clip of track.clips) {
           if (ids.has(clip.id) && clip.linkId != null) existing.add(clip.linkId);
         }
@@ -1576,7 +1577,7 @@ export function createClipsSlice(
       if (existing.size > 1) return;
       const linkId = existing.size === 1 ? [...existing][0]! : uid('link');
       withHistory((p) => {
-        for (const track of p.tracks) {
+        for (const track of lanes(p)) {
           for (const clip of track.clips) {
             if (ids.has(clip.id)) clip.linkId = linkId;
           }
@@ -1590,7 +1591,7 @@ export function createClipsSlice(
       // J/K/L → S → P flow works without ever touching the mouse.
       let targetId = selectedClipId;
       if (!targetId) {
-        for (const track of project.tracks) {
+        for (const track of lanes(project)) {
           if (track.kind !== 'video') continue;
           const hit = track.clips.find(
             (c) => currentTimeMs >= c.timelineStartMs && currentTimeMs < clipEndMs(c),
@@ -1634,7 +1635,7 @@ export function createClipsSlice(
         if (replaceClipIds?.length) {
           const doomed = new Set(replaceClipIds);
           const emptied = new Set<string>();
-          for (const track of p.tracks) {
+          for (const track of lanes(p)) {
             const kept = track.clips.filter((c) => !doomed.has(c.id));
             if (kept.length === track.clips.length) continue;
             track.clips = kept;
@@ -1644,7 +1645,7 @@ export function createClipsSlice(
           // it rather than leave a bare track header behind. Only lanes this
           // replacement emptied - an empty lane the user just added by hand is
           // theirs, not ours to collect.
-          p.tracks = p.tracks.filter((track) => !emptied.has(track.id));
+          setLanes(p, lanes(p).filter((track) => !emptied.has(track.id)));
         }
         // Captions always live on their own dedicated video track, composited
         // above any footage. Z-order = array order the way the timeline shows
@@ -1655,7 +1656,7 @@ export function createClipsSlice(
         // the lane carrying it, so captions and footage read as a pair. A
         // loose .srt has no anchor and goes above every video lane.
         const anchorIdx = anchorAssetId
-          ? p.tracks.findIndex(
+          ? lanes(p).findIndex(
               (t) => t.kind === 'video' && t.clips.some((c) => c.assetId === anchorAssetId),
             )
           : -1;
@@ -1667,7 +1668,7 @@ export function createClipsSlice(
         // captions to stand alone.
         let linkId: string | undefined;
         if (anchorIdx >= 0) {
-          const anchor = p.tracks[anchorIdx]!.clips
+          const anchor = lanes(p)[anchorIdx]!.clips
             .filter((c) => c.assetId === anchorAssetId)
             .sort((a, b) => a.timelineStartMs - b.timelineStartMs)[0];
           if (anchor) {
@@ -1675,9 +1676,9 @@ export function createClipsSlice(
             anchor.linkId = linkId;
           }
         }
-        const firstVideoIdx = p.tracks.findIndex((t) => t.kind === 'video');
+        const firstVideoIdx = lanes(p).findIndex((t) => t.kind === 'video');
         const at = anchorIdx >= 0 ? anchorIdx : firstVideoIdx >= 0 ? firstVideoIdx : 0;
-        p.tracks.splice(at, 0, track);
+        lanes(p).splice(at, 0, track);
         for (const cue of cues) {
           track.clips.push({
             kind: 'text',
@@ -1748,8 +1749,8 @@ export function createClipsSlice(
         inner.clip.transform = coverZone(gameCrop, outW / 2, outH * 0.3 + zoneH / 2, outW, zoneH);
         // Facecam duplicate on a NEW track above (captions/titles keep their own).
         const camTrack: Track = { id: uid('track'), kind: 'video', clips: [] };
-        const idx = p.tracks.findIndex((t) => t.id === inner.track.id);
-        p.tracks.splice(idx, 0, camTrack);
+        const idx = lanes(p).findIndex((t) => t.id === inner.track.id);
+        lanes(p).splice(idx, 0, camTrack);
         camTrack.clips.push({
           ...cloneClip(inner.clip),
           id: camClipId,

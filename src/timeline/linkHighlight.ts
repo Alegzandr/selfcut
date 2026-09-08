@@ -11,17 +11,18 @@
  * only when the selection or the project's tracks actually change.
  */
 import { EditorState } from '../store/editorState';
+import { tracksOf } from '../model';
 
 let cache: { key: unknown[]; set: ReadonlySet<string> } | null = null;
 
 /** The `linkId`s of every currently selected clip. */
 export function selectedLinkIds(s: EditorState): ReadonlySet<string> {
-  const key = [s.selectedClipIds, s.project.tracks];
+  const key = [s.selectedClipIds, tracksOf(s.project, s.activeCompId)];
   if (cache && cache.key[0] === key[0] && cache.key[1] === key[1]) return cache.set;
   const out = new Set<string>();
   if (s.selectedClipIds.length > 0) {
     const selected = new Set(s.selectedClipIds);
-    for (const track of s.project.tracks) {
+    for (const track of tracksOf(s.project, s.activeCompId)) {
       for (const clip of track.clips) {
         if (clip.linkId != null && selected.has(clip.id)) out.add(clip.linkId);
       }

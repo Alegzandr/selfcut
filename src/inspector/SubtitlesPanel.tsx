@@ -9,7 +9,7 @@ import {
   TextIcon,
   TrashIcon,
 } from "@radix-ui/react-icons";
-import { useStore, getTimelineFps } from "../store/store";
+import { useStore, getTimelineFps, getLanes } from '../store/store';
 import { Tooltip } from "../ui/Tooltip";
 import { openSubtitlePicker } from "../ui/mediaPicker";
 import { useImport } from "../ui/useImport";
@@ -56,8 +56,8 @@ import {
   isTrackPlayable,
   type Clip,
   type MediaAsset,
-  type Project,
   type TextClip,
+  type Track,
 } from "../types";
 
 /**
@@ -82,11 +82,11 @@ interface CaptionTarget {
 
 /** Those of `ids` that are media clips with sound, in timeline order. */
 function audibleTargets(
-  project: Project,
+  tracks: Track[],
   assets: Record<string, MediaAsset>,
   ids: Set<string>,
 ): CaptionTarget[] {
-  return project.tracks
+  return tracks
     .flatMap((track) => track.clips)
     .filter((clip) => ids.has(clip.id) && clip.kind === "media")
     .map((clip) => ({ clip, asset: assets[clip.assetId] }))
@@ -258,7 +258,7 @@ function CaptionGenerator({
     void (async () => {
       const from = Math.min(...targets.map((x) => x.clip.timelineStartMs));
       const to = Math.max(...targets.map((x) => clipEndMs(x.clip)));
-      const superseded = supersededCueIds(st.project, from, to);
+      const superseded = supersededCueIds(getLanes(st), from, to);
       if (superseded.length > 0) {
         const ok = await st.requestConfirm({
           title: t("subtitles.replace.title"),
@@ -384,7 +384,7 @@ function CaptionGenerator({
 
 export function SubtitlesPanel() {
   const { t } = useTranslation();
-  const project = useStore((s) => s.project);
+  const lanes = useStore(getLanes);
   const selectedClipId = useStore((s) => s.selectedClipId);
   const selectedClipIds = useStore((s) => s.selectedClipIds);
   const assets = useStore((s) => s.assets);
@@ -400,17 +400,17 @@ export function SubtitlesPanel() {
   // the playback engine writes the current time 60 times a second.
   const cues = useMemo(
     () =>
-      project.tracks
+      lanes
         .flatMap((track) => track.clips)
         .filter(isTextClip)
         .sort((a, b) => a.timelineStartMs - b.timelineStartMs),
-    [project],
+    [lanes],
   );
 
   /** Every selected clip that actually carries sound, in timeline order. */
   const selectedTargets = useMemo(
-    () => audibleTargets(project, assets, new Set(selectedClipIds)),
-    [project, selectedClipIds, assets],
+    () => audibleTargets(lanes, assets, new Set(selectedClipIds)),
+    [lanes, selectedClipIds, assets],
   );
 
   // Touching a cue selects its text clip, and a text clip carries no sound: the
@@ -427,8 +427,8 @@ export function SubtitlesPanel() {
     () =>
       selectedTargets.length > 0
         ? selectedTargets
-        : audibleTargets(project, assets, new Set(remembered.current)),
-    [selectedTargets, project, assets],
+        : audibleTargets(lanes, assets, new Set(remembered.current)),
+    [selectedTargets, lanes, assets],
   );
 
   const importSubtitles = () =>
