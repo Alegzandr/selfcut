@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { produce, setAutoFreeze } from 'immer';
 import { Clip, LoopRegion, Marker, Project, Track } from '../types';
-import { clipDurationMs, clipEndMs, projectDurationMs, sortedMarkers } from '../model';
+import { clipDurationMs, clipEndMs, projectDurationMs, sortedMarkers, timelineFps } from '../model';
 import { createEmptyProject, linkableSelection, resolveOverlaps } from './projectOps';
 import { editTargets } from './editTargets';
 import { type TimeFormat } from '../lib/time';
@@ -35,7 +35,10 @@ import {
   PREVIEW_MUTED_KEY,
   SCOPES_MODE_KEY,
   PREVIEW_BACKGROUND_KEY,
+  PREVIEW_GUIDES_KEY,
+  RIPPLE_ACROSS_TRACKS_KEY,
 } from './constants';
+import { PREVIEW_GUIDE_MODES, type PreviewGuides } from '../preview/guides';
 import { DEFAULT_PREVIEW_BACKGROUND } from '../lib/palette';
 import type { EditorState } from './editorState';
 import { PREVIEW_VIEW_RESET } from '../preview/view';
@@ -62,6 +65,20 @@ function loadTimeFormat(): TimeFormat {
     /* private mode / no storage - fall through to the default */
   }
   return 'timecode';
+}
+
+/**
+ * Whether ripple edits move every track. Off unless the user has said so: the
+ * per-track ripple is what the app has always done, and a preference read from
+ * an empty store must not change how a delete behaves.
+ */
+function loadRippleAcrossTracks(): boolean {
+  try {
+    return localStorage.getItem(RIPPLE_ACROSS_TRACKS_KEY) === '1';
+  } catch {
+    /* private mode / no storage - fall through to the default */
+  }
+  return false;
 }
 
 function loadTrackHeight(): number {
@@ -128,6 +145,16 @@ function loadPreviewBackground(): string {
     /* private mode / no storage - fall through to the default */
   }
   return DEFAULT_PREVIEW_BACKGROUND;
+}
+
+function loadPreviewGuides(): PreviewGuides {
+  try {
+    const v = localStorage.getItem(PREVIEW_GUIDES_KEY);
+    if (v && PREVIEW_GUIDE_MODES.includes(v as PreviewGuides)) return v as PreviewGuides;
+  } catch {
+    /* private mode / no storage - fall through to the default */
+  }
+  return 'off';
 }
 
 function loadPreviewMuted(): boolean {
@@ -262,8 +289,11 @@ export const useStore = create<EditorState>((set, get) => {
       INSPECTOR_WIDTH_PX,
     ),
     timeFormat: loadTimeFormat(),
+    rippleAcrossTracks: loadRippleAcrossTracks(),
     previewResolution: loadPreviewResolution(),
     scopesMode: loadScopesMode(),
+    previewGuides: loadPreviewGuides(),
+    renamingTrackId: null,
     previewBackground: loadPreviewBackground(),
     previewVolume: loadPreviewVolume(),
     previewMuted: loadPreviewMuted(),
@@ -387,3 +417,6 @@ export function getLinkTargets(state: EditorState): string[] | null {
 
 export { clipDurationMs, clipEndMs, projectDurationMs, sortedMarkers };
 export type { LoopRegion, Marker };
+
+/** The frame rate the timeline steps and counts in (see `timelineFps`). */
+export const getTimelineFps = (s: EditorState): number => timelineFps(s.project, s.assets);

@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
-import { useStore, getSelectedClip, projectDurationMs, clipEndMs, sortedMarkers } from '../store/store';
-import { zoomAtPlayhead } from '../timeline/zoom';
+import { useStore, getTimelineFps, projectDurationMs, clipEndMs, sortedMarkers } from '../store/store';
+import { zoomAtPlayhead, zoomToFit } from '../timeline/zoom';
 import { EASE_IDS } from '../model';
 import { focusIsKeyboardDriven } from '../lib/focusModality';
 import { openProject, saveProject } from './projectActions';
 import { PLAYBACK_SKIP_BACK_MS, PLAYBACK_SKIP_FORWARD_MS } from '../app/config';
+import { shuttleStep } from '../lib/shuttle';
 
 /**
  * Jump to the previous/next edit point (clip edges, markers, region corners,
@@ -33,20 +34,62 @@ function jumpToEdge(dir: -1 | 1) {
   if (target !== undefined) s.seek(target);
 }
 
-/** Trim the selected clip's edge to the playhead (only when the playhead is inside it). */
+/**
+ * Trim the selected clips' edge to the playhead - every selected clip the
+ * playhead is inside, as one undo step. A stacked selection (a shot and the
+ * graphics over it) trims together, which is the point of selecting it.
+ */
 function trimSelectedToPlayhead(edge: 'left' | 'right') {
   const s = useStore.getState();
-  const clip = getSelectedClip(s);
-  if (!clip) return;
-  if (s.currentTimeMs <= clip.timelineStartMs + 1 || s.currentTimeMs >= clipEndMs(clip) - 1) return;
+  const selected = new Set(s.selectedClipIds);
+  const targets = s.project.tracks
+    .flatMap((tr) => tr.clips)
+    .filter(
+      (clip) =>
+        selected.has(clip.id) &&
+        s.currentTimeMs > clip.timelineStartMs + 1 &&
+        s.currentTimeMs < clipEndMs(clip) - 1,
+    );
+  if (targets.length === 0) return;
   s.beginGesture();
-  s.trimClip(clip.id, edge, s.currentTimeMs);
+  for (const clip of targets) s.trimClip(clip.id, edge, s.currentTimeMs);
   s.endGesture();
 }
 
 function stepBy(ms: number) {
   const s = useStore.getState();
   s.seek(s.currentTimeMs + ms);
+}
+
+/**
+ * One press of J (-1) or L (1): take the ladder's next rung and run.
+ *
+ * The rate is set before the transport starts, so the engine's first tick after
+ * the press already anchors itself on the direction that was asked for - a play
+ * that started forwards and turned round a frame later is a jump backwards on
+ * screen and a click in the sound.
+ */
+function shuttle(dir: -1 | 1) {
+  const s = useStore.getState();
+  const next = shuttleStep(s.playbackRate, s.playing, dir);
+  s.setPlaybackRate(next.rate);
+  if (next.playing !== s.playing) s.setPlaying(next.playing);
+}
+
+/** One frame of the timeline, in ms - at the footage's rate, not the project ceiling. */
+function frameMs(): number {
+  return 1000 / getTimelineFps(useStore.getState());
+}
+
+/** Cue the playhead to the next (1) or previous (-1) marker, Premiere's Shift+M pair. */
+function jumpToMarker(dir: -1 | 1) {
+  const s = useStore.getState();
+  const markers = sortedMarkers(s.project);
+  const target =
+    dir === 1
+      ? markers.find((m) => m.timeMs > s.currentTimeMs + 1)
+      : [...markers].reverse().find((m) => m.timeMs < s.currentTimeMs - 1);
+  if (target) s.seek(target.timeMs);
 }
 
 /**
@@ -81,7 +124,7 @@ function toggleTrackExpansion() {
 function nudgeSelected(frames: number) {
   const s = useStore.getState();
   if (s.selectedClipIds.length === 0) return;
-  const step = (1000 / s.project.fps) * frames;
+  const step = frameMs() * frames;
   const entries: { clipId: string; timelineStartMs: number }[] = [];
   for (const track of s.project.tracks) {
     for (const clip of track.clips) {
@@ -163,12 +206,51 @@ export function useEditorHotkeys() {
         return;
       }
 
+      // Shift+Z: the whole cut in the window, the fit every NLE puts on this
+      // key. Matched before the letter switch below, where a bare Z arms the
+      // magnifier and used to swallow the shifted press as well.
+      if (!mod && e.shiftKey && e.code === 'KeyZ') {
+        e.preventDefault();
+        zoomToFit();
+        return;
+      }
+
+      // Alt + arrows: nudge the selection by a frame, Alt+Shift by ten - the
+      // Premiere pair, kept on the arrows so it works on every keyboard layout
+      // (the , / . pair below depends on where the layout puts them).
+      if (e.altKey && !mod && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        const dir = e.key === 'ArrowLeft' ? -1 : 1;
+        nudgeSelected(dir * (e.shiftKey ? 10 : 1));
+        return;
+      }
+      // Alt + up/down: lift the selection onto the neighbouring lane.
+      if (e.altKey && !mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        s.moveSelectionToTrack(e.key === 'ArrowUp' ? -1 : 1);
+        return;
+      }
+
       if (mod) {
         switch (e.key.toLowerCase()) {
           case 'z':
             e.preventDefault();
             if (e.shiftKey) s.redo();
             else s.undo();
+            return;
+          case 'backspace':
+            // Ctrl+Backspace: close the gap(s) under the playhead. Backspace
+            // alone deletes the selection, so the modifier is what says
+            // "the empty space, not the clip".
+            e.preventDefault();
+            s.closeGapsAtPlayhead();
+            return;
+          case 'm':
+            // Ctrl+Shift+M: previous marker (Shift+M alone is the next one).
+            if (e.shiftKey) {
+              e.preventDefault();
+              jumpToMarker(-1);
+            }
             return;
           case 'y':
             e.preventDefault();
@@ -188,7 +270,8 @@ export function useEditorHotkeys() {
             return;
           case 'v':
             e.preventDefault();
-            s.pasteAtPlayhead();
+            if (e.shiftKey) s.pasteInsertAtPlayhead();
+            else s.pasteAtPlayhead();
             return;
           case 'd':
             if (s.selectedClipIds.length) {
@@ -198,7 +281,8 @@ export function useEditorHotkeys() {
             return;
           case 'a':
             e.preventDefault();
-            s.selectAllClips();
+            if (e.shiftKey) s.selectClipsAfterPlayhead();
+            else s.selectAllClips();
             return;
           case 'e':
             e.preventDefault();
@@ -259,7 +343,7 @@ export function useEditorHotkeys() {
               ? -1000
               : s.playing
                 ? -PLAYBACK_SKIP_BACK_MS
-                : -1000 / s.project.fps,
+                : -frameMs(),
           );
           return;
         case 'ArrowRight':
@@ -269,7 +353,7 @@ export function useEditorHotkeys() {
               ? 1000
               : s.playing
                 ? PLAYBACK_SKIP_FORWARD_MS
-                : 1000 / s.project.fps,
+                : frameMs(),
           );
           return;
         case 'ArrowUp':
@@ -323,6 +407,20 @@ export function useEditorHotkeys() {
         case '.':
           nudgeSelected(1);
           return;
+        // Shift + , / . on the layouts where that types < and >: ten frames.
+        case '<':
+          nudgeSelected(-10);
+          return;
+        case '>':
+          nudgeSelected(10);
+          return;
+        case 'M':
+          // Shift+M: next marker. The lowercase m below drops one.
+          if (e.shiftKey) {
+            jumpToMarker(1);
+            return;
+          }
+          break;
       }
 
       // Action letters run once per physical press: a held S must not machine-gun
@@ -388,10 +486,11 @@ export function useEditorHotkeys() {
         case 'z':
           s.setPreviewTool('zoom');
           return;
+        // J and L are one ladder read in two directions (see `shuttleStep`):
+        // J plays backwards, L forwards, and each pressed against the current
+        // direction of travel slows the transport down before turning it round.
         case 'j':
-          // Playing: halve the shuttle rate (slow review). Paused: step back 1s.
-          if (s.playing) s.setPlaybackRate(s.playbackRate / 2);
-          else stepBy(-1000);
+          shuttle(-1);
           return;
         case 'k':
           // Always stops AND drops the shuttle back to 1x, as in Premiere and
@@ -400,9 +499,7 @@ export function useEditorHotkeys() {
           s.setPlaying(false);
           return;
         case 'l':
-          // First press plays at 1×, repeats double the shuttle rate (up to 8×).
-          if (!s.playing) s.setPlaying(true);
-          else s.setPlaybackRate(s.playbackRate < 1 ? 1 : s.playbackRate * 2);
+          shuttle(1);
           return;
       }
     };

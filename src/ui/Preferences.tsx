@@ -37,6 +37,12 @@ const TIME_FORMATS: readonly { value: TimeFormat; labelKey: ParseKeys }[] = [
   { value: 'decimal', labelKey: 'preferences.timeFormat.decimal' },
 ];
 
+/** How far a ripple edit reaches - see `rippleAcrossTracks`. */
+const RIPPLE_SCOPES: readonly { value: 'track' | 'all'; labelKey: ParseKeys }[] = [
+  { value: 'track', labelKey: 'preferences.ripple.track' },
+  { value: 'all', labelKey: 'preferences.ripple.all' },
+];
+
 /** The one-click surrounds, darkest to lightest. Any other colour goes through the picker. */
 const BACKGROUNDS: readonly { value: string; labelKey: ParseKeys }[] = [
   {
@@ -104,7 +110,8 @@ function Rows({ children }: { children: ReactNode }) {
 function GeneralTab() {
   const { t } = useTranslation();
   const timeFormat = useStore((s) => s.timeFormat);
-  const { setTimeFormat } = useStore.getState();
+  const rippleAcrossTracks = useStore((s) => s.rippleAcrossTracks);
+  const { setTimeFormat, setRippleAcrossTracks } = useStore.getState();
   const currentLang = (i18n.resolvedLanguage ?? 'en') as Locale;
 
   return (
@@ -132,6 +139,23 @@ function GeneralTab() {
           onChange={(e) => setTimeFormat(e.target.value as TimeFormat)}
         >
           {TIME_FORMATS.map(({ value, labelKey }) => (
+            <option key={value} value={value}>
+              {t(labelKey)}
+            </option>
+          ))}
+        </select>
+      </Row>
+
+      {/* Which lanes a ripple delete, a ripple trim or a closed gap moves.
+          Two editors' answers, and no way to guess which one someone learned. */}
+      <Row label={t('preferences.ripple')}>
+        <select
+          className={SELECT_CLASS}
+          aria-label={t('a11y.preferences.ripple')}
+          value={rippleAcrossTracks ? 'all' : 'track'}
+          onChange={(e) => setRippleAcrossTracks(e.target.value === 'all')}
+        >
+          {RIPPLE_SCOPES.map(({ value, labelKey }) => (
             <option key={value} value={value}>
               {t(labelKey)}
             </option>

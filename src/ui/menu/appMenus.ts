@@ -34,7 +34,7 @@ export const MENUS: readonly AppMenu[] = [
   },
   {
     titleKey: 'menu.edit',
-    items: ['edit.undo', 'edit.redo', '---', 'edit.cut', 'edit.copy', 'edit.paste', '---', 'edit.selectAll', '---', 'edit.preferences'],
+    items: ['edit.undo', 'edit.redo', '---', 'edit.cut', 'edit.copy', 'edit.paste', 'edit.pasteInsert', '---', 'edit.closeGap', '---', 'edit.selectAll', 'edit.selectForward', '---', 'edit.preferences'],
   },
   {
     titleKey: 'menu.insert',
@@ -51,6 +51,12 @@ export const MENUS: readonly AppMenu[] = [
     items: [
       'view.zoomIn',
       'view.zoomOut',
+      'view.zoomFit',
+      '---',
+      'view.guides.off',
+      'view.guides.safe',
+      'view.guides.thirds',
+      'view.guides.social',
       '---',
       'view.media',
       'view.effects',
@@ -63,7 +69,7 @@ export const MENUS: readonly AppMenu[] = [
   },
   {
     titleKey: 'menu.playback',
-    items: ['playback.playPause', 'playback.start', '---', 'playback.loop', 'playback.regionIn', 'playback.regionOut'],
+    items: ['playback.playPause', 'playback.start', '---', 'playback.loop', 'playback.regionIn', 'playback.regionOut', '---', 'playback.nextMarker', 'playback.prevMarker'],
   },
   { titleKey: 'menu.help', items: ['help.shortcuts', '---', 'help.about'] },
 ];

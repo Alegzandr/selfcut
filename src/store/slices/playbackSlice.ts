@@ -2,7 +2,7 @@ import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
 import { projectDurationMs } from '../../model';
 import { clamp } from '../../lib/time';
-import { MIN_REGION_MS } from '../../app/config';
+import { MAX_SHUTTLE_RATE, MIN_REGION_MS, MIN_SHUTTLE_RATE } from '../../app/config';
 
 export function createPlaybackSlice(
   set: StoreSet,
@@ -43,7 +43,13 @@ export function createPlaybackSlice(
       set({ playing, ...(playing ? {} : { playbackRate: 1 }) });
     },
 
-    setPlaybackRate: (rate) => set({ playbackRate: clamp(rate, 0.25, 8) }),
+    // The sign is the direction of travel (negative = backwards), so the clamp
+    // is on the magnitude: a rate of -8 is as legal as 8, and 0 - a transport
+    // that plays without moving - is not reachable from either end.
+    setPlaybackRate: (rate) => {
+      const speed = clamp(Math.abs(rate), MIN_SHUTTLE_RATE, MAX_SHUTTLE_RATE);
+      set({ playbackRate: rate < 0 ? -speed : speed });
+    },
 
     setLoopRegion: (region) => {
       if (!region) {

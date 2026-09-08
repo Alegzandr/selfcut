@@ -364,11 +364,18 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
       clip.kind === 'media' &&
       !!asset &&
       asset.kind !== 'image';
-    // Ctrl+Alt on a trim handle: ripple trim - downstream clips on this track
-    // follow the edited edge, keeping their distance to it (their partners tag
-    // along).
+    // Ctrl+Alt on a trim handle: ripple trim - downstream clips follow the
+    // edited edge, keeping their distance to it (their partners tag along). How
+    // far that reaches is the ripple preference's to say.
     const ripple =
-      !coarse && ctrl && e.altKey && isTrim ? rippleForTrim(state.project, clip) : null;
+      !coarse && ctrl && e.altKey && isTrim
+        ? rippleForTrim(
+            state.project,
+            clip,
+            mode === 'trim-left' ? 'left' : 'right',
+            state.rippleAcrossTracks,
+          )
+        : null;
     // Alt alone on a trim handle: roll edit - the cut point between this clip
     // and its neighbor moves, one side lengthens exactly as the other shortens.
     // Only a true edit point rolls (adjacent or crossfading neighbor).

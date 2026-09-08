@@ -12,6 +12,7 @@ import {
 import { useStore } from '../store/store';
 import { formatTime } from '../lib/time';
 import {
+  exportFileName,
   fpsCapBinds,
   presetSectionsForAspect,
   projectSourceFps,
@@ -130,6 +131,12 @@ export function ExportSheet() {
    * choice made about THIS render rather than one made once and forgotten.
    */
   const [forceMaxFps, setForceMaxFps] = useState(false);
+  /**
+   * The base name of the file to write, without its extension. Empty until the
+   * user types one: the placeholder shows the stamped default, and typing over
+   * it is the one thing a monteur exporting "ep12-final-v3" ever wants to do.
+   */
+  const [baseName, setBaseName] = useState('');
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const handleRef = useRef<ExportHandle | null>(null);
   // Set when the user cancels: the promise then rejects with "canceled", which
@@ -145,6 +152,12 @@ export function ExportSheet() {
   // while `selectedId` still remembers the choice made in another category.
   const selected = active.presets.find((p) => p.id === selectedId) ?? active.presets[0]!;
   const exportedRegion = region && regionOnly ? region : null;
+  const ext = selected.kind === 'mp3' ? 'mp3' : 'mp4';
+  const defaultBase = exportFileName(selected).replace(/\.[^.]+$/, '');
+  // Characters no file system accepts, dropped rather than rejected: a save
+  // dialog that refuses the name is worse than one that quietly fixes it.
+  const cleanBase = baseName.replace(/[\\/:*?"<>|]+/g, '').trim();
+  const fileName = `${cleanBase || defaultBase}.${ext}`;
   const { elapsedMs, remainingMs } = useRenderClock(
     phase.kind === 'rendering',
     phase.kind === 'rendering' ? phase.progress : 0,
@@ -184,6 +197,7 @@ export function ExportSheet() {
       exportedRegion,
       {
         forceMaxFps,
+        fileName,
         onFallback: (fallback) =>
           setPhase((p) => (p.kind === 'rendering' ? { ...p, fallback } : p)),
       },
@@ -336,6 +350,25 @@ export function ExportSheet() {
                     </span>
                   </label>
                 )}
+
+                <label className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950 px-2.5 py-2 text-xs text-zinc-300">
+                  <span className="flex-none text-zinc-400">{t('export.fileName')}</span>
+                  <input
+                    type="text"
+                    value={baseName}
+                    placeholder={defaultBase}
+                    spellCheck={false}
+                    aria-label={t('export.fileName')}
+                    className="min-w-0 flex-1 bg-transparent text-right tabular-nums text-zinc-100 outline-none placeholder:text-zinc-600"
+                    onChange={(e) => setBaseName(e.target.value)}
+                    onKeyDown={(e) => {
+                      // Enter renders; Escape belongs to the sheet's own handler.
+                      if (e.key === 'Enter') run(selected);
+                      if (e.key !== 'Escape') e.stopPropagation();
+                    }}
+                  />
+                  <span className="flex-none text-zinc-500">.{ext}</span>
+                </label>
 
                 {region && (
                   <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs text-zinc-300">

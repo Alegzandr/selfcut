@@ -1,6 +1,7 @@
 import {
   Clip,
   ClipColor,
+  MarkerColor,
   ClipCurves,
   ClipMask,
   ClipRedaction,
@@ -22,6 +23,7 @@ import type { TimeFormat } from '../lib/time';
 import type { PreviewResolutionMode } from '../app/config';
 import type { PreviewTool, PreviewView } from '../preview/view';
 import type { ScopeMode } from '../preview/scopes';
+import type { PreviewGuides } from '../preview/guides';
 import type { Framing } from '../model/reframe';
 import type { SubtitleCue } from '../lib/subtitles';
 import type { FFmpegProgress } from '../media/ffmpeg';
@@ -80,7 +82,12 @@ export interface ClipboardEntry {
  */
 export type ContextTarget =
   | { kind: 'clip'; clipId: string }
-  | { kind: 'timeline' }
+  /**
+   * The empty track background. `trackId` / `timeMs` name the spot pressed, so
+   * the menu can offer what applies right there (closing the gap under the
+   * pointer); absent when the press was below the last track.
+   */
+  | { kind: 'timeline'; trackId?: string; timeMs?: number }
   | { kind: 'marker'; markerId: string }
   | { kind: 'track'; trackId: string }
   | { kind: 'asset'; assetId: string }
@@ -248,6 +255,13 @@ export interface EditorState {
   confirmDialog: ConfirmRequest | null;
   /** Marker whose inline label editor is open (opened by dbl-click or the menu). */
   renamingMarkerId: string | null;
+  /** Track whose header name is being edited inline (dbl-click or the menu). */
+  renamingTrackId: string | null;
+  /**
+   * Guide overlay on the monitor: safe margins, thirds, or the UI chrome of
+   * the platform the cut is going to (persisted). Never composited.
+   */
+  previewGuides: PreviewGuides;
   /**
    * Track whose levels sheet is open, or null.
    *
@@ -257,6 +271,17 @@ export interface EditorState {
   trackSettingsTrackId: string | null;
   /** How the transport spells time out (persisted). */
   timeFormat: TimeFormat;
+  /**
+   * How far a ripple edit reaches (persisted).
+   *
+   * False - the default, and what this editor grew up doing - is the Vegas
+   * rule: a ripple delete, a ripple trim or a closed gap moves the clips that
+   * follow ON THAT TRACK, and every other lane keeps its timing. True is
+   * Premiere's: the span comes out of the whole timeline, so the tracks stay in
+   * sync with each other and the cut downstream keeps its shape. Neither is
+   * more correct than the other - which is why it is a preference.
+   */
+  rippleAcrossTracks: boolean;
   /** Preview playback resolution the user picked (persisted). */
   previewResolution: PreviewResolutionMode;
   /** Which video scope the monitor overlays, or 'off' (persisted). Desktop only. */
@@ -349,6 +374,10 @@ export interface EditorState {
   toggleTrackHidden: (trackId: string) => void;
   /** Lock a track: its clips stop being selectable, so no edit can reach them. */
   toggleTrackLocked: (trackId: string) => void;
+  /** Solo a track: only the soloed tracks of its kind play / show (see `isTrackAudible`). */
+  toggleTrackSolo: (trackId: string) => void;
+  /** Name a track ("VO", "Music"); an empty name goes back to the positional "V1". */
+  renameTrack: (trackId: string, name: string) => void;
   /**
    * Toggle a track's expanded state: an expanded track reveals a lane per
    * animatable property with the keyframes of every clip on it.
@@ -395,6 +424,12 @@ export interface EditorState {
   selectClip: (id: string | null) => void;
   /** Ctrl/Cmd+A: every clip on every track. */
   selectAllClips: () => void;
+  /**
+   * Ctrl/Cmd+Shift+A: every clip that ends after the playhead, on every track -
+   * the "select forward" of Premiere, for opening up or closing a stretch of
+   * the cut in one drag.
+   */
+  selectClipsAfterPlayhead: () => void;
   /** Ctrl/Cmd+click: add/remove a clip from the multi-selection. */
   toggleSelectClip: (id: string) => void;
   /** Replace the whole selection (marquee / rubber-band select). */
@@ -494,6 +529,20 @@ export interface EditorState {
    */
   cloneClipsForDrag: (clipIds: string[]) => Record<string, string>;
   splitAtPlayhead: () => void;
+  /**
+   * Close the empty span under `timeMs` on one track: everything after it on
+   * that track slides left by the gap's length. The Vegas per-track ripple,
+   * like ripple delete - the other tracks keep their timing.
+   */
+  closeGap: (trackId: string, timeMs: number) => void;
+  /** `closeGap` on every unlocked track whose gap the playhead sits in. */
+  closeGapsAtPlayhead: () => void;
+  /**
+   * Move every selected clip to the neighbouring track of the same kind
+   * (-1 = up, 1 = down), keeping its time. Nothing moves unless every clip has
+   * an unlocked lane to go to, so a group never splits across the gesture.
+   */
+  moveSelectionToTrack: (dir: -1 | 1) => void;
   deleteClip: (clipId: string) => void;
   /** Delete a clip and close the gap: later clips on the same track shift left. */
   /** Delete several clips as one undo step; ripple closes the gaps. */
@@ -515,6 +564,13 @@ export interface EditorState {
   copyClips: (clipIds: string[]) => void;
   cutClips: (clipIds: string[]) => void;
   pasteAtPlayhead: () => void;
+  /**
+   * Paste-insert (Ctrl+Shift+V): the clipboard lands at the playhead and the
+   * cut from there on slides right on every unlocked track to make room (a clip
+   * straddling the playhead is razored), rather than the pasted block being
+   * overlapped and pushed by the overlap policy.
+   */
+  pasteInsertAtPlayhead: () => void;
   /**
    * Punch-in zoom (the social-cut staple): cycle the scale of the selected
    * clip - or the topmost video clip under the playhead - 1 → 1.2 → 1.4 → 1.
@@ -715,6 +771,8 @@ export interface EditorState {
   moveMarker: (markerId: string, timeMs: number) => void;
   renameMarker: (markerId: string, label: string) => void;
   removeMarker: (markerId: string) => void;
+  setMarkerColor: (markerId: string, color: MarkerColor) => void;
+  removeAllMarkers: () => void;
   /** Replace the whole editor content (restore from IndexedDB at boot). */
   hydrate: (project: Project, assets: MediaAsset[]) => void;
   /** Start over: empty project, empty library, empty history. */
@@ -748,8 +806,11 @@ export interface EditorState {
   resolveConfirm: (ok: boolean) => void;
   /** Open (id) or close (null) a marker's inline label editor. */
   setRenamingMarker: (markerId: string | null) => void;
+  setRenamingTrack: (trackId: string | null) => void;
+  setPreviewGuides: (mode: PreviewGuides) => void;
   setTrackSettingsTrack: (trackId: string | null) => void;
   setTimeFormat: (format: TimeFormat) => void;
+  setRippleAcrossTracks: (on: boolean) => void;
   setPreviewTool: (tool: PreviewTool) => void;
   /** Move/scale the preview camera; the caller clamps via `clampView`. */
   setPreviewView: (view: PreviewView) => void;

@@ -62,10 +62,14 @@ export function ClipVolumeLine({
         className={`pointer-events-none absolute inset-x-0 z-10 h-0 translate-y-1/2 border-t-2 border-amber-300/90 transition-opacity ${gainTrimmed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} ${selected ? 'opacity-100' : ''}`}
         style={{ bottom: volumeLineBottom(volumeFader) }}
       />
-      {(!coarse || selected) && (
+      {/* Desktop only. On touch the band sat across the middle of a selected
+          clip, 24px tall in a 56px lane, so the thumb that meant to move the
+          clip trimmed its gain instead - and CapCut has no such line at all.
+          The inspector's volume slider is the touch control. */}
+      {!coarse && (
         <Tooltip label={t('clip.volumeLine')}>
           <div
-            className={`absolute inset-x-0 z-20 translate-y-1/2 cursor-ns-resize touch-none ${coarse ? 'h-6' : 'h-2'}`}
+            className="absolute inset-x-0 z-20 h-2 translate-y-1/2 cursor-ns-resize touch-none"
             style={{ bottom: volumeLineBottom(volumeFader) }}
             onPointerDown={(e) => beginDrag(e, 'volume')}
             onPointerMove={onPointerMove}

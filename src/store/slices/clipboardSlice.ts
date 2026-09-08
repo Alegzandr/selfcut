@@ -2,12 +2,14 @@ import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState, ClipboardItem } from '../editorState';
 import { uid } from '../../lib/id';
 import { ensureTrack, findClip } from '../projectOps';
+import { clipDurationMs } from '../../model';
+import { insertRoom } from '../razor';
 
 export function createClipboardSlice(
   set: StoreSet,
   get: StoreGet,
   { withHistory }: SliceHelpers,
-): Pick<EditorState, 'copyClips' | 'cutClips' | 'pasteAtPlayhead'> {
+): Pick<EditorState, 'copyClips' | 'cutClips' | 'pasteAtPlayhead' | 'pasteInsertAtPlayhead'> {
   return {
     copyClips: (clipIds) => {
       const project = get().project;
@@ -40,33 +42,47 @@ export function createClipboardSlice(
       get().deleteClips(clipIds, false);
     },
 
-    pasteAtPlayhead: () => {
-      const { clipboard, currentTimeMs } = get();
-      if (!clipboard || clipboard.items.length === 0) return;
-      const newIds = clipboard.items.map(() => uid('clip'));
-      // Re-keyed so a pasted pair links to itself and not to the clips it came from.
-      const linkIds = new Map<string, string>();
+    pasteInsertAtPlayhead: () => paste(true),
 
-      // The earliest pasted clip holds the playhead position (priority) when
-      // overlaps settle; the rest keep their offsets from it.
-      withHistory((p) => {
-        clipboard.items.forEach((item, i) => {
-          const track = ensureTrack(p, item.kind, item.clip.trackId);
-          const clip = structuredClone(item.clip);
-          if (clip.linkId) {
-            const next = linkIds.get(clip.linkId) ?? uid('link');
-            linkIds.set(clip.linkId, next);
-            clip.linkId = next;
-          }
-          track.clips.push({
-            ...clip,
-            id: newIds[i]!,
-            trackId: track.id,
-            timelineStartMs: currentTimeMs + item.offsetMs,
-          });
-        });
-      }, newIds[0]);
-      set({ selectedClipId: newIds[newIds.length - 1]!, selectedClipIds: newIds });
-    },
+    pasteAtPlayhead: () => paste(false),
   };
+
+  /**
+   * One paste, overlapping (`insert` false) or inserting. Inserting first opens
+   * room at the playhead on every unlocked track (see `insertRoom`): clips
+   * straddling it are razored and everything from it on slides right by the
+   * span of the pasted block, so the cut downstream keeps its sync.
+   */
+  function paste(insert: boolean): void {
+    const { clipboard, currentTimeMs } = get();
+    if (!clipboard || clipboard.items.length === 0) return;
+    const newIds = clipboard.items.map(() => uid('clip'));
+    // Re-keyed so a pasted pair links to itself and not to the clips it came from.
+    const linkIds = new Map<string, string>();
+
+    // The earliest pasted clip holds the playhead position (priority) when
+    // overlaps settle; the rest keep their offsets from it.
+    const spanMs = insert
+      ? Math.max(...clipboard.items.map((item) => item.offsetMs + clipDurationMs(item.clip)))
+      : 0;
+    withHistory((p) => {
+      if (insert) insertRoom(p, currentTimeMs, spanMs);
+      clipboard.items.forEach((item, i) => {
+        const track = ensureTrack(p, item.kind, item.clip.trackId);
+        const clip = structuredClone(item.clip);
+        if (clip.linkId) {
+          const next = linkIds.get(clip.linkId) ?? uid('link');
+          linkIds.set(clip.linkId, next);
+          clip.linkId = next;
+        }
+        track.clips.push({
+          ...clip,
+          id: newIds[i]!,
+          trackId: track.id,
+          timelineStartMs: currentTimeMs + item.offsetMs,
+        });
+      });
+    }, newIds[0]);
+    set({ selectedClipId: newIds[newIds.length - 1]!, selectedClipIds: newIds });
+  }
 }

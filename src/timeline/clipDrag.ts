@@ -98,15 +98,42 @@ const VOLUME_DRAG_TRAVEL_PX = 220;
 const signedMs = (v: number) => `${v < 0 ? '−' : '+'}${formatTime(Math.abs(v))}`;
 
 /**
- * Ripple trim capture (Ctrl+Alt on a trim handle): downstream clips on this track
- * follow the edited edge, keeping their distance to it (their partners tag
- * along). Their original starts are recorded at press so each move is absolute.
+ * Ripple trim capture (Ctrl+Alt on a trim handle): downstream clips follow the
+ * edited edge, keeping their distance to it (their partners tag along). Their
+ * original starts are recorded at press so each move is absolute.
+ *
+ * `acrossTracks` is the ripple preference: off, only this track's downstream
+ * clips move (Vegas); on, so does everything the edit point is in front of on
+ * every unlocked lane (Premiere), which is what keeps the tracks in sync
+ * through a trim. The edit point on the OTHER lanes is the edge being dragged -
+ * the clip's head for a left trim, its tail for a right one - so a clip already
+ * playing across that instant stays where it is instead of being torn out of
+ * step with the picture it belongs to.
  */
-export const rippleForTrim = (project: Project, clip: Clip): { id: string; startMs: number }[] =>
-  project.tracks
-    .find((tr) => tr.id === clip.trackId)
-    ?.clips.filter((c) => c.id !== clip.id && c.timelineStartMs > clip.timelineStartMs)
-    .map((c) => ({ id: c.id, startMs: c.timelineStartMs })) ?? [];
+export const rippleForTrim = (
+  project: Project,
+  clip: Clip,
+  edge: 'left' | 'right',
+  acrossTracks = false,
+): { id: string; startMs: number }[] => {
+  const own = project.tracks.find((tr) => tr.id === clip.trackId);
+  const captured: { id: string; startMs: number }[] = [];
+  const editPoint = edge === 'left' ? clip.timelineStartMs : clipEndMs(clip);
+  for (const track of project.tracks) {
+    if (track === own) {
+      for (const c of track.clips) {
+        if (c.id !== clip.id && c.timelineStartMs > clip.timelineStartMs) {
+          captured.push({ id: c.id, startMs: c.timelineStartMs });
+        }
+      }
+    } else if (acrossTracks && !track.locked) {
+      for (const c of track.clips) {
+        if (c.timelineStartMs >= editPoint) captured.push({ id: c.id, startMs: c.timelineStartMs });
+      }
+    }
+  }
+  return captured;
+};
 
 /**
  * Roll edit capture (Alt on a trim handle): the cut point between this clip and

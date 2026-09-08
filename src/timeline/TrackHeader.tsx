@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,6 +19,8 @@ import { useStore } from '../store/store';
 import { Tooltip } from '../ui/Tooltip';
 import { useIsCoarsePointer } from '../lib/device';
 import { TrackMeter } from './TrackMeter';
+import { isTrackSoloedOut } from '../model';
+import { trackDisplayName } from './trackName';
 
 import { gainDb } from '../inspector/format';
 import { DB_STEP_FADER, faderToGainStepped, gainToFader } from '../lib/gain';
@@ -74,12 +76,22 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
   };
   const trackHeightPx = useStore((s) => s.trackHeightPx);
   const expanded = useStore((s) => s.expandedTrackIds.includes(track.id));
+  // Another track's solo has silenced or hidden this one: the header says so.
+  const soloedOut = useStore((s) => isTrackSoloedOut(track, s.project));
+  const renaming = useStore((s) => s.renamingTrackId === track.id);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (renaming) nameInputRef.current?.select();
+  }, [renaming]);
   const lanes = trackLanes(track);
   const {
     toggleTrackMuted,
     toggleTrackHidden,
     toggleTrackLocked,
+    toggleTrackSolo,
     toggleTrackExpanded,
+    renameTrack,
+    setRenamingTrack,
     updateTrack,
     beginGesture,
     endGesture,
@@ -131,6 +143,32 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
     </Tooltip>
   );
 
+  /** Commit the inline rename; an empty name goes back to "V1" / "A2". */
+  const commitRename = (value: string) => {
+    renameTrack(track.id, value);
+    setRenamingTrack(null);
+  };
+
+  // Every NLE puts an S next to the mute: soloing is how a mix is checked one
+  // lane at a time, and a reflex that has to open a menu is not a reflex.
+  const soloButton = (
+    <Tooltip label={t(track.solo ? 'track.unsolo' : 'track.solo')}>
+      <button
+        className={track.solo ? btnOn : btn}
+        aria-label={t('track.solo')}
+        aria-pressed={!!track.solo}
+        onClick={() => toggleTrackSolo(track.id)}
+      >
+        <span
+          className={`text-3xs font-bold leading-none ${track.solo ? 'text-amber-300' : ''}`}
+          aria-hidden="true"
+        >
+          S
+        </span>
+      </button>
+    </Tooltip>
+  );
+
   const muteButton = (
     // The tooltip names the action, not the state: the icon already shows the
     // state, and "Mute track" on a muted track is a lie.
@@ -168,7 +206,7 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
       <div
         className={`flex min-w-0 flex-col justify-center gap-1 overflow-hidden ${
           coarse ? 'items-center' : 'px-1.5'
-        } ${track.hidden ? 'opacity-40' : ''}`}
+        } ${track.hidden || soloedOut ? 'opacity-40' : ''}`}
         style={{ height: trackHeightPx }}
       >
         {coarse ? (
@@ -199,14 +237,42 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
               {/* "V1" / "A2", the name every NLE gives a lane. The header used
                   to carry no identity at all, so two audio tracks were the same
                   row of glyphs twice over. */}
-              <span
-                className="min-w-0 flex-1 truncate text-3xs font-medium tracking-wide text-zinc-400"
-                title={t(video ? 'a11y.track.video' : 'a11y.track.audio', { n: ordinal })}
-              >
-                {t(video ? 'track.label.video' : 'track.label.audio', { n: ordinal })}
-              </span>
+              {renaming ? (
+                <input
+                  ref={nameInputRef}
+                  autoFocus
+                  defaultValue={track.name ?? ''}
+                  placeholder={t(video ? 'track.label.video' : 'track.label.audio', { n: ordinal })}
+                  aria-label={t('track.rename')}
+                  className="min-w-0 flex-1 rounded-sm border border-brand-500 bg-zinc-950 px-1 text-3xs text-zinc-100 outline-none"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onBlur={(e) => commitRename(e.target.value)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') commitRename((e.target as HTMLInputElement).value);
+                    else if (e.key === 'Escape') setRenamingTrack(null);
+                  }}
+                />
+              ) : (
+                <span
+                  className={`min-w-0 flex-1 truncate text-3xs font-medium tracking-wide ${
+                    track.name ? 'text-zinc-200' : 'text-zinc-400'
+                  }`}
+                  title={`${trackDisplayName(track, ordinal, t)} · ${t('track.rename.hint')}`}
+                  // Double-click to name the lane, the reflex of every NLE's
+                  // track header. The name is a label for the cut ("VO",
+                  // "Music"), never an identity: V1 stays V1 underneath.
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setRenamingTrack(track.id);
+                  }}
+                >
+                  {trackDisplayName(track, ordinal, t)}
+                </span>
+              )}
               <div className="flex flex-none items-center gap-0.5">
                 {muteButton}
+                {soloButton}
                 {video && (
                   <Tooltip label={t(track.hidden ? 'track.show' : 'track.hide')}>
                     <button

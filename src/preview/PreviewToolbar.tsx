@@ -1,5 +1,10 @@
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pencil1Icon } from '@radix-ui/react-icons';
+import { AnimatePresence } from 'framer-motion';
+import { GridIcon, Pencil1Icon } from '@radix-ui/react-icons';
+import { MenuList, type MenuEntry } from '../ui/menu/MenuList';
+import { MenuPanel, useDismissOnOutside } from '../ui/menu/MenuPanel';
+import { PREVIEW_GUIDE_MODES } from './guides';
 import { useEditorCommands, type Command } from '../ui/commands';
 import { ShapeToolButton } from '../ui/ShapeToolButton';
 import { Tooltip } from '../ui/Tooltip';
@@ -69,6 +74,47 @@ function PenToolButton() {
   );
 }
 
+/**
+ * Guide overlays (safe margins, thirds, the platform's chrome). A menu rather
+ * than a cycling button: four states are too many to step through blindly,
+ * and the open list says which one is on. Lit while any overlay is showing.
+ */
+function GuidesMenuButton({ commands }: { commands: Record<string, Command> }) {
+  const { t } = useTranslation();
+  const mode = useStore((s) => s.previewGuides);
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useDismissOnOutside(open, () => setOpen(false), rootRef);
+  const entries: MenuEntry[] = PREVIEW_GUIDE_MODES.map((m) => commands[`view.guides.${m}`]).filter(
+    (c): c is Command => !!c,
+  );
+  return (
+    <div ref={rootRef} className="relative">
+      <Tooltip label={t('preview.guides')} disabled={open}>
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={t('preview.guides')}
+          className={`touch-hit rounded-md p-1.5 enabled:hover:bg-zinc-800/80 ${
+            mode !== 'off' ? 'brand-on' : 'text-zinc-300'
+          }`}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <GridIcon className="h-4 w-4" />
+        </button>
+      </Tooltip>
+      <AnimatePresence>
+        {open && (
+          <MenuPanel className="left-0 top-full mt-1 min-w-44">
+            <MenuList items={entries} onRun={() => setOpen(false)} />
+          </MenuPanel>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export function PreviewToolbar() {
   const commands = useEditorCommands();
   const coarse = useIsCoarsePointer();
@@ -82,6 +128,7 @@ export function PreviewToolbar() {
       <ShapeToolButton />
       <PenToolButton />
       <div className="mx-0.5 h-5 w-px bg-zinc-700/70" />
+      <GuidesMenuButton commands={commands} />
       <ToolButton command={commands['preview.resetView']} />
     </div>
   );

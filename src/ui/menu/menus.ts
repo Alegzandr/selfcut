@@ -1,6 +1,8 @@
 import {
   BookmarkIcon,
   ChatBubbleIcon,
+  ColumnSpacingIcon,
+  Pencil1Icon,
   ChevronDownIcon,
   ChevronUpIcon,
   EyeOpenIcon,
@@ -15,7 +17,9 @@ import {
 } from '@radix-ui/react-icons';
 import { useTranslation } from 'react-i18next';
 import { useStore, getLinkTargets } from '../../store/store';
-import { EASE_IDS } from '../../model';
+import { EASE_IDS, gapAt, MARKER_COLORS, sortedMarkers } from '../../model';
+import { markerSwatchIcon } from '../../timeline/MarkerSwatch';
+import { trackDisplayName } from '../../timeline/trackName';
 import { selectionEase } from '../../timeline/keyframeSelection';
 import { CurveIcon } from '../../timeline/KeyframeIcon';
 import { audioKey } from '../../media/mediaCache';
@@ -102,18 +106,43 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
       ]).concat(transcodeRows.length > 0 ? ['---', ...transcodeRows] : []);
     }
 
-    case 'timeline':
-      return resolve([
-        'edit.paste',
-        '---',
-        'insert.text',
-        'insert.color',
-        'insert.gradient',
-        '---',
-        'insert.marker',
-        '---',
-        'edit.selectAll',
-      ]);
+    case 'timeline': {
+      // Closing the gap under the pointer: offered only where there is one,
+      // on the track that was pressed. A greyed row would name a thing the
+      // user cannot see is missing.
+      const track = target.trackId ? tracks.find((tr) => tr.id === target.trackId) : undefined;
+      const gap =
+        track && !track.locked && target.timeMs !== undefined ? gapAt(track, target.timeMs) : null;
+      const gapRows: MenuEntry[] = gap
+        ? [
+            {
+              id: 'ctx.timeline.closeGap',
+              labelKey: 'ctx.timeline.closeGap',
+              icon: ColumnSpacingIcon,
+              onClick: () => st().closeGap(track!.id, target.timeMs!),
+            },
+            '---',
+          ]
+        : [];
+      const markerRows: MenuEntry[] = st().project.markers.length
+        ? [
+            {
+              id: 'ctx.timeline.removeAllMarkers',
+              labelKey: 'ctx.timeline.removeAllMarkers',
+              icon: TrashIcon,
+              danger: true,
+              onClick: () => st().removeAllMarkers(),
+            },
+          ]
+        : [];
+      return [
+        ...resolve(['edit.paste', 'edit.pasteInsert', '---']),
+        ...gapRows,
+        ...resolve(['insert.text', 'insert.color', 'insert.gradient', '---', 'insert.marker']),
+        ...markerRows,
+        ...resolve(['---', 'edit.selectAll', 'edit.selectForward']),
+      ];
+    }
 
     case 'marker': {
       const id = target.markerId;
@@ -134,6 +163,20 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
           onClick: () => st().setRenamingMarker(id),
         },
         '---',
+        // One row per colour, the swatch standing in for the icon: a cut room
+        // sorts its cues by colour before it reads a single label.
+        ...MARKER_COLORS.map((color): MenuEntry => {
+          const marker = sortedMarkers(st().project).find((m) => m.id === id);
+          const current = marker?.color ?? 'cyan';
+          return {
+            id: `ctx.marker.color.${color}`,
+            labelKey: `marker.color.${color}` as const,
+            icon: markerSwatchIcon(color),
+            checked: current === color,
+            onClick: () => st().setMarkerColor(id, color),
+          };
+        }),
+        '---',
         {
           id: 'ctx.marker.delete',
           labelKey: 'ctx.marker.delete',
@@ -148,6 +191,25 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
       const id = target.trackId;
       const track = tracks.find((tr) => tr.id === id);
       const items: MenuEntry[] = [
+        {
+          id: 'ctx.track.rename',
+          labelKey: 'track.rename',
+          label: track
+            ? `${t('track.rename')} · ${trackDisplayName(track, tracks.filter((tr) => tr.kind === track.kind).indexOf(track) + 1, t)}`
+            : undefined,
+          icon: Pencil1Icon,
+          // The touch header has no name line to edit in place: the levels
+          // sheet carries the field there.
+          onClick: () => (coarse ? st().setTrackSettingsTrack(id) : st().setRenamingTrack(id)),
+        },
+        '---',
+        {
+          id: 'ctx.track.solo',
+          labelKey: track?.solo ? 'track.unsolo' : 'track.solo',
+          icon: SpeakerModerateIcon,
+          checked: track?.solo,
+          onClick: () => st().toggleTrackSolo(id),
+        },
         {
           id: 'ctx.track.mute',
           // The label states what a click will do, like play/pause does. The

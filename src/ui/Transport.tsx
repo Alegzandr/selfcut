@@ -6,7 +6,7 @@ import {
   PlayIcon,
   TrackPreviousIcon,
 } from "@radix-ui/react-icons";
-import { useStore, projectDurationMs } from "../store/store";
+import { useStore, getTimelineFps, projectDurationMs } from "../store/store";
 import { Tooltip } from "./Tooltip";
 import { useEditorCommands } from "./commands";
 import { TrackHeightMenu } from "./TrackHeightMenu";
@@ -39,15 +39,12 @@ function TimeReadout() {
     const apply = () => {
       const s = useStore.getState();
       const durationMs = projectDurationMs(s.project);
-      const cur = formatClockParts(
-        s.currentTimeMs,
-        s.project.fps,
-        s.timeFormat,
-      );
+      const fps = getTimelineFps(s);
+      const cur = formatClockParts(s.currentTimeMs, fps, s.timeFormat);
       const rightMs = remainingRef.current
         ? Math.max(0, durationMs - s.currentTimeMs)
         : durationMs;
-      const right = formatClockParts(rightMs, s.project.fps, s.timeFormat);
+      const right = formatClockParts(rightMs, fps, s.timeFormat);
       if (currentRef.current) currentRef.current.textContent = cur.main;
       if (framesRef.current)
         framesRef.current.textContent = cur.frames ? `.${cur.frames}` : "";
@@ -61,6 +58,7 @@ function TimeReadout() {
       if (
         s.currentTimeMs !== prev.currentTimeMs ||
         s.project !== prev.project ||
+        s.assets !== prev.assets ||
         s.timeFormat !== prev.timeFormat
       )
         apply();
@@ -76,7 +74,7 @@ function TimeReadout() {
     const s = useStore.getState();
     const { main, frames } = formatClockParts(
       s.currentTimeMs,
-      s.project.fps,
+      getTimelineFps(s),
       s.timeFormat,
     );
     setDraft(frames ? `${main}.${frames}` : main);
@@ -85,14 +83,20 @@ function TimeReadout() {
 
   const commit = () => {
     const s = useStore.getState();
-    const ms = parseClock(draft ?? "", s.project.fps, s.timeFormat);
+    const text = (draft ?? "").trim();
+    // A leading sign makes the entry relative: "+100" at 25 fps is four
+    // seconds on, "-1:00" a minute back - the offset entry every NLE's
+    // timecode field accepts, and the fastest way to a spot a known distance
+    // from here.
+    const sign = text.startsWith("+") ? 1 : text.startsWith("-") ? -1 : 0;
+    const ms = parseClock(sign ? text.slice(1) : text, getTimelineFps(s), s.timeFormat);
     // Unparseable input keeps the field open instead of jumping somewhere
     // arbitrary - the user gets to fix the typo.
     if (ms === null) {
       setInvalid(true);
       return;
     }
-    s.seek(ms);
+    s.seek(sign ? s.currentTimeMs + sign * ms : ms);
     setDraft(null);
   };
 
@@ -193,8 +197,22 @@ function TimelineViewTools() {
       <div className="mx-1 h-5 w-px bg-zinc-800" />
       <ViewToolButton id="view.zoomOut" />
       <ViewToolButton id="view.zoomIn" />
+      <ViewToolButton id="view.zoomFit" />
     </div>
   );
+}
+
+/**
+ * The shuttle badge's text: "2×", "0.5×", "-2×".
+ *
+ * The magnitude is what gets the fractional treatment (a slow rung is 0.5 or
+ * 0.25, never 0.50) and the sign is carried in front of it, because a rate is
+ * signed by its direction of travel.
+ */
+function shuttleLabel(rate: number): string {
+  const speed = Math.abs(rate);
+  const shown = speed < 1 ? speed.toFixed(2).replace(/0$/, "") : String(speed);
+  return `${rate < 0 ? "-" : ""}${shown}×`;
 }
 
 /**
@@ -210,7 +228,7 @@ export function Transport() {
   const region = useStore((s) => s.loopRegion);
   const loopEnabled = useStore((s) => s.loopEnabled);
   const timeFormat = useStore((s) => s.timeFormat);
-  const fps = useStore((s) => s.project.fps);
+  const fps = useStore(getTimelineFps);
   const { setPlaying, seek, toggleLoopEnabled, setLoopRegion } =
     useStore.getState();
 
@@ -242,13 +260,12 @@ export function Transport() {
             ) : (
               <PlayIcon className="h-4 w-4 translate-x-px" />
             )}
-            {/* Shuttle badge: visible while J/L drive playback at a non-1× rate. */}
+            {/* Shuttle badge: visible while J/L drive playback at a non-1× rate,
+                and while J runs it backwards at any rate - "-1×" is the only
+                thing on screen that says the transport is in reverse. */}
             {playing && playbackRate !== 1 && (
               <span className="absolute -right-1.5 -top-1.5 rounded-full bg-brand-600 px-1 text-4xs font-bold leading-4 text-white">
-                {playbackRate < 1
-                  ? playbackRate.toFixed(2).replace(/0$/, "")
-                  : playbackRate}
-                ×
+                {shuttleLabel(playbackRate)}
               </span>
             )}
           </button>

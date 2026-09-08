@@ -1,5 +1,5 @@
 import { Clip, LoopRegion, MediaAsset, Project } from '../types';
-import { clipEndMs, delegatedLinkIds, hasVelocity, projectDurationMs } from '../model';
+import { clipEndMs, delegatedLinkIds, hasVelocity, isTrackAudible, projectDurationMs } from '../model';
 import { AUDIO_SAMPLE_RATE } from '../app/config';
 import { t } from '../i18n';
 import { audioKey, getAudioRange } from '../media/mediaCache';
@@ -35,6 +35,11 @@ export type ExportFallback = 'oneEncoder' | 'softwareEncoder';
 
 /** Rarely-used knobs on a render. */
 export interface ExportOptions {
+  /**
+   * The file's name, extension included, when the user typed one in the sheet.
+   * Absent, the preset's stamped default (`exportFileName`) is used.
+   */
+  fileName?: string;
   /**
    * Render on a single worker instead of fanning out.
    *
@@ -253,7 +258,7 @@ export function startExport(
 
     // First await of the run: everything above is synchronous so the picker
     // still runs under the activation of the click that started the export.
-    const filename = exportFileName(preset);
+    const filename = options?.fileName?.trim() || exportFileName(preset);
     const picked = await pickExportFile(
       filename,
       preset.kind === 'mp3' ? 'audio/mpeg' : 'video/mp4',
@@ -593,7 +598,7 @@ function audibleClips(
   const out: { clip: Clip; asset: MediaAsset }[] = [];
   const delegated = delegatedLinkIds(project);
   for (const track of project.tracks) {
-    if (track.muted) continue;
+    if (!isTrackAudible(track, project)) continue;
     for (const clip of track.clips) {
       // A linked video clip delegates its sound to its audio partners: the mix
       // never schedules it, so don't decode its track (twice) nor let it count

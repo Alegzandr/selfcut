@@ -34,6 +34,18 @@ export const MIN_CLIP_DURATION_MS = FRAME_MS;
 export const PLAYBACK_SKIP_FORWARD_MS = 10_000;
 export const PLAYBACK_SKIP_BACK_MS = 5_000;
 
+/**
+ * Slowest and fastest shuttle the J/L keys reach, as a multiple of real time.
+ *
+ * The sign of `playbackRate` carries the direction - a negative rate runs the
+ * transport backwards - so these bound its MAGNITUDE. A quarter speed is the
+ * slow review an editor uses to find the exact frame of an action; eight times
+ * is the point past which a shuttle stops reading as motion, and is also where
+ * the decoder starts spending the whole frame budget seeking.
+ */
+export const MIN_SHUTTLE_RATE = 0.25;
+export const MAX_SHUTTLE_RATE = 8;
+
 /** Default timeline duration of a still-image clip (a still has no intrinsic length). */
 export const IMAGE_CLIP_DEFAULT_MS = 5000;
 
@@ -112,14 +124,15 @@ export const TRACK_HEIGHT_PX = 64;
 export const MIN_TRACK_HEIGHT_PX = 36;
 export const MAX_TRACK_HEIGHT_PX = 160;
 /** Width of the fixed track-header pane (desktop: sliders + meter; coarse: buttons only). */
-export const TRACK_HEADER_WIDTH_PX = 168;
+export const TRACK_HEADER_WIDTH_PX = 192;
 export const TRACK_HEADER_WIDTH_COARSE_PX = 44;
 /**
  * Resize bounds for the header pane. MIN fits the header's identity line whole
- * - chevron, name, three toggles, overflow - with a couple of characters left
- * for the name; MAX stops the pane from eating the timeline on a narrow window.
+ * - chevron, name, four toggles (mute, solo, hide, lock), overflow - with a
+ * few characters left for a track's own name; MAX stops the pane from eating
+ * the timeline on a narrow window.
  */
-export const MIN_TRACK_HEADER_WIDTH_PX = 136;
+export const MIN_TRACK_HEADER_WIDTH_PX = 152;
 export const MAX_TRACK_HEADER_WIDTH_PX = 360;
 
 /** Docked side panels (desktop): default width and resize bounds. */

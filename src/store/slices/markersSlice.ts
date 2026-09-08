@@ -7,7 +7,7 @@ export function createMarkersSlice(
   set: StoreSet,
   get: StoreGet,
   { withHistory }: SliceHelpers,
-): Pick<EditorState, 'addMarkerAtPlayhead' | 'moveMarker' | 'renameMarker' | 'removeMarker'> {
+): Pick<EditorState, 'addMarkerAtPlayhead' | 'moveMarker' | 'renameMarker' | 'removeMarker' | 'setMarkerColor' | 'removeAllMarkers'> {
   return {
     addMarkerAtPlayhead: () => {
       const { currentTimeMs, project } = get();
@@ -37,5 +37,18 @@ export function createMarkersSlice(
       withHistory((p) => {
         p.markers = p.markers.filter((m) => m.id !== markerId);
       }),
+
+    setMarkerColor: (markerId, color) =>
+      withHistory((p) => {
+        const marker = p.markers.find((m) => m.id === markerId);
+        if (marker) marker.color = color;
+      }),
+
+    removeAllMarkers: () => {
+      if (get().project.markers.length === 0) return;
+      withHistory((p) => {
+        p.markers = [];
+      });
+    },
   };
 }

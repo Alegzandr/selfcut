@@ -46,6 +46,8 @@ const GROUPS: readonly Group[] = [
       ['{{shift}} + ← / →', 'shortcuts.navigate.second'],
       ['{{ctrl}} + ← / →', 'shortcuts.navigate.cutPoint'],
       ['1 … 9', 'shortcuts.navigate.marker'],
+      ['{{shift}} + M / {{ctrl}} + {{shift}} + M', 'shortcuts.navigate.markerNext'],
+      ['{{clickTimecode}}', 'shortcuts.navigate.timecodeEntry'],
       ['{{home}} / {{end}}', 'shortcuts.navigate.bounds'],
     ],
   },
@@ -94,6 +96,7 @@ const GROUPS: readonly Group[] = [
       ['{{shift}} + {{click}}', 'shortcuts.edit.rangeSelect'],
       ['{{dragBackground}}', 'shortcuts.edit.marquee'],
       ['{{ctrl}} + A', 'shortcuts.edit.selectAll'],
+      ['{{ctrl}} + {{shift}} + A', 'shortcuts.edit.selectForward'],
       ['{{esc}}', 'shortcuts.edit.deselect'],
     ],
   },
@@ -109,6 +112,9 @@ const GROUPS: readonly Group[] = [
       ['{{ctrl}} + {{drag}}', 'shortcuts.edit.dragCopy'],
       ['{{del}} / {{backspace}}', 'shortcuts.edit.delete'],
       ['{{shift}} + {{del}}', 'shortcuts.edit.rippleDelete'],
+      ['{{ctrl}} + {{backspace}}', 'shortcuts.edit.closeGap'],
+      ['{{ctrl}} + {{shift}} + V', 'shortcuts.edit.pasteInsert'],
+      ['{{alt}} + ↑ / ↓', 'shortcuts.edit.moveTrack'],
       ['{{esc}}', 'shortcuts.edit.cancelDrag'],
     ],
   },
@@ -127,6 +133,8 @@ const GROUPS: readonly Group[] = [
     title: 'shortcuts.group.trim',
     rows: [
       [', / .', 'shortcuts.edit.nudge'],
+      ['{{alt}} + ← / →', 'shortcuts.edit.nudgeAlt'],
+      ['{{alt}} + {{shift}} + ← / →', 'shortcuts.edit.nudgeTen'],
       ['[ / ]', 'shortcuts.edit.trim'],
       ['{{alt}} + {{drag}}', 'shortcuts.edit.slip'],
       ['{{ctrl}} + {{dragTrimEdge}}', 'shortcuts.edit.rateStretch'],
@@ -170,6 +178,7 @@ const GESTURES: ReadonlySet<string> = new Set([
   'dragMagnifier',
   'middleDrag',
   'rightClickKeyframe',
+  'clickTimecode',
 ]);
 
 /** Punctuation that joins keys instead of being one. `+` combines, `/` and `…` alternate. */
@@ -196,6 +205,7 @@ function useKeyLabels(): Readonly<Record<string, string>> {
       click: t('shortcuts.key.click'),
       or: t('shortcuts.key.or'),
       dragTopBar: t('shortcuts.key.dragTopBar'),
+      clickTimecode: t('shortcuts.key.clickTimecode'),
       clickTopBar: t('shortcuts.key.clickTopBar'),
       dragMarker: t('shortcuts.key.dragMarker'),
       doubleClickMarker: t('shortcuts.key.doubleClickMarker'),

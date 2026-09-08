@@ -24,7 +24,9 @@ import {
   PREVIEW_VOLUME_KEY,
   PREVIEW_MUTED_KEY,
   SCOPES_MODE_KEY,
+  PREVIEW_GUIDES_KEY,
   PREVIEW_BACKGROUND_KEY,
+  RIPPLE_ACROSS_TRACKS_KEY,
 } from '../constants';
 
 /** How many imported presets the session shelf holds before dropping the oldest. */
@@ -93,6 +95,7 @@ export function createUiSlice(
   | 'setRenamingMarker'
   | 'setTrackSettingsTrack'
   | 'setTimeFormat'
+  | 'setRippleAcrossTracks'
   | 'setPreviewTool'
   | 'setSelectedRedactionId'
   | 'setPreviewShapeKind'
@@ -100,6 +103,8 @@ export function createUiSlice(
   | 'resetPreviewView'
   | 'setPreviewResolution'
   | 'setScopesMode'
+  | 'setRenamingTrack'
+  | 'setPreviewGuides'
   | 'setPreviewBackground'
   | 'setCurrentProjectId'
   | 'setProjects'
@@ -220,6 +225,16 @@ export function createUiSlice(
       if (get().contextMenu) set({ contextMenu: null });
     },
     setRenamingMarker: (markerId) => set({ renamingMarkerId: markerId }),
+    setRenamingTrack: (trackId) => set({ renamingTrackId: trackId }),
+    setPreviewGuides: (mode) => {
+      if (get().previewGuides === mode) return;
+      try {
+        localStorage.setItem(PREVIEW_GUIDES_KEY, mode);
+      } catch {
+        /* private mode / no storage - the choice just won't persist */
+      }
+      set({ previewGuides: mode });
+    },
     setTrackSettingsTrack: (trackId) => set({ trackSettingsTrackId: trackId }),
 
     requestConfirm: (options) =>
@@ -243,6 +258,15 @@ export function createUiSlice(
         /* private mode / no storage - the choice just won't persist */
       }
       set({ timeFormat: format });
+    },
+
+    setRippleAcrossTracks: (on) => {
+      try {
+        localStorage.setItem(RIPPLE_ACROSS_TRACKS_KEY, on ? '1' : '0');
+      } catch {
+        /* private mode / no storage - the choice just won't persist */
+      }
+      set({ rippleAcrossTracks: on });
     },
 
     setPreviewTool: (tool) => {

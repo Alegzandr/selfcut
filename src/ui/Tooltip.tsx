@@ -134,12 +134,25 @@ export function Tooltip({
   useEffect(() => {
     if (!open) return;
     const sync = () => measure();
+    // Any press or key anywhere dismisses it. The trigger's own mouseleave is
+    // not enough: a right-click that opens a popup, or a zoom that moves the
+    // trigger out from under a resting pointer, never fires it, and the tip
+    // then follows a trigger that has left the screen.
+    const dismiss = () => hide();
     window.addEventListener('scroll', sync, true);
     window.addEventListener('resize', sync);
+    window.addEventListener('pointerdown', dismiss, true);
+    window.addEventListener('keydown', dismiss, true);
+    window.addEventListener('wheel', dismiss, { capture: true, passive: true });
     return () => {
       window.removeEventListener('scroll', sync, true);
       window.removeEventListener('resize', sync);
+      window.removeEventListener('pointerdown', dismiss, true);
+      window.removeEventListener('keydown', dismiss, true);
+      window.removeEventListener('wheel', dismiss, { capture: true });
     };
+    // `hide` is recreated per render but only clears a timer and a flag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, measure]);
 
   if (!isValidElement(children)) return children;

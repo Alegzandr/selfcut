@@ -1,5 +1,5 @@
 import { AspectRatio, MediaAsset, Project } from '../types';
-import { audioTrackForClip } from '../model';
+import { audioTrackForClip, isTrackAudible } from '../model';
 import { APP_NAME, PROJECT_FPS } from '../app/config';
 import type { ParseKeys } from 'i18next';
 
@@ -676,7 +676,7 @@ export function audioBitrateForProject(
 ): number {
   let audible = false;
   for (const track of project.tracks) {
-    if (track.muted) continue;
+    if (!isTrackAudible(track, project)) continue;
     for (const clip of track.clips) {
       if (clip.kind !== 'media' || clip.volume <= 0) continue;
       const asset = assets[clip.assetId];

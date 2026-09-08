@@ -18,6 +18,7 @@ import {
   clipRotationAt,
   isTextClip,
   isGeneratedClip,
+  isTrackVisible,
   outputDimensions,
   resolveTransform,
   timelineToSourceMs,
@@ -54,6 +55,7 @@ import {
 } from './transformSnap';
 import { MaskPenOverlay } from './MaskPenOverlay';
 import { RedactionOverlay } from './RedactionOverlay';
+import { PreviewGuidesOverlay } from './PreviewGuidesOverlay';
 import {
   DEFAULT_SHAPE_FILL,
   MIN_DRAWN_SHAPE,
@@ -485,8 +487,7 @@ function PreviewOverlays({
     !cropping &&
     project.tracks.some(
       (tr) =>
-        tr.kind === 'video' &&
-        !tr.hidden &&
+        isTrackVisible(tr, project) &&
         tr.clips.some(
           (c) =>
             !isGeneratedClip(c) &&
@@ -504,7 +505,7 @@ function PreviewOverlays({
     currentTimeMs >= selectedClip.timelineStartMs &&
     currentTimeMs < clipEndMs(selectedClip) &&
     project.tracks.some(
-      (tr) => tr.kind === 'video' && !tr.hidden && tr.clips.some((c) => c.id === selectedClip.id),
+      (tr) => isTrackVisible(tr, project) && tr.clips.some((c) => c.id === selectedClip.id),
     )
       ? clipRectAt(selectedClip, assets, outW, outH, currentTimeMs)
       : null;
@@ -949,7 +950,7 @@ export function PreviewCanvas() {
     const py = ny * outH;
     // Top lane paints last, so scan tracks top-down to hit the frontmost clip.
     for (const track of project.tracks) {
-      if (track.kind !== 'video' || track.hidden || (track.opacity ?? 1) <= 0) continue;
+      if (!isTrackVisible(track, project) || (track.opacity ?? 1) <= 0) continue;
       const visible = clipsAt(track.clips, timeMs);
       for (let i = visible.length - 1; i >= 0; i--) {
         const clip = visible[i]!;
@@ -1314,6 +1315,8 @@ export function PreviewCanvas() {
           className="h-full w-full rounded-lg shadow-lg shadow-black/50"
         />
         {croppingClip && cropAsset && <CropOverlay clip={croppingClip} asset={cropAsset} />}
+        {/* Guides under the gesture overlays: a ruler, never a target. */}
+        {!rendering && <PreviewGuidesOverlay />}
         {/* Smart-guide lines while dragging a clip in the preview. */}
         {(guides.v.length > 0 || guides.h.length > 0) && (
           <div className="pointer-events-none absolute inset-0 z-20">

@@ -14,6 +14,7 @@ export type AnnouncementKey =
   | 'a11y.announce.pause'
   | 'a11y.announce.split'
   | 'a11y.announce.deleted'
+  | 'a11y.announce.gapClosed'
   | 'a11y.announce.undo'
   | 'a11y.announce.redo';
 

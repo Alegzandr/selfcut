@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
 import { useEnterMotion } from '../ui/motion';
-import { BlendingModeIcon, Cross2Icon, SpeakerLoudIcon } from '@radix-ui/react-icons';
+import { BlendingModeIcon, Cross2Icon, Pencil1Icon, SpeakerLoudIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
 import { gainDb } from '../inspector/format';
 import { faderToGainStepped, gainToFader } from '../lib/gain';
@@ -22,7 +22,11 @@ export function TrackSettingsSheet() {
   const sheet = useEnterMotion({ y: '100%' });
   const trackId = useStore((s) => s.trackSettingsTrackId);
   const track = useStore((s) => s.project.tracks.find((tr) => tr.id === trackId) ?? null);
-  const { setTrackSettingsTrack, updateTrack, beginGesture, endGesture } = useStore.getState();
+  const { setTrackSettingsTrack, updateTrack, renameTrack, beginGesture, endGesture } = useStore.getState();
+  const ordinal = useStore((s) => {
+    const list = s.project.tracks.filter((tr) => tr.kind === track?.kind);
+    return list.findIndex((tr) => tr.id === trackId) + 1;
+  });
   const close = () => setTrackSettingsTrack(null);
 
   // A deleted track must not leave its sheet up over an empty timeline.
@@ -58,6 +62,25 @@ export function TrackSettingsSheet() {
                 <Cross2Icon className="h-4 w-4" />
               </button>
             </div>
+            {/* The name, first: on touch this sheet is the only place a lane
+                can be called "Music" instead of A2. Committed on blur, so a
+                tap on the fader below saves it. */}
+            <label className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 text-xs text-zinc-300">
+              <Pencil1Icon className="h-4 w-4 flex-none text-zinc-400" aria-hidden="true" />
+              <input
+                key={track?.id}
+                type="text"
+                defaultValue={track?.name ?? ''}
+                placeholder={t(track?.kind === 'video' ? 'track.label.video' : 'track.label.audio', { n: ordinal })}
+                aria-label={t('track.rename')}
+                className="min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-brand-500"
+                onBlur={(e) => track && renameTrack(track.id, e.target.value)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                }}
+              />
+            </label>
 
             <div className="space-y-4 px-4 py-4">
               <label className="flex items-center gap-3">

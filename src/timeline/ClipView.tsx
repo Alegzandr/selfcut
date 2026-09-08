@@ -370,13 +370,7 @@ export const ClipView = memo(function ClipView({
       {selected && <ClipKeyframes clip={clip} pxPerMs={pxPerMs} coarse={coarse} />}
 
       {hasSpeed && (
-        <ClipVelocityLine
-          clip={clip}
-          width={width}
-          pxPerMs={pxPerMs}
-          selected={selected}
-          coarse={coarse}
-        />
+        <ClipVelocityLine clip={clip} width={width} pxPerMs={pxPerMs} coarse={coarse} />
       )}
 
       {hasAudio && (

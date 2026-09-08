@@ -39,10 +39,8 @@ import { LINE_INSET_PX, rateToTopPx, snapRate, topPxToRate } from './velocityLin
 import { speedX } from '../inspector/format';
 
 /**
- * Grab band around the flat line, in px. The coarse figure matches the volume
- * line's, which is the band a thumb already finds on this exact clip - and it
- * is as tall as a 36 px track can hold without the target being clipped by the
- * clip's own overflow.
+ * Grab band around the flat line, in px. The coarse figure is kept for the
+ * layout maths only: on touch the band is not interactive (see `editable`).
  */
 const GRAB_FINE_PX = 10;
 const GRAB_COARSE_PX = 24;
@@ -107,13 +105,11 @@ export function ClipVelocityLine({
   clip,
   width,
   pxPerMs,
-  selected,
   coarse,
 }: {
   clip: Clip;
   width: number;
   pxPerMs: number;
-  selected: boolean;
   coarse: boolean;
 }) {
   const { t } = useTranslation();
@@ -244,8 +240,11 @@ export function ClipVelocityLine({
   const visibility = speedSet || dragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
   const grabPx = coarse ? GRAB_COARSE_PX : GRAB_FINE_PX;
   const flatTop = rateToTopPx(clip.speed, height);
-  // The flat line takes a drag once the clip is selected, like the volume line.
-  const editable = selected || !coarse;
+  // The flat line takes a drag on a fine pointer only, like the volume line.
+  // On touch the band sat across the middle of every selected clip and took
+  // the thumb that meant to move it; the inspector's speed row is the touch
+  // control, and the line stays a read-out.
+  const editable = !coarse;
   /**
    * Ramp points are shaped here on a fine pointer only. A thumb needs a 44 px
    * target, and a 44 px target centred on a line inside a 28 px clip is cut in

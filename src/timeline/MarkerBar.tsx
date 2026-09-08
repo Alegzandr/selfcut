@@ -13,6 +13,7 @@ import {
 } from '../app/config';
 import { hapticOnSnap } from '../lib/haptics';
 import { trackRowHeightPx } from './trackHeight';
+import { markerColorClass } from './markerColors';
 
 /** Timeline ms under a client X, clamped to the origin (the bar has no negative time). */
 function markerMsFromClientX(el: HTMLElement, clientX: number): number {
@@ -249,7 +250,7 @@ export const MarkerBar = memo(function MarkerBar({ pxPerMs }: { pxPerMs: number 
           }
         >
           <div
-            className="absolute top-0 z-10 flex h-full max-w-[160px] cursor-grab touch-none items-center gap-1 rounded-r-sm border-l-2 border-cyan-400 bg-cyan-500/25 pl-1 pr-1.5 text-3xs leading-none text-cyan-100 active:cursor-grabbing"
+            className={`absolute top-0 z-10 flex h-full max-w-[160px] cursor-grab touch-none items-center gap-1 rounded-r-sm border-l-2 pl-1 pr-1.5 text-3xs leading-none active:cursor-grabbing ${markerColorClass(marker.color).flag}`}
             style={{ left: xOf(marker.timeMs) }}
             onPointerDown={(e) => onMarkerPointerDown(e, marker)}
             onPointerMove={onPointerMove}
@@ -343,7 +344,7 @@ export const TimelineOverlay = memo(function TimelineOverlay({
       {markers.map((marker) => (
         <div
           key={marker.id}
-          className="absolute inset-y-0 w-px bg-cyan-400/40"
+          className={`absolute inset-y-0 w-px ${markerColorClass(marker.color).line}`}
           style={{ left: padLeft + marker.timeMs * pxPerMs }}
         />
       ))}
