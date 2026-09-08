@@ -1,4 +1,4 @@
-import { AudioFx, Clip, Project } from '../types';
+import { AudioFx, Clip, Project, Track } from '../types';
 import {
   clipEndMs,
   clipEnvelopeGainAt,
@@ -9,7 +9,7 @@ import {
   trackCrossfades,
 } from '../model';
 import type { AudioSegment } from '../media/audioSegments';
-import { buildAudioFxChain } from './audioFx';
+import { buildAudioFxChain, type AudioFxChain } from './audioFx';
 
 /** Where a track's clips connect: a plain node, or a per-track bus factory. */
 export type MixDestination = AudioNode | ((trackId: string) => AudioNode);
@@ -60,6 +60,15 @@ interface ClipChain {
  */
 export class MixScheduler {
   private chains = new Map<string, ClipChain>();
+  /**
+   * The FX chain of each lane that has one, by track id, built on first use.
+   *
+   * One per track, not one per clip: a track effect processes the SUM of the
+   * lane, which is the whole reason to reach for it. Building it per clip would
+   * be five compressors that each only hear their own shot - they would pump
+   * against each other at every cut - and five reverb tails restarting there.
+   */
+  private trackFx = new Map<string, AudioFxChain>();
   /** `${clipId}@${segmentIndex}` for every segment already scheduled. */
   private placed = new Set<string>();
   private stopped = false;
@@ -94,7 +103,8 @@ export class MixScheduler {
       const trackVolume = track.volume ?? 1;
       if (trackVolume <= 0) continue;
       const xfades = trackCrossfades(track.clips);
-      const dest = typeof this.destination === 'function' ? this.destination(track.id) : this.destination;
+      const bus = typeof this.destination === 'function' ? this.destination(track.id) : this.destination;
+      const dest = this.trackInput(track, bus);
       for (const clip of track.clips) {
         if (isGeneratedClip(clip)) continue;
         // The video side of a link delegates its audio to the group's audio
@@ -107,6 +117,25 @@ export class MixScheduler {
         this.extendClip(clip, dest, trackVolume, xf.inMs, xf.outMs, fromMs, untilMs);
       }
     }
+  }
+
+  /**
+   * Where a lane's clips connect: its own FX chain when it carries one, spliced
+   * once between every clip of the lane and the mix bus it feeds, else the bus
+   * itself.
+   *
+   * The chain sits BEFORE the bus, so the track meter and the master gain both
+   * read the processed lane - what the export will contain - rather than the
+   * raw sum with the effect hanging off the side.
+   */
+  private trackInput(track: Track, bus: AudioNode): AudioNode {
+    const built = this.trackFx.get(track.id);
+    if (built) return built.input;
+    const chain = buildAudioFxChain(this.ctx, track.audioFx);
+    if (!chain) return bus;
+    chain.output.connect(bus);
+    this.trackFx.set(track.id, chain);
+    return chain.input;
   }
 
   /** Stop and release every node this scheduler created. */
@@ -126,6 +155,13 @@ export class MixScheduler {
       for (const node of chain.nodes) node.disconnect();
     }
     this.chains.clear();
+    // The lane chains outlive every clip chain that fed them, so they are torn
+    // down after: a track reverb left connected would keep ringing into a bus
+    // the next schedule reuses.
+    for (const chain of this.trackFx.values()) {
+      for (const node of chain.nodes) node.disconnect();
+    }
+    this.trackFx.clear();
     this.placed.clear();
   }
 
@@ -346,6 +382,7 @@ export function sameAudioMix(a: Project, b: Project): boolean {
       !!ta.muted !== !!tb.muted ||
       !!ta.solo !== !!tb.solo ||
       (ta.volume ?? 1) !== (tb.volume ?? 1) ||
+      !sameAudioFx(ta.audioFx, tb.audioFx) ||
       ta.clips.length !== tb.clips.length
     ) {
       return false;
@@ -380,7 +417,7 @@ function sameAudioClip(a: Clip, b: Clip): boolean {
   );
 }
 
-/** Whether two clips carry the same audio effects, in the same order and amounts. */
+/** Whether two chains - a clip's or a track's - hold the same effects, in order. */
 function sameAudioFx(a: AudioFx[] | undefined, b: AudioFx[] | undefined): boolean {
   const la = a?.length ?? 0;
   const lb = b?.length ?? 0;

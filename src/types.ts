@@ -111,6 +111,31 @@ export interface Track {
   volume?: number;
   /** Video only: opacity multiplier for every clip on the track (0..1, default 1). */
   opacity?: number;
+  /**
+   * Video only: a colour grade over the WHOLE lane, applied once the track's
+   * clips have been composited together and before the result is laid over the
+   * tracks below — the Vegas "track FX" slot, and what an adjustment layer does
+   * in the editors that have one.
+   *
+   * Same shape as a clip's grade so the WebGL pass, the LUT and the curves are
+   * literally the same code, but every channel here is a CONSTANT: a track has
+   * no local time to keyframe against (its clips each have their own), and a
+   * lane-wide look that drifts is a clip grade wearing the wrong hat. Readers
+   * sample it at local time 0 (`resolveTrackColor`).
+   *
+   * Graded after compositing rather than per clip: that is what makes a cut of
+   * twelve shots read as one graded lane instead of twelve grades that happen
+   * to match, and it is the only version that survives a crossfade — the two
+   * clips dissolve first, then the grade sees the dissolved picture once.
+   */
+  color?: ClipColor;
+  /**
+   * Audio effects on the track bus: they process the SUM of the lane's clips,
+   * after each clip's own gain, pan and effect chain and before the track meter.
+   * One compressor across a whole dialogue lane is the point - the same effect
+   * dropped on each clip would pump against itself at every cut.
+   */
+  audioFx?: AudioFx[];
 }
 
 /**

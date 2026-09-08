@@ -94,6 +94,7 @@ export function createUiSlice(
   | 'resolveConfirm'
   | 'setRenamingMarker'
   | 'setTrackSettingsTrack'
+  | 'setFxTrack'
   | 'setTimeFormat'
   | 'setRippleAcrossTracks'
   | 'setPreviewTool'
@@ -237,6 +238,9 @@ export function createUiSlice(
       set({ previewGuides: mode });
     },
     setTrackSettingsTrack: (trackId) => set({ trackSettingsTrackId: trackId }),
+    // Opening a lane's FX takes the inspector over, so it also puts the column
+    // up on touch - where the pane is a sheet that is closed until asked for.
+    setFxTrack: (trackId) => set({ fxTrackId: trackId, ...(trackId ? { inspectorOpen: true, inspectorTab: 'clip' as const } : {}) }),
 
     requestConfirm: (options) =>
       new Promise<boolean>((resolve) => {

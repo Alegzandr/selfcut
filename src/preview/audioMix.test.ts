@@ -63,6 +63,10 @@ describe('sameAudioMix', () => {
     it('track opacity and visibility', () => {
       expect(sameAudioMix(project(), project({ opacity: 0.3, hidden: true }))).toBe(true);
     });
+
+    it('a track grade (the lane FX pane dragging a colour slider)', () => {
+      expect(sameAudioMix(project(), project({ color: { contrast: 0.4 } }))).toBe(true);
+    });
   });
 
   describe('detects edits that change the sound', () => {
@@ -115,6 +119,17 @@ describe('sameAudioMix', () => {
 
     it('track kind (drives link delegation)', () => {
       expect(sameAudioMix(project(), project({ kind: 'video' }))).toBe(false);
+    });
+
+    it('track effect added', () => {
+      const fx = project({ audioFx: [{ type: 'leveler', amount: 0.5 }] });
+      expect(sameAudioMix(project(), fx)).toBe(false);
+    });
+
+    it('track effect intensity', () => {
+      const a = project({ audioFx: [{ type: 'leveler', amount: 0.3 }] });
+      const b = project({ audioFx: [{ type: 'leveler', amount: 0.8 }] });
+      expect(sameAudioMix(a, b)).toBe(false);
     });
 
     it('clip added', () => {

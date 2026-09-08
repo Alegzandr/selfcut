@@ -11,6 +11,7 @@ import {
   EyeOpenIcon,
   LockClosedIcon,
   LockOpen1Icon,
+  MagicWandIcon,
   SpeakerLoudIcon,
   SpeakerOffIcon,
 } from '@radix-ui/react-icons';
@@ -25,6 +26,7 @@ import { trackDisplayName } from './trackName';
 import { gainDb } from '../inspector/format';
 import { DB_STEP_FADER, faderToGainStepped, gainToFader } from '../lib/gain';
 import { useVolumeEntry } from '../ui/VolumeEntry';
+import { EFFECT_DRAG_MIME } from '../app/config';
 import { KEYFRAME_LANE_HEIGHT_PX, KEYFRAME_LANES_GAP_PX, lanesHeightPx, trackLanes } from './trackHeight';
 import { KeyframeProp } from '../types';
 import type { ParseKeys } from 'i18next';
@@ -70,6 +72,8 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
   const volumeRef = useRef<HTMLInputElement>(null);
   const opacityRef = useRef<HTMLInputElement>(null);
   const [badgeAt, setBadgeAt] = useState<{ left: number; top: number; kind: 'volume' | 'opacity' } | null>(null);
+  /** An effect is being dragged over this header: the lane rings as a target. */
+  const [fxDragOver, setFxDragOver] = useState(false);
   const showBadge = (el: HTMLInputElement | null, kind: 'volume' | 'opacity') => {
     const r = el?.getBoundingClientRect();
     if (r) setBadgeAt({ left: r.left + r.width / 2, top: r.top - 6, kind });
@@ -96,9 +100,16 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
     beginGesture,
     endGesture,
     openContextMenu,
+    setFxTrack,
+    applyEffectToTrack,
+    setNotice,
   } = useStore.getState();
 
   const video = track.kind === 'video';
+  // What the FX button reports: whether the lane carries anything, and whether
+  // its pane is the one the inspector is showing right now.
+  const hasFx = !!track.color || (track.audioFx?.length ?? 0) > 0;
+  const fxOpen = useStore((s) => s.fxTrackId === track.id);
   const showVolume = !coarse && trackHeightPx >= VOLUME_MIN_HEIGHT_PX;
   const showMeter = !coarse && trackHeightPx >= METER_MIN_HEIGHT_PX;
   const showOpacity = !coarse && video && trackHeightPx >= OPACITY_MIN_HEIGHT_PX;
@@ -125,6 +136,28 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
 
   const openMenu = (x: number, y: number) =>
     openContextMenu(x, y, { kind: 'track', trackId: track.id });
+
+  /**
+   * The lane's FX, in the inspector. Sits beside the overflow rather than with
+   * the toggles: like the menu it OPENS something, and unlike them it changes
+   * what the export contains.
+   *
+   * Its plate is lit when the lane actually carries an effect, so a grade laid
+   * on a lane is visible from the header instead of only from the picture -
+   * which is what makes "why does this whole lane look wrong" answerable.
+   */
+  const fxButton = (
+    <Tooltip label={t('track.fx.open')}>
+      <button
+        className={hasFx || fxOpen ? btnOn : btn}
+        aria-label={t('track.fx.open')}
+        aria-pressed={fxOpen}
+        onClick={() => setFxTrack(fxOpen ? null : track.id)}
+      >
+        <MagicWandIcon className={`h-3.5 w-3.5 ${hasFx ? 'text-brand-300' : ''}`} />
+      </button>
+    </Tooltip>
+  );
 
   /** Overflow: the rows of the right-click menu, reachable by touch too. */
   const moreButton = (
@@ -193,12 +226,47 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
 
   return (
     <div
-      className="flex flex-col border-b border-zinc-800/80 bg-zinc-900"
+      className={`flex flex-col border-b border-zinc-800/80 bg-zinc-900 ${
+        fxDragOver ? 'ring-1 ring-inset ring-brand-500' : ''
+      }`}
       onContextMenu={(e) => {
         if (coarse) return; // Desktop only.
         e.preventDefault();
         e.stopPropagation();
         openMenu(e.clientX, e.clientY);
+      }}
+      // A catalogue entry dropped on the HEADER lands on the lane, the way one
+      // dropped on a clip lands on that clip: the header is the lane's handle
+      // everywhere else in the editor, so it is where a lane-wide effect goes.
+      //
+      // The ring says "this is a target", not "this entry will take": a drag
+      // only exposes its MIME type, never its payload, so which effect it is
+      // cannot be known until the drop. A refusal is a line of text then.
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(EFFECT_DRAG_MIME)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+        setFxDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) {
+          setFxDragOver(false);
+        }
+      }}
+      onDrop={(e) => {
+        setFxDragOver(false);
+        const effectId = e.dataTransfer.getData(EFFECT_DRAG_MIME);
+        if (!effectId) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!applyEffectToTrack(track.id, effectId)) {
+          setNotice(t('track.fx.rejected'));
+          return;
+        }
+        // Straight into the pane: the effect landed with its intensity at the
+        // default, and the next thing anyone wants is the knob for it.
+        setFxTrack(track.id);
       }}
     >
       {/* Only the controls dim on a hidden track: the pane itself must stay
@@ -307,6 +375,7 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
               {/* Hairline before the overflow: it opens things, the three
                   buttons beside it toggle things. */}
               <span aria-hidden="true" className="h-3.5 w-px flex-none bg-zinc-700/70" />
+              {fxButton}
               {moreButton}
             </div>
 

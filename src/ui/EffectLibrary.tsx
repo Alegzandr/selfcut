@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/store';
 import type { TransitionType } from '../types';
 import { EFFECTS, TRANSITIONS, type EffectGroup } from '../effects/catalog';
-import { resolveEffectTargets } from '../effects/apply';
+import { resolveEffectTargets, trackAcceptsEffect } from '../effects/apply';
 import { EFFECT_DRAG_MIME, PRESET_DRAG_MIME, TRANSITION_DRAG_MIME } from '../app/config';
 import { useIsCoarsePointer } from '../lib/device';
 import { applyPresetToClips } from './presetActions';
@@ -256,9 +256,28 @@ export function EffectsPane() {
   const project = useStore((s) => s.project);
   const assets = useStore((s) => s.assets);
   const selectedClipIds = useStore((s) => s.selectedClipIds);
+  // The lane whose FX pane is open, when one is: while it is up, it is what the
+  // catalogue is pointed at, exactly as the clip selection is the rest of the
+  // time. Touch has no drag gesture at all, so without this a phone could open
+  // a lane's pane and have no way to put anything in it.
+  const fxTrack = useStore((s) =>
+    s.fxTrackId ? (s.project.tracks.find((tr) => tr.id === s.fxTrackId) ?? null) : null,
+  );
 
   const apply = (effectId: string) => {
     const st = useStore.getState();
+    if (fxTrack) {
+      if (!trackAcceptsEffect(fxTrack, effectId)) {
+        st.setNotice(t('track.fx.rejected'));
+        return;
+      }
+      // A false here is the lane already running this effect: applying again
+      // would stack a second copy of it, and there is nothing to report - the
+      // effect IS on the lane, which is what was asked for.
+      st.applyEffectToTrack(fxTrack.id, effectId);
+      dismissOnTouch(coarse);
+      return;
+    }
     if (selectedClipIds.length === 0) {
       st.setNotice(t('library.effects.noSelection'));
       return;
@@ -287,8 +306,10 @@ export function EffectsPane() {
                 label={t(fx.labelKey)}
                 coarse={coarse}
                 enabled={
-                  selectedClipIds.length > 0 &&
-                  resolveEffectTargets(project, assets, fx.id, selectedClipIds).length > 0
+                  fxTrack
+                    ? trackAcceptsEffect(fxTrack, fx.id)
+                    : selectedClipIds.length > 0 &&
+                      resolveEffectTargets(project, assets, fx.id, selectedClipIds).length > 0
                 }
                 onDragStart={(e) => {
                   e.dataTransfer.setData(EFFECT_DRAG_MIME, fx.id);

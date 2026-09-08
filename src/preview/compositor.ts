@@ -14,8 +14,11 @@ import {
   resolveMaskMotion,
   type ResolvedMaskMotion,
   resolveOpacity,
+  resolveTrackBlur,
+  resolveTrackColor,
   resolveTransform,
   trackCrossfades,
+  trackHasPictureFx,
 } from '../model';
 import { gradeFrame } from './colorPass';
 import { drawBlurred } from './blur';
@@ -653,6 +656,54 @@ export function visibleVideoClips(track: Track, tMs: number): VisibleClip[] {
   return out;
 }
 
+/**
+ * Draw one video track's clips, then apply the track's own FX to the result.
+ *
+ * `paint` gets the context the lane's clips go onto: the output canvas itself
+ * when the track carries no FX - the path every project without a track grade
+ * keeps taking, at no cost - and a scratch of the output size when it does.
+ * The scratch is graded as one picture and composited in a single draw, which
+ * is what makes a track grade mean "this lane, after its cut" rather than "each
+ * of its clips, separately": a crossfade dissolves first and is graded once,
+ * and stacked clips inside the lane are graded together.
+ *
+ * Shared by the preview and the export, like every other compositing decision,
+ * so the two cannot disagree about what a track's FX do.
+ */
+export function drawTrackLayer(
+  ctx: Ctx2D,
+  track: Track,
+  outW: number,
+  outH: number,
+  paint: (target: Ctx2D) => void,
+): void {
+  if (!trackHasPictureFx(track)) {
+    paint(ctx);
+    return;
+  }
+  const scratch = getScratch('track', outW, outH);
+  // No OffscreenCanvas: the lane draws ungraded rather than not at all, the
+  // same degradation the WebGL grade already falls back to.
+  if (!scratch) {
+    paint(ctx);
+    return;
+  }
+  const started = span();
+  scratch.ctx.clearRect(0, 0, outW, outH);
+  paint(scratch.ctx);
+  const color = resolveTrackColor(track);
+  // `gradeFrame` hands back a canvas it reuses, so it is drawn from immediately
+  // and never held. A failed grade falls through to the ungraded scratch.
+  const graded = color ? gradeFrame(canvasAsFrame(scratch.canvas), outW, outH, color) : null;
+  const source = graded ?? scratch.canvas;
+  const blurPx = resolveTrackBlur(track) * outH * 0.06;
+  drawBlurred(ctx, blurPx, { x: 0, y: 0, w: outW, h: outH }, (target) => {
+    target.drawImage(source, 0, 0, outW, outH, 0, 0, outW, outH);
+  });
+  count('trackLayers');
+  endSpan('trackFx', started);
+}
+
 /** Pixel geometry of a mask on an `outW × outH` frame: top-left box and centre. */
 export function maskBoundsPx(
   mask: ClipMask,
@@ -679,11 +730,15 @@ interface Scratch {
  *             into its alpha, and a redaction or a local grade can replace part
  *             of it without touching what is composited underneath.
  *  - `region` holds one reprocessed region on its way back onto `clip`.
+ *  - `track`  holds one whole lane, composited but not yet laid over the lanes
+ *             below, so a track grade can see the cut as one picture.
  *
- * Two are needed rather than one: building the replacement reads the clip's own
- * pixels while it writes, and a canvas cannot be its own filtered source. One
- * `region` serves redactions and local grades alike, since each replacement is
- * finished and copied back before the next one starts.
+ * `clip` and `region` are two rather than one: building the replacement reads
+ * the clip's own pixels while it writes, and a canvas cannot be its own
+ * filtered source. One `region` serves redactions and local grades alike, since
+ * each replacement is finished and copied back before the next one starts.
+ * `track` is a third because a clip inside the lane is drawn onto it while
+ * `clip` and `region` are busy shaping that clip.
  */
 const scratches = new Map<string, Scratch>();
 

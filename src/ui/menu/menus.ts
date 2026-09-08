@@ -8,6 +8,7 @@ import {
   EyeOpenIcon,
   LinkBreak1Icon,
   LockOpen1Icon,
+  MagicWandIcon,
   Pencil2Icon,
   PlusIcon,
   SliderIcon,
@@ -230,6 +231,15 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
           onClick: () => st().toggleTrackHidden(id),
         });
       }
+      // The lane's own grade / effect chain, in the inspector. Above the
+      // monitoring toggles' neighbours because it is an EDIT, not a way of
+      // listening: what it changes is in the export.
+      items.push('---', {
+        id: 'ctx.track.fx',
+        labelKey: 'track.fx.open',
+        icon: MagicWandIcon,
+        onClick: () => st().setFxTrack(id),
+      });
       // Volume and opacity: faders on the desktop header, and nothing at all on
       // the 44px touch one, so on touch the menu is where they live.
       if (coarse) {

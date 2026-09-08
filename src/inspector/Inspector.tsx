@@ -28,6 +28,7 @@ import { MaskSection } from './sections/MaskSection';
 import { RedactionSection } from './sections/RedactionSection';
 import { LocalAdjustSection } from './sections/LocalAdjustSection';
 import { TransitionSection } from './sections/TransitionSection';
+import { TrackFxPanel } from './TrackFxPanel';
 import { clipDisplayName } from '../ui/clipName';
 
 /**
@@ -112,6 +113,14 @@ export function Inspector() {
   const tab = useStore((s) => s.inspectorTab);
   const inspectorWidthPx = useStore((s) => s.inspectorWidthPx);
   const showSubtitles = tab === 'subtitles';
+  // The lane whose FX are being edited, when one is. It takes the clip pane's
+  // place rather than sitting beside it: a lane and a clip are two different
+  // things to be pointed at, and the selection clears this the moment a clip is
+  // clicked (see `fxTrackId`). A track deleted under an open pane resolves to
+  // nothing here and the column falls back to the clip it was showing.
+  const fxTrack = useStore((s) =>
+    s.fxTrackId ? (s.project.tracks.find((tr) => tr.id === s.fxTrackId) ?? null) : null,
+  );
   // Counted here rather than in the panel: the tab badge has to state how many
   // cues the project holds even while the clip pane is the one on screen.
   const tracks = useStore((s) => s.project.tracks);
@@ -151,7 +160,7 @@ export function Inspector() {
   // The cue list stands on its own: unlike the clip pane it stays useful with
   // nothing selected, so it alone can keep the column up.
   if (!coarse) {
-    if (!clip && !showSubtitles) return null;
+    if (!clip && !showSubtitles && !fxTrack) return null;
     return (
       // The handle rides the column's left edge, so it appears and disappears
       // with the column instead of leaving an orphan divider next to the preview.
@@ -173,6 +182,8 @@ export function Inspector() {
           <InspectorTabs cueCount={cueCount} />
           {showSubtitles ? (
             <SubtitlesPanel />
+          ) : fxTrack ? (
+            <TrackFxPanel track={fxTrack} />
           ) : (
             clip && (
               <InspectorBody
@@ -189,12 +200,12 @@ export function Inspector() {
     );
   }
 
-  const show = (clip || showSubtitles) && inspectorOpen;
+  const show = (clip || showSubtitles || fxTrack) && inspectorOpen;
   return (
     <AnimatePresence>
       {show && (
         <m.div
-          key={showSubtitles ? 'subtitles' : clip!.id}
+          key={showSubtitles ? 'subtitles' : fxTrack ? `track:${fxTrack.id}` : clip!.id}
           {...sheet}
           transition={{ type: 'spring', damping: 28, stiffness: 320 }}
           className="fixed inset-x-0 bottom-0 z-40 max-h-[55dvh] space-y-3 overflow-x-hidden overflow-y-auto rounded-t-2xl [scrollbar-gutter:stable] border-t border-zinc-800 bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black"
@@ -202,6 +213,8 @@ export function Inspector() {
           <InspectorTabs cueCount={cueCount} />
           {showSubtitles ? (
             <SubtitlesPanel />
+          ) : fxTrack ? (
+            <TrackFxPanel track={fxTrack} />
           ) : (
             clip && (
               <InspectorBody

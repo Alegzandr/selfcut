@@ -12,12 +12,19 @@ import { AudioFx } from '../types';
  * nothing is bundled and nothing is heavier than the browser's own DSP.
  */
 
-/** One built effect: its entry node, its exit node, and every node to disconnect. */
-interface Segment {
+/**
+ * One built chain: its entry node, its exit node, and every node to disconnect.
+ * Exported because a track bus splices one of these too - the same builder, the
+ * same nodes, one level up from the clip.
+ */
+export interface AudioFxChain {
   input: AudioNode;
   output: AudioNode;
   nodes: AudioNode[];
 }
+
+/** One effect inside a chain. Same shape: a chain is its segments in series. */
+type Segment = AudioFxChain;
 
 /**
  * A short synthetic reverb impulse response (decaying stereo noise), memoized per

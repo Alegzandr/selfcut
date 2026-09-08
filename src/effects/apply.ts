@@ -1,4 +1,4 @@
-import type { Clip, MediaAsset, Project } from '../types';
+import type { Clip, MediaAsset, Project, Track } from '../types';
 import { EFFECTS_BY_ID } from './catalog';
 
 /**
@@ -39,4 +39,34 @@ export function resolveEffectTargets(
     if (preset.accepts(clip, assets[clip.assetId])) seen.add(clip.id);
   }
   return [...seen];
+}
+
+/**
+ * Whether a catalogue entry means anything dropped on a whole LANE.
+ *
+ * Two gates. The entry has to have a track form at all (`trackPatch`) - a
+ * push-in is a clip's transform and a lane has none - and it has to match the
+ * lane's kind: a grade needs a picture, and an effect chain needs sound.
+ *
+ * Audio effects are refused on a video lane rather than merely being useless
+ * there: importing a file with sound lays its audio on an AUDIO lane and links
+ * the two, so a video lane's bus carries nothing to process. A knob that is
+ * dead in every ordinary project should not be offered.
+ */
+export function trackAcceptsEffect(track: Track, effectId: string): boolean {
+  const preset = EFFECTS_BY_ID[effectId];
+  if (!preset?.trackPatch) return false;
+  return preset.group === 'audio' ? track.kind === 'audio' : track.kind === 'video';
+}
+
+/**
+ * The patch a catalogue entry lays on a lane, or null when the lane refuses it
+ * or when applying it would change nothing (re-dropping an effect the chain
+ * already runs). Null is what the caller turns into "this did not apply",
+ * rather than an undo step that undoes nothing.
+ */
+export function trackEffectPatch(track: Track, effectId: string): Partial<Track> | null {
+  if (!trackAcceptsEffect(track, effectId)) return null;
+  const patch = EFFECTS_BY_ID[effectId]!.trackPatch!(track);
+  return Object.keys(patch).length > 0 ? patch : null;
 }

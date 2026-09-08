@@ -21,6 +21,7 @@ import { frameBytes, maxLiveCursors, selectCursorEvictions } from './cursorPool'
 import {
   drawClip,
   forEachUpcomingVideoClip,
+  drawTrackLayer,
   forEachVisibleVideoClip,
   invalidateResampling,
 } from './compositor';
@@ -740,51 +741,56 @@ export class PlaybackEngine {
       const track = tracks[t]!;
       const alphaMul = track.opacity ?? 1;
       if (alphaMul <= 0 || !isTrackVisible(track, state.project)) continue;
-      forEachVisibleVideoClip(track, tMs, (clip, xfadeInMs) => {
-        let sample: DrawableFrame | null = null;
-        if (clip.kind === 'media') {
-          const asset = state.assets[clip.assetId];
-          if (!asset) return;
-          if (asset.kind === 'image') {
-            sample = this.ensureStill(asset);
-          } else {
-            let cursor = this.cursors.get(clip.id);
-            if (!cursor) {
-              cursor = new FrameCursor(asset, () => {
-                this.videoDirty = true;
-                this.frameRetries = 0;
-              });
+      // The lane's clips go onto whatever surface its FX need - the canvas
+      // itself when it has none, a scratch to be graded as one picture when it
+      // does. Nothing below cares which: it draws into `target`.
+      drawTrackLayer(this.ctx, track, w, h, (target) => {
+        forEachVisibleVideoClip(track, tMs, (clip, xfadeInMs) => {
+          let sample: DrawableFrame | null = null;
+          if (clip.kind === 'media') {
+            const asset = state.assets[clip.assetId];
+            if (!asset) return;
+            if (asset.kind === 'image') {
+              sample = this.ensureStill(asset);
             } else {
-              // Delete before re-inserting: a Map keeps insertion order, so
-              // this is what moves the clip to the young end of the ranking.
-              this.cursors.delete(clip.id);
-            }
-            this.cursors.set(clip.id, cursor);
-            liveClipIds.add(clip.id);
-            cursor.request(
-              timelineToSourceMs(clip, tMs) / 1000,
-              // Sequential decoding is a reader walking forward. Backwards,
-              // every frame is behind the last one it produced, which the
-              // worker answers by restarting its iterator: asking for a seek
-              // outright is the same work without the iterator churn.
-              this.wasPlaying && this.rate > 0,
-              shouldBlendFrames(clip, tMs),
-            );
-            sample = cursor.sample;
-            if (!sample) this.awaitingFrame = true;
-            // What the pool's memory cap is actually measured against. Taken
-            // from the decoded frame rather than from the asset's declared
-            // size, so a source that decodes to something unexpected is still
-            // budgeted for what it really costs.
-            if (sample) {
-              this.largestFrameBytes = Math.max(
-                this.largestFrameBytes,
-                frameBytes(sample.displayWidth, sample.displayHeight),
+              let cursor = this.cursors.get(clip.id);
+              if (!cursor) {
+                cursor = new FrameCursor(asset, () => {
+                  this.videoDirty = true;
+                  this.frameRetries = 0;
+                });
+              } else {
+                // Delete before re-inserting: a Map keeps insertion order, so
+                // this is what moves the clip to the young end of the ranking.
+                this.cursors.delete(clip.id);
+              }
+              this.cursors.set(clip.id, cursor);
+              liveClipIds.add(clip.id);
+              cursor.request(
+                timelineToSourceMs(clip, tMs) / 1000,
+                // Sequential decoding is a reader walking forward. Backwards,
+                // every frame is behind the last one it produced, which the
+                // worker answers by restarting its iterator: asking for a seek
+                // outright is the same work without the iterator churn.
+                this.wasPlaying && this.rate > 0,
+                shouldBlendFrames(clip, tMs),
               );
+              sample = cursor.sample;
+              if (!sample) this.awaitingFrame = true;
+              // What the pool's memory cap is actually measured against. Taken
+              // from the decoded frame rather than from the asset's declared
+              // size, so a source that decodes to something unexpected is still
+              // budgeted for what it really costs.
+              if (sample) {
+                this.largestFrameBytes = Math.max(
+                  this.largestFrameBytes,
+                  frameBytes(sample.displayWidth, sample.displayHeight),
+                );
+              }
             }
           }
-        }
-        drawClip(this.ctx, clip, w, h, tMs, alphaMul, xfadeInMs, sample);
+          drawClip(target, clip, w, h, tMs, alphaMul, xfadeInMs, sample);
+        });
       });
     }
 

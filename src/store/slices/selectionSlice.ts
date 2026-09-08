@@ -33,6 +33,10 @@ export function createSelectionSlice(
       const ids = id ? selectable([id]) : [];
       set({
         selectedClipId: ids[0] ?? null,
+        // A lane is not a clip: showing one puts the track FX pane away. Every
+        // selection path below does the same, so the two panes can never be up
+        // at once whichever gesture got here.
+        fxTrackId: null,
         selectedClipIds: ids,
         // A plain click is a fresh start: the boxed keyframes go with it. The
         // marquee sets both sets itself, so it never routes through here.
@@ -48,7 +52,7 @@ export function createSelectionSlice(
 
     selectAllClips: () => {
       const ids = selectable(get().project.tracks.flatMap((t) => t.clips.map((c) => c.id)));
-      set({ selectedClipIds: ids, selectedClipId: ids[ids.length - 1] ?? null });
+      set({ selectedClipIds: ids, selectedClipId: ids[ids.length - 1] ?? null, fxTrackId: null });
     },
 
     selectClipsAfterPlayhead: () => {
@@ -61,6 +65,7 @@ export function createSelectionSlice(
       set({
         selectedClipIds: ids,
         selectedClipId: ids[ids.length - 1] ?? null,
+        fxTrackId: null,
         cropEditing: false,
         selectedRedactionId: null,
         selectedLocalAdjustId: null,
@@ -76,6 +81,7 @@ export function createSelectionSlice(
       set({
         selectedClipIds: ids,
         selectedClipId: ids[ids.length - 1] ?? null,
+        fxTrackId: null,
         ...(ids.length === 0 ? { inspectorOpen: false } : {}),
       });
     },
@@ -85,6 +91,7 @@ export function createSelectionSlice(
       set({
         selectedClipIds: ids,
         selectedClipId: ids[ids.length - 1] ?? null,
+        fxTrackId: null,
         cropEditing: false,
         selectedRedactionId: null,
         selectedLocalAdjustId: null,
@@ -123,6 +130,7 @@ export function createSelectionSlice(
       set({
         selectedClipIds: ids,
         selectedClipId: ids.includes(targetId) ? targetId : (ids[ids.length - 1] ?? null),
+        fxTrackId: null,
         cropEditing: false,
         selectedRedactionId: null,
         selectedLocalAdjustId: null,

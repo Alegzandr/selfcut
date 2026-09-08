@@ -1,4 +1,5 @@
 import {
+  AudioFxType,
   Clip,
   ClipColor,
   ClipLocalAdjust,
@@ -270,6 +271,16 @@ export interface EditorState {
    * faders inline, and the 44px touch header has room for two icon buttons.
    */
   trackSettingsTrackId: string | null;
+  /**
+   * Track whose FX pane the inspector is showing, or null for the usual clip
+   * pane.
+   *
+   * A lane is not a clip, so it cannot ride the clip selection: it gets a slot
+   * of its own that takes precedence over it while set. Selecting a clip clears
+   * it - clicking a clip must show that clip - which makes the two states
+   * mutually exclusive without either having to know about the other's rules.
+   */
+  fxTrackId: string | null;
   /** How the transport spells time out (persisted). */
   timeFormat: TimeFormat;
   /**
@@ -384,6 +395,28 @@ export interface EditorState {
    * animatable property with the keyframes of every clip on it.
    */
   toggleTrackExpanded: (trackId: string) => void;
+
+  /**
+   * Put a catalogue effect on a whole lane (drag onto the track header, or the
+   * track pane's own row). False when the lane refuses it - wrong kind, or an
+   * effect its chain already runs - so the caller can say why nothing moved.
+   */
+  applyEffectToTrack: (trackId: string, effectId: string) => boolean;
+  /**
+   * Live-set one parameter of a lane's grade. No history of its own: wrap a
+   * drag in begin/endGesture, like every other slider.
+   */
+  setTrackColorLive: (trackId: string, prop: ColorProp, value: number) => void;
+  /** Put an imported LUT on a lane, or take it off (null). */
+  setTrackLut: (trackId: string, lutId: string | null) => void;
+  /** Live-dial the lane LUT's strength; no-op on a lane carrying none. */
+  setTrackLutIntensity: (trackId: string, intensity: number) => void;
+  /** Drop the lane's whole grade, LUT included. */
+  resetTrackColor: (trackId: string) => void;
+  /** Live-set one lane effect's intensity - same gesture rule as the sliders. */
+  setTrackAudioFxAmount: (trackId: string, type: AudioFxType, amount: number) => void;
+  /** Take one effect out of the lane's chain. */
+  removeTrackAudioFx: (trackId: string, type: AudioFxType) => void;
 
   setAssetPeaks: (assetId: string, audioTrackIndex: number, peaks: number[]) => void;
   setAssetThumbnails: (assetId: string, thumbnails: string[]) => void;
@@ -865,6 +898,8 @@ export interface EditorState {
   setRenamingTrack: (trackId: string | null) => void;
   setPreviewGuides: (mode: PreviewGuides) => void;
   setTrackSettingsTrack: (trackId: string | null) => void;
+  /** Show a lane's FX in the inspector (id), or go back to the clip pane (null). */
+  setFxTrack: (trackId: string | null) => void;
   setTimeFormat: (format: TimeFormat) => void;
   setRippleAcrossTracks: (on: boolean) => void;
   setPreviewTool: (tool: PreviewTool) => void;

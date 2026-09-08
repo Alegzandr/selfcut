@@ -1,7 +1,9 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
+import type { Track } from '../../types';
 import { uid } from '../../lib/id';
 import { insertTrack } from '../projectOps';
+import { trackEffectPatch } from '../../effects/apply';
 
 export function createTracksSlice(
   set: StoreSet,
@@ -19,7 +21,26 @@ export function createTracksSlice(
   | 'toggleTrackSolo'
   | 'renameTrack'
   | 'toggleTrackExpanded'
+  | 'applyEffectToTrack'
+  | 'setTrackColorLive'
+  | 'setTrackLut'
+  | 'setTrackLutIntensity'
+  | 'resetTrackColor'
+  | 'setTrackAudioFxAmount'
+  | 'removeTrackAudioFx'
 > {
+  /**
+   * Rewrite one track, copy-on-write and WITHOUT a history entry - the shape
+   * every live control needs. A slider drag writes on each pointermove and is
+   * turned into a single undo step by the gesture around it (see `beginGesture`),
+   * exactly as the clip colour sliders already work.
+   */
+  const patchTrackLive = (trackId: string, fn: (track: Track) => Partial<Track>) => {
+    const p = get().project;
+    const tracks = p.tracks.map((tr) => (tr.id === trackId ? { ...tr, ...fn(tr) } : tr));
+    set({ project: { ...p, tracks } });
+  };
+
   return {
     addTrack: (kind) =>
       withHistory((p) => {
@@ -99,6 +120,65 @@ export function createTracksSlice(
       const tracks = p.tracks.map((t) => (t.id === trackId ? { ...t, ...patch } : t));
       set({ project: { ...p, tracks } });
     },
+
+    applyEffectToTrack: (trackId, effectId) => {
+      const track = get().project.tracks.find((tr) => tr.id === trackId);
+      if (!track) return false;
+      const patch = trackEffectPatch(track, effectId);
+      // Refused by the lane, or already there: no undo step for a no-op, and a
+      // false the caller can turn into a word about why nothing happened.
+      if (!patch) return false;
+      withHistory((p) => {
+        const target = p.tracks.find((tr) => tr.id === trackId);
+        if (target) Object.assign(target, patch);
+      });
+      return true;
+    },
+
+    setTrackColorLive: (trackId, prop, value) =>
+      patchTrackLive(trackId, (track) => ({ color: { ...track.color, [prop]: value } })),
+
+    setTrackLut: (trackId, lutId) =>
+      withHistory((p) => {
+        const track = p.tracks.find((tr) => tr.id === trackId);
+        if (!track) return;
+        if (!lutId) {
+          if (track.color) delete track.color.lut;
+          return;
+        }
+        // A LUT picked on a lane with no grade yet starts the grade: the table
+        // is the base a lane is then tuned on top of, not a tweak of one.
+        track.color = { ...track.color, lut: { id: lutId, intensity: 1 } };
+      }),
+
+    setTrackLutIntensity: (trackId, intensity) =>
+      patchTrackLive(trackId, (track) =>
+        track.color?.lut
+          ? { color: { ...track.color, lut: { ...track.color.lut, intensity } } }
+          : {},
+      ),
+
+    resetTrackColor: (trackId) =>
+      withHistory((p) => {
+        const track = p.tracks.find((tr) => tr.id === trackId);
+        if (track) delete track.color;
+      }),
+
+    setTrackAudioFxAmount: (trackId, type, amount) =>
+      patchTrackLive(trackId, (track) => ({
+        audioFx: (track.audioFx ?? []).map((fx) => (fx.type === type ? { ...fx, amount } : fx)),
+      })),
+
+    removeTrackAudioFx: (trackId, type) =>
+      withHistory((p) => {
+        const track = p.tracks.find((tr) => tr.id === trackId);
+        if (!track) return;
+        const next = (track.audioFx ?? []).filter((fx) => fx.type !== type);
+        // An empty chain is no chain: leaving `[]` behind would make every
+        // "does this lane have effects" check answer yes for a lane with none.
+        if (next.length) track.audioFx = next;
+        else delete track.audioFx;
+      }),
 
     toggleTrackExpanded: (trackId) => {
       const cur = get().expandedTrackIds;

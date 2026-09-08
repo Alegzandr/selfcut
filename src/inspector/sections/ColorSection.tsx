@@ -4,23 +4,12 @@ import { useStore } from '../../store/store';
 import { Channel, Clip, ColorProp, EaseId } from '../../types';
 import { COLOR_PROPS, EASE_IDS, keyframesOf, sampleChannel } from '../../model';
 import { PERCENT_ENTRY, SliderRow, type KeyframeControl } from '../SliderRow';
+import { COLOR_RANGES, formatColorValue } from '../colorRanges';
 import { importLutFromDisk } from '../../ui/lutActions';
 import { editTargets } from '../../store/editTargets';
 
 /** Two keyframe times within this many ms count as sitting on the same playhead. */
 const ON_KEY_EPSILON_MS = 1;
-
-/** Slider range of each colour param, in the order `COLOR_PROPS` lists them. */
-const RANGES: Record<ColorProp, { min: number; max: number }> = {
-  brightness: { min: -1, max: 1 },
-  contrast: { min: -1, max: 1 },
-  saturation: { min: -1, max: 1 },
-  temperature: { min: -1, max: 1 },
-  tint: { min: -1, max: 1 },
-  vignette: { min: 0, max: 1 },
-  blur: { min: 0, max: 1 },
-  sharpen: { min: 0, max: 1 },
-};
 
 /** Value of a colour channel at a clip-local time. Absent means identity (0). */
 function valueAt(ch: Channel | undefined, localMs: number): number {
@@ -152,7 +141,7 @@ export function ColorSection({ clip }: { clip: Clip }) {
       </div>
       <LutRow clip={clip} />
       {COLOR_PROPS.map((key) => {
-        const { min, max } = RANGES[key];
+        const { min, max } = COLOR_RANGES[key];
         const label = t(`inspector.adjust.${key}`);
         return (
           <SliderRow
@@ -162,9 +151,7 @@ export function ColorSection({ clip }: { clip: Clip }) {
             min={min}
             max={max}
             step={0.01}
-            format={(v) =>
-              min < 0 ? `${v > 0 ? '+' : ''}${Math.round(v * 100)}` : `${Math.round(v * 100)}%`
-            }
+            format={(v) => formatColorValue(min, v)}
             entry={PERCENT_ENTRY}
             // Identity for every graded parameter: no lift, no vignette, no blur,
             // no sharpening.

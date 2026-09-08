@@ -1,5 +1,5 @@
 import type { ParseKeys } from 'i18next';
-import type { AudioFxType, Clip, ClipColor, MediaAsset, TransitionType } from '../types';
+import type { AudioFxType, Clip, ClipColor, MediaAsset, Track, TransitionType } from '../types';
 import { DEFAULT_TRANSFORM } from '../model';
 
 /**
@@ -37,6 +37,18 @@ export interface EffectPreset {
    * blur, the audio presets append to the chain).
    */
   patch: (clip: Clip) => Partial<Clip>;
+  /**
+   * The same patch, aimed at a whole lane. Present only for the effects a track
+   * can carry - the grades and the audio chain, which a track holds in fields of
+   * the same shape a clip does.
+   *
+   * Absent means "clip only", and it is absent for a reason rather than for
+   * want of writing: the push-in and the Ken Burns drift are a transform and a
+   * zoom over the CLIP's own length, and a lane has no length of its own to
+   * drift across. A catalogue entry with no `trackPatch` is refused by a track
+   * instead of being applied to something it does not mean.
+   */
+  trackPatch?: (track: Track) => Partial<Track>;
 }
 
 /**
@@ -89,6 +101,9 @@ export const EFFECTS: EffectPreset[] = [
       patch: (clip) => ({
         color: { ...look.color, blur: clip.color?.blur, sharpen: clip.color?.sharpen },
       }),
+      trackPatch: (track) => ({
+        color: { ...look.color, blur: track.color?.blur, sharpen: track.color?.sharpen },
+      }),
     }),
   ),
   ...GRADES.map(
@@ -98,6 +113,7 @@ export const EFFECTS: EffectPreset[] = [
       labelKey: `inspector.adjust.${grade.id}` as ParseKeys,
       accepts: paintsPicture,
       patch: (clip) => ({ color: { ...clip.color, ...grade.color } }),
+      trackPatch: (track) => ({ color: { ...track.color, ...grade.color } }),
     }),
   ),
   {
@@ -129,6 +145,11 @@ export const EFFECTS: EffectPreset[] = [
         // Re-applying an effect already in the chain must not stack a second
         // copy of it - the inspector's toggle row would then show one entry
         // while the graph ran two.
+        if (chain.some((fx) => fx.type === type)) return {};
+        return { audioFx: [...chain, { type, amount: DEFAULT_FX_AMOUNT }] };
+      },
+      trackPatch: (track) => {
+        const chain = track.audioFx ?? [];
         if (chain.some((fx) => fx.type === type)) return {};
         return { audioFx: [...chain, { type, amount: DEFAULT_FX_AMOUNT }] };
       },

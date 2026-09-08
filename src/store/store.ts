@@ -268,6 +268,7 @@ export const useStore = create<EditorState>((set, get) => {
     confirmDialog: null,
     renamingMarkerId: null,
     trackSettingsTrackId: null,
+    fxTrackId: null,
     expandedTrackIds: [],
     trackHeightPx: loadTrackHeight(),
     trackHeaderWidthPx: loadWidth(

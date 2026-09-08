@@ -1,7 +1,7 @@
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny';
-import type { Clip, Project } from '../types';
+import type { Clip, Project, Track } from '../types';
 import { isTextClip, isTrackVisible, shouldBlendFrames, timelineToSourceMs } from '../model';
-import { drawClip, forEachVisibleVideoClip, invalidateResampling } from '../preview/compositor';
+import { drawClip, drawTrackLayer, forEachVisibleVideoClip, invalidateResampling } from '../preview/compositor';
 import { syncLuts } from '../preview/colorPass';
 import { loadFonts } from '../lib/fonts';
 import { StillFrame, type DrawableFrame } from '../media/stillImage';
@@ -29,6 +29,13 @@ interface FrameLayer {
   xfadeInMs: number;
   alphaMul: number;
   sample: DrawableFrame | null;
+  /**
+   * The lane the clip came off. Carried on the layer rather than looked up
+   * again at composite time: the list is flat so every clip in the frame can be
+   * decoded in one `Promise.all`, and the composite still has to hand each
+   * lane's run of clips to `drawTrackLayer` in one go for its track FX.
+   */
+  track: Track;
 }
 
 export interface FrameRendererOptions {
@@ -165,7 +172,7 @@ export class FrameRenderer {
       const alphaMul = track.opacity ?? 1;
       if (alphaMul <= 0 || !isTrackVisible(track, project)) continue;
       forEachVisibleVideoClip(track, tMs, (clip, xfadeInMs) => {
-        layers.push({ clip, xfadeInMs, alphaMul, sample: null });
+        layers.push({ clip, xfadeInMs, alphaMul, sample: null, track });
       });
     }
 
@@ -194,8 +201,22 @@ export class FrameRenderer {
     this.ctx.globalAlpha = 1;
     this.ctx.fillStyle = '#000';
     this.ctx.fillRect(0, 0, width, height);
-    for (const { clip, xfadeInMs, alphaMul, sample } of layers) {
-      drawClip(this.ctx, clip, width, height, tMs, alphaMul, xfadeInMs, sample);
+    // Layers were pushed lane by lane, so one lane's clips are a contiguous
+    // run: walking the runs hands each track its own clips in one call, which
+    // is what lets a track grade see the lane composited rather than each clip
+    // separately. Identical to the preview's loop, one track at a time.
+    for (let i = 0; i < layers.length; ) {
+      const { track } = layers[i]!;
+      let end = i + 1;
+      while (end < layers.length && layers[end]!.track === track) end++;
+      const from = i;
+      drawTrackLayer(this.ctx, track, width, height, (target) => {
+        for (let j = from; j < end; j++) {
+          const { clip, xfadeInMs, alphaMul, sample } = layers[j]!;
+          drawClip(target, clip, width, height, tMs, alphaMul, xfadeInMs, sample);
+        }
+      });
+      i = end;
     }
     endSpan('composite', compositeStarted);
   }
