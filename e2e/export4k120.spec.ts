@@ -64,7 +64,18 @@ test('exports the 120 fps 4K preset without running out of memory', async ({ pag
   await sheet.getByRole('button', { name: 'Custom' }).click();
   // The 120 fps family is offered at three rungs; the 4K one is the row whose
   // quality reads "4K".
-  await sheet.getByRole('button', { name: '120 fps · 4K' }).click();
+  //
+  // Anchored at the HEAD of the row, because the sheet grew a second 4K 120
+  // one: the AV1 hand-off reads "AV1 · Up to 120 fps · 4K" and contains this
+  // row's whole title, so the plain substring this used to be now matches both
+  // and strict mode stops the spec before it exercises anything.
+  //
+  // A row's accessible name is its entire text - title, resolved format, hint -
+  // so `exact` is not the way out of that: it would have to spell out a bitrate
+  // that moves with the fixture. The head is the stable part, and matching it
+  // fails loudly on a rename rather than silently picking the neighbour and
+  // reporting that a 4K export ran out of memory.
+  await sheet.getByRole('button', { name: /^Up to 120 fps · 4K/ }).click();
 
   // The fixture is 30 fps and the preset's cadence is a CEILING, so left alone
   // this spec would quietly encode 30 fps and pass - having stopped exercising
