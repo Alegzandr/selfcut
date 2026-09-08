@@ -108,6 +108,15 @@ async function renderAndSample(
   const downloadPromise = page.waitForEvent('download', { timeout: 150_000 });
   await sheet.getByRole('button', { name: /^Export / }).click();
   await downloadPromise;
+  // The download firing is NOT the sheet being done: the file is handed over
+  // first and the sheet only then leaves its rendering phase, where Escape is
+  // deliberately inert so that a stray key cannot throw an export away. On a
+  // machine slow enough to separate the two - a CI runner with no hardware
+  // encoder - an Escape sent on the download is swallowed and the sheet never
+  // closes. So wait for the finished screen, which is the real sync point.
+  await expect(sheet.getByRole('button', { name: 'New export' })).toBeVisible({
+    timeout: 30_000,
+  });
   // The sheet stays up after the render, and while it is open every editor
   // hotkey is inert by design - so the next step could not select or
   // pre-compose anything if it were left there.
