@@ -328,6 +328,8 @@
   "export.preset.hevc1080.hint": "Same picture as the 1080p upload, about half the file. Plays on Apple devices and recent Windows.",
   "export.preset.av1_1080.label": "AV1 · 1080p",
   "export.preset.av1_1080.hint": "The smallest file for the picture. Royalty-free, played by every recent browser, slower to encode.",
+  "export.preset.av1_4k120.label": "AV1 · Up to 120 fps",
+  "export.preset.av1_4k120.hint": "The 120 fps hand-off, about half the file · slower to encode, falls back to H.264 where AV1 is unavailable",
   "export.preset.light1080.label": "1080p Light",
   "export.preset.light1080.hint": "Small file for messaging and email · uploads fast",
   "export.preset.mp3.label": "MP3 (audio only)",

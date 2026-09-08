@@ -328,6 +328,8 @@
   "export.preset.hevc1080.hint": "1080pアップロードと同じ画質で、ファイルはおよそ半分。Apple製品と最近のWindowsで再生できます。",
   "export.preset.av1_1080.label": "AV1 · 1080p",
   "export.preset.av1_1080.hint": "同じ画質で最小のファイル。ロイヤリティフリーで、最近のブラウザーならどれでも再生できますが、エンコードは遅めです。",
+  "export.preset.av1_4k120.label": "AV1 · 最大 120 fps",
+  "export.preset.av1_4k120.hint": "120 fps の受け渡しをおよそ半分のファイルサイズで · エンコードは遅く、AV1 が使えない場合は H.264 になります",
   "export.preset.light1080.label": "1080p ライト",
   "export.preset.light1080.hint": "メッセージやメール向けの小さいファイル · アップロードが速い",
   "export.preset.mp3.label": "MP3（音声のみ）",

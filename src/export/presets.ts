@@ -303,6 +303,25 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
     fps: 120,
   },
   {
+    // The same hand-off at the same rung, in AV1: the row above is the heaviest
+    // preset the sheet offers, and 4K at 120 fps is exactly where halving the
+    // bytes stops being a nicety. Half the H.264 scale, like the 1080p AV1 row,
+    // for the same conservative reading of the published figures.
+    //
+    // It is the slow one, and deliberately so: AV1 hardware encoding is far
+    // from universal, and where it is missing this falls back to H.264 at half
+    // the budget (see `pickCodec`) rather than failing - a smaller file than
+    // the row above rather than a better one. The hint says as much.
+    id: 'av1_4k120',
+    labelKey: 'export.preset.av1_4k120.label',
+    hintKey: 'export.preset.av1_4k120.hint',
+    qualityKey: 'export.quality.4k',
+    tier: '4k',
+    bitrateScale: 0.7,
+    fps: 120,
+    codec: 'av1',
+  },
+  {
     // Film cadence, whatever the timeline holds. Doubled rung bitrate so the
     // 24 fps scaling below still lands well above an upload's figure.
     id: 'cinema24',

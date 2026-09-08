@@ -351,6 +351,18 @@ describe('codec presets', () => {
       expect(p.height).toBe(h264.height);
     }
   });
+
+  // The AV1 hand-off is the H.264 one for half the bytes: same frame, same
+  // cadence, and a ceiling rather than a pin so it still follows the footage.
+  it('mirrors the 4K 120 hand-off in AV1, at half its bitrate', () => {
+    const h264 = mp4.find((p) => p.id === 'smooth120-4k-16x9')!;
+    const av1 = mp4.find((p) => p.id === 'av1_4k120-16x9')!;
+    expect(av1.codec).toBe('av1');
+    expect([av1.width, av1.height]).toEqual([h264.width, h264.height]);
+    expect(av1.fps).toBe(h264.fps);
+    expect(av1.fpsMode).toBe('capped');
+    expect(av1.videoBitrate).toBeCloseTo(h264.videoBitrate / 2, -5);
+  });
 });
 
 describe('audio bitrate adapted to the timeline', () => {

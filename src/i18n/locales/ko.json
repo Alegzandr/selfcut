@@ -328,6 +328,8 @@
   "export.preset.hevc1080.hint": "1080p 업로드와 같은 화질에 파일은 약 절반. Apple 기기와 최근 Windows에서 재생됩니다.",
   "export.preset.av1_1080.label": "AV1 · 1080p",
   "export.preset.av1_1080.hint": "같은 화질에서 가장 작은 파일. 로열티가 없고 최근 브라우저라면 모두 재생하지만 인코딩은 느립니다.",
+  "export.preset.av1_4k120.label": "AV1 · 최대 120 fps",
+  "export.preset.av1_4k120.hint": "120 fps 넘겨주기를 약 절반 크기 파일로 · 인코딩이 느리고, AV1을 쓸 수 없으면 H.264로 대체됩니다",
   "export.preset.light1080.label": "1080p 라이트",
   "export.preset.light1080.hint": "메신저와 메일용 작은 파일 · 업로드가 빠릅니다",
   "export.preset.mp3.label": "MP3(오디오만)",

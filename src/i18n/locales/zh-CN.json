@@ -328,6 +328,8 @@
   "export.preset.hevc1080.hint": "画质与 1080p 上传版相同，文件大约只有一半。可在 Apple 设备和较新的 Windows 上播放。",
   "export.preset.av1_1080.label": "AV1 · 1080p",
   "export.preset.av1_1080.hint": "同样画质下文件最小。免版税，较新的浏览器都能播，但编码更慢。",
+  "export.preset.av1_4k120.label": "AV1 · 最高 120 fps",
+  "export.preset.av1_4k120.hint": "120 fps 交付版本，文件大约只有一半 · 编码更慢，无法使用 AV1 时回退到 H.264",
   "export.preset.light1080.label": "1080p 轻量",
   "export.preset.light1080.hint": "适合聊天和邮件的小文件 · 上传很快",
   "export.preset.mp3.label": "MP3（仅音频）",
