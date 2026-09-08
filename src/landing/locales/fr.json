@@ -45,7 +45,7 @@
   "depth.title": "Quand le montage le demande",
   "depth.lead": "Rien de tout cela n'est à l'écran tant que vous n'allez pas le chercher. C'est là quand une coupe demande plus qu'une coupe.",
   "depth.grade.dt": "Étalonnage",
-  "depth.grade.dd": "Luminosité, contraste, saturation, balance des blancs, teinte, vignettage et flou ; courbes de tonalité par canal ; LUT .cube importées une fois et réutilisées d'un clip à l'autre ; incrustation sur fond vert. Waveform, parade RVB, histogramme et vecteurscope pour vérifier le résultat.",
+  "depth.grade.dd": "Luminosité, contraste, saturation, balance des blancs, teinte, vignettage, flou et netteté ; courbes de tonalité par canal ; LUT .cube importées une fois et réutilisées d'un clip à l'autre ; incrustation sur fond vert. Chacun s'applique aussi sur un masque, pour étalonner un visage ou un ciel plutôt que toute l'image. Waveform, parade RVB, histogramme et vecteurscope pour vérifier le résultat.",
   "depth.keyframes.dt": "Keyframes",
   "depth.keyframes.dd": "Position, échelle, étirement, rotation, opacité et chaque paramètre colorimétrique, avec des presets d'easing ou des poignées de Bézier par segment, sur des pistes de propriété sous le clip.",
   "depth.masks.dt": "Masques et floutage",

@@ -19,6 +19,7 @@ const RANGES: Record<ColorProp, { min: number; max: number }> = {
   tint: { min: -1, max: 1 },
   vignette: { min: 0, max: 1 },
   blur: { min: 0, max: 1 },
+  sharpen: { min: 0, max: 1 },
 };
 
 /** Value of a colour channel at a clip-local time. Absent means identity (0). */
@@ -90,8 +91,9 @@ function LutRow({ clip }: { clip: Clip }) {
 }
 
 /**
- * Colour grading ("Adjust"): brightness, contrast, saturation, white balance and
- * vignette, run through the WebGL colour pass. Shown for video and image clips.
+ * Colour grading ("Adjust"): brightness, contrast, saturation, white balance,
+ * vignette and sharpening, run through the WebGL colour pass. Shown for video and
+ * image clips.
  *
  * Parameters only. The one-tap looks (B&W, Warm, Vintage…) that used to head
  * this section are the library's Effects tab now: the catalogue is where you
@@ -164,7 +166,8 @@ export function ColorSection({ clip }: { clip: Clip }) {
               min < 0 ? `${v > 0 ? '+' : ''}${Math.round(v * 100)}` : `${Math.round(v * 100)}%`
             }
             entry={PERCENT_ENTRY}
-            // Identity for every graded parameter: no lift, no vignette, no blur.
+            // Identity for every graded parameter: no lift, no vignette, no blur,
+            // no sharpening.
             defaultValue={0}
             onChange={(v) => updateClipColorLive(clip.id, key, v, currentTimeMs)}
             keyframe={kf(key, label)}

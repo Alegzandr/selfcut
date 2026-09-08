@@ -63,7 +63,7 @@ vs. what needs a structural investment:
 
 | Domain | Free (existing pass) | Costly (WebGL / WASM) |
 |---|---|---|
-| Video | `ctx.filter`: brightness, contrast, saturate, blur, hue-rotate, grayscale, sepia, invert | temperature/tint, curves, **LUT**, HSL secondary, highlights/shadows, vignette, sharpen |
+| Video | `ctx.filter`: brightness, contrast, saturate, blur, hue-rotate, grayscale, sepia, invert | temperature/tint, curves, **LUT**, HSL secondary, highlights/shadows, vignette, sharpen (all shipped since, on the WebGL pass — the last two, plus masked local grades, in Sept 2026) |
 | Audio | `BiquadFilter` (EQ, hi/lo-pass, "telephone"), `DynamicsCompressor` (VO leveler), `Convolver` (reverb), `Delay` (echo), `WaveShaper` (drive) | constant-duration pitch shift, denoise |
 | Transitions | dissolve (done), dip to black/white, slide/push, wipe, iris | glitch, RGB-split, 3D flip, zoom-blur, morph (also off-brand "toy") |
 

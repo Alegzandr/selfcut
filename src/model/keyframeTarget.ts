@@ -29,6 +29,7 @@ export const COLOR_PROPS: ColorProp[] = [
   'tint',
   'vignette',
   'blur',
+  'sharpen',
 ];
 
 const COLOR_PROP_SET = new Set<string>(COLOR_PROPS);

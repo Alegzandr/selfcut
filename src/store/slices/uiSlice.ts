@@ -98,6 +98,7 @@ export function createUiSlice(
   | 'setRippleAcrossTracks'
   | 'setPreviewTool'
   | 'setSelectedRedactionId'
+  | 'setSelectedLocalAdjustId'
   | 'setPreviewShapeKind'
   | 'setPreviewView'
   | 'resetPreviewView'
@@ -275,6 +276,14 @@ export function createUiSlice(
 
     setSelectedRedactionId: (id) => {
       if (get().selectedRedactionId !== id) set({ selectedRedactionId: id });
+      // One open shape at a time: the pen writes into it and the monitor draws
+      // its handles, and neither can be pointed at two things at once.
+      if (id !== null && get().selectedLocalAdjustId !== null) set({ selectedLocalAdjustId: null });
+    },
+
+    setSelectedLocalAdjustId: (id) => {
+      if (get().selectedLocalAdjustId !== id) set({ selectedLocalAdjustId: id });
+      if (id !== null && get().selectedRedactionId !== null) set({ selectedRedactionId: null });
     },
 
     // Fires on every pointermove of a pan and every wheel notch, so it skips the

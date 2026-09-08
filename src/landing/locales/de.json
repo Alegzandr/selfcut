@@ -45,7 +45,7 @@
   "depth.title": "Wenn der Schnitt danach verlangt",
   "depth.lead": "Nichts davon ist auf dem Bildschirm, solange du es nicht suchst. Es ist da, wenn ein Schnitt mehr braucht als einen Schnitt.",
   "depth.grade.dt": "Farbkorrektur",
-  "depth.grade.dd": "Helligkeit, Kontrast, Sättigung, Weißabgleich, Tönung, Vignette und Unschärfe; Tonwertkurven pro Kanal; .cube-LUTs, einmal importiert und über Clips hinweg wiederverwendet; Chroma Key für den Greenscreen. Waveform, RGB-Parade, Histogramm und Vektorskop zur Kontrolle.",
+  "depth.grade.dd": "Helligkeit, Kontrast, Sättigung, Weißabgleich, Tönung, Vignette, Unschärfe und Schärfe; Tonwertkurven pro Kanal; .cube-LUTs, einmal importiert und über Clips hinweg wiederverwendet; Chroma Key für den Greenscreen. Alles davon läuft auch auf einer Maske, sodass ein Grade auf einem Gesicht oder einem Himmel landet statt auf dem ganzen Bild. Waveform, RGB-Parade, Histogramm und Vektorskop zur Kontrolle.",
   "depth.keyframes.dt": "Keyframes",
   "depth.keyframes.dd": "Position, Skalierung, Dehnung, Rotation, Deckkraft und jeder Farbparameter, mit Easing-Presets oder Bézier-Griffen pro Segment, bearbeitet auf Eigenschaftsspuren unter dem Clip.",
   "depth.masks.dt": "Masken und Verpixeln",

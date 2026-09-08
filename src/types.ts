@@ -317,7 +317,8 @@ export type ColorProp =
   | 'temperature'
   | 'tint'
   | 'vignette'
-  | 'blur';
+  | 'blur'
+  | 'sharpen';
 
 /**
  * Any property a keyframe can sit on. The two unions do not overlap, so a flat
@@ -375,8 +376,8 @@ export interface AudioFx {
  * Colour grading applied to a clip before compositing, run as an isolated WebGL
  * pass (`src/preview/colorPass.ts`). Every field is an animatable `Channel`
  * (keyframable), defaults to the identity (0), and is optional so a project
- * saved before a field existed still loads. `vignette` is 0..1; the rest are
- * roughly -1..1.
+ * saved before a field existed still loads. `vignette` and `sharpen` are 0..1;
+ * the rest are roughly -1..1.
  */
 export interface ClipColor {
   brightness?: Channel;
@@ -389,6 +390,14 @@ export interface ClipColor {
   vignette?: Channel;
   /** Gaussian blur, 0..1 (fraction of the output height), applied when compositing. */
   blur?: Channel;
+  /**
+   * Sharpening, 0..1: a picture-wide grade like the fields above, applied to the
+   * whole clip in the WebGL pass (an unsharp mask - the frame minus its own
+   * one-pixel blur, added back on top of itself). Nothing to do with `mask`. The
+   * counterpart of `blur` and not its inverse: it raises the local contrast a
+   * lens already resolved, it does not recover detail a `blur` threw away.
+   */
+  sharpen?: Channel;
   /**
    * Per-channel tone curves, applied in the WebGL pass AFTER the numeric
    * adjustments above. Absent/identity = the frame passes through. Not
@@ -515,6 +524,40 @@ export interface ClipRedaction extends ClipMask {
    * the setting means the same thing on a face as on a whole wall.
    */
   amount: number;
+  /** Muted without being deleted, to compare with and without. Default on. */
+  disabled?: boolean;
+}
+
+/**
+ * A grade that applies only inside a shape — the clip's own adjustments, on a
+ * mask.
+ *
+ * The premise every editor works from: an effect is either on the whole picture
+ * or on a region of it, and which one it is should not change what the effect
+ * can do. So this carries a full `ClipColor`, the same one `clip.color` carries,
+ * keyframable channel for keyframable channel. Darkening a sky, warming a face,
+ * sharpening the subject and leaving the background alone are all the same
+ * feature as the global grade, pointed at less of the frame.
+ *
+ * Structurally a `ClipMask`, like `ClipRedaction`, so the shape tools, the
+ * feather, the pen path and the motion tracker are the ones already built: a
+ * region follows what it covers because it is the same tracked shape.
+ *
+ * A clip holds a list of them, applied in order over the graded picture, each
+ * one over the result of the last — a warm region and a darkened region that
+ * overlap read as both, which is what stacking them says.
+ */
+export interface ClipLocalAdjust extends ClipMask {
+  /** Stable across edits — the inspector list and the preview overlay key on it. */
+  id: string;
+  /**
+   * The grade inside the shape. Applied ON TOP of the clip's own `color`, over
+   * the already-graded picture, so a region says what it changes rather than
+   * restating the whole grade. `vignette` is left out of the applied set: it is
+   * measured from the frame's centre and would draw the frame's corners inside
+   * the region.
+   */
+  color: ClipColor;
   /** Muted without being deleted, to compare with and without. Default on. */
   disabled?: boolean;
 }
@@ -708,6 +751,13 @@ interface BaseClip {
    * as the clip. Undefined/empty = nothing hidden.
    */
   redactions?: ClipRedaction[];
+  /**
+   * Grades confined to a shape — the same adjustments as `color`, on a mask, one
+   * entry per region. Applied over the clip's own grade and before any
+   * redaction, so hiding a face still wins over a grade that lands on it.
+   * Undefined/empty = the grade is the whole picture's.
+   */
+  localAdjusts?: ClipLocalAdjust[];
   /**
    * How this clip enters over its overlap with the previous clip. Undefined =
    * `dissolve` (the historical cross-dissolve). Only takes effect where an

@@ -1,6 +1,7 @@
 import {
   Clip,
   ClipColor,
+  ClipLocalAdjust,
   MarkerColor,
   ClipCurves,
   ClipMask,
@@ -686,6 +687,61 @@ export interface EditorState {
    */
   selectedRedactionId: string | null;
   setSelectedRedactionId: (id: string | null) => void;
+  /**
+   * Add a local adjustment region to a clip (one undo step) and return its id.
+   * The grade it carries starts empty: the shape is what the user came to place.
+   */
+  addClipLocalAdjust: (clipId: string, adjust: Omit<ClipLocalAdjust, 'id'>) => string;
+  /** Live (uncommitted) edit of one region's shape; the gesture commits it. */
+  setClipLocalAdjust: (
+    clipId: string,
+    adjustId: string,
+    patch: Partial<ClipLocalAdjust>,
+  ) => void;
+  /** Drop a region (one undo step), clearing the selection when it was the open one. */
+  removeClipLocalAdjust: (clipId: string, adjustId: string) => void;
+  /**
+   * Live (uncommitted) edit of one colour parameter INSIDE a region — the
+   * regional twin of `updateClipColorLive`, writing the keyframe under the
+   * playhead once that parameter animates and the constant otherwise.
+   */
+  setClipLocalAdjustColorLive: (
+    clipId: string,
+    adjustId: string,
+    prop: ColorProp,
+    value: number,
+    timelineMs: number,
+  ) => void;
+  /** Add or remove a region's colour keyframe for `prop` at the playhead (one undo step). */
+  toggleClipLocalAdjustColorKeyframe: (
+    clipId: string,
+    adjustId: string,
+    prop: ColorProp,
+    timelineMs: number,
+  ) => void;
+  /** Live (uncommitted) edit of a region's motion channel, like the redaction twin. */
+  setClipLocalAdjustMotionLive: (
+    clipId: string,
+    adjustId: string,
+    prop: MaskMotionProp,
+    value: number,
+    timelineMs: number,
+  ) => void;
+  /** Add or remove a region's motion keyframe for `prop` at the playhead (one undo step). */
+  toggleClipLocalAdjustMotionKeyframe: (
+    clipId: string,
+    adjustId: string,
+    prop: MaskMotionProp,
+    timelineMs: number,
+  ) => void;
+  /**
+   * Which local adjustment the preview overlay edits, exactly like
+   * `selectedRedactionId`. The two are mutually exclusive: opening one closes
+   * the other, because the pen tool and the monitor handles have to know which
+   * single shape "the open one" means.
+   */
+  selectedLocalAdjustId: string | null;
+  setSelectedLocalAdjustId: (id: string | null) => void;
   /**
    * Import a parsed `.cube` LUT into the project (one undo step) and return its
    * new id, so the caller can immediately apply it to the selection.

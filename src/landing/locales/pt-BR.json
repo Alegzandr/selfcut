@@ -45,7 +45,7 @@
   "depth.title": "Quando a edição pede",
   "depth.lead": "Nada disso aparece na tela até você ir atrás. Está lá quando um corte precisa de mais do que um corte.",
   "depth.grade.dt": "Correção de cor",
-  "depth.grade.dd": "Brilho, contraste, saturação, balanço de branco, matiz, vinheta e desfoque; curvas de tom por canal; LUTs .cube importadas uma vez e reaproveitadas entre clipes; chroma key para fundo verde. Waveform, parada RGB, histograma e vetorscópio para conferir o resultado.",
+  "depth.grade.dd": "Brilho, contraste, saturação, balanço de branco, matiz, vinheta, desfoque e nitidez; curvas de tom por canal; LUTs .cube importadas uma vez e reaproveitadas entre clipes; chroma key para fundo verde. Tudo isso funciona também sobre uma máscara, para colorizar um rosto ou um céu em vez da imagem inteira. Waveform, parada RGB, histograma e vetorscópio para conferir o resultado.",
   "depth.keyframes.dt": "Keyframes",
   "depth.keyframes.dd": "Posição, escala, esticamento, rotação, opacidade e cada parâmetro de cor, com presets de easing ou alças Bézier por segmento, editados em trilhas de propriedade sob o clipe.",
   "depth.masks.dt": "Máscaras e desfoque",

@@ -54,7 +54,7 @@ import {
   stretchSnapTargets,
 } from './transformSnap';
 import { MaskPenOverlay } from './MaskPenOverlay';
-import { RedactionOverlay } from './RedactionOverlay';
+import { LocalAdjustOverlay, RedactionOverlay } from './RegionOverlay';
 import { PreviewGuidesOverlay } from './PreviewGuidesOverlay';
 import {
   DEFAULT_SHAPE_FILL,
@@ -1366,6 +1366,7 @@ export function PreviewCanvas() {
         {/* Redaction regions first, the pen over them: while the pen is out it
             owns every click on the stage. */}
         {!croppingClip && !rendering && <RedactionOverlay outW={outW} outH={outH} />}
+        {!croppingClip && !rendering && <LocalAdjustOverlay outW={outW} outH={outH} />}
         {!croppingClip && !rendering && <MaskPenOverlay outW={outW} outH={outH} />}
         <RenderPreviewBadge />
       </div>

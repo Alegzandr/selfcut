@@ -15,7 +15,8 @@ import { appModuleUrl } from './appModule';
  *  - luma uses the SOURCE's matrix (BT.709 for HD), not a hardcoded BT.601;
  *  - white balance is a luma-preserving gain in linear light, not an offset on
  *    the encoded signal (which is what used to tint the shadows);
- *  - the 8-bit write is dithered, so a gradient does not band.
+ *  - the 8-bit write is dithered, so a gradient does not band;
+ *  - the sharpener adds the local detail back and leaves flat areas alone.
  */
 
 const COLOR_MODULE = '/src/preview/colorPass.ts';
@@ -74,6 +75,7 @@ async function gradeSolid(
         temperature: 0,
         tint: 0,
         vignette: 0,
+        sharpen: 0,
         ...adj,
       });
       if (!out) return null;
@@ -184,6 +186,7 @@ test('the vignette darkens toward the corners and leaves the centre alone', asyn
       temperature: 0,
       tint: 0,
       vignette: 1,
+      sharpen: 0,
     });
     if (!out) return null;
     const read = new OffscreenCanvas(W, H);
@@ -241,6 +244,7 @@ test('the 8-bit write is dithered, so a flat ramp does not band', async ({ page 
       temperature: 0,
       tint: 0,
       vignette: 0,
+      sharpen: 0,
     });
     if (!out) return null;
     const read = new OffscreenCanvas(W, H);
@@ -263,4 +267,60 @@ test('the 8-bit write is dithered, so a flat ramp does not band', async ({ page 
   // visible grain.
   expect(result!.levels.length).toBeLessThanOrEqual(3);
   expect(result!.levels[result!.levels.length - 1]! - result!.levels[0]!).toBeLessThanOrEqual(2);
+});
+
+test('sharpening overshoots the edge and leaves the flats alone', async ({ page }) => {
+  const mod = await appModuleUrl(page, COLOR_MODULE);
+  const samples = await page.evaluate(async (url) => {
+    const { gradeFrame } = (await import(url)) as {
+      gradeFrame: (s: unknown, w: number, h: number, adj: unknown) => OffscreenCanvas | null;
+    };
+    const W = 64;
+    const H = 64;
+    const src = new OffscreenCanvas(W, H);
+    const sctx = src.getContext('2d')!;
+    // One vertical step, 100 to 160, at x = 32. Two flats and one edge is the
+    // whole of what an unsharp mask has an opinion about.
+    sctx.fillStyle = 'rgb(100, 100, 100)';
+    sctx.fillRect(0, 0, W, H);
+    sctx.fillStyle = 'rgb(160, 160, 160)';
+    sctx.fillRect(W / 2, 0, W / 2, H);
+    const bitmap = await createImageBitmap(src);
+    const sample = {
+      displayWidth: W,
+      displayHeight: 1080,
+      draw: () => {},
+      toCanvasImageSource: () => bitmap,
+      rotation: 0,
+      colorSpace: null,
+      format: 'RGBA',
+    };
+    const read = (out: OffscreenCanvas) => {
+      const c = new OffscreenCanvas(W, H);
+      const ctx = c.getContext('2d', { willReadFrequently: true })!;
+      ctx.drawImage(out, 0, 0);
+      const at = (x: number) => ctx.getImageData(x, H / 2, 1, 1).data[0]!;
+      return { darkFlat: at(4), darkEdge: at(W / 2 - 1), brightEdge: at(W / 2), brightFlat: at(60) };
+    };
+    const base = { brightness: 0, contrast: 0, saturation: 0, temperature: 0, tint: 0, vignette: 0 };
+    const off = gradeFrame(sample, W, H, { ...base, sharpen: 0 });
+    if (!off) return null;
+    const flat = read(off);
+    const on = gradeFrame(sample, W, H, { ...base, sharpen: 1 });
+    if (!on) return null;
+    return { flat, sharp: read(on) };
+  }, mod);
+
+  expect(samples).not.toBeNull();
+  const { flat, sharp } = samples!;
+
+  // The flats are the picture minus its own blur where there is nothing to
+  // subtract: a sharpener that moves them is changing exposure, not detail.
+  expect(Math.abs(sharp.darkFlat - flat.darkFlat)).toBeLessThanOrEqual(1);
+  expect(Math.abs(sharp.brightFlat - flat.brightFlat)).toBeLessThanOrEqual(1);
+
+  // At the edge the mask overshoots both ways - the halo that IS the effect.
+  // The dark side of a 100/160 step is pulled down and the bright side up.
+  expect(sharp.darkEdge).toBeLessThan(flat.darkEdge - 5);
+  expect(sharp.brightEdge).toBeGreaterThan(flat.brightEdge + 5);
 });

@@ -61,7 +61,8 @@ export const DEFAULT_FX_AMOUNT = 0.5;
 /**
  * One-tap looks. Identical grades to the inspector's filter row, so applying
  * "Vintage" from the library and from the inspector land on the same values.
- * Blur is carried over rather than reset: it reads as focus, not as a look.
+ * Blur and sharpening are carried over rather than reset: they read as focus,
+ * not as a look.
  */
 const LOOKS: { id: string; color: ClipColor }[] = [
   { id: 'bw', color: { saturation: -1 } },
@@ -75,6 +76,7 @@ const LOOKS: { id: string; color: ClipColor }[] = [
 const GRADES: { id: string; color: ClipColor }[] = [
   { id: 'blur', color: { blur: 0.3 } },
   { id: 'vignette', color: { vignette: 0.5 } },
+  { id: 'sharpen', color: { sharpen: 0.5 } },
 ];
 
 export const EFFECTS: EffectPreset[] = [
@@ -84,7 +86,9 @@ export const EFFECTS: EffectPreset[] = [
       group: 'video',
       labelKey: `inspector.filters.${look.id}` as ParseKeys,
       accepts: paintsPicture,
-      patch: (clip) => ({ color: { ...look.color, blur: clip.color?.blur } }),
+      patch: (clip) => ({
+        color: { ...look.color, blur: clip.color?.blur, sharpen: clip.color?.sharpen },
+      }),
     }),
   ),
   ...GRADES.map(

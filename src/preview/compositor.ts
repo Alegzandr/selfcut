@@ -1,4 +1,4 @@
-import { BezierPoint, Clip, ClipMask, ClipRedaction, ClipShape, ClipText, ShapeClip, SolidClip, TextClip, Track, TransitionType } from '../types';
+import { BezierPoint, Clip, ClipLocalAdjust, ClipMask, ClipRedaction, ClipShape, ClipText, ShapeClip, SolidClip, TextClip, Track, TransitionType } from '../types';
 import {
   DEFAULT_TEXT_WIDTH_FRAC,
   DEFAULT_TRANSFORM,
@@ -6,10 +6,13 @@ import {
   clipEnvelopeGainAt,
   clipRotationAt,
   clipZoomAt,
+  activeLocalAdjusts,
   isTextClip,
   resolveBlur,
   resolveColor,
+  resolveLocalAdjustColor,
   resolveMaskMotion,
+  type ResolvedMaskMotion,
   resolveOpacity,
   resolveTransform,
   trackCrossfades,
@@ -673,12 +676,14 @@ interface Scratch {
  * worker), kept at the output size and never reallocated per frame.
  *
  *  - `clip`   holds a single clip drawn in isolation, so a mask can multiply
- *             into its alpha and a redaction can replace part of it without
- *             touching what is composited underneath.
- *  - `redact` holds one obscured region on its way back onto `clip`.
+ *             into its alpha, and a redaction or a local grade can replace part
+ *             of it without touching what is composited underneath.
+ *  - `region` holds one reprocessed region on its way back onto `clip`.
  *
- * Two are needed rather than one: building the obscured copy reads the clip's
- * own pixels while it writes, and a canvas cannot be its own filtered source.
+ * Two are needed rather than one: building the replacement reads the clip's own
+ * pixels while it writes, and a canvas cannot be its own filtered source. One
+ * `region` serves redactions and local grades alike, since each replacement is
+ * finished and copied back before the next one starts.
  */
 const scratches = new Map<string, Scratch>();
 
@@ -981,19 +986,50 @@ function drawMosaic(
 }
 
 /**
+ * Replace a shaped region of a clip's picture with a reprocessed copy of itself,
+ * on a context holding THAT CLIP'S pixels and nothing else.
+ *
+ * `build` paints the replacement into the region scratch, reading the clip's own
+ * pixels off `ctx.canvas`; everything around it is the same four steps whatever
+ * the replacement is. Feather the copy to the shape, punch that same feathered
+ * shape out of the clip, then drop the copy into the hole it left.
+ *
+ * Punching first is what makes the result exact at any opacity - simply laying
+ * the copy over the original would composite the clip twice inside the region,
+ * and a clip fading in would show its regions as denser patches. Because the two
+ * use one feather kernel, the alpha they sum to across the soft edge is the
+ * alpha the clip already had.
+ *
+ * `invert` treats everything EXCEPT the shape (blur the room and keep the face,
+ * darken around the subject), which is the same two steps with the sense of both
+ * flipped.
+ */
+function replaceShapedRegion(
+  ctx: OffscreenCanvasRenderingContext2D,
+  shape: ClipMask,
+  outW: number,
+  outH: number,
+  motion: ResolvedMaskMotion,
+  box: { x: number; y: number; w: number; h: number },
+  scratch: Scratch,
+  build: (target: OffscreenCanvasRenderingContext2D) => void,
+): void {
+  scratch.ctx.save();
+  scratch.ctx.beginPath();
+  scratch.ctx.rect(box.x, box.y, box.w, box.h);
+  scratch.ctx.clip();
+  scratch.ctx.clearRect(box.x, box.y, box.w, box.h);
+  build(scratch.ctx);
+  applyMask(scratch.ctx, shape, outW, outH, motion);
+  scratch.ctx.restore();
+
+  applyMask(ctx, { ...shape, invert: !shape.invert }, outW, outH, motion);
+  ctx.drawImage(scratch.canvas, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h);
+}
+
+/**
  * Obscure a clip's redaction regions, on a context holding THAT CLIP'S pixels
  * and nothing else.
- *
- * Per region: build the obscured copy out of the clip's own pixels, feather it
- * to the shape, punch that same feathered shape out of the clip, then drop the
- * copy into the hole it left. Punching first is what makes the result exact at
- * any opacity - simply laying a blurred copy over the original would composite
- * the clip twice inside the region, and a clip fading in would show its
- * redactions as denser patches. Because the two use one feather kernel, the
- * alpha they sum to across the soft edge is the alpha the clip already had.
- *
- * `invert` obscures everything EXCEPT the shape (blur the room, keep the face),
- * which is the same two steps with the sense of both flipped.
  */
 function applyRedactions(
   ctx: OffscreenCanvasRenderingContext2D,
@@ -1002,7 +1038,7 @@ function applyRedactions(
   outH: number,
   localMs: number,
 ): void {
-  const scratch = getScratch('redact', outW, outH);
+  const scratch = getScratch('region', outW, outH);
   if (!scratch) return;
   for (const redaction of redactions) {
     const motion = resolveMaskMotion(redaction, localMs);
@@ -1011,14 +1047,11 @@ function applyRedactions(
     const started = span();
     const short = Math.min(box.w, box.h);
 
-    scratch.ctx.save();
-    scratch.ctx.beginPath();
-    scratch.ctx.rect(box.x, box.y, box.w, box.h);
-    scratch.ctx.clip();
-    scratch.ctx.clearRect(box.x, box.y, box.w, box.h);
-    if (redaction.mode === 'pixelate') {
-      drawMosaic(scratch.ctx, ctx.canvas, box, redactionCellPx(redaction.amount, short));
-    } else {
+    replaceShapedRegion(ctx, redaction, outW, outH, motion, box, scratch, (target) => {
+      if (redaction.mode === 'pixelate') {
+        drawMosaic(target, ctx.canvas, box, redactionCellPx(redaction.amount, short));
+        return;
+      }
       const radius = redactionBlurRadiusPx(redaction.amount, short);
       // Padded by three sigma, and no more: the blur has to see the neighbours
       // of every pixel it writes or the region darkens towards its own edge,
@@ -1029,17 +1062,99 @@ function applyRedactions(
       const sy = Math.max(0, box.y - pad);
       const sw = Math.min(outW, box.x + box.w + pad) - sx;
       const sh = Math.min(outH, box.y + box.h + pad) - sy;
-      drawBlurred(scratch.ctx, radius, { x: sx, y: sy, w: sw, h: sh }, (target) =>
-        target.drawImage(ctx.canvas, sx, sy, sw, sh, sx, sy, sw, sh),
+      drawBlurred(target, radius, { x: sx, y: sy, w: sw, h: sh }, (inner) =>
+        inner.drawImage(ctx.canvas, sx, sy, sw, sh, sx, sy, sw, sh),
       );
-    }
-    applyMask(scratch.ctx, redaction, outW, outH, motion);
-    scratch.ctx.restore();
-
-    applyMask(ctx, { ...redaction, invert: !redaction.invert }, outW, outH, motion);
-    ctx.drawImage(scratch.canvas, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h);
+    });
     count('redactPx', box.w * box.h);
     endSpan('redact', started);
+  }
+}
+
+/**
+ * The clip's own picture, wrapped as something the colour pass can grade.
+ *
+ * `gradeFrame` was written against decoded footage, and everything it wants from
+ * a frame - a size, a direct texture source, no rotation to honour - a canvas
+ * already is. So a local adjustment re-grades the pixels the clip has ALREADY
+ * been drawn to, rather than running a second pass over the source: the region
+ * then sits on top of the clip's own grade, which is what "adjust this part
+ * further" means, and it works identically for footage, text, solids and shapes
+ * because by that point they are all just pixels.
+ */
+const canvasFrames = new WeakMap<OffscreenCanvas, DrawableFrame>();
+
+function canvasAsFrame(canvas: OffscreenCanvas): DrawableFrame {
+  const cached = canvasFrames.get(canvas);
+  // The scratch canvases are per thread and live for the session, so the wrapper
+  // is built once each rather than per region per frame. Its two size fields
+  // read the canvas live, so a resized scratch does not strand a stale wrapper.
+  if (cached) return cached;
+  const frame = {
+    get displayWidth() {
+      return canvas.width;
+    },
+    get displayHeight() {
+      return canvas.height;
+    },
+    draw: (
+      target: Ctx2D,
+      sx: number,
+      sy: number,
+      sw: number,
+      sh: number,
+      dx: number,
+      dy: number,
+      dw: number,
+      dh: number,
+    ) => target.drawImage(canvas, sx, sy, sw, sh, dx, dy, dw, dh),
+    // Read by `frameTexSource`: hands the canvas straight to the GPU, no copy.
+    toCanvasImageSource: () => canvas,
+  } as DrawableFrame;
+  canvasFrames.set(canvas, frame);
+  return frame;
+}
+
+/**
+ * Grade a clip's local-adjustment regions, on a context holding THAT CLIP'S
+ * pixels and nothing else.
+ *
+ * The whole frame is graded per region, not just the region's box, so every
+ * parameter keeps the meaning it has on the global grade: the sharpener sees the
+ * neighbours of the pixels at the box's edge instead of inventing them, and a
+ * frame-relative parameter still reads the frame. Only the box is copied back,
+ * so what the extra pass costs is GPU fill on a frame already resident, not a
+ * second full-frame composite.
+ */
+function applyLocalAdjusts(
+  ctx: OffscreenCanvasRenderingContext2D,
+  adjusts: ClipLocalAdjust[],
+  outW: number,
+  outH: number,
+  localMs: number,
+): void {
+  const scratch = getScratch('region', outW, outH);
+  if (!scratch) return;
+  for (const adjust of adjusts) {
+    const color = resolveLocalAdjustColor(adjust, localMs);
+    // A region at the identity - freshly added, or keyframed back to nothing -
+    // is not worth a pass, and must not cost one just for existing.
+    if (!color) continue;
+    const motion = resolveMaskMotion(adjust, localMs);
+    const box = maskDirtyRect(adjust, outW, outH, motion);
+    if (box.w <= 0 || box.h <= 0) continue;
+    const started = span();
+    const graded = gradeFrame(canvasAsFrame(ctx.canvas), outW, outH, color);
+    // No WebGL: the region simply does not grade. Skipping the replacement
+    // outright leaves the picture as it was, which is the same degradation the
+    // global grade already falls back to rather than painting something wrong.
+    if (graded) {
+      replaceShapedRegion(ctx, adjust, outW, outH, motion, box, scratch, (target) =>
+        target.drawImage(graded, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h),
+      );
+      count('localAdjustPx', box.w * box.h);
+    }
+    endSpan('localAdjust', started);
   }
 }
 
@@ -1054,11 +1169,11 @@ function activeRedactions(clip: Clip): ClipRedaction[] | null {
  * kind rendering is decided, shared by preview and export. Media clips need a
  * decoded `sample` (null skips them); text and solid clips are self-contained.
  *
- * A clip carrying a `mask` or a `redaction` is rendered to a scratch frame
- * first, the redactions replaced and the mask multiplied into its alpha, then
- * the result composited in one draw — so both work the same for footage, text,
- * solids and shapes, feathered edges blend over the lower tracks, and neither
- * can reach the tracks underneath.
+ * A clip carrying a `mask`, a `redaction` or a local adjustment is rendered to a
+ * scratch frame first, the shaped regions graded and replaced and the mask
+ * multiplied into its alpha, then the result composited in one draw — so all
+ * three work the same for footage, text, solids and shapes, feathered edges
+ * blend over the lower tracks, and none of them can reach the tracks underneath.
  */
 function dispatchClipDraw(
   ctx: Ctx2D,
@@ -1072,17 +1187,19 @@ function dispatchClipDraw(
 ): void {
   const mask = clip.mask;
   const redactions = activeRedactions(clip);
-  const scratch = mask || redactions ? getScratch('clip', outW, outH) : null;
-  if (scratch && (mask || redactions)) {
+  const adjusts = activeLocalAdjusts(clip.localAdjusts);
+  const shaped = mask || redactions || adjusts;
+  const scratch = shaped ? getScratch('clip', outW, outH) : null;
+  if (scratch && shaped) {
     const started = span();
     const localMs = timelineMs - clip.timelineStartMs;
     const motion = mask ? resolveMaskMotion(mask, localMs) : null;
     // Everything outside the mask ends up at alpha 0, so the clear, the draw,
     // the matte composite and the copy-back all restrict to this box. A small
     // mask on a 4K frame used to pay for the full 4K on every one of those four.
-    // A clip that is only redacted still shows everywhere, so it has no such box
-    // to win: it pays one full-frame round-trip, which is the price of keeping
-    // the blur off whatever is composited underneath.
+    // A clip that is only redacted or locally graded still shows everywhere, so
+    // it has no such box to win: it pays one full-frame round-trip, which is the
+    // price of keeping those effects off whatever is composited underneath.
     const dirty = mask && motion ? maskDirtyRect(mask, outW, outH, motion) : { x: 0, y: 0, w: outW, h: outH };
     if (dirty.w <= 0 || dirty.h <= 0) {
       endSpan('mask', started);
@@ -1095,8 +1212,12 @@ function dispatchClipDraw(
     scratch.ctx.clip();
     scratch.ctx.clearRect(dirty.x, dirty.y, dirty.w, dirty.h);
     dispatchClipDrawRaw(scratch.ctx, clip, outW, outH, timelineMs, alphaMul, xfadeInMs, sample);
-    // Before the mask: a region the mask cuts away has nothing left to hide, and
-    // a redaction must never blur the matte's own soft edge into the frame.
+    // Grades first, then what hides: a redaction is the last word on what can be
+    // read off the frame, and a local grade laid over a blurred face would be
+    // grading the blur. Both run before the mask - a region the mask cuts away
+    // has nothing left to adjust or hide, and neither may reach the matte's own
+    // soft edge and drag it into the frame.
+    if (adjusts) applyLocalAdjusts(scratch.ctx, adjusts, outW, outH, localMs);
     if (redactions) applyRedactions(scratch.ctx, redactions, outW, outH, localMs);
     if (mask && motion) applyMask(scratch.ctx, mask, outW, outH, motion);
     scratch.ctx.restore();

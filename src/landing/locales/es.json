@@ -45,7 +45,7 @@
   "depth.title": "Cuando la edición lo pide",
   "depth.lead": "Nada de esto aparece en pantalla hasta que vas a buscarlo. Está ahí cuando un corte necesita algo más que un corte.",
   "depth.grade.dt": "Etalonaje",
-  "depth.grade.dd": "Brillo, contraste, saturación, balance de blancos, tinte, viñeteado y desenfoque; curvas de tono por canal; LUT .cube importadas una vez y reutilizadas de un clip a otro; croma para fondo verde. Waveform, desfile RGB, histograma y vectorscopio para comprobar el resultado.",
+  "depth.grade.dd": "Brillo, contraste, saturación, balance de blancos, tinte, viñeteado, desenfoque y nitidez; curvas de tono por canal; LUT .cube importadas una vez y reutilizadas de un clip a otro; croma para fondo verde. Todo ello funciona también sobre una máscara, para etalonar un rostro o un cielo en vez de toda la imagen. Waveform, desfile RGB, histograma y vectorscopio para comprobar el resultado.",
   "depth.keyframes.dt": "Fotogramas clave",
   "depth.keyframes.dd": "Posición, escala, estiramiento, rotación, opacidad y cada parámetro de color, con presets de easing o manejadores Bézier por segmento, editados en carriles de propiedad bajo el clip.",
   "depth.masks.dt": "Máscaras y difuminado",

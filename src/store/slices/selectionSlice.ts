@@ -41,6 +41,7 @@ export function createSelectionSlice(
         // mode, and whichever redaction region the preview was editing.
         cropEditing: false,
         selectedRedactionId: null,
+        selectedLocalAdjustId: null,
         ...(ids.length === 0 ? { inspectorOpen: false } : {}),
       });
     },
@@ -62,6 +63,7 @@ export function createSelectionSlice(
         selectedClipId: ids[ids.length - 1] ?? null,
         cropEditing: false,
         selectedRedactionId: null,
+        selectedLocalAdjustId: null,
         ...(ids.length === 0 ? { inspectorOpen: false } : {}),
       });
     },
@@ -85,6 +87,7 @@ export function createSelectionSlice(
         selectedClipId: ids[ids.length - 1] ?? null,
         cropEditing: false,
         selectedRedactionId: null,
+        selectedLocalAdjustId: null,
         ...(ids.length === 0 ? { inspectorOpen: false } : {}),
       });
     },
@@ -122,6 +125,7 @@ export function createSelectionSlice(
         selectedClipId: ids.includes(targetId) ? targetId : (ids[ids.length - 1] ?? null),
         cropEditing: false,
         selectedRedactionId: null,
+        selectedLocalAdjustId: null,
       });
     },
   };

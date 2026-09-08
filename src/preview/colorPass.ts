@@ -43,6 +43,9 @@ uniform sampler2D tex;
 uniform sampler3D uLut;
 uniform sampler2D uCurve;
 uniform float uBright, uContrast, uSat, uTemp, uTint, uVignette, uLutAmount, uLutSize, uCurveOn;
+uniform float uSharpen;
+// One texel of the source frame, in uv - the unsharp mask's whole sense of scale.
+uniform vec2 uTexel;
 uniform float uKeyOn, uKeySim, uKeySmooth, uKeySpill;
 uniform vec3 uKeyColor;
 // Luma coefficients of the SOURCE, not a constant: BT.709 for HD and up,
@@ -104,6 +107,11 @@ vec3 fromLinear(vec3 c) {
   return linearToSrgb(c);
 }
 
+// Amount the sharpen slider reaches at 1. A one-pixel radius carries little
+// detail, so a gain of 1 is barely visible; past ~2 the halo on a hard edge
+// stops reading as sharpness and starts reading as an outline.
+const float SHARPEN_GAIN = 1.5;
+
 // Interleaved gradient noise: a screen-space ordered dither with no texture and
 // no visible pattern. Scaled to half a code value, it turns the banding a
 // gentle gradient shows at 8 bits into a noise floor below the eye's threshold.
@@ -135,6 +143,27 @@ void main() {
       float m = max(rgb.r, rgb.b);
       rgb.g = mix(rgb.g, min(rgb.g, m), uKeySpill);
     }
+  }
+  // Unsharp mask: a picture minus its own small blur is the local detail, and
+  // adding a multiple of that back is what every sharpener does. The blur is four
+  // bilinear taps placed on the texel's corners - each one is already the average
+  // of the 2x2 it sits between, so the four together weight the neighbourhood
+  // 1-2-1 (the 3x3 gaussian) for four fetches instead of nine.
+  //
+  // It runs after the key and before the LUT. After, because a matte cut from a
+  // sharpened green screen keys the halo along the subject's edge as foreground
+  // and leaves a lit fringe; before, because the grade should map the picture the
+  // sharpener produced, the way it maps everything else the source hands it.
+  if (uSharpen > 0.0) {
+    vec2 h = uTexel * 0.5;
+    vec3 lo = 0.25 * (texture(tex, uv + vec2( h.x,  h.y)).rgb
+                    + texture(tex, uv + vec2( h.x, -h.y)).rgb
+                    + texture(tex, uv + vec2(-h.x,  h.y)).rgb
+                    + texture(tex, uv + vec2(-h.x, -h.y)).rgb);
+    // Clamped here rather than at the end: the overshoot a hard edge produces is
+    // the halo, and letting it ride out of range through the LUT fetch and the
+    // curve lookup would clip it somewhere those two cannot see it coming.
+    rgb = clamp(rgb + uSharpen * SHARPEN_GAIN * (c.rgb - lo), 0.0, 1.0);
   }
   // LUT first: the technical LOG->Rec.709 transform (or a creative grade) maps
   // the raw frame, then the sliders tune the mapped result. The half-texel
@@ -196,6 +225,8 @@ interface Uniforms {
   uTemp: WebGLUniformLocation | null;
   uTint: WebGLUniformLocation | null;
   uVignette: WebGLUniformLocation | null;
+  uSharpen: WebGLUniformLocation | null;
+  uTexel: WebGLUniformLocation | null;
   uLutAmount: WebGLUniformLocation | null;
   uLutSize: WebGLUniformLocation | null;
   uCurveOn: WebGLUniformLocation | null;
@@ -303,6 +334,8 @@ class ColorGrader {
       uTemp: gl.getUniformLocation(program, 'uTemp'),
       uTint: gl.getUniformLocation(program, 'uTint'),
       uVignette: gl.getUniformLocation(program, 'uVignette'),
+      uSharpen: gl.getUniformLocation(program, 'uSharpen'),
+      uTexel: gl.getUniformLocation(program, 'uTexel'),
       uLutAmount: gl.getUniformLocation(program, 'uLutAmount'),
       uLutSize: gl.getUniformLocation(program, 'uLutSize'),
       uCurveOn: gl.getUniformLocation(program, 'uCurveOn'),
@@ -485,6 +518,11 @@ class ColorGrader {
     gl.uniform1f(this.uniforms.uTemp, adj.temperature);
     gl.uniform1f(this.uniforms.uTint, adj.tint);
     gl.uniform1f(this.uniforms.uVignette, adj.vignette);
+    // The frame is uploaded at its own size and the canvas resized to match, so
+    // one texel is one output pixel and the mask's radius is the pixel it is
+    // named for - not a fraction of whatever the preview happens to be scaled to.
+    gl.uniform1f(this.uniforms.uSharpen, adj.sharpen);
+    gl.uniform2f(this.uniforms.uTexel, 1 / w, 1 / h);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return this.canvas;
   }

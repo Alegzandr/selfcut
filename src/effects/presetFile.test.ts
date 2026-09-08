@@ -120,7 +120,7 @@ describe('parsePresetFile envelope', () => {
 
 describe('sanitizeLook', () => {
   it('drops an unknown colour key and keeps its siblings', () => {
-    const look = pf.sanitizeLook({ color: { brightness: 0.2, sharpen: 0.9 } });
+    const look = pf.sanitizeLook({ color: { brightness: 0.2, gamma: 0.9 } });
     expect(look.color).toEqual({ brightness: 0.2 });
   });
 

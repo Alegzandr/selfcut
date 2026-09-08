@@ -42,6 +42,7 @@ export function razorClip(clip: Clip, atMs: number, relink: Map<string, string>)
   if (left.color) clip.color = left.color;
   if (left.mask) clip.mask = left.mask;
   if (left.redactions) clip.redactions = left.redactions;
+  if (left.localAdjusts) clip.localAdjusts = left.localAdjusts;
   if (clip.linkId) {
     let nextLink = relink.get(clip.linkId);
     if (!nextLink) {

@@ -4,8 +4,10 @@ import {
   AspectRatio,
   Clip,
   ClipAnimation,
+  Channel,
   ClipColor,
   ClipCurves,
+  ClipLocalAdjust,
   ClipTransform,
   MaskMotion,
   MaskMotionProp,
@@ -176,6 +178,13 @@ export function createClipsSlice(
   | 'removeClipRedaction'
   | 'setClipRedactionMotionLive'
   | 'toggleClipRedactionMotionKeyframe'
+  | 'addClipLocalAdjust'
+  | 'setClipLocalAdjust'
+  | 'removeClipLocalAdjust'
+  | 'setClipLocalAdjustColorLive'
+  | 'toggleClipLocalAdjustColorKeyframe'
+  | 'setClipLocalAdjustMotionLive'
+  | 'toggleClipLocalAdjustMotionKeyframe'
   | 'toggleClipKeyframe'
   | 'moveClipKeyframes'
   | 'setClipKeyframesEase'
@@ -218,6 +227,31 @@ export function createClipsSlice(
   const spansPlayhead = (clip: Clip, timelineMs: number) => {
     const local = timelineMs - clip.timelineStartMs;
     return local >= 0 && local <= clipDurationMs(clip);
+  };
+
+  /**
+   * One local-adjustment region, patched in place on a copy of its clip.
+   *
+   * Every regional edit is the same three steps - find the region by id, work
+   * out the fields that change, rebuild the list around it - and each of them
+   * has a reason to bail out halfway (no such region, a playhead outside the
+   * clip). Returning null from `edit` is that bail-out, and it leaves the clip
+   * reference-equal so the store's subscribers see nothing happened.
+   */
+  const patchAdjust = (
+    c: Clip,
+    adjustId: string,
+    edit: (target: ClipLocalAdjust) => Partial<ClipLocalAdjust> | null,
+  ): Clip => {
+    const list = c.localAdjusts;
+    const target = list?.find((a) => a.id === adjustId);
+    if (!list || !target) return c;
+    const patch = edit(target);
+    if (!patch) return c;
+    return {
+      ...c,
+      localAdjusts: list.map((a) => (a.id === adjustId ? { ...a, ...patch } : a)),
+    } as Clip;
   };
 
   /**
@@ -830,6 +864,143 @@ export function createClipsSlice(
           motion[prop] = setKeyframe([], local, typeof ch === 'number' ? ch : identity[prop]);
         }
         clip.redactions = list.map((r) => (r.id === redactionId ? { ...r, motion } : r));
+      });
+    },
+
+    addClipLocalAdjust: (clipId, adjust) => {
+      const id = uid();
+      withHistory((p) => {
+        const clip = findClip(p, clipId)?.clip;
+        if (!clip) return;
+        // Appended, and applied in list order: a region added later grades the
+        // result of the ones before it, which is what the list is showing.
+        clip.localAdjusts = [...(clip.localAdjusts ?? []), { ...adjust, id }];
+      });
+      return id;
+    },
+
+    /**
+     * Aimed at one region on one clip, never spread across the selection —
+     * region ids are per clip, so "the same region" does not exist elsewhere to
+     * apply the edit to. Same rule as `setClipRedaction`.
+     */
+    setClipLocalAdjust: (clipId, adjustId, patch) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([[clipId, (c: Clip): Clip => patchAdjust(c, adjustId, () => patch)]]),
+        ),
+      }),
+
+    removeClipLocalAdjust: (clipId, adjustId) => {
+      withHistory((p) => {
+        const clip = findClip(p, clipId)?.clip;
+        if (!clip?.localAdjusts) return;
+        const left = clip.localAdjusts.filter((a) => a.id !== adjustId);
+        // Dropped entirely rather than left as `[]`, so a clip that no longer
+        // has regions stops going through the scratch path for nothing.
+        clip.localAdjusts = left.length ? left : undefined;
+      });
+      if (get().selectedLocalAdjustId === adjustId) set({ selectedLocalAdjustId: null });
+    },
+
+    setClipLocalAdjustColorLive: (clipId, adjustId, prop, value, timelineMs) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([
+            [
+              clipId,
+              (c: Clip): Clip =>
+                patchAdjust(c, adjustId, (target) => {
+                  const ch = target.color[prop];
+                  // Same rule as the clip's own colour sliders: once the
+                  // parameter animates, a drag writes the key under the playhead
+                  // rather than a constant that would wipe the animation.
+                  if (Array.isArray(ch) && ch.length) {
+                    if (!spansPlayhead(c, timelineMs)) return null;
+                    return {
+                      color: {
+                        ...target.color,
+                        [prop]: setKeyframe(ch, timelineMs - c.timelineStartMs, value),
+                      },
+                    };
+                  }
+                  return { color: { ...target.color, [prop]: value } };
+                }),
+            ],
+          ]),
+        ),
+      }),
+
+    toggleClipLocalAdjustColorKeyframe: (clipId, adjustId, prop, timelineMs) => {
+      withHistory((p) => {
+        const clip = findClip(p, clipId)?.clip;
+        const list = clip?.localAdjusts;
+        const target = list?.find((a) => a.id === adjustId);
+        if (!clip || !list || !target || !spansPlayhead(clip, timelineMs)) return;
+        const local = timelineMs - clip.timelineStartMs;
+        const ch = target.color[prop];
+        let next: Channel;
+        if (Array.isArray(ch) && ch.length) {
+          // A key on the playhead is removed; otherwise one is added holding the
+          // value the parameter currently shows, so toggling never makes the
+          // region jump.
+          next = ch.some((k) => Math.abs(k.t - local) < 1)
+            ? removeKeyframe(ch, local)
+            : setKeyframe(ch, local, sampleChannel(ch, local));
+        } else {
+          // Every colour parameter is identity at 0, which is also its absent value.
+          next = setKeyframe([], local, typeof ch === 'number' ? ch : 0);
+        }
+        clip.localAdjusts = list.map((a) =>
+          a.id === adjustId ? { ...a, color: { ...a.color, [prop]: next } } : a,
+        );
+      });
+    },
+
+    setClipLocalAdjustMotionLive: (clipId, adjustId, prop, value, timelineMs) =>
+      set({
+        project: patchClips(
+          get().project,
+          new Map([
+            [
+              clipId,
+              (c: Clip): Clip =>
+                patchAdjust(c, adjustId, (target) => {
+                  const motion: MaskMotion = { ...(target.motion ?? {}) };
+                  const ch = motion[prop];
+                  if (Array.isArray(ch) && ch.length) {
+                    if (!spansPlayhead(c, timelineMs)) return null;
+                    motion[prop] = setKeyframe(ch, timelineMs - c.timelineStartMs, value);
+                  } else {
+                    motion[prop] = value;
+                  }
+                  return { motion };
+                }),
+            ],
+          ]),
+        ),
+      }),
+
+    toggleClipLocalAdjustMotionKeyframe: (clipId, adjustId, prop, timelineMs) => {
+      withHistory((p) => {
+        const clip = findClip(p, clipId)?.clip;
+        const list = clip?.localAdjusts;
+        const target = list?.find((a) => a.id === adjustId);
+        if (!clip || !list || !target || !spansPlayhead(clip, timelineMs)) return;
+        const local = timelineMs - clip.timelineStartMs;
+        const identity: Record<MaskMotionProp, number> = { tx: 0, ty: 0, scale: 1, rotation: 0 };
+        const motion: MaskMotion = { ...(target.motion ?? {}) };
+        const ch = motion[prop];
+        if (Array.isArray(ch) && ch.length) {
+          motion[prop] = ch.some((k) => Math.abs(k.t - local) < 1)
+            ? removeKeyframe(ch, local)
+            : setKeyframe(ch, local, sampleChannel(ch, local));
+        } else {
+          motion[prop] = setKeyframe([], local, typeof ch === 'number' ? ch : identity[prop]);
+        }
+        clip.localAdjusts = list.map((a) => (a.id === adjustId ? { ...a, motion } : a));
       });
     },
 

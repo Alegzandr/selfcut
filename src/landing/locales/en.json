@@ -45,7 +45,7 @@
   "depth.title": "When the edit asks for it",
   "depth.lead": "None of this is on screen until you go looking for it. It is there when a cut needs more than a cut.",
   "depth.grade.dt": "Grading",
-  "depth.grade.dd": "Brightness, contrast, saturation, white balance, tint, vignette and blur; per-channel tone curves; .cube LUTs imported once and reused across clips; chroma key for a green screen. Waveform, RGB parade, histogram and vectorscope to check the result.",
+  "depth.grade.dd": "Brightness, contrast, saturation, white balance, tint, vignette, blur and sharpening; per-channel tone curves; .cube LUTs imported once and reused across clips; chroma key for a green screen. Every one of them also runs on a mask, so a grade can land on a face or a sky rather than the whole frame. Waveform, RGB parade, histogram and vectorscope to check the result.",
   "depth.keyframes.dt": "Keyframes",
   "depth.keyframes.dd": "Position, scale, stretch, rotation, opacity and every colour parameter, with easing presets or per-segment Bézier handles, edited on property lanes under the clip.",
   "depth.masks.dt": "Masks and blurring",

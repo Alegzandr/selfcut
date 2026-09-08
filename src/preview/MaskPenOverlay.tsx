@@ -53,11 +53,14 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
   const editing = useRef<EditTarget | null>(null);
 
   const drawing = previewTool === 'pen';
-  // Whichever shape the pen is aimed at: the open redaction region wins over the
-  // clip mask, since opening one is how the user said which shape they mean.
+  // Whichever shape the pen is aimed at: an open region wins over the clip mask,
+  // since opening one is how the user said which shape they mean. The two region
+  // families are mutually exclusive in the store, so at most one is open here.
   const redactionId = useStore((s) => s.selectedRedactionId);
+  const adjustId = useStore((s) => s.selectedLocalAdjustId);
   const region = selected?.redactions?.find((r) => r.id === redactionId);
-  const target: ClipMask | undefined = region ?? selected?.mask;
+  const adjust = selected?.localAdjusts?.find((a) => a.id === adjustId);
+  const target: ClipMask | undefined = region ?? adjust ?? selected?.mask;
   const pathShape = target?.shape === 'path' ? target : undefined;
   const editable = !drawing && !!pathShape && previewTool === 'select';
 
@@ -73,13 +76,15 @@ export function MaskPenOverlay({ outW, outH }: { outW: number; outH: number }) {
     Math.hypot((a.x - b.x) * outW, (a.y - b.y) * outH) / outW;
 
   /**
-   * Send the drawn shape where it belongs. A redaction keeps everything the pen
-   * has no opinion about (its mode, its strength) because the patch merges.
+   * Send the drawn shape where it belongs. A region keeps everything the pen has
+   * no opinion about (a redaction's mode and strength, an adjustment's whole
+   * grade) because the patch merges.
    */
   const write = (shape: ClipMask) => {
     if (!selected) return;
     const st = useStore.getState();
     if (region) st.setClipRedaction(selected.id, region.id, shape);
+    else if (adjust) st.setClipLocalAdjust(selected.id, adjust.id, shape);
     else st.setClipMask(selected.id, shape);
   };
 

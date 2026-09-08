@@ -90,7 +90,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         'clip.duplicate',
         '---',
         'clip.split',
-        ...(picture ? ['clip.punchIn', 'clip.stream', 'clip.blurRegion'] : []),
+        ...(picture ? ['clip.punchIn', 'clip.stream', 'clip.blurRegion', 'clip.maskedFx'] : []),
         'clip.captions',
         'clip.adjust',
         // Link when the selection joins into a pair; unlink on an already-linked clip.

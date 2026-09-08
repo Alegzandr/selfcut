@@ -32,6 +32,7 @@ import {
   LoopIcon,
   MagicWandIcon,
   MagnifyingGlassIcon,
+  MaskOnIcon,
   MixerHorizontalIcon,
   PinLeftIcon,
   PlayIcon,
@@ -56,7 +57,7 @@ import {
   ZoomOutIcon,
 } from '@radix-ui/react-icons';
 import { useStore, getSelectedClip, getSelectedTrackKind, getLinkTargets } from '../store/store';
-import { defaultRedaction, isTextClip, sortedMarkers } from '../model';
+import { defaultLocalAdjust, defaultRedaction, isTextClip, sortedMarkers } from '../model';
 import type { LibraryTab } from '../store/editorState';
 import { useImport } from './useImport';
 import { openMediaPicker, openSubtitlePicker } from './mediaPicker';
@@ -289,6 +290,22 @@ export function useEditorCommands(): Record<string, Command> {
         if (!selectedId) return;
         const id = st().addClipRedaction(selectedId, defaultRedaction());
         st().setSelectedRedactionId(id);
+        st().setInspectorOpen(true);
+      },
+    },
+    // The same grade the inspector's Adjust sliders write, on a mask. Opened
+    // straight away for the same reason the blur region is: an empty region on
+    // an unopened panel is a feature nobody finds twice.
+    {
+      id: 'clip.maskedFx',
+      labelKey: 'menu.clip.maskedFx',
+      hintKey: 'menu.clip.maskedFx.hint',
+      icon: MaskOnIcon,
+      disabled: !canRedact,
+      onClick: () => {
+        if (!selectedId) return;
+        const id = st().addClipLocalAdjust(selectedId, defaultLocalAdjust());
+        st().setSelectedLocalAdjustId(id);
         st().setInspectorOpen(true);
       },
     },

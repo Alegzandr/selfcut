@@ -1,31 +1,25 @@
 import { useTranslation } from 'react-i18next';
 import type { ParseKeys } from 'i18next';
-import {
-  EyeClosedIcon,
-  EyeOpenIcon,
-  PlusIcon,
-  TrashIcon,
-} from '@radix-ui/react-icons';
+import { EyeClosedIcon, EyeOpenIcon, PlusIcon, TrashIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../store/store';
-import { Clip, ClipRedaction, RedactionMode } from '../../types';
-import { defaultRedaction } from '../../model';
-import { PERCENT_ENTRY, SliderRow } from '../SliderRow';
+import { Clip, ClipLocalAdjust, ColorProp } from '../../types';
+import { LOCAL_ADJUST_PROPS, defaultLocalAdjust, sampleChannel } from '../../model';
+import { PERCENT_ENTRY, SliderRow, type KeyframeControl } from '../SliderRow';
 import { MaskMotionControls } from './MaskMotionControls';
 
 /**
- * Redaction regions: the blur-this-face tool.
+ * Local adjustments: the Adjust sliders, on a mask.
  *
- * A list rather than a single control, because one shot routinely has several
- * things to hide and each of them moves on its own. Only the region being
- * worked on opens its controls — a stack of four fully-expanded shape editors is
- * unreadable, and the preview is where the placing actually happens anyway.
+ * The whole point of the section is that it is not a different feature. A region
+ * carries the same parameters as the clip's own grade, keyframable the same way,
+ * on a shape with the same tools and the same motion tracker — so "darken the
+ * sky", "warm the face" and "sharpen the subject only" are the grade you already
+ * know, pointed at less of the frame.
  *
- * Unlike the mask above, a region hides in place: the clip stays whole, nothing
- * behind it is touched, and there is no duplicate on a track above to keep in
- * sync when the cut changes.
+ * A list, like redactions, and for the same reason: a shot routinely wants two
+ * of these, and each moves on its own. Only the region being worked on opens its
+ * controls; the preview is where the placing actually happens.
  */
-
-const MODES: RedactionMode[] = ['blur', 'pixelate'];
 
 /**
  * The box sliders, for the placement the preview drag cannot do: a keyboard, and
@@ -38,52 +32,128 @@ const BOX_AXES: { prop: 'x' | 'y' | 'w' | 'h'; labelKey: ParseKeys; min: number 
   { prop: 'h', labelKey: 'inspector.mask.height', min: 0.02 },
 ];
 
-/** What a fresh region carries: where a double-clicked slider lands back on. */
-const REGION_DEFAULTS = defaultRedaction();
+/** Slider range of each parameter a region applies. Mirrors the global grade's. */
+const RANGES: Record<string, { min: number; max: number }> = {
+  brightness: { min: -1, max: 1 },
+  contrast: { min: -1, max: 1 },
+  saturation: { min: -1, max: 1 },
+  temperature: { min: -1, max: 1 },
+  tint: { min: -1, max: 1 },
+  sharpen: { min: 0, max: 1 },
+};
 
-export function RedactionSection({ clip }: { clip: Clip }) {
+/** What a fresh region carries: where a double-clicked slider lands back on. */
+const REGION_DEFAULTS = defaultLocalAdjust();
+
+/** Two keyframe times within this many ms count as sitting on the same playhead. */
+const ON_KEY_EPSILON_MS = 1;
+
+/** The grade sliders of one region, each with its own keyframe diamond. */
+function AdjustParams({ clip, adjust }: { clip: Clip; adjust: ClipLocalAdjust }) {
   const { t } = useTranslation();
-  const regions = clip.redactions ?? [];
-  const selectedId = useStore((s) => s.selectedRedactionId);
+  // Subscribed so the sliders track the value at the playhead as it moves: an
+  // animated parameter reads its sampled value, not a stale constant.
   const currentTimeMs = useStore((s) => s.currentTimeMs);
-  const active = regions.find((r) => r.id === selectedId) ?? null;
+  const local = currentTimeMs - clip.timelineStartMs;
+
+  const kf = (prop: ColorProp, label: string): KeyframeControl => {
+    const ch = adjust.color[prop];
+    const keys = Array.isArray(ch) ? ch : undefined;
+    return {
+      animated: !!keys,
+      onKey: (keys ?? []).some((k) => Math.abs(k.t - local) < ON_KEY_EPSILON_MS),
+      onToggle: () =>
+        useStore
+          .getState()
+          .toggleClipLocalAdjustColorKeyframe(clip.id, adjust.id, prop, currentTimeMs),
+      label: `${t('inspector.keyframe')} · ${label}`,
+    };
+  };
+
+  return (
+    <div className="space-y-2 border-t border-zinc-800/70 pt-2">
+      <h4 className="text-2xs font-semibold uppercase tracking-wide text-zinc-600">
+        {t('inspector.adjust')}
+      </h4>
+      {LOCAL_ADJUST_PROPS.map((prop) => {
+        const { min, max } = RANGES[prop]!;
+        const label = t(`inspector.adjust.${prop}` as ParseKeys);
+        const ch = adjust.color[prop];
+        return (
+          <SliderRow
+            key={prop}
+            label={label}
+            value={ch === undefined ? 0 : sampleChannel(ch, local)}
+            min={min}
+            max={max}
+            step={0.01}
+            format={(v) =>
+              min < 0 ? `${v > 0 ? '+' : ''}${Math.round(v * 100)}` : `${Math.round(v * 100)}%`
+            }
+            entry={PERCENT_ENTRY}
+            // Identity for every graded parameter: the region changes nothing.
+            defaultValue={0}
+            onChange={(v) =>
+              useStore
+                .getState()
+                .setClipLocalAdjustColorLive(clip.id, adjust.id, prop, v, currentTimeMs)
+            }
+            keyframe={kf(prop, label)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+export function LocalAdjustSection({ clip }: { clip: Clip }) {
+  const { t } = useTranslation();
+  const regions = clip.localAdjusts ?? [];
+  const selectedId = useStore((s) => s.selectedLocalAdjustId);
+  const currentTimeMs = useStore((s) => s.currentTimeMs);
+  const active = regions.find((a) => a.id === selectedId) ?? null;
 
   const add = () => {
     const st = useStore.getState();
-    const id = st.addClipRedaction(clip.id, defaultRedaction());
-    st.setSelectedRedactionId(id);
+    const id = st.addClipLocalAdjust(clip.id, defaultLocalAdjust());
+    st.setSelectedLocalAdjustId(id);
   };
 
   /** Live edit of the open region — the slider gesture commits the undo step. */
-  const set = (patch: Partial<ClipRedaction>) => {
-    if (active) useStore.getState().setClipRedaction(clip.id, active.id, patch);
+  const set = (patch: Partial<ClipLocalAdjust>) => {
+    if (active) useStore.getState().setClipLocalAdjust(clip.id, active.id, patch);
   };
 
-  const commit = (patch: Partial<ClipRedaction>) => {
+  const commit = (patch: Partial<ClipLocalAdjust>) => {
     const st = useStore.getState();
     st.beginGesture();
-    if (active) st.setClipRedaction(clip.id, active.id, patch);
+    if (active) st.setClipLocalAdjust(clip.id, active.id, patch);
     st.endGesture();
   };
 
   return (
-    <div className="space-y-3 border-t border-zinc-800 pt-3">
+    // Named for the e2e that drives it: both this section and the clip's own
+    // Adjust panel render a slider called "Brightness", so a spec asserting on
+    // the regional one has to be able to say which panel it means.
+    <div data-local-adjusts className="space-y-3 border-t border-zinc-800 pt-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          {t('inspector.redaction')}
+          {t('inspector.localAdjust')}
         </h3>
         <button
           type="button"
           onClick={add}
-          aria-label={t('inspector.redaction.add.aria')}
+          aria-label={t('inspector.localAdjust.add.aria')}
           className="touch-hit flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-1 text-2xs font-medium text-zinc-200 hover:bg-zinc-700/70 active:bg-zinc-700"
         >
           <PlusIcon className="h-3 w-3" />
-          {t('inspector.redaction.add')}
+          {t('inspector.localAdjust.add')}
         </button>
       </div>
 
-      {regions.length === 0 && <p className="text-2xs text-zinc-600">{t('inspector.redaction.empty')}</p>}
+      {regions.length === 0 && (
+        <p className="text-2xs text-zinc-600">{t('inspector.localAdjust.empty')}</p>
+      )}
 
       {regions.map((region, i) => {
         const open = region.id === selectedId;
@@ -91,28 +161,35 @@ export function RedactionSection({ clip }: { clip: Clip }) {
           <div
             key={region.id}
             className={`space-y-2 rounded-md border px-2 py-1.5 ${
-              open ? 'border-brand-600/50 bg-brand-700/15' : 'border-zinc-800 bg-zinc-900/40'
+              open ? 'border-amber-600/50 bg-amber-700/15' : 'border-zinc-800 bg-zinc-900/40'
             }`}
           >
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 aria-pressed={open}
-                onClick={() => useStore.getState().setSelectedRedactionId(open ? null : region.id)}
+                onClick={() =>
+                  useStore.getState().setSelectedLocalAdjustId(open ? null : region.id)
+                }
                 className={`touch-hit min-w-0 flex-1 truncate text-left text-xs ${
-                  region.disabled ? 'text-zinc-600 line-through' : open ? 'text-blue-300' : 'text-zinc-300'
+                  region.disabled
+                    ? 'text-zinc-600 line-through'
+                    : open
+                      ? 'text-amber-300'
+                      : 'text-zinc-300'
                 }`}
               >
-                {t('inspector.redaction.region', { n: i + 1 })} ·{' '}
-                <span className="text-zinc-500">{t(`inspector.redaction.mode.${region.mode}`)}</span>
+                {t('inspector.localAdjust.region', { n: i + 1 })}
               </button>
               <button
                 type="button"
                 onClick={() =>
-                  useStore.getState().setClipRedaction(clip.id, region.id, { disabled: !region.disabled })
+                  useStore
+                    .getState()
+                    .setClipLocalAdjust(clip.id, region.id, { disabled: !region.disabled })
                 }
-                title={t('inspector.redaction.toggle')}
-                aria-label={t('inspector.redaction.toggle')}
+                title={t('inspector.localAdjust.toggle')}
+                aria-label={t('inspector.localAdjust.toggle')}
                 className="touch-hit rounded p-1 text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-200"
               >
                 {region.disabled ? (
@@ -123,9 +200,9 @@ export function RedactionSection({ clip }: { clip: Clip }) {
               </button>
               <button
                 type="button"
-                onClick={() => useStore.getState().removeClipRedaction(clip.id, region.id)}
-                title={t('inspector.redaction.remove')}
-                aria-label={t('inspector.redaction.remove')}
+                onClick={() => useStore.getState().removeClipLocalAdjust(clip.id, region.id)}
+                title={t('inspector.localAdjust.remove')}
+                aria-label={t('inspector.localAdjust.remove')}
                 className="touch-hit rounded p-1 text-zinc-500 hover:bg-zinc-800/70 hover:text-red-300"
               >
                 <TrashIcon className="h-3.5 w-3.5" />
@@ -134,42 +211,9 @@ export function RedactionSection({ clip }: { clip: Clip }) {
 
             {open && active && (
               <>
-                <div className="flex items-center gap-2">
-                  <span className="w-16 flex-none text-xs text-zinc-500">
-                    {t('inspector.redaction.mode')}
-                  </span>
-                  <div className="flex flex-1 gap-1">
-                    {MODES.map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        aria-pressed={active.mode === mode}
-                        onClick={() => commit({ mode })}
-                        className={`touch-hit flex-1 rounded px-2 py-1 text-2xs ${
-                          active.mode === mode
-                            ? 'brand-on'
-                            : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700/60 active:bg-zinc-700'
-                        }`}
-                      >
-                        {t(`inspector.redaction.mode.${mode}`)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <AdjustParams clip={clip} adjust={active} />
 
-                <SliderRow
-                  label={t('inspector.redaction.amount')}
-                  value={active.amount}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  format={(v) => `${Math.round(v * 100)}%`}
-                  entry={PERCENT_ENTRY}
-                  defaultValue={REGION_DEFAULTS.amount}
-                  onChange={(v) => set({ amount: v })}
-                />
-
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 border-t border-zinc-800/70 pt-2">
                   <span className="w-16 flex-none text-xs text-zinc-500">
                     {t('inspector.mask.shape')}
                   </span>
@@ -209,7 +253,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                   <p className="text-2xs text-zinc-600">{t('inspector.mask.pen.hint')}</p>
                 )}
                 {active.shape !== 'path' && (
-                  <p className="text-2xs text-zinc-600">{t('inspector.redaction.dragHint')}</p>
+                  <p className="text-2xs text-zinc-600">{t('inspector.localAdjust.dragHint')}</p>
                 )}
 
                 {active.shape !== 'path' &&
@@ -240,12 +284,12 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                   onChange={(v) => set({ feather: v })}
                 />
                 <label className="flex items-center justify-between text-xs text-zinc-400">
-                  <span>{t('inspector.redaction.invert')}</span>
+                  <span>{t('inspector.localAdjust.invert')}</span>
                   <input
                     type="checkbox"
                     checked={!!active.invert}
                     onChange={(e) => commit({ invert: e.target.checked })}
-                    className="h-3.5 w-3.5 accent-blue-500"
+                    className="h-3.5 w-3.5 accent-amber-500"
                   />
                 </label>
 
@@ -255,15 +299,15 @@ export function RedactionSection({ clip }: { clip: Clip }) {
                   onLive={(prop, v) =>
                     useStore
                       .getState()
-                      .setClipRedactionMotionLive(clip.id, active.id, prop, v, currentTimeMs)
+                      .setClipLocalAdjustMotionLive(clip.id, active.id, prop, v, currentTimeMs)
                   }
                   onToggleKey={(prop) =>
                     useStore
                       .getState()
-                      .toggleClipRedactionMotionKeyframe(clip.id, active.id, prop, currentTimeMs)
+                      .toggleClipLocalAdjustMotionKeyframe(clip.id, active.id, prop, currentTimeMs)
                   }
                   onMotion={(motion) =>
-                    useStore.getState().setClipRedaction(clip.id, active.id, { motion })
+                    useStore.getState().setClipLocalAdjust(clip.id, active.id, { motion })
                   }
                 />
               </>

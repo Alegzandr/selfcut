@@ -108,7 +108,7 @@ test('a clip carries as many regions as the shot needs', async ({ page }) => {
     { mode: 'pixelate' },
   ]);
 
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Add a blurred area', exact: true }).click();
   // Each region keeps its own settings: a second face does not have to be
   // hidden the same way as the first.
   await expectRegions(page, 'a second region was added').toMatchObject([

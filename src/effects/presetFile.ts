@@ -95,6 +95,7 @@ const COLOR_PROPS = [
   'tint',
   'vignette',
   'blur',
+  'sharpen',
 ] as const satisfies readonly (keyof ClipColor)[];
 
 /** The keyframable transform properties, likewise. */

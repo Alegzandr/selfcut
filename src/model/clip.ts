@@ -4,6 +4,7 @@ import {
   Channel,
   Clip,
   ClipAnimation,
+  ClipColor,
   ClipMask,
   ClipTransform,
   Keyframe,
@@ -266,6 +267,13 @@ export interface ResolvedColor {
   tint: number;
   vignette: number;
   /**
+   * Sharpening amount (0..1), applied to the clip's whole picture. Spatial like
+   * `blur`, but resolved here rather than beside it because the colour pass
+   * already holds the frame as a texture: the neighbouring pixels it reads cost
+   * four fetches there, and a second full-frame buffer anywhere else.
+   */
+  sharpen: number;
+  /**
    * The LUT to apply before the numeric adjustments, when the clip carries one
    * at a non-zero intensity. `id` is looked up in the renderer's LUT registry
    * (fed from `Project.luts`); a LUT that isn't registered is drawn as no LUT.
@@ -308,9 +316,18 @@ export function hexToRgb01(hex: string): [number, number, number] {
  * so the compositor skips the WebGL pass entirely for the common ungraded case.
  */
 export function resolveColor(clip: Clip, timelineMs: number): ResolvedColor | null {
-  const c = clip.color;
-  if (!c) return null;
-  const local = timelineMs - clip.timelineStartMs;
+  return clip.color ? resolveColorAt(clip.color, timelineMs - clip.timelineStartMs) : null;
+}
+
+/**
+ * The same grade, resolved at a CLIP-LOCAL time against a colour that need not
+ * be the clip's own — which is what a local adjustment's region carries. Split
+ * out so a region's grade is sampled, identity-checked and skipped by exactly
+ * the code the whole-clip grade goes through: a parameter that means one thing
+ * on the picture and another inside a shape is a bug waiting for a shot to
+ * expose it.
+ */
+export function resolveColorAt(c: ClipColor, local: number): ResolvedColor | null {
   const r: ResolvedColor = {
     brightness: sampleChannel(c.brightness ?? 0, local),
     contrast: sampleChannel(c.contrast ?? 0, local),
@@ -318,6 +335,7 @@ export function resolveColor(clip: Clip, timelineMs: number): ResolvedColor | nu
     temperature: sampleChannel(c.temperature ?? 0, local),
     tint: sampleChannel(c.tint ?? 0, local),
     vignette: sampleChannel(c.vignette ?? 0, local),
+    sharpen: Math.max(0, sampleChannel(c.sharpen ?? 0, local)),
   };
   // A LUT at intensity 0 is a no-op the WebGL pass shouldn't spin up for.
   const lut = c.lut && c.lut.intensity > 0 ? { id: c.lut.id, intensity: Math.min(1, c.lut.intensity) } : undefined;
@@ -337,6 +355,7 @@ export function resolveColor(clip: Clip, timelineMs: number): ResolvedColor | nu
     r.temperature === 0 &&
     r.tint === 0 &&
     r.vignette === 0 &&
+    r.sharpen === 0 &&
     !lut &&
     !curves &&
     !key
@@ -373,9 +392,10 @@ export function clipEnvelopeGainAt(
 
 /**
  * Apply `fn` to every keyframable channel a clip carries — transform animation,
- * colour grading, and the motion of its mask and of each redaction. One place
- * knows the full list, so an edit that moves clip-local time (split, left trim)
- * cannot silently forget a family of keyframes.
+ * colour grading, the grade and motion of each local adjustment, and the motion
+ * of its mask and of each redaction. One place knows the full list, so an edit
+ * that moves clip-local time (split, left trim) cannot silently forget a family
+ * of keyframes.
  *
  * Returns a copy; the clip passed in is left untouched.
  */
@@ -396,7 +416,18 @@ export function mapClipChannels<T extends Clip>(clip: T, fn: (ch: Channel) => Ch
       }
     }
   }
-  const motions = [next.mask?.motion, ...(next.redactions ?? []).map((r) => r.motion)];
+  for (const adjust of next.localAdjusts ?? []) {
+    for (const [prop, ch] of Object.entries(adjust.color)) {
+      if (typeof ch === 'number' || Array.isArray(ch)) {
+        (adjust.color as Record<string, Channel>)[prop] = fn(ch as Channel);
+      }
+    }
+  }
+  const motions = [
+    next.mask?.motion,
+    ...(next.redactions ?? []).map((r) => r.motion),
+    ...(next.localAdjusts ?? []).map((a) => a.motion),
+  ];
   for (const motion of motions) {
     if (!motion) continue;
     for (const [prop, ch] of Object.entries(motion)) {

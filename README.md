@@ -34,8 +34,8 @@ lockable, with per-track gain, opacity and level meters. Markers, a loop region
 scale, non-uniform stretch and rotation - dragged in the preview or typed in
 the inspector.
 
-**Grade.** Brightness, contrast, saturation, white balance, tint, vignette and
-blur; per-channel tone curves; `.cube` LUTs imported into the project and reused
+**Grade.** Brightness, contrast, saturation, white balance, tint, vignette,
+blur and sharpening; per-channel tone curves; `.cube` LUTs imported into the project and reused
 across clips; chroma key for a green screen. Waveform, RGB parade, histogram and
 vectorscope to check the result.
 
@@ -45,7 +45,9 @@ property lanes under the clip. Ken Burns zoom for the quick version.
 
 **Mask and hide.** Rectangle, ellipse or a bezier pen-tool shape, feathered and
 invertible; a planar motion tracker (position, scale, rotation) writes the
-motion so a mask follows what it covers. Redactions blur or pixelate a face, a
+motion so a mask follows what it covers. Every grade runs on a mask too, as many
+areas per clip as the shot needs: darken a sky, warm a face, sharpen the subject
+alone, keyframed and tracked like the rest. Redactions blur or pixelate a face, a
 plate or a screen in place, several per clip, each tracked on its own.
 
 **Add what is not in the footage.** Text and titles (six faces, outline, caption
