@@ -7,10 +7,23 @@
  */
 
 export const DB_NAME = 'selfcut';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 export const PROJECT_STORE = 'project';
+/** Asset metadata (everything on a MediaAsset except its File), keyed by asset id. */
 export const ASSETS_STORE = 'assets';
+/**
+ * The media File of each asset, keyed by asset id, apart from its metadata.
+ *
+ * A File put into IndexedDB is not a reference: Chrome copies the whole file
+ * into the database's blob directory, and a second `put` of the same record
+ * copies it again before the first copy is collected. Kept inline on the asset
+ * record, every metadata update (peaks landing, the thumbnail strip filling
+ * in) re-copied the source, so one import of a 2 GB recording wrote 6 GB and
+ * held twice the file on disk while it did. Here the File is written once, on
+ * import or relink, and the metadata record next to it stays a few kilobytes.
+ */
+export const FILES_STORE = 'assetFiles';
 /** Compressed copies of transcoded audio tracks, keyed `${mediaKey}#${trackIndex}`. */
 export const AUDIO_STORE = 'transcodedAudio';
 /**
@@ -43,12 +56,18 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 export function db(): Promise<IDBDatabase> {
   dbPromise ??= new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const d = req.result;
       if (!d.objectStoreNames.contains(PROJECT_STORE)) d.createObjectStore(PROJECT_STORE);
       if (!d.objectStoreNames.contains(ASSETS_STORE)) {
         d.createObjectStore(ASSETS_STORE, { keyPath: 'id' });
       }
+      // v5: Files move out of the asset record. Not migrated here: an asset
+      // saved by v4 still carries its File inline, persistence reads it from
+      // there and moves it into this store on the asset's next write. Moving
+      // them all during the upgrade would copy every library file again, on
+      // the startup path, before the editor has appeared.
+      if (!d.objectStoreNames.contains(FILES_STORE)) d.createObjectStore(FILES_STORE);
       // Dropped rather than migrated, twice over now. v2 stored bare
       // Uint8Arrays with no sizes and no timestamps, which is exactly what
       // eviction needs and cannot reconstruct; v3 keyed them by asset id, a
@@ -61,9 +80,14 @@ export function db(): Promise<IDBDatabase> {
       // transcode the app knows how to redo, so starting over costs one
       // conversion the next time that track is opened, and nothing at all for
       // the ones never reopened.
+      //
+      // Only on the way up from those versions: a later upgrade (v5 added a
+      // store elsewhere) must leave the caches alone, or every version bump
+      // would cost the user their transcodes.
+      const rebuildCaches = event.oldVersion < 4;
       for (const store of [AUDIO_STORE, AUDIO_META_STORE, SUBTITLE_STORE, SUBTITLE_META_STORE]) {
-        if (d.objectStoreNames.contains(store)) d.deleteObjectStore(store);
-        d.createObjectStore(store);
+        if (rebuildCaches && d.objectStoreNames.contains(store)) d.deleteObjectStore(store);
+        if (!d.objectStoreNames.contains(store)) d.createObjectStore(store);
       }
     };
     req.onsuccess = () => resolve(req.result);

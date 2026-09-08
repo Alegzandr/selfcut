@@ -11,7 +11,7 @@ import { decodeCachedAudio } from '../media/transcodeAudio';
 import { isMissingSource } from './missingSource';
 import { sweepExportScratch } from './opfs';
 import { nextSaveDelay } from './saveSchedule';
-import { ASSETS_STORE, PROJECT_STORE, db, requestDone, txDone } from './idb';
+import { ASSETS_STORE, FILES_STORE, PROJECT_STORE, db, requestDone, txDone } from './idb';
 import { loadTranscodedAudio, pruneTranscodedAudio } from './audioCache';
 import { pruneSubtitleCues } from './subtitleCache';
 import { mediaKeyOf } from './mediaKey';
@@ -41,12 +41,89 @@ function reportSaveSuccess(): void {
  * project JSON is debounced, assets are written/deleted one by one as the
  * library changes.
  *
+ * An asset is two records under the same id: its metadata in ASSETS_STORE and
+ * its File in FILES_STORE. The split exists because the browser copies a File
+ * into the database on every `put` (see FILES_STORE): the metadata changes a
+ * handful of times right after import, the File only on import or relink, and
+ * a 2 GB source must not be copied along with a 100 KB peaks array.
+ *
  * When the project JSON is actually written is decided by `saveSchedule.ts`.
  */
 
-/** A persisted asset carries its owning project's id, so a project can be listed,
- * loaded and swept independently. Runtime `MediaAsset` never needs the field. */
-type StoredAsset = MediaAsset & { projectId?: string };
+/**
+ * The metadata record: a MediaAsset without its File, tagged with the owning
+ * project's id so a project can be listed, loaded and swept independently
+ * (runtime `MediaAsset` never needs the tag). `file` is still present on
+ * records written before FILES_STORE existed; it is read from there until the
+ * asset's next write moves it.
+ */
+type StoredAsset = Omit<MediaAsset, 'file'> & { projectId?: string; file?: File };
+
+/**
+ * The File on disk for each asset id, by identity.
+ *
+ * What decides whether a write touches FILES_STORE: an asset whose File is the
+ * very object recorded here has nothing to copy, whatever else on it changed.
+ * A new import, a relink and a legacy record whose File was never moved out of
+ * its metadata all miss here and get their File written. Filled from the
+ * library as it is read and from each write as it commits, so it never claims
+ * more than the database actually holds.
+ */
+const persistedFiles = new Map<string, File>();
+
+/**
+ * Queue an asset's records on `tx`, which must include ASSETS_STORE and
+ * FILES_STORE. Returns what to record in `persistedFiles` once the transaction
+ * commits - not before, since a write that fails at commit time has written
+ * nothing.
+ */
+function putAsset(tx: IDBTransaction, asset: MediaAsset, projectId: string): [string, File] | null {
+  const { file, ...meta } = asset;
+  tx.objectStore(ASSETS_STORE).put({ ...meta, projectId } satisfies StoredAsset);
+  if (persistedFiles.get(asset.id) === file) return null;
+  tx.objectStore(FILES_STORE).put(file, asset.id);
+  return [asset.id, file];
+}
+
+/** Queue the removal of both of an asset's records. */
+function deleteAsset(tx: IDBTransaction, id: string): void {
+  tx.objectStore(ASSETS_STORE).delete(id);
+  tx.objectStore(FILES_STORE).delete(id);
+  persistedFiles.delete(id);
+}
+
+/**
+ * Every valid asset record in the database joined with its File, on a
+ * transaction that includes both stores. Records without a File anywhere (an
+ * interrupted write, a hand-edited database) are dropped, like any other
+ * invalid record. `getAll` on the file store is cheap: it hands back handles,
+ * the bytes are only read when someone reads them.
+ */
+async function readLibrary(tx: IDBTransaction): Promise<(StoredAsset & { file: File })[]> {
+  const files = tx.objectStore(FILES_STORE);
+  const [records, fileKeys, fileValues] = await Promise.all([
+    requestDone(tx.objectStore(ASSETS_STORE).getAll()),
+    requestDone(files.getAllKeys()),
+    requestDone(files.getAll()),
+  ]);
+  const filesById = new Map<IDBValidKey, unknown>();
+  fileKeys.forEach((key, i) => filesById.set(key, fileValues[i]));
+  const out: (StoredAsset & { file: File })[] = [];
+  for (const record of records) {
+    if (!isValidStoredAsset(record)) continue;
+    const stored = filesById.get(record.id);
+    if (stored instanceof File) {
+      persistedFiles.set(record.id, stored);
+      out.push({ ...record, file: stored });
+    } else if (record.file instanceof File) {
+      // Written before FILES_STORE: the File rides on the record until the
+      // asset's next write moves it, which `persistedFiles` not knowing this
+      // id is what makes happen.
+      out.push({ ...record, file: record.file });
+    }
+  }
+  return out;
+}
 
 /**
  * Project ids known to have a record in PROJECT_STORE.
@@ -99,20 +176,20 @@ export function isValidProject(p: unknown): p is Project {
   );
 }
 
-function isValidAsset(a: unknown): a is MediaAsset {
+function isValidStoredAsset(a: unknown): a is StoredAsset {
   if (typeof a !== 'object' || a === null) return false;
-  const asset = a as MediaAsset;
+  const asset = a as StoredAsset;
   return (
     typeof asset.id === 'string' &&
-    asset.file instanceof File &&
     typeof asset.durationMs === 'number' &&
     Array.isArray(asset.thumbnails)
   );
 }
 
 /**
- * A persisted File is only a reference to the on-disk file. Between sessions
- * that file can be moved, renamed or deleted, and any read then throws. Probe
+ * A persisted File can stop being readable between sessions: a browser that
+ * keeps it as a reference loses it when the file is moved, renamed or deleted,
+ * and one that keeps a copy can still evict it under storage pressure. Probe
  * a single byte so we can flag the asset up front instead of letting every
  * decode fail silently and leave the preview black.
  */
@@ -167,13 +244,12 @@ export async function loadProjectById(
   id: string,
 ): Promise<{ project: Project; assets: MediaAsset[] } | null> {
   const d = await db();
-  const tx = d.transaction([PROJECT_STORE, ASSETS_STORE], 'readonly');
+  const tx = d.transaction([PROJECT_STORE, ASSETS_STORE, FILES_STORE], 'readonly');
   const project = await requestDone(tx.objectStore(PROJECT_STORE).get(id));
   if (!isValidProject(project)) return null;
-  const stored = (await requestDone(tx.objectStore(ASSETS_STORE).getAll()))
-    .filter(isValidAsset)
-    .filter((a) => (a as StoredAsset).projectId === id)
-    .map(migrateAsset);
+  const stored = (await readLibrary(tx))
+    .filter((a) => a.projectId === id)
+    .map(({ projectId: _owner, ...asset }) => migrateAsset(asset));
   const assets = await Promise.all(
     stored.map(async (asset) => ({
       ...asset,
@@ -218,7 +294,7 @@ async function migrateSingleProject(): Promise<void> {
       const as = tx.objectStore(ASSETS_STORE);
       const all = await requestDone(as.getAll());
       for (const a of all) {
-        if (isValidAsset(a) && (a as StoredAsset).projectId === undefined) {
+        if (isValidStoredAsset(a) && a.projectId === undefined) {
           as.put({ ...a, projectId: legacy.id });
         }
       }
@@ -233,11 +309,10 @@ async function migrateSingleProject(): Promise<void> {
 /** Delete a project record and every asset owned by it (media caches sweep later). */
 export async function deleteProjectFromDb(id: string): Promise<void> {
   const d = await db();
-  const tx = d.transaction([PROJECT_STORE, ASSETS_STORE], 'readwrite');
+  const tx = d.transaction([PROJECT_STORE, ASSETS_STORE, FILES_STORE], 'readwrite');
   tx.objectStore(PROJECT_STORE).delete(id);
-  const store = tx.objectStore(ASSETS_STORE);
-  const all = await requestDone(store.getAll());
-  for (const a of all) if (isValidAsset(a) && (a as StoredAsset).projectId === id) store.delete(a.id);
+  const all = await requestDone(tx.objectStore(ASSETS_STORE).getAll());
+  for (const a of all) if (isValidStoredAsset(a) && a.projectId === id) deleteAsset(tx, a.id);
   await txDone(tx);
   persistedProjects.delete(id);
 }
@@ -260,13 +335,20 @@ export async function renameProjectInDb(id: string, name: string): Promise<void>
 async function sweepOrphanAssets(validProjectIds: Set<string>): Promise<void> {
   try {
     const d = await db();
-    const tx = d.transaction(ASSETS_STORE, 'readwrite');
-    const store = tx.objectStore(ASSETS_STORE);
-    const all = await requestDone(store.getAll());
+    const tx = d.transaction([ASSETS_STORE, FILES_STORE], 'readwrite');
+    const all = await requestDone(tx.objectStore(ASSETS_STORE).getAll());
+    const kept = new Set<string>();
     for (const a of all) {
-      if (!isValidAsset(a)) continue;
-      const pid = (a as StoredAsset).projectId;
-      if (pid === undefined || !validProjectIds.has(pid)) store.delete(a.id);
+      if (!isValidStoredAsset(a)) continue;
+      const pid = a.projectId;
+      if (pid === undefined || !validProjectIds.has(pid)) deleteAsset(tx, a.id);
+      else kept.add(a.id);
+    }
+    // A File whose metadata record is gone (an invalid record dropped above, or
+    // a write that landed the File and lost the metadata) is unreachable and
+    // the biggest thing in the database: collect it with the rest.
+    for (const key of await requestDone(tx.objectStore(FILES_STORE).getAllKeys())) {
+      if (typeof key === 'string' && !kept.has(key)) deleteAsset(tx, key);
     }
     await txDone(tx);
   } catch (err) {
@@ -284,11 +366,11 @@ export async function saveWholeProject(): Promise<void> {
   const { project, assets, currentProjectId } = useStore.getState();
   try {
     const d = await db();
-    const tx = d.transaction([PROJECT_STORE, ASSETS_STORE], 'readwrite');
+    const tx = d.transaction([PROJECT_STORE, ASSETS_STORE, FILES_STORE], 'readwrite');
     tx.objectStore(PROJECT_STORE).put({ ...project, updatedAt: Date.now() }, project.id);
-    const store = tx.objectStore(ASSETS_STORE);
-    for (const a of Object.values(assets)) store.put({ ...a, projectId: currentProjectId });
+    const written = Object.values(assets).map((a) => putAsset(tx, a, currentProjectId));
     await txDone(tx);
+    for (const entry of written) if (entry) persistedFiles.set(...entry);
     persistedProjects.add(project.id);
     reportSaveSuccess();
   } catch (err) {
@@ -435,22 +517,25 @@ async function syncAssets(
   try {
     const d = await db();
     const tx = d.transaction(
-      ownerMissing ? [PROJECT_STORE, ASSETS_STORE] : [ASSETS_STORE],
+      ownerMissing
+        ? [PROJECT_STORE, ASSETS_STORE, FILES_STORE]
+        : [ASSETS_STORE, FILES_STORE],
       'readwrite',
     );
     if (ownerMissing) {
       tx.objectStore(PROJECT_STORE).put({ ...project, updatedAt: Date.now() }, projectId);
     }
-    const store = tx.objectStore(ASSETS_STORE);
+    const written: ([string, File] | null)[] = [];
     for (const [id, asset] of Object.entries(next)) {
-      if (prev[id] !== asset) store.put({ ...asset, projectId });
+      if (prev[id] !== asset) written.push(putAsset(tx, asset, projectId));
     }
     // The asset itself goes now - the state is the library, and leaving its
     // blob behind would resurrect the card on the next hydrate. Its transcoded
     // audio stays: a removal is undoable for as long as the session lasts, and
     // orphans are swept at the next startup instead.
-    for (const id of Object.keys(prev)) if (!(id in next)) store.delete(id);
+    for (const id of Object.keys(prev)) if (!(id in next)) deleteAsset(tx, id);
     await txDone(tx);
+    for (const entry of written) if (entry) persistedFiles.set(...entry);
     if (ownerMissing) persistedProjects.add(projectId);
     reportSaveSuccess();
   } catch (err) {
@@ -476,9 +561,7 @@ async function pruneMediaCaches(): Promise<void> {
   let live: Set<string> | null = null;
   try {
     const d = await db();
-    const stored = (
-      await requestDone(d.transaction(ASSETS_STORE, 'readonly').objectStore(ASSETS_STORE).getAll())
-    ).filter(isValidAsset);
+    const stored = await readLibrary(d.transaction([ASSETS_STORE, FILES_STORE], 'readonly'));
     const keys = stored.map((asset) => mediaKeyOf(asset.file));
     // An asset still on a `.selfcut` placeholder has no media key at all, so it
     // cannot vouch for its own cache - and its entries would read as orphaned
@@ -507,6 +590,9 @@ export async function initPersistence(): Promise<void> {
   if (started) return;
   started = true;
 
+  // The library as the subscription below would have first seen it, had it
+  // been installed at hydrate time.
+  let hydratedAssets = useStore.getState().assets;
   try {
     await migrateSingleProject();
     const metas = await listProjectMetas();
@@ -518,6 +604,7 @@ export async function initPersistence(): Promise<void> {
       const saved = await loadProjectById(chosen);
       if (saved && (saved.project.tracks.length > 0 || saved.assets.length > 0)) {
         s.hydrate(saved.project, saved.assets); // also sets currentProjectId
+        hydratedAssets = useStore.getState().assets;
         // Recompute anything saved before it finished (peaks, thumbnail strip).
         // Skip disconnected assets: their file cannot be read, so decoding would
         // only throw - they wait for the user to reconnect the source.
@@ -552,6 +639,14 @@ export async function initPersistence(): Promise<void> {
     localStorage.setItem(CURRENT_PROJECT_KEY, lastProjectId);
   } catch {
     /* no storage - the reopened project just won't be remembered */
+  }
+  // Catch up on library changes made while the sweeps ran: a peaks pass over
+  // a short file lands before this point, and without this its result was
+  // recomputed on every start and never written - which also left a record
+  // saved before FILES_STORE existed carrying its File inline for good.
+  {
+    const s = useStore.getState();
+    if (s.assets !== hydratedAssets) void syncAssets(s.assets, hydratedAssets, s.project);
   }
   useStore.subscribe((s, prev) => {
     // A project switch changes project, assets AND the id in one store update.
