@@ -242,6 +242,9 @@ export function Timeline() {
   usePinchZoom(scrollerRef, coarse, pinching, empty);
   useMobileScrubSync(scrollerRef, coarse, { programmaticScroll, pinching, lastScrollLeft }, empty);
   const { onAssetDragOver, onAssetDragLeave, onAssetDrop, newTrackDragOver } = useAssetDrop();
+  // A clip dragged past the last row asks for the same placeholder an asset
+  // drag gets: one offer of a fresh track, whichever drag is making it.
+  const newTrackHintKind = useStore((s) => s.newTrackHintKind);
 
   if (empty) {
     return (
@@ -513,9 +516,10 @@ export function Timeline() {
                 />
               ))}
             </div>
-            {/* Placeholder row while an asset drag hovers below the last track:
-                dropping there creates a fresh track instead of reusing one. */}
-            {newTrackDragOver && (
+            {/* Placeholder row while a drag hovers below the last track - an asset
+                from the library or a clip already on the timeline: letting go
+                there creates a fresh track instead of reusing one. */}
+            {(newTrackDragOver || newTrackHintKind !== null) && (
               <div
                 className="pointer-events-none flex items-center border-y border-dashed border-blue-400/60 bg-blue-400/10"
                 style={{ height: trackHeightPx }}

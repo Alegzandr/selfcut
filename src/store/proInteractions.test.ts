@@ -181,6 +181,52 @@ describe('cancelGesture', () => {
   });
 });
 
+describe('moveClipToNewTrack', () => {
+  it('gives the clip a fresh lane of its own kind, keeping its position', () => {
+    s().addAsset(videoAsset('v', 2000, 0));
+    s().addClipFromAsset('v');
+    const clip = s().project.tracks[0]!.clips[0]!;
+    s().moveClip(clip.id, 3000);
+
+    s().moveClipToNewTrack(clip.id);
+
+    const tracks = s().project.tracks;
+    expect(tracks).toHaveLength(2);
+    expect(tracks[0]!.clips).toHaveLength(0);
+    expect(tracks[1]!.kind).toBe('video');
+    expect(tracks[1]!.clips[0]!.id).toBe(clip.id);
+    expect(tracks[1]!.clips[0]!.trackId).toBe(tracks[1]!.id);
+    expect(tracks[1]!.clips[0]!.timelineStartMs).toBe(3000);
+  });
+
+  it('is undone in one step with the drag that asked for it', () => {
+    s().addAsset(videoAsset('v', 2000, 0));
+    s().addClipFromAsset('v');
+    const clip = s().project.tracks[0]!.clips[0]!;
+
+    s().beginGesture();
+    s().moveClip(clip.id, 3000);
+    s().moveClipToNewTrack(clip.id);
+    s().endGesture();
+    expect(s().project.tracks).toHaveLength(2);
+
+    s().undo();
+    expect(s().project.tracks).toHaveLength(1);
+    expect(s().project.tracks[0]!.clips[0]!.timelineStartMs).toBe(0);
+  });
+
+  it('keeps a video lane inside the video group, above the audio ones', () => {
+    s().addAsset(videoAsset('v'));
+    s().addClipFromAsset('v');
+    const { video } = pair();
+
+    s().moveClipToNewTrack(video.id);
+
+    const kinds = s().project.tracks.map((t) => t.kind);
+    expect(kinds).toEqual(['video', 'video', 'audio']);
+  });
+});
+
 describe('setSelectedClips', () => {
   it('replaces the selection and clears it with an empty list', () => {
     s().addAsset(videoAsset('v', 2000, 0));

@@ -62,6 +62,7 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
     const state = useStore.getState();
     state.setSnapGuide(null);
     state.setDragBadge(null);
+    state.setNewTrackHint(null);
     // Give the picture back to the playhead - the trim preview only lives for
     // the length of the gesture.
     state.setPreviewOverride(null);
@@ -196,6 +197,9 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
     const d = drag.current;
     if (!d) return;
     const state = useStore.getState();
+    // Let go below the last row: the clip takes the fresh track the placeholder
+    // was offering. Inside the gesture, so the whole drag stays one undo step.
+    if (d.moved && d.dropNewTrack) state.moveClipToNewTrack(d.targetClipId);
     state.endGesture();
     if (!coarse && !d.moved) {
       // Ctrl+click that never dragged: toggle multi-selection membership.
@@ -287,6 +291,7 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
       ripple: null,
       roll: null,
       rowsEl: el.closest<HTMLElement>('[data-rowbg]')?.parentElement ?? null,
+      dropNewTrack: false,
       winDriven: true,
       contentEl,
       scrollerEl: el.closest<HTMLElement>('.timeline-scroller'),
@@ -417,6 +422,7 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
       ripple,
       roll,
       rowsEl: el.closest<HTMLElement>('[data-rowbg]')?.parentElement ?? null,
+      dropNewTrack: false,
       winDriven: mode === 'move',
       contentEl,
       scrollerEl: el.closest<HTMLElement>('.timeline-scroller'),

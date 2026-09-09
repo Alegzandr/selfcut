@@ -73,6 +73,13 @@ export interface DragState {
   /** The row container, to resolve the track under the pointer (content-relative). */
   rowsEl: HTMLElement | null;
   /**
+   * Move drag held below the last row: releasing there builds a fresh track for
+   * the clip. The lane is only created on release - creating it live would
+   * reshuffle the rows (a video lane joins the video group, not the bottom)
+   * under a pointer that is mid-gesture.
+   */
+  dropNewTrack: boolean;
+  /**
    * Move drags are driven by window-level listeners: switching tracks reparents
    * (and remounts) the clip's component mid-gesture, which would kill
    * element-level events. Resolved-once anchors keep the math alive after the
@@ -243,18 +250,18 @@ export const applyClipDrag = (
       let targetTrackId: string | undefined;
       const tracks = getLanes(state);
       const rowsRect = d.rowsEl?.getBoundingClientRect();
+      const tops = trackTops(tracks, state.trackHeightPx, new Set(state.expandedTrackIds));
+      // Past the last row: the drag is offering a track of its own, the way an
+      // asset dragged in from the library does. The clip stays on its lane for
+      // the rest of the gesture and only changes rows on release - so a pointer
+      // that wanders back up finds the timeline exactly as it left it.
+      d.dropNewTrack = !!rowsRect && clientY - rowsRect.top >= tops[tracks.length]!;
+      state.setNewTrackHint(d.dropNewTrack ? trackKind : null);
       const targetIdx = rowsRect
-        ? clamp(
-            trackIndexAtY(
-              trackTops(tracks, state.trackHeightPx, new Set(state.expandedTrackIds)),
-              clientY - rowsRect.top,
-            ),
-            0,
-            tracks.length - 1,
-          )
+        ? clamp(trackIndexAtY(tops, clientY - rowsRect.top), 0, tracks.length - 1)
         : d.origTrackIndex;
       // A locked track refuses arrivals too, not just edits to what it holds.
-      if (tracks[targetIdx]?.kind === trackKind && !tracks[targetIdx].locked) {
+      if (!d.dropNewTrack && tracks[targetIdx]?.kind === trackKind && !tracks[targetIdx].locked) {
         targetTrackId = tracks[targetIdx].id;
       }
 

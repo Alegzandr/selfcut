@@ -190,6 +190,7 @@ export function createClipsSlice(
   | 'moveClipKeyframes'
   | 'setClipKeyframesEase'
   | 'moveClip'
+  | 'moveClipToNewTrack'
   | 'moveClips'
   | 'trimClip'
   | 'stretchClip'
@@ -1129,6 +1130,23 @@ export function createClipsSlice(
       const edits = new Map(shiftBy);
       edits.set(clipId, (c: Clip) => ({ ...c, timelineStartMs: start }));
       set({ project: patchClips(p, edits) });
+    },
+
+    moveClipToNewTrack: (clipId) => {
+      const p = get().project;
+      const found = findClip(p, clipId);
+      if (!found) return;
+      // Same insertion rule as an asset dropped below the last row: a video
+      // lane joins the video group (array order is z-order), an audio one goes
+      // to the end. The clip keeps the position the drag left it at - only its
+      // lane changes.
+      const track: Track = { id: uid('track'), kind: found.track.kind, clips: [] };
+      const tracks = lanes(p).map((t) =>
+        t.id === found.track.id ? { ...t, clips: t.clips.filter((c) => c.id !== clipId) } : t,
+      );
+      insertTrack({ tracks }, track);
+      track.clips = [{ ...found.clip, trackId: track.id }];
+      set({ project: withLanes(p, tracks) });
     },
 
     moveClips: (entries) => {

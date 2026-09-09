@@ -70,6 +70,7 @@ export function createUiSlice(
   EditorState,
   | 'toggleSnap'
   | 'setHoveredLinkId'
+  | 'setNewTrackHint'
   | 'setSnapGuide'
   | 'setDragBadge'
   | 'setDropPreview'
@@ -141,6 +142,10 @@ export function createUiSlice(
       const cur = get().dragBadge;
       if (cur?.clipId === badge?.clipId && cur?.text === badge?.text) return;
       set({ dragBadge: badge });
+    },
+
+    setNewTrackHint: (kind) => {
+      if (get().newTrackHintKind !== kind) set({ newTrackHintKind: kind });
     },
 
     setHoveredLinkId: (linkId) => {
