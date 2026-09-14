@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, m } from 'framer-motion';
 import { useEnterMotion } from './motion';
 import { ExclamationTriangleIcon } from '@radix-ui/react-icons';
@@ -90,7 +91,11 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
     location.reload();
   }
 
-  return (
+  // Portalled out of the Preferences dialog. That dialog animates its
+  // `transform`, and a transformed ancestor is what `position: fixed`
+  // measures against: mounted where it is used, this overlay was laid out
+  // inside the preferences panel and clipped by its scrolling tab area.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <m.div
@@ -189,6 +194,7 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
           </m.div>
         </m.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
