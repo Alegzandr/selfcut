@@ -7,6 +7,7 @@ import {
   DownloadIcon,
   LightningBoltIcon,
   LinkBreak1Icon,
+  LockClosedIcon,
   UploadIcon,
 } from "@radix-ui/react-icons";
 import { useStore } from "./store/store";
@@ -14,6 +15,8 @@ import { initPersistence } from "./lib/persistence";
 import { saveProjectFile, unbindProjectFile } from "./lib/projectFile";
 import { HEALTHY, getSaveHealth, subscribeSaveHealth } from "./lib/saveHealth";
 import { openFolderPicker, openMediaPicker } from "./ui/mediaPicker";
+import { grantStorageFolderAccess } from "./ui/storageFolderActions";
+import { useStorageFolder } from "./ui/StorageLocation";
 import { MenuBar } from "./ui/MenuBar";
 import { TopBar } from "./ui/TopBar";
 import { Transport } from "./ui/Transport";
@@ -136,6 +139,7 @@ export default function App() {
       <TopBar />
       <SoftwareRenderingBanner />
       <SaveFailureBanner />
+      <StorageFolderBanner />
       <DisconnectedBanner />
       <div
         className="flex flex-none border-b border-zinc-800"
@@ -273,6 +277,39 @@ function SaveFailureBanner() {
 }
 
 /**
+ * Storage-folder access: shown when the library lives in a folder of the
+ * user's choosing and this session has not been allowed into it yet.
+ *
+ * The browser forgets the permission between visits and only a click can ask
+ * for it again, so the restore leaves every folder-backed asset disconnected
+ * and this banner carries the one button that puts them all right. Hidden
+ * during a library move, which has its own progress line in Preferences.
+ */
+function StorageFolderBanner() {
+  const { t } = useTranslation();
+  const folder = useStorageFolder();
+  if (!folder.handle || folder.access === "granted" || folder.moving) return null;
+
+  return (
+    <div
+      role="status"
+      className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+    >
+      <LockClosedIcon className="h-4 w-4 flex-none text-amber-300" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        {t("storage.folder.banner", { name: folder.name })}
+      </span>
+      <button
+        className="flex-none rounded bg-amber-400/20 px-2.5 py-1 font-medium text-amber-100 hover:bg-amber-400/30"
+        onClick={() => void grantStorageFolderAccess()}
+      >
+        {t("storage.folder.allow")}
+      </button>
+    </div>
+  );
+}
+
+/**
  * Restore warning: shown when a reopened session has assets whose source file
  * can no longer be read. Offers to reconnect the files in bulk (matched by
  * name) or to start a fresh project.
@@ -282,8 +319,13 @@ function DisconnectedBanner() {
   // Select the stable assets reference and derive in render: returning a fresh
   // array straight from the selector would make Zustand loop (new ref each run).
   const assets = useStore((s) => s.assets);
+  const folder = useStorageFolder();
   const disconnected = Object.values(assets).filter((a) => a.disconnected);
   if (disconnected.length === 0) return null;
+  // While the storage folder is waiting on its permission, the disconnected
+  // assets are its: the banner above resolves them in one click, and offering
+  // a file picker for the same files would only have them copied in twice.
+  if (folder.handle && folder.access !== "granted") return null;
 
   const reconnectFrom = (open: typeof openMediaPicker) => () => {
     open((files) => {

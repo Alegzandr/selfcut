@@ -31,6 +31,9 @@ import {
 import { useCaptionModelPref } from '../media/useCaptionPrefs';
 import { useCaptionsSupported } from '../media/useCaptionCapabilities';
 import { formatBytes } from '../lib/bytes';
+import { storageFolderSupported } from '../lib/storageFolder';
+import { Row, Rows } from './preferenceRows';
+import { StorageLocationNotes, StorageLocationRow, useStorageLocation } from './StorageLocation';
 
 const TIME_FORMATS: readonly { value: TimeFormat; labelKey: ParseKeys }[] = [
   { value: 'timecode', labelKey: 'preferences.timeFormat.timecode' },
@@ -91,21 +94,6 @@ const TABS: readonly {
   { id: 'captions', labelKey: 'preferences.tab.captions', Icon: ChatBubbleIcon },
   { id: 'data', labelKey: 'preferences.tab.data', Icon: ArchiveIcon },
 ];
-
-/** One labelled preference row: description on the left, control on the right. */
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-6 py-2.5">
-      <span className="text-xs text-zinc-300">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-/** Rows in a section, hairline-separated the way the single list used to be. */
-function Rows({ children }: { children: ReactNode }) {
-  return <div className="divide-y divide-zinc-800">{children}</div>;
-}
 
 function GeneralTab() {
   const { t } = useTranslation();
@@ -272,11 +260,17 @@ function CaptionsTab() {
  * storage estimate rather than from adding up what the app thinks it wrote, so
  * an orphaned cache or a leftover export scratch file is counted too - it is the
  * number the browser would enforce a quota against.
+ *
+ * The storage location sits under it: the figure is what lives in the browser,
+ * and the folder is the way to keep media out of it. Only where the browser can
+ * offer a folder at all - elsewhere the row would be a setting with no values.
  */
 function DataTab() {
   const { t } = useTranslation();
   const [usage, setUsage] = useState<number | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
+  const [folderSupported] = useState(storageFolderSupported);
+  const location = useStorageLocation();
 
   useEffect(() => {
     let live = true;
@@ -297,15 +291,19 @@ function DataTab() {
         {t('preferences.data.intro')}
       </p>
 
-      {usage !== null && (
+      {(usage !== null || folderSupported) && (
         <Rows>
-          <Row label={t('preferences.data.usage')}>
-            <span className="min-w-44 text-right text-xs tabular-nums text-zinc-200">
-              {formatBytes(usage)}
-            </span>
-          </Row>
+          {usage !== null && (
+            <Row label={t('preferences.data.usage')}>
+              <span className="min-w-44 text-right text-xs tabular-nums text-zinc-200">
+                {formatBytes(usage)}
+              </span>
+            </Row>
+          )}
+          {folderSupported && <StorageLocationRow model={location} />}
         </Rows>
       )}
+      {folderSupported && <StorageLocationNotes model={location} />}
 
       <div className="mt-4 rounded-xl border border-red-500/25 bg-red-500/5 p-3.5">
         <h3 className="text-xs font-semibold text-red-200">

@@ -31,5 +31,15 @@ export function mediaKeyOf(file: File): string | null {
   // waiting to be relinked, so every unrelinked asset of a given name would key
   // to the same entry - and to one that belongs to none of them.
   if (isMissingSource(file)) return null;
-  return `${file.size}-${file.lastModified}-${encodeURIComponent(file.name)}`;
+  return mediaKeyOfParts(file.size, file.lastModified, file.name);
+}
+
+/**
+ * The same key from the triple alone, for a file the app knows about without
+ * holding it: an asset whose bytes sit in the storage folder is recorded by
+ * exactly these three values, and the startup cache sweep must be able to vouch
+ * for its entries without opening every file in the folder first.
+ */
+export function mediaKeyOfParts(size: number, lastModified: number, name: string): string {
+  return `${size}-${lastModified}-${encodeURIComponent(name)}`;
 }

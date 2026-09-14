@@ -1,7 +1,7 @@
 import { selfcutStorageKeys } from '../store/constants';
 import { closeDb, DB_NAME } from './idb';
 import { removeExportScratch } from './opfs';
-import { suspendPersistence } from './persistence';
+import { deleteFolderLibrary, suspendPersistence } from './persistence';
 import { deleteCaptionCache } from '../media/captionsCache';
 
 /**
@@ -17,15 +17,22 @@ import { deleteCaptionCache } from '../media/captionsCache';
  *    the project to reopen.
  *  - OPFS `exports/`: the scratch file of the last export, which is a whole
  *    video and can be gigabytes.
+ *  - The storage folder, when one was chosen: the media copies the library
+ *    keeps there, and only those - the folder itself and anything else in it
+ *    are the user's. Needs the folder to be reachable in this session; a copy
+ *    in a folder the app cannot open right now stays, and its record goes with
+ *    the database, so the erase says what it can and cannot do only through
+ *    the folder's own contents.
  *  - Cache Storage `transformers-cache`: the downloaded Whisper models. These
  *    are the one pile worth keeping on purpose, hence `keepModels` - they hold
  *    nothing personal, they are the slowest thing here to get back (up to a
  *    gigabyte over the network), and someone clearing out a finished project
  *    rarely means "and make me re-download the transcriber too".
  *
- * What this deliberately does NOT touch: the source files on the user's disk.
- * Media is referenced, never copied, so a cleared library leaves every original
- * exactly where it was. The COOP service worker stays registered as well - it is
+ * What this deliberately does NOT touch: the files the user imported from. The
+ * library keeps its own copies (in the browser or in the storage folder), so a
+ * cleared library leaves every original exactly where it was. The COOP service
+ * worker stays registered as well - it is
  * what makes the page cross-origin isolated, and removing it would break
  * multithreaded decoding on the reload rather than free anything.
  *
@@ -85,6 +92,8 @@ export interface EraseResult {
 export async function eraseSelfcutData({ keepModels }: EraseOptions): Promise<EraseResult> {
   suspendPersistence();
   clearLocalStorage();
+  // Before the database goes: the records are what say which files are ours.
+  await deleteFolderLibrary();
   await closeDb();
   const { blocked } = await deleteDatabase(DB_NAME);
   await removeExportScratch();

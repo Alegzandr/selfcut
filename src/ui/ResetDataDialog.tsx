@@ -5,6 +5,7 @@ import { AnimatePresence, m } from 'framer-motion';
 import { useEnterMotion } from './motion';
 import { ExclamationTriangleIcon } from '@radix-ui/react-icons';
 import { eraseSelfcutData } from '../lib/resetData';
+import { useStorageFolder } from './StorageLocation';
 import { captionCacheAvailable, listCachedModels } from '../media/captionsCache';
 import { formatBytes } from '../lib/bytes';
 
@@ -37,6 +38,9 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
   const [modelBytes, setModelBytes] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  // The copies in the storage folder go too, and the list has to say so: a
+  // folder on another drive is exactly the kind of place people forget about.
+  const folder = useStorageFolder();
 
   // Measure what the models occupy, so the option can say what keeping them is
   // worth. Absent (or zero) and the choice is not offered at all - an empty
@@ -124,9 +128,18 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
                       {t(key)}
                     </li>
                   ))}
+                  {folder.handle && (
+                    <li className="flex gap-2">
+                      <span aria-hidden className="text-red-400">
+                        ·
+                      </span>
+                      {t('preferences.data.reset.item.folder', { name: folder.name })}
+                    </li>
+                  )}
                 </ul>
                 {/* The one genuinely reassuring fact, and the one people ask
-                    about first: the originals are referenced, never copied. */}
+                    about first: the files they imported from are never
+                    touched, whichever copy the library keeps. */}
                 <p className="mt-3 text-2xs leading-relaxed text-zinc-500">
                   {t('preferences.data.reset.safe')}
                 </p>
