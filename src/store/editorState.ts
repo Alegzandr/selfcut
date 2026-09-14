@@ -336,6 +336,12 @@ export interface EditorState {
   exportOpen: boolean;
   importing: boolean;
   /**
+   * An auto-balance of clip volumes is measuring loudness right now. Set for
+   * the whole pass so the command greys out instead of starting a second
+   * measurement over the first; see `ui/volumeBalanceActions.ts`.
+   */
+  volumeBalancing: boolean;
+  /**
    * A human-readable line about the one import step that is not instant: remuxing
    * an unreadable container through ffmpeg (pulling the core, reading the whole
    * file). Null the rest of the time, when the plain "Importing…" badge says all
@@ -508,6 +514,13 @@ export interface EditorState {
   updateClip: (clipId: string, patch: ClipPatch) => void;
   /** Same targeting as `updateClip`, committed as one history entry. */
   updateClipCommitted: (clipId: string, patch: ClipPatch) => void;
+  /**
+   * Set the volume of several clips at once, as ONE undo step. What the
+   * auto-balance commits after measuring: one Ctrl+Z has to bring every clip
+   * back, not peel them off one at a time. Ids that no longer exist (deleted
+   * while the measurement ran) are skipped.
+   */
+  setClipVolumes: (volumes: Record<string, number>) => void;
   /**
    * Keyframe-aware live transform edit — the one path the inspector transform
    * sliders and the preview move/scale/rotate gestures both use. For each
@@ -1011,6 +1024,7 @@ export interface EditorState {
   togglePreviewMuted: () => void;
   setExportOpen: (open: boolean) => void;
   setImporting: (v: boolean) => void;
+  setVolumeBalancing: (v: boolean) => void;
   /** Set (or clear, with null) the detailed import status line. */
   setImportStatus: (msg: string | null) => void;
   setError: (msg: string | null) => void;

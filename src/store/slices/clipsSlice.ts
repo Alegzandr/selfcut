@@ -167,6 +167,7 @@ export function createClipsSlice(
   | 'addShapeClip'
   | 'updateClip'
   | 'updateClipCommitted'
+  | 'setClipVolumes'
   | 'updateClipTransformLive'
   | 'updateClipColorLive'
   | 'setClipCurves'
@@ -613,6 +614,17 @@ export function createClipsSlice(
             if ('velocity' in fields) partner.clip.velocity = fields.velocity;
             if ('velocityLocked' in fields) partner.clip.velocityLocked = fields.velocityLocked;
           }
+        }
+      });
+    },
+
+    setClipVolumes: (volumes) => {
+      const entries = Object.entries(volumes);
+      if (entries.length === 0) return;
+      withHistory((p) => {
+        for (const [id, volume] of entries) {
+          const found = findClip(p, id);
+          if (found) found.clip.volume = volume;
         }
       });
     },

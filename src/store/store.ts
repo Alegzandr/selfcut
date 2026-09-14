@@ -366,6 +366,7 @@ export const useStore = create<EditorState>((set, get) => {
     clipboard: null,
     exportOpen: false,
     importing: false,
+    volumeBalancing: false,
     importStatus: null,
     transcodes: {},
     error: null,

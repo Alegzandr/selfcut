@@ -9,6 +9,7 @@ import {
   LinkBreak1Icon,
   LockOpen1Icon,
   MagicWandIcon,
+  MixerVerticalIcon,
   CardStackPlusIcon,
   EnterIcon,
   Pencil2Icon,
@@ -36,6 +37,7 @@ import { audioKey } from '../../media/mediaCache';
 import type { ContextTarget } from '../../store/editorState';
 import { reconnectAssetViaPicker } from '../MediaLibrary';
 import { removeCompWithConfirm } from '../compActions';
+import { balanceClipVolumes } from '../volumeBalanceActions';
 import { useEditorCommands, type Command } from '../commands';
 import { useIsCoarsePointer } from '../../lib/device';
 import type { MenuEntry } from './MenuList';
@@ -60,6 +62,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
   const assets = useStore((s) => s.assets);
   const canLink = useStore((s) => getLinkTargets(s) !== null);
   const expandedTrackIds = useStore((s) => s.expandedTrackIds);
+  const volumeBalancing = useStore((s) => s.volumeBalancing);
   const coarse = useIsCoarsePointer();
   const st = useStore.getState;
 
@@ -112,6 +115,7 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
         'clip.split',
         ...(picture ? ['clip.punchIn', 'clip.stream', 'clip.blurRegion', 'clip.maskedFx'] : []),
         'clip.captions',
+        'clip.balanceVolume',
         'clip.adjust',
         // Link when the selection joins into a pair; unlink on an already-linked clip.
         ...(canLink ? ['clip.link'] : []),
@@ -303,6 +307,16 @@ export function useContextMenuItems(target: ContextTarget): MenuEntry[] {
             st().setInspectorTab('subtitles');
             st().setInspectorOpen(true);
           },
+        });
+        // The whole lane at one level: what a track of interview shots or a
+        // bed of downloaded music needs before anything else is mixed. Runs
+        // on the spot - the target is fixed and there is nothing to choose.
+        items.push({
+          id: 'ctx.track.balanceVolume',
+          labelKey: 'ctx.track.balanceVolume',
+          icon: MixerVerticalIcon,
+          disabled: volumeBalancing,
+          onClick: () => void balanceClipVolumes(audible.map((clip) => clip.id)),
         });
       }
       items.push(

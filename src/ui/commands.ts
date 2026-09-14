@@ -36,6 +36,7 @@ import {
   MagnifyingGlassIcon,
   MaskOnIcon,
   MixerHorizontalIcon,
+  MixerVerticalIcon,
   PinLeftIcon,
   PlayIcon,
   ReloadIcon,
@@ -77,6 +78,7 @@ import { unbindProjectFile } from '../lib/projectFile';
 import { applyPresetToClips, exportClipPreset, importPreset } from './presetActions';
 import { clipDisplayName } from './clipName';
 import { decomposeWithConfirm } from './compActions';
+import { balanceClipVolumes, balanceTargets } from './volumeBalanceActions';
 import { t } from '../i18n';
 import { zoomAtPlayhead, zoomToFit } from '../timeline/zoom';
 import { PREVIEW_GUIDE_MODES } from '../preview/guides';
@@ -156,6 +158,12 @@ export function useEditorCommands(): Record<string, Command> {
     const clip = getSelectedClip(s);
     return clip?.kind === 'media' && !!s.assets[clip.assetId]?.hasAudio;
   });
+  // Balancing needs sound to measure behind at least one selected clip (the
+  // linked audio partner of a video clip counts), and one pass at a time.
+  const canBalance = useStore(
+    (s) => balanceTargets(s.project, s.assets, s.selectedClipIds).length > 0,
+  );
+  const volumeBalancing = useStore((s) => s.volumeBalancing);
   // Exporting needs something to write: subscribe to the boolean, not the cue
   // list, so a typo in one caption does not re-render every menu.
   const hasCues = useStore((s) =>
@@ -394,6 +402,17 @@ export function useEditorCommands(): Record<string, Command> {
         st().setInspectorTab('subtitles');
         st().setInspectorOpen(true);
       },
+    },
+    // Loudness-match the selection: measure each clip (ITU-R BS.1770) and set
+    // its volume so they all sound as loud as each other. Async, and one pass
+    // at a time - the flag greys the row out while the measurement runs.
+    {
+      id: 'clip.balanceVolume',
+      labelKey: 'menu.clip.balanceVolume',
+      hintKey: 'menu.clip.balanceVolume.hint',
+      icon: MixerVerticalIcon,
+      disabled: !canBalance || volumeBalancing,
+      onClick: () => void balanceClipVolumes(st().selectedClipIds),
     },
     { id: 'clip.adjust', labelKey: 'menu.clip.adjust', icon: MixerHorizontalIcon, disabled: !selectedId, onClick: () => st().setInspectorOpen(true) },
     { id: 'clip.link', labelKey: 'menu.clip.link', icon: Link2Icon, disabled: !canLink, onClick: () => { const targets = getLinkTargets(st()); if (targets) st().linkClips(targets); } },

@@ -118,6 +118,7 @@ export function createUiSlice(
   | 'setExportOpen'
   | 'setError'
   | 'setNotice'
+  | 'setVolumeBalancing'
   | 'addLoadedPreset'
   | 'removeLoadedPreset'
 > {
@@ -377,5 +378,7 @@ export function createUiSlice(
     // the previous toast's button, so a stale action can never outlive its text.
     setNotice: (msg, action = null) =>
       set({ notice: msg, noticeAction: msg ? action : null, ...(msg ? { error: null } : {}) }),
+
+    setVolumeBalancing: (v) => set({ volumeBalancing: v }),
   };
 }
