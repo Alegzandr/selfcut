@@ -38,6 +38,9 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
   const [keepModels, setKeepModels] = useState(true);
   const [modelBytes, setModelBytes] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  // Another tab held the database: the delete is queued behind it, and the
+  // reload would show a "cleared" app that still counts the gigabytes.
+  const [blocked, setBlocked] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
   // The copies in the storage folder go too, and the list has to say so: a
   // folder on another drive is exactly the kind of place people forget about.
@@ -84,7 +87,11 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
     // leaving the editor running on state whose backing store is gone is the
     // one outcome worse than an incomplete wipe.
     try {
-      await eraseSelfcutData({ keepModels: offerModels && keepModels });
+      const result = await eraseSelfcutData({ keepModels: offerModels && keepModels });
+      if (result.blocked) {
+        setBlocked(true);
+        return;
+      }
     } catch (err) {
       console.warn('[reset] erase failed:', err);
     }
@@ -151,7 +158,16 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
               </div>
             </div>
 
-            {offerModels && (
+            {blocked && (
+              <p
+                role="alert"
+                className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed text-amber-100"
+              >
+                {t('preferences.data.reset.blocked')}
+              </p>
+            )}
+
+            {offerModels && !blocked && (
               <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
                 <input
                   type="checkbox"
@@ -173,23 +189,37 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
             )}
 
             <div className="mt-5 flex justify-end gap-2">
-              <button
-                ref={cancelRef}
-                disabled={busy}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-                onClick={onClose}
-              >
-                {t('confirm.cancel')}
-              </button>
-              <button
-                disabled={busy}
-                className="rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/30 disabled:opacity-50"
-                onClick={() => void erase()}
-              >
-                {busy
-                  ? t('preferences.data.reset.working')
-                  : t('preferences.data.reset.confirm')}
-              </button>
+              {blocked ? (
+                // Persistence is suspended for good by now: the only way on
+                // is a restart, after which the queued delete has completed
+                // if the other tab was closed.
+                <button
+                  className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-700"
+                  onClick={() => location.reload()}
+                >
+                  {t('preferences.data.location.restart')}
+                </button>
+              ) : (
+                <>
+                  <button
+                    ref={cancelRef}
+                    disabled={busy}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                    onClick={onClose}
+                  >
+                    {t('confirm.cancel')}
+                  </button>
+                  <button
+                    disabled={busy}
+                    className="rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/30 disabled:opacity-50"
+                    onClick={() => void erase()}
+                  >
+                    {busy
+                      ? t('preferences.data.reset.working')
+                      : t('preferences.data.reset.confirm')}
+                  </button>
+                </>
+              )}
             </div>
           </m.div>
         </m.div>

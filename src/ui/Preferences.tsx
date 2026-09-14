@@ -252,6 +252,31 @@ function CaptionsTab() {
 }
 
 /**
+ * Chrome's per-store breakdown of the origin's usage, absent elsewhere. Shown
+ * because the total alone cannot say what is holding the space: a figure that
+ * survives the erase is an entirely different problem depending on whether it
+ * is the database, a cache bucket or a scratch file.
+ */
+type UsageDetails = Partial<
+  Record<'indexedDB' | 'caches' | 'fileSystem' | 'serviceWorkerRegistrations', number>
+>;
+
+const USAGE_PARTS: readonly { key: keyof UsageDetails; labelKey: ParseKeys }[] = [
+  { key: 'indexedDB', labelKey: 'preferences.data.usage.indexedDB' },
+  { key: 'caches', labelKey: 'preferences.data.usage.caches' },
+  { key: 'fileSystem', labelKey: 'preferences.data.usage.fileSystem' },
+  { key: 'serviceWorkerRegistrations', labelKey: 'preferences.data.usage.serviceWorker' },
+];
+
+function usageBreakdown(
+  estimate: StorageEstimate & { usageDetails?: UsageDetails },
+): UsageDetails | null {
+  const details = estimate.usageDetails;
+  if (!details || typeof details !== 'object') return null;
+  return USAGE_PARTS.some(({ key }) => (details[key] ?? 0) > 0) ? details : null;
+}
+
+/**
  * What Selfcut has stored, and the way out of it.
  *
  * Everything the editor keeps lives in this browser and nowhere else, which is
@@ -268,6 +293,7 @@ function CaptionsTab() {
 function DataTab() {
   const { t } = useTranslation();
   const [usage, setUsage] = useState<number | null>(null);
+  const [usageDetails, setUsageDetails] = useState<UsageDetails | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [folderSupported] = useState(storageFolderSupported);
   const location = useStorageLocation();
@@ -277,7 +303,9 @@ function DataTab() {
     void navigator.storage
       ?.estimate?.()
       .then((e) => {
-        if (live && typeof e.usage === 'number') setUsage(e.usage);
+        if (!live || typeof e.usage !== 'number') return;
+        setUsage(e.usage);
+        setUsageDetails(usageBreakdown(e as StorageEstimate & { usageDetails?: UsageDetails }));
       })
       .catch(() => undefined);
     return () => {
@@ -299,6 +327,16 @@ function DataTab() {
                 {formatBytes(usage)}
               </span>
             </Row>
+          )}
+          {usageDetails && (
+            <div className="py-2.5">
+              {USAGE_PARTS.filter(({ key }) => (usageDetails[key] ?? 0) > 0).map(({ key, labelKey }) => (
+                <div key={key} className="flex items-center justify-between gap-6 py-0.5 text-2xs text-zinc-500">
+                  <span>{t(labelKey)}</span>
+                  <span className="tabular-nums">{formatBytes(usageDetails[key]!)}</span>
+                </div>
+              ))}
+            </div>
           )}
           {folderSupported && <StorageLocationRow model={location} />}
         </Rows>
