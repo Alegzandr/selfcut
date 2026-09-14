@@ -3,7 +3,7 @@ import type { MouseEvent } from 'react';
 import { ComponentInstanceIcon } from '@radix-ui/react-icons';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/store';
-import { decimalsForStep, seedDecimals } from './entryDecimals';
+import { decimalsForStep, seedDecimals, snapToStep } from './entryDecimals';
 
 /**
  * Keyframe control for a slider row: the diamond that turns the property into an
@@ -81,6 +81,13 @@ export function SliderRow({
   value: number;
   min: number;
   max: number;
+  /**
+   * The drag's detent, in stored units. Pick the unit the read-out shows - a
+   * whole percent for a fraction read as "57 %", one degree, a whole dB on a
+   * fader - never something finer: a slider is a coarse instrument, and a drag
+   * that lands on 57,5 % is a number nobody aimed for. The decimals live in
+   * the typed entry (click the read-out), which ignores the step.
+   */
   step: number;
   format: (v: number) => string;
   /** Native tooltip, for a control whose label cannot carry the whole meaning. */
@@ -205,7 +212,7 @@ export function SliderRow({
           onPointerUp={endGesture}
           onContextMenu={onContextMenu}
           onDoubleClick={reset}
-          onChange={(e) => onChange(Number(e.target.value))}
+          onChange={(e) => onChange(snapToStep(Number(e.target.value), min, step))}
         />
       </label>
       {/* The read-out sits outside the label on purpose: as a second control it

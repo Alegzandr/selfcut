@@ -16,7 +16,7 @@ import {
 } from '../model';
 import { MIN_CLIP_DURATION_MS } from '../app/config';
 import type { AudioSegment } from '../media/audioSegments';
-import { buildAudioFxChain, type AudioFxChain } from './audioFx';
+import { buildAudioFxChain } from './audioFx';
 
 /** Where a track's clips connect: a plain node, or a per-track bus factory. */
 export type MixDestination = AudioNode | ((trackId: string) => AudioNode);
@@ -66,10 +66,44 @@ interface CompFrame {
 interface ClipChain {
   /** Where segment sources connect: the clip's gain (envelope) node. */
   input: AudioNode;
+  /**
+   * The clip's volume, on a node of its own after the envelope. Kept apart
+   * from the fades so a fader moved mid-playback is one short ramp on this
+   * node rather than a re-laid envelope (see `applyVolumes`).
+   */
+  trim: GainNode;
+  /** The volume `trim` was last asked for, so an unchanged fader costs nothing. */
+  volume: number;
   /** Every node of the chain (gain, mono downmix, panner, fx) - disconnected on stop. */
   nodes: AudioNode[];
   sources: Set<AudioBufferSourceNode>;
 }
+
+/** One lane's shared nodes: its fader, and its FX chain when it carries one. */
+interface Lane {
+  /** Where the lane's clips connect: the lane fader, ahead of the effects. */
+  input: GainNode;
+  volume: number;
+  /** Every node the lane owns - disconnected on stop. */
+  nodes: AudioNode[];
+}
+
+/**
+ * Time constant of the ramp a live fader move is applied with, in seconds.
+ *
+ * A gain that steps clicks - the waveform jumps - and the preview used to tear
+ * the whole graph down on every fader move instead, which was worse: a row of
+ * buffer sources stopped mid-sample and the transport re-anchored, sixty times
+ * a second under a drag. Ten milliseconds reaches the new level in about fifty
+ * and is well under what a hand on a fader can hear as lag.
+ */
+const VOLUME_RAMP_TAU_S = 0.01;
+
+/**
+ * What separates two project versions for the mix: nothing, only how loud
+ * something is, or the schedule itself. See `audioMixDelta`.
+ */
+export type AudioMixDelta = 'same' | 'volumes' | 'structure';
 
 /**
  * Schedules a project's audio onto a Web Audio context, a window at a time.
@@ -96,14 +130,17 @@ interface ClipChain {
 export class MixScheduler {
   private chains = new Map<string, ClipChain>();
   /**
-   * The FX chain of each lane that has one, by track id, built on first use.
+   * Each lane's fader and FX chain, by (composition instance, track id), built
+   * on first use.
    *
    * One per track, not one per clip: a track effect processes the SUM of the
    * lane, which is the whole reason to reach for it. Building it per clip would
    * be five compressors that each only hear their own shot - they would pump
    * against each other at every cut - and five reverb tails restarting there.
+   * The fader lives here for the same reason, and so that a track's volume can
+   * move while the lane plays without touching any clip's envelope.
    */
-  private trackFx = new Map<string, AudioFxChain>();
+  private lanes = new Map<string, Lane>();
   /** `${clipId}@${segmentIndex}` for every segment already scheduled. */
   private placed = new Set<string>();
   private stopped = false;
@@ -155,8 +192,7 @@ export class MixScheduler {
 
     for (const track of tracks) {
       if (!isTrackAudible(track, tracks)) continue;
-      const trackVolume = track.volume ?? 1;
-      if (trackVolume <= 0) continue;
+      if ((track.volume ?? 1) <= 0) continue;
       const xfades = trackCrossfades(track.clips);
       // Inside a composition every lane feeds the comp clip's own chain, so the
       // group is faded, panned and metered as the one layer the parent sees.
@@ -165,11 +201,13 @@ export class MixScheduler {
         : typeof this.destination === 'function'
           ? this.destination(track.id)
           : this.destination;
-      const dest = this.trackInput(track, bus, frame?.prefix ?? '');
+      // Resolved by the first clip that actually gets a chain, so a lane whose
+      // audio has not been decoded yet leaves nothing hanging off the bus.
+      const dest = () => this.laneInput(track, bus, frame?.prefix ?? '');
       for (const clip of track.clips) {
         if (clip.volume <= 0) continue;
         if (isCompClip(clip)) {
-          this.extendComp(project, clip, dest, trackVolume, fromMs, untilMs, frame);
+          this.extendComp(project, clip, dest, fromMs, untilMs, frame);
           continue;
         }
         if (isGeneratedClip(clip)) continue;
@@ -182,15 +220,7 @@ export class MixScheduler {
         if (clipEndMs(scheduled) <= fromMs || scheduled.timelineStartMs >= untilMs) continue;
         const scale = frame ? frame.scale : 1;
         const xf = xfades.get(clip.id) ?? { inMs: 0, outMs: 0 };
-        this.extendClip(
-          scheduled,
-          dest,
-          trackVolume,
-          xf.inMs * scale,
-          xf.outMs * scale,
-          fromMs,
-          untilMs,
-        );
+        this.extendClip(scheduled, dest, xf.inMs * scale, xf.outMs * scale, fromMs, untilMs);
       }
     }
   }
@@ -210,8 +240,7 @@ export class MixScheduler {
   private extendComp(
     project: Project,
     clip: CompClip,
-    destination: AudioNode,
-    trackVolume: number,
+    destination: () => AudioNode,
     fromMs: number,
     untilMs: number,
     frame: CompFrame | null,
@@ -228,7 +257,7 @@ export class MixScheduler {
     if (endMs <= fromMs || startMs >= untilMs) return;
 
     const prefix = `${frame?.prefix ?? ''}${clip.id}/`;
-    const chain = this.chainFor(scheduled, destination, trackVolume, 0, 0, Math.max(fromMs, startMs));
+    const chain = this.chainFor(scheduled, destination, 0, 0, Math.max(fromMs, startMs));
     // Composition ms -> root ms. `scheduled.speed` is already source (here:
     // composition) ms per ROOT ms, so its reciprocal is the scale, and the
     // origin is where composition time 0 would fall.
@@ -245,27 +274,78 @@ export class MixScheduler {
   }
 
   /**
-   * Where a lane's clips connect: its own FX chain when it carries one, spliced
-   * once between every clip of the lane and the mix bus it feeds, else the bus
-   * itself.
+   * Where a lane's clips connect: the lane's fader, spliced once between every
+   * clip of the lane and the mix bus it feeds, through the lane's FX chain when
+   * it carries one.
    *
-   * The chain sits BEFORE the bus, so the track meter and the master gain both
-   * read the processed lane - what the export will contain - rather than the
-   * raw sum with the effect hanging off the side.
+   * Fader then effects, so the lane sounds exactly as it did when the track
+   * volume was folded into each clip's envelope: a compressor on the lane
+   * still hears the faded sum. Both sit BEFORE the bus, so the track meter and
+   * the master gain read the processed lane - what the export will contain -
+   * rather than the raw sum with the effect hanging off the side.
    */
-  private trackInput(track: Track, bus: AudioNode, prefix: string): AudioNode {
+  private laneInput(track: Track, bus: AudioNode, prefix: string): AudioNode {
     // Keyed with the composition instance, not by track id alone: one
     // composition used twice is two lanes feeding two different comp chains,
-    // and sharing one effect chain between them would route the second use into
-    // the first one's fader.
+    // and sharing one fader between them would route the second use into the
+    // first one's.
     const key = `${prefix}${track.id}`;
-    const built = this.trackFx.get(key);
+    const built = this.lanes.get(key);
     if (built) return built.input;
-    const chain = buildAudioFxChain(this.ctx, track.audioFx);
-    if (!chain) return bus;
-    chain.output.connect(bus);
-    this.trackFx.set(key, chain);
-    return chain.input;
+    const volume = track.volume ?? 1;
+    const fader = this.ctx.createGain();
+    fader.gain.value = volume;
+    const nodes: AudioNode[] = [fader];
+    const fx = buildAudioFxChain(this.ctx, track.audioFx);
+    if (fx) {
+      fader.connect(fx.input);
+      fx.output.connect(bus);
+      nodes.push(...fx.nodes);
+    } else {
+      fader.connect(bus);
+    }
+    this.lanes.set(key, { input: fader, volume, nodes });
+    return fader;
+  }
+
+  /**
+   * Follow the project's volumes on the graph that is playing, without
+   * rebuilding it.
+   *
+   * Every fader the scheduler owns - each lane's, each clip's trim - is ramped
+   * to the value the project now holds, over a few milliseconds so nothing
+   * clicks. Only what already plays is touched: a clip the schedule has not
+   * reached yet reads its volume when its chain is built, and a lane or clip
+   * that was silent (volume 0) was never scheduled at all, which is why a
+   * fader lifted off the floor is a rebuild and not a ramp (see
+   * `audioMixDelta`).
+   */
+  applyVolumes(project: Project, compId: CompId = null): void {
+    if (this.stopped) return;
+    this.applyLaneVolumes(project, tracksOf(project, compId), '');
+  }
+
+  private applyLaneVolumes(project: Project, tracks: Track[], prefix: string): void {
+    const now = this.ctx.currentTime;
+    for (const track of tracks) {
+      const lane = this.lanes.get(`${prefix}${track.id}`);
+      const laneVolume = track.volume ?? 1;
+      if (lane && lane.volume !== laneVolume) {
+        lane.volume = laneVolume;
+        lane.input.gain.setTargetAtTime(laneVolume, now, VOLUME_RAMP_TAU_S);
+      }
+      for (const clip of track.clips) {
+        const chain = this.chains.get(`${prefix}${clip.id}`);
+        if (chain && chain.volume !== clip.volume) {
+          chain.volume = clip.volume;
+          chain.trim.gain.setTargetAtTime(clip.volume, now, VOLUME_RAMP_TAU_S);
+        }
+        if (isCompClip(clip)) {
+          const comp = findComp(project, clip.compId);
+          if (comp) this.applyLaneVolumes(project, comp.tracks, `${prefix}${clip.id}/`);
+        }
+      }
+    }
   }
 
   /** Stop and release every node this scheduler created. */
@@ -285,20 +365,19 @@ export class MixScheduler {
       for (const node of chain.nodes) node.disconnect();
     }
     this.chains.clear();
-    // The lane chains outlive every clip chain that fed them, so they are torn
-    // down after: a track reverb left connected would keep ringing into a bus
-    // the next schedule reuses.
-    for (const chain of this.trackFx.values()) {
-      for (const node of chain.nodes) node.disconnect();
+    // The lanes outlive every clip chain that fed them, so they are torn down
+    // after: a track reverb left connected would keep ringing into a bus the
+    // next schedule reuses.
+    for (const lane of this.lanes.values()) {
+      for (const node of lane.nodes) node.disconnect();
     }
-    this.trackFx.clear();
+    this.lanes.clear();
     this.placed.clear();
   }
 
   private extendClip(
     clip: Clip,
-    destination: AudioNode,
-    trackVolume: number,
+    destination: () => AudioNode,
     xfadeInMs: number,
     xfadeOutMs: number,
     fromMs: number,
@@ -328,7 +407,7 @@ export class MixScheduler {
 
     // Built on first contact with the clip, so a clip whose audio has not been
     // decoded yet does not leave an idle chain hanging off the bus.
-    const chain = this.chainFor(clip, destination, trackVolume, xfadeInMs, xfadeOutMs, windowFrom);
+    const chain = this.chainFor(clip, destination, xfadeInMs, xfadeOutMs, windowFrom);
     const now = this.ctx.currentTime;
 
     for (const segment of segments) {
@@ -390,8 +469,7 @@ export class MixScheduler {
    */
   private chainFor(
     clip: Clip,
-    destination: AudioNode,
-    trackVolume: number,
+    destination: () => AudioNode,
     xfadeInMs: number,
     xfadeOutMs: number,
     effectiveStartTl: number,
@@ -400,8 +478,13 @@ export class MixScheduler {
     if (existing) return existing;
 
     const gain = this.ctx.createGain();
-    const nodes: AudioNode[] = [gain];
-    let tail: AudioNode = gain;
+    // The clip's volume on its own node, after the envelope, so a fader moved
+    // while the clip plays is one ramp here and the fades stay where they are.
+    const trim = this.ctx.createGain();
+    trim.gain.value = clip.volume;
+    gain.connect(trim);
+    const nodes: AudioNode[] = [gain, trim];
+    let tail: AudioNode = trim;
 
     if (clip.mono) {
       // A 1-channel explicit gain node averages L/R; the stereo destination
@@ -425,19 +508,20 @@ export class MixScheduler {
     // Audio effects sit at the end of the clip chain (after gain/mono/pan), so
     // they process the clip's final signal before it reaches the mix bus.
     const fxChain = buildAudioFxChain(this.ctx, clip.audioFx);
+    const dest = destination();
     if (fxChain) {
       tail.connect(fxChain.input);
-      fxChain.output.connect(destination);
+      fxChain.output.connect(dest);
       nodes.push(...fxChain.nodes);
     } else {
-      tail.connect(destination);
+      tail.connect(dest);
     }
 
-    // Gain envelope: base volume × fades/crossfades (linear ramps). A crossfade
-    // is an implicit fade of the overlap duration; the longer of the explicit
-    // fade and the crossfade wins, keeping the ramp linear.
-    const base = clip.volume * trackVolume;
-    const envAt = (tlMs: number) => base * clipEnvelopeGainAt(clip, tlMs, xfadeInMs, xfadeOutMs);
+    // Gain envelope: fades/crossfades as linear ramps, from unity - the clip's
+    // and the lane's volumes sit on their own nodes. A crossfade is an implicit
+    // fade of the overlap duration; the longer of the explicit fade and the
+    // crossfade wins, keeping the ramp linear.
+    const envAt = (tlMs: number) => clipEnvelopeGainAt(clip, tlMs, xfadeInMs, xfadeOutMs);
     const clipEnd = clipEndMs(clip);
     gain.gain.setValueAtTime(
       envAt(effectiveStartTl),
@@ -454,7 +538,7 @@ export class MixScheduler {
       gain.gain.linearRampToValueAtTime(envAt(tl), this.tlToCtx(tl));
     }
 
-    const chain: ClipChain = { input: gain, nodes, sources: new Set() };
+    const chain: ClipChain = { input: gain, trim, volume: clip.volume, nodes, sources: new Set() };
     this.chains.set(clip.id, chain);
     return chain;
   }
@@ -608,24 +692,54 @@ export function scheduleProjectAudio(
  * added here too, or the preview will stop following that edit.
  */
 export function sameAudioMix(a: Project, b: Project): boolean {
-  if (a === b) return true;
+  return audioMixDelta(a, b) === 'same';
+}
+
+/**
+ * What an edit did to the mix: nothing, moved a fader, or changed the schedule.
+ *
+ * The middle answer is the one the preview wants most: a volume drag writes the
+ * store on every pointermove, and the graph that is playing can follow it with
+ * a ramp on the node that carries that volume (`MixScheduler.applyVolumes`)
+ * instead of being torn down. Only a fader that crosses silence counts as
+ * structure - a clip or lane at volume 0 is never scheduled, so lifting it
+ * needs a schedule, and dropping one to 0 could leave the next rebuild with a
+ * different set of chains than the ramp left playing.
+ */
+export function audioMixDelta(a: Project, b: Project): AudioMixDelta {
+  if (a === b) return 'same';
   // Compositions carry sound of their own, so an edit two precomps deep changes
   // the mix exactly as an edit on the timeline does. Compared by identity first,
   // which copy-on-write makes free for every composition the edit did not touch.
   const ca = a.comps ?? [];
   const cb = b.comps ?? [];
-  if (ca.length !== cb.length) return false;
+  if (ca.length !== cb.length) return 'structure';
+  let delta: AudioMixDelta = 'same';
   for (let i = 0; i < ca.length; i++) {
     if (ca[i] === cb[i]) continue;
-    if (ca[i]!.id !== cb[i]!.id) return false;
-    if (!sameLaneAudio(ca[i]!.tracks, cb[i]!.tracks)) return false;
+    if (ca[i]!.id !== cb[i]!.id) return 'structure';
+    delta = worse(delta, laneAudioDelta(ca[i]!.tracks, cb[i]!.tracks));
+    if (delta === 'structure') return delta;
   }
-  return sameLaneAudio(a.tracks, b.tracks);
+  return worse(delta, laneAudioDelta(a.tracks, b.tracks));
 }
 
-/** The per-lane half of `sameAudioMix`, shared by the timeline and every comp. */
-function sameLaneAudio(la: Track[], lb: Track[]): boolean {
-  if (la.length !== lb.length) return false;
+/** The larger of two deltas: structure over volumes over same. */
+function worse(a: AudioMixDelta, b: AudioMixDelta): AudioMixDelta {
+  if (a === 'structure' || b === 'structure') return 'structure';
+  if (a === 'volumes' || b === 'volumes') return 'volumes';
+  return 'same';
+}
+
+/** A volume edit that turns sound on or off, rather than up or down. */
+function crossesSilence(a: number, b: number): boolean {
+  return a <= 0 !== b <= 0;
+}
+
+/** The per-lane half of `audioMixDelta`, shared by the timeline and every comp. */
+function laneAudioDelta(la: Track[], lb: Track[]): AudioMixDelta {
+  if (la.length !== lb.length) return 'structure';
+  let delta: AudioMixDelta = 'same';
   for (let i = 0; i < la.length; i++) {
     const ta = la[i]!;
     const tb = lb[i]!;
@@ -635,22 +749,32 @@ function sameLaneAudio(la: Track[], lb: Track[]): boolean {
       ta.kind !== tb.kind ||
       !!ta.muted !== !!tb.muted ||
       !!ta.solo !== !!tb.solo ||
-      (ta.volume ?? 1) !== (tb.volume ?? 1) ||
       !sameAudioFx(ta.audioFx, tb.audioFx) ||
       ta.clips.length !== tb.clips.length
     ) {
-      return false;
+      return 'structure';
+    }
+    const va = ta.volume ?? 1;
+    const vb = tb.volume ?? 1;
+    if (va !== vb) {
+      if (crossesSilence(va, vb)) return 'structure';
+      delta = 'volumes';
     }
     for (let j = 0; j < ta.clips.length; j++) {
       const clipA = ta.clips[j]!;
       const clipB = tb.clips[j]!;
       if (clipA === clipB) continue;
-      if (!sameAudioClip(clipA, clipB)) return false;
+      if (!sameAudioClip(clipA, clipB)) return 'structure';
+      if (clipA.volume !== clipB.volume) {
+        if (crossesSilence(clipA.volume, clipB.volume)) return 'structure';
+        delta = 'volumes';
+      }
     }
   }
-  return true;
+  return delta;
 }
 
+/** Everything but the volume, which `laneAudioDelta` weighs on its own. */
 function sameAudioClip(a: Clip, b: Clip): boolean {
   return (
     a.id === b.id &&
@@ -659,7 +783,6 @@ function sameAudioClip(a: Clip, b: Clip): boolean {
     (a.kind !== 'comp' || a.compId === (b as typeof a).compId) &&
     a.audioTrackIndex === b.audioTrackIndex &&
     a.linkId === b.linkId &&
-    a.volume === b.volume &&
     a.timelineStartMs === b.timelineStartMs &&
     a.sourceInMs === b.sourceInMs &&
     a.sourceOutMs === b.sourceOutMs &&

@@ -112,7 +112,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 value={mask!.x}
                 min={0}
                 max={1}
-                step={0.005}
+                step={0.01}
                 format={(v) => `${Math.round(v * 100)}%`}
                 entry={PERCENT_ENTRY}
                 defaultValue={DEFAULT_MASK.x}
@@ -123,7 +123,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 value={mask!.y}
                 min={0}
                 max={1}
-                step={0.005}
+                step={0.01}
                 format={(v) => `${Math.round(v * 100)}%`}
                 entry={PERCENT_ENTRY}
                 defaultValue={DEFAULT_MASK.y}
@@ -134,7 +134,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 value={mask!.w}
                 min={0.02}
                 max={1}
-                step={0.005}
+                step={0.01}
                 format={(v) => `${Math.round(v * 100)}%`}
                 entry={PERCENT_ENTRY}
                 defaultValue={DEFAULT_MASK.w}
@@ -145,7 +145,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
                 value={mask!.h}
                 min={0.02}
                 max={1}
-                step={0.005}
+                step={0.01}
                 format={(v) => `${Math.round(v * 100)}%`}
                 entry={PERCENT_ENTRY}
                 defaultValue={DEFAULT_MASK.h}
@@ -158,7 +158,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
             value={mask!.feather}
             min={0}
             max={0.3}
-            step={0.005}
+            step={0.01}
             format={(v) => `${Math.round(v * 100)}%`}
             entry={PERCENT_ENTRY}
             defaultValue={DEFAULT_MASK.feather}

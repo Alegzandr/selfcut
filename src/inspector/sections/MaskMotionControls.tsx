@@ -29,8 +29,8 @@ const MOTION_AXES: {
   fmt: (v: number) => string;
   entry?: NumericEntry;
 }[] = [
-  { prop: 'tx', labelKey: 'inspector.mask.offsetX', def: 0, min: -0.5, max: 0.5, step: 0.005, fmt: (v) => `${Math.round(v * 100)}%`, entry: PERCENT_ENTRY },
-  { prop: 'ty', labelKey: 'inspector.mask.offsetY', def: 0, min: -0.5, max: 0.5, step: 0.005, fmt: (v) => `${Math.round(v * 100)}%`, entry: PERCENT_ENTRY },
+  { prop: 'tx', labelKey: 'inspector.mask.offsetX', def: 0, min: -0.5, max: 0.5, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%`, entry: PERCENT_ENTRY },
+  { prop: 'ty', labelKey: 'inspector.mask.offsetY', def: 0, min: -0.5, max: 0.5, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%`, entry: PERCENT_ENTRY },
   { prop: 'scale', labelKey: 'inspector.mask.scale', def: 1, min: 0.2, max: 3, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%`, entry: PERCENT_ENTRY },
   // Rotation is stored in the degrees it reads in, so it needs no mapping.
   { prop: 'rotation', labelKey: 'inspector.mask.rotation', def: 0, min: -180, max: 180, step: 1, fmt: (v) => `${Math.round(v)}°` },

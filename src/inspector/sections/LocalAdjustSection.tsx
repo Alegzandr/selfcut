@@ -264,7 +264,7 @@ export function LocalAdjustSection({ clip }: { clip: Clip }) {
                       value={active[axis.prop]}
                       min={axis.min}
                       max={1}
-                      step={0.005}
+                      step={0.01}
                       format={(v) => `${Math.round(v * 100)}%`}
                       entry={PERCENT_ENTRY}
                       defaultValue={REGION_DEFAULTS[axis.prop]}
@@ -277,7 +277,7 @@ export function LocalAdjustSection({ clip }: { clip: Clip }) {
                   value={active.feather}
                   min={0}
                   max={0.3}
-                  step={0.005}
+                  step={0.01}
                   format={(v) => `${Math.round(v * 100)}%`}
                   entry={PERCENT_ENTRY}
                   defaultValue={REGION_DEFAULTS.feather}
