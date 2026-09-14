@@ -83,6 +83,7 @@ const CLIP_TILES: readonly Tile[] = [
   { cmd: 'clip.stream', labelKey: 'clipbar.stream', mediaOnly: true, pictureOnly: true },
   { cmd: 'clip.blurRegion', labelKey: 'clipbar.blurRegion', pictureOnly: true },
   { cmd: 'clip.adjust', labelKey: 'clipbar.adjust' },
+  { cmd: 'clip.balanceVolume', labelKey: 'clipbar.balanceVolume', mediaOnly: true },
   { cmd: 'clip.link', labelKey: 'clipbar.link', linkableOnly: true },
   { cmd: 'clip.unlink', labelKey: 'clipbar.unlink', linkedOnly: true },
   // Touch gets a single "Delete" that closes the gap (ripple), matching the

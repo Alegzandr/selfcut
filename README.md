@@ -57,6 +57,9 @@ slides, wipe, zoom.
 
 **Mix.** Per-clip volume envelopes and audio effects - leveler, voice, bass,
 reverb, echo - all native Web Audio, so preview and export sound identical.
+Auto-balance measures how loud each clip sounds (ITU-R BS.1770 integrated
+loudness) and sets the volumes of a selection or a whole track to one level, in
+one undo step, holding back only what would clip.
 Auto-captions transcribe the selected clips locally with Whisper (desktop only;
 the model downloads once and the audio never leaves the browser). Pick the
 spoken language or let it be detected, aim the pass at any audio track of the

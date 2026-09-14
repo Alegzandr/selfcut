@@ -1,7 +1,11 @@
 import { useTranslation } from 'react-i18next';
-import { Cross2Icon } from '@radix-ui/react-icons';
+import { Cross2Icon, MixerVerticalIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../store/store';
+import { editTargets } from '../../store/editTargets';
 import { ToggleButton } from '../../ui/ToggleButton';
+import { Tooltip } from '../../ui/Tooltip';
+import { balanceClipVolumes } from '../../ui/volumeBalanceActions';
+import { TARGET_LUFS } from '../../lib/loudness';
 import { AudioFxType, Clip } from '../../types';
 import { PERCENT_ENTRY, SliderRow, type NumericEntry } from '../SliderRow';
 import { gainDb } from '../format';
@@ -36,6 +40,14 @@ export function AudioSection({ clip }: { clip: Clip }) {
     gain: clip.volume,
     onCommit: (volume) => updateClipCommitted(clip.id, { volume }),
   });
+
+  const volumeBalancing = useStore((s) => s.volumeBalancing);
+  // The same clips a drag of the fader above reaches: the whole selection when
+  // this clip belongs to one, resolved to each clip's own audio side.
+  const balanceSelection = () => {
+    const s = useStore.getState();
+    void balanceClipVolumes(editTargets(s.project, s.selectedClipIds, clip.id));
+  };
 
   const fxList = clip.audioFx ?? [];
   // Both edits rebuild the list from EACH edited clip's own effects: with
@@ -84,6 +96,23 @@ export function AudioSection({ clip }: { clip: Clip }) {
         onContextMenu={volumeEntry.onContextMenu}
       />
       {volumeEntry.entry}
+      {/* Under the fader, where the number it will move lives. Measures rather
+          than guesses: the volume lands where the clip reads the target. */}
+      <div className="flex items-center gap-3 text-xs">
+        <span className="w-16 flex-none" aria-hidden />
+        <Tooltip label={t('inspector.balanceVolume.hint', { lufs: TARGET_LUFS })}>
+          <button
+            type="button"
+            className="touch-hit flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-1 text-2xs font-medium text-zinc-200 hover:bg-zinc-700/70 active:bg-zinc-700 disabled:opacity-40"
+            disabled={volumeBalancing}
+            aria-busy={volumeBalancing}
+            onClick={balanceSelection}
+          >
+            <MixerVerticalIcon className="h-3 w-3" />
+            {volumeBalancing ? t('inspector.balanceVolume.running') : t('inspector.balanceVolume')}
+          </button>
+        </Tooltip>
+      </div>
       {/* Balance is typed as a signed percentage - negative is left - since the
           read-out's L/R letter is not something a field can take. */}
       <SliderRow
