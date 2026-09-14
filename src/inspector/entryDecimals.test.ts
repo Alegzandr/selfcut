@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_ENTRY_DECIMALS, decimalsForStep, seedDecimals } from './entryDecimals';
+import { MAX_ENTRY_DECIMALS, decimalsForStep, seedDecimals, snapToStep } from './entryDecimals';
 
 const percent = (v: number) => v * 100;
 const toSeconds = (ms: number) => ms / 1000;
@@ -47,5 +47,25 @@ describe('seedDecimals', () => {
   it('never drops below the floor the step asks for', () => {
     expect(seedDecimals(toSeconds(1200), 1)).toBe(1);
     expect(seedDecimals(identity(12), 2)).toBe(2);
+  });
+});
+
+describe('snapToStep', () => {
+  it('strips the float noise of min + n × step', () => {
+    // What the range input hands over for a 57 % stretch from a 10 % floor.
+    expect(snapToStep(0.1 + 47 * 0.01, 0.1, 0.01)).toBe(0.57);
+    expect(snapToStep(0.02 + 13 * 0.01, 0.02, 0.01)).toBe(0.15);
+  });
+
+  it('keeps a whole-dB fader position exact enough to round-trip', () => {
+    const step = 1 / 60;
+    const pos = snapToStep(48 * step, 0, step);
+    expect(Math.round(pos / step)).toBe(48);
+    expect(pos).toBeCloseTo(0.8, 12);
+  });
+
+  it('leaves a value alone without a usable step', () => {
+    expect(snapToStep(0.123, 0, 0)).toBe(0.123);
+    expect(snapToStep(Infinity, 0, 1)).toBe(Infinity);
   });
 });

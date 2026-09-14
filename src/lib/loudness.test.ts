@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { LoudnessMeter, PEAK_CEILING_DB, TARGET_LUFS, balanceGain } from './loudness';
+import {
+  LoudnessMeter,
+  MASTER_TARGET_LUFS,
+  MAX_LIMITING_DB,
+  PEAK_CEILING_DB,
+  TARGET_LUFS,
+  balanceGain,
+  masterNormalization,
+} from './loudness';
 import { MAX_GAIN, gainToDb } from './gain';
 
 /**
@@ -135,5 +143,34 @@ describe('balanceGain', () => {
 
   it('leaves silence alone', () => {
     expect(balanceGain({ lufs: -Infinity, peak: 0 })).toBeNull();
+  });
+});
+
+describe('masterNormalization', () => {
+  it('lifts a quiet mix to the master target', () => {
+    const decision = masterNormalization({ lufs: -22.4, peak: 0.2 })!;
+    expect(decision.gainDb).toBeCloseTo(8.4, 9);
+    expect(decision.resultLufs).toBeCloseTo(MASTER_TARGET_LUFS, 9);
+    expect(decision.limited).toBe(false);
+  });
+
+  it('turns a hot mix down, however far', () => {
+    const decision = masterNormalization({ lufs: -4, peak: 1 })!;
+    expect(decision.gainDb).toBe(-10);
+    expect(decision.limited).toBe(false);
+  });
+
+  it('holds the lift back where the limiter would have to work too hard', () => {
+    // -30 LUFS with peaks at -3 dBFS: reaching -14 asks for +16 dB, which puts
+    // the peaks at +13 dBFS - 14 dB over the ceiling. The limiter takes 6 of
+    // those; the rest is not applied.
+    const decision = masterNormalization({ lufs: -30, peak: 10 ** (-3 / 20) })!;
+    expect(decision.gainDb).toBeCloseTo(-1 + 3 + MAX_LIMITING_DB, 9);
+    expect(decision.limited).toBe(true);
+    expect(decision.resultLufs).toBeLessThan(MASTER_TARGET_LUFS);
+  });
+
+  it('leaves silence alone', () => {
+    expect(masterNormalization({ lufs: -Infinity, peak: 0 })).toBeNull();
   });
 });

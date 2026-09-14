@@ -4,7 +4,7 @@ import { useEnterMotion } from '../ui/motion';
 import { BlendingModeIcon, Cross2Icon, Pencil1Icon, SpeakerLoudIcon } from '@radix-ui/react-icons';
 import { useStore, getLanes } from '../store/store';
 import { gainDb } from '../inspector/format';
-import { faderToGainStepped, gainToFader } from '../lib/gain';
+import { DB_STEP_FADER, faderToGainStepped, gainToFader } from '../lib/gain';
 
 /**
  * The track's levels, on touch.
@@ -89,7 +89,7 @@ export function TrackSettingsSheet() {
                   type="range"
                   min={0}
                   max={1}
-                  step={0.001}
+                  step={DB_STEP_FADER}
                   value={gainToFader(track.volume ?? 1)}
                   className="min-w-0 flex-1 accent-zinc-300 pointer-coarse:h-8 [color-scheme:dark]"
                   aria-label={t('a11y.track.volume')}

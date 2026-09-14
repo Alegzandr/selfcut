@@ -122,7 +122,7 @@ export function TextSection({ clip }: { clip: TextClip }) {
         value={text.sizeFrac}
         min={0.02}
         max={0.3}
-        step={0.005}
+        step={0.01}
         format={pct}
         entry={PERCENT_ENTRY}
         defaultValue={DEFAULT_TEXT_SIZE_FRAC}

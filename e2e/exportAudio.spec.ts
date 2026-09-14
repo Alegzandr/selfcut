@@ -188,20 +188,90 @@ test('a source longer than one decode segment comes back continuous', async ({ p
 });
 
 /**
+ * The master normalization lands the file on the loudness target, and does it
+ * with one gain over the mix: the clips' own volumes are not touched.
+ *
+ * Measured with the app's own meter on what the browser decodes back from the
+ * MP3, which is what a platform's normalizer would read. The raw export of
+ * the same timeline is measured first, so the test proves the level MOVED
+ * rather than that the fixture happened to sit on the target already.
+ */
+test('the master is delivered at the loudness target when normalized', async ({ page }) => {
+  test.setTimeout(180_000);
+
+  await page.addInitScript(() => {
+    delete (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker;
+  });
+
+  await page.goto('/app/');
+  await page.setInputFiles('input[type="file"]', {
+    name: 'quiet-take.wav',
+    mimeType: 'audio/wav',
+    buffer: makeWav({ seconds: 12 }),
+  });
+  await expect(page.locator('[data-clip-id]')).toHaveCount(1);
+  const storeUrl = await appModuleUrl(page, STORE_MODULE);
+
+  const raw = await exportMp3(page, storeUrl);
+  expect(raw.error ?? null).toBeNull();
+  expect(raw.normalization).toBeNull();
+  const rawLufs = (await loudnessOfScratch(page)).lufs;
+  // The fixture is nowhere near the target on its own.
+  expect(Math.abs(rawLufs - MASTER_TARGET_LUFS)).toBeGreaterThan(2);
+
+  const normalized = await exportMp3(page, storeUrl, { normalize: true });
+  expect(normalized.error ?? null).toBeNull();
+  const decision = normalized.normalization!;
+  expect(decision).not.toBeNull();
+  expect(decision.limited).toBe(false);
+  // The meter that decided the gain read the same mix the raw file carries.
+  expect(decision.measuredLufs).toBeCloseTo(rawLufs, 0);
+  // To the tenth of a dB the gain is quantized to.
+  expect(decision.resultLufs).toBeCloseTo(MASTER_TARGET_LUFS, 1);
+
+  const { lufs, peak } = await loudnessOfScratch(page);
+  // Within a dB of the target through an MP3 encode and decode.
+  expect(Math.abs(lufs - MASTER_TARGET_LUFS)).toBeLessThan(1);
+  // And under the ceiling the limiter holds (a little slack for the codec).
+  expect(peak).toBeLessThan(10 ** (-0.5 / 20));
+
+  // The timeline itself was not touched: the clip still sits at unity.
+  const clipVolume = await page.evaluate(async (mod) => {
+    const { useStore } = (await import(mod)) as { useStore: { getState: () => never } };
+    const s = useStore.getState() as unknown as { project: { tracks: { clips: { volume: number }[] }[] } };
+    return s.project.tracks.flatMap((t) => t.clips).map((c) => c.volume);
+  }, storeUrl);
+  expect(clipVolume).toEqual([1]);
+});
+
+/** Where the master is brought to (see `MASTER_TARGET_LUFS` in `lib/loudness`). */
+const MASTER_TARGET_LUFS = -14;
+
+/**
  * Export the current project through the exporter module with an MP3 preset:
  * the audio path with nothing else in it.
  */
-async function exportMp3(page: Page, storeUrl: string) {
+async function exportMp3(page: Page, storeUrl: string, options: { normalize?: boolean } = {}) {
   const exporterUrl = await appModuleUrl(page, EXPORTER_MODULE);
   return page.evaluate(
-    async ({ exporter, store }) => {
+    async ({ exporter, store, opts }) => {
+      type Normalization = {
+        measuredLufs: number;
+        gainDb: number;
+        resultLufs: number;
+        limited: boolean;
+      };
       const { startExport } = (await import(exporter)) as {
         startExport: (
           project: unknown,
           assets: unknown,
           preset: unknown,
           onProgress: (v: number) => void,
-        ) => { promise: Promise<{ blob: Blob | null; filename: string }> };
+          region: null,
+          options: { normalize?: boolean },
+        ) => {
+          promise: Promise<{ blob: Blob | null; filename: string; normalization: Normalization | null }>;
+        };
       };
       const { useStore } = (await import(store)) as { useStore: { getState: () => never } };
       const s = useStore.getState() as unknown as { project: unknown; assets: unknown };
@@ -215,14 +285,60 @@ async function exportMp3(page: Page, storeUrl: string) {
         audioBitrate: 192_000,
       };
       try {
-        const { blob } = await startExport(s.project, s.assets, preset, () => {}).promise;
-        return { ok: true, hasBlob: !!blob };
+        const { blob, normalization } = await startExport(
+          s.project,
+          s.assets,
+          preset,
+          () => {},
+          null,
+          opts,
+        ).promise;
+        return { ok: true, hasBlob: !!blob, normalization };
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) };
       }
     },
-    { exporter: exporterUrl, store: storeUrl },
+    { exporter: exporterUrl, store: storeUrl, opts: options },
   );
+}
+
+/** The integrated loudness and sample peak of the render in scratch storage. */
+async function loudnessOfScratch(page: Page) {
+  const loudnessUrl = await appModuleUrl(page, '/src/lib/loudness.ts');
+  return page.evaluate(async (mod) => {
+    type Dir = {
+      getDirectoryHandle(name: string): Promise<Dir>;
+      getFileHandle(name: string): Promise<{ getFile(): Promise<Blob> }>;
+      keys(): AsyncIterable<string>;
+    };
+    const g = globalThis as unknown as {
+      navigator: { storage: { getDirectory(): Promise<Dir> } };
+      AudioContext: new () => {
+        decodeAudioData(b: ArrayBuffer): Promise<{
+          sampleRate: number;
+          numberOfChannels: number;
+          getChannelData(i: number): Float32Array;
+        }>;
+      };
+    };
+    const dir = await (await g.navigator.storage.getDirectory()).getDirectoryHandle('exports');
+    let name: string | null = null;
+    for await (const key of dir.keys()) name = key;
+    if (!name) throw new Error('no scratch file');
+    const bytes = await (await (await dir.getFileHandle(name)).getFile()).arrayBuffer();
+    const decoded = await new g.AudioContext().decodeAudioData(bytes);
+    const { LoudnessMeter } = (await import(mod)) as {
+      LoudnessMeter: new (
+        rate: number,
+        channels: number,
+      ) => { process(c: Float32Array[]): void; result(): { lufs: number; peak: number } };
+    };
+    const meter = new LoudnessMeter(decoded.sampleRate, decoded.numberOfChannels);
+    const channels: Float32Array[] = [];
+    for (let c = 0; c < decoded.numberOfChannels; c++) channels.push(decoded.getChannelData(c));
+    meter.process(channels);
+    return meter.result();
+  }, loudnessUrl);
 }
 
 /**

@@ -29,6 +29,10 @@ class FakeParam {
     this.events.push(['ramp', value, time]);
     return this;
   }
+  setTargetAtTime(value: number, time: number, _tau: number): this {
+    this.events.push(['target', value, time]);
+    return this;
+  }
 }
 
 class FakeNode {
@@ -246,16 +250,24 @@ describe('MixScheduler', () => {
   it('builds one gain chain per clip, whatever the number of pieces', () => {
     const ctx = new FakeCtx();
     const mix = scheduler(ctx, lookupOf(segment(0), segment(1), segment(2)));
-    const p = project([clip({ sourceInMs: 0, sourceOutMs: 80_000, volume: 0.5 })]);
+    const p = project([clip({ sourceInMs: 0, sourceOutMs: 80_000, volume: 0.5 })], {
+      volume: 0.25,
+    });
     mix.extend(p, 0, 30_000);
     mix.extend(p, 30_000, 90_000);
 
     // A second chain would put the clip's volume, fades and effects on the
-    // signal twice from the first boundary on.
-    expect(ctx.gains).toHaveLength(1);
-    expect(ctx.gains[0]!.gain.events[0]).toEqual(['set', 0.5, 0]);
+    // signal twice from the first boundary on. One envelope, one trim, one
+    // lane fader - and the volumes sit on the faders, not in the envelope.
+    expect(ctx.gains).toHaveLength(3);
+    const [envelope, trim, lane] = ctx.gains as [FakeGain, FakeGain, FakeGain];
+    expect(lane.gain.value).toBe(0.25);
+    expect(envelope.gain.events[0]).toEqual(['set', 1, 0]);
+    expect(trim.gain.value).toBe(0.5);
+    expect(envelope.outputs).toEqual([trim]);
+    expect(trim.outputs).toEqual([lane]);
     expect(ctx.sources).toHaveLength(3);
-    for (const source of ctx.sources) expect(source.outputs).toContain(ctx.gains[0]);
+    for (const source of ctx.sources) expect(source.outputs).toContain(envelope);
   });
 
   it('lays the fade envelope on absolute timeline instants', () => {
@@ -272,6 +284,29 @@ describe('MixScheduler', () => {
     // Ramps land where the fades are, not where a segment happens to end.
     expect(events.map((e) => e[2])).toEqual([0, 1, 8, 10]);
     expect(events.at(-1)).toEqual(['ramp', 0, 10]);
+  });
+
+  it('follows a fader moved mid-playback with a ramp, not a rebuild', () => {
+    const ctx = new FakeCtx();
+    const mix = scheduler(ctx, lookupOf(segment(0)));
+    mix.extend(project([clip({ volume: 0.5 })], { volume: 0.8 }), 0, 10_000);
+    const [envelope, trim, lane] = ctx.gains as [FakeGain, FakeGain, FakeGain];
+    const laid = envelope.gain.events.length;
+
+    ctx.currentTime = 2;
+    mix.applyVolumes(project([clip({ volume: 0.25 })], { volume: 0.4 }));
+
+    // A short ramp on the node that carries the volume; the envelope, with the
+    // fades laid on it, is left alone and no source is stopped or restarted.
+    expect(trim.gain.events).toEqual([['target', 0.25, 2]]);
+    expect(lane.gain.events).toEqual([['target', 0.4, 2]]);
+    expect(envelope.gain.events).toHaveLength(laid);
+    expect(ctx.sources).toHaveLength(1);
+
+    // Unchanged faders are not re-issued: a drag re-applies on every move.
+    mix.applyVolumes(project([clip({ volume: 0.25 })], { volume: 0.4 }));
+    expect(trim.gain.events).toHaveLength(1);
+    expect(lane.gain.events).toHaveLength(1);
   });
 
   it('does not build a chain for a clip whose audio is not decoded yet', () => {
@@ -293,7 +328,7 @@ describe('MixScheduler', () => {
 
     expect(ctx.sources).toHaveLength(2);
     for (const source of ctx.sources) expect(source.disconnected).toBe(1);
-    expect(ctx.gains[0]!.disconnected).toBe(1);
+    for (const gain of ctx.gains) expect(gain.disconnected).toBe(1);
     // And a scheduler that has been stopped stays stopped.
     mix.extend(project([clip()]), 0, 10_000);
     expect(ctx.sources).toHaveLength(2);

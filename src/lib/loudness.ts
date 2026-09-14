@@ -300,3 +300,67 @@ export function balanceGain(
   const db = Math.min(MAX_DB, Math.max(MIN_DB, Math.min(wanted, room)));
   return { gain: dbToGain(Math.round(db * 10) / 10), limited: db !== wanted };
 }
+
+/**
+ * The level the exported master is brought to.
+ *
+ * -14 LUFS is what YouTube, Spotify and TikTok normalize to: a file delivered
+ * there is played back untouched, and one delivered at the clip target (-16)
+ * is left alone too but sits 2 dB under everything around it. Distinct from
+ * `TARGET_LUFS` on purpose - the clips are balanced against each other with
+ * headroom for the mix, the mix is delivered at the platforms' level.
+ */
+export const MASTER_TARGET_LUFS = -14;
+
+/**
+ * How much of the lift the master limiter is allowed to absorb, in dB.
+ *
+ * Bringing a mix to the target can push its peaks over the ceiling; the
+ * limiter turns those down, and a few dB of that on a handful of transients
+ * is inaudible. Past this it stops being a safety and becomes the sound - a
+ * mix that needs 10 dB of limiting to reach -14 is pumping - so the gain is
+ * held back instead and the report says by how much.
+ */
+export const MAX_LIMITING_DB = 6;
+
+/** What the master normalization decided for one export. */
+export interface MasterNormalization {
+  /** The mix as measured, before the gain. */
+  measuredLufs: number;
+  /** Gain applied to the whole mix, in dB, to a tenth. */
+  gainDb: number;
+  /** Where the mix lands: measured plus gain. */
+  resultLufs: number;
+  /**
+   * The mix could not be brought all the way to the target without more
+   * limiting than `MAX_LIMITING_DB`, and was held short of it.
+   */
+  limited: boolean;
+}
+
+/**
+ * The gain that brings a measured mix to the master target.
+ *
+ * Null for a silent mix: there is nothing to normalize, and lifting nothing by
+ * +60 dB only lifts the noise floor. A hot mix is turned down all the way; a
+ * quiet one is lifted until its peaks would need more limiting than the
+ * limiter is trusted with.
+ */
+export function masterNormalization(
+  measured: LoudnessResult,
+  targetLufs = MASTER_TARGET_LUFS,
+  peakCeilingDb = PEAK_CEILING_DB,
+  maxLimitingDb = MAX_LIMITING_DB,
+): MasterNormalization | null {
+  if (!isFinite(measured.lufs)) return null;
+  const wanted = targetLufs - measured.lufs;
+  const peakDb = measured.peak > 0 ? 20 * Math.log10(measured.peak) : -Infinity;
+  const room = peakCeilingDb - peakDb + maxLimitingDb;
+  const db = Math.round(Math.min(wanted, room) * 10) / 10;
+  return {
+    measuredLufs: measured.lufs,
+    gainDb: db,
+    resultLufs: measured.lufs + db,
+    limited: db < Math.round(wanted * 10) / 10,
+  };
+}

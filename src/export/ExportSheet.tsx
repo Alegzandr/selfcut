@@ -10,6 +10,7 @@ import {
   UpdateIcon,
 } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
+import i18n from '../i18n';
 import { formatTime } from '../lib/time';
 import {
   exportFileName,
@@ -41,6 +42,8 @@ import {
   type ExportFallback,
   ExportHandle,
 } from './exporter';
+import { setStoredNormalize, storedNormalize } from './exportPrefs';
+import { MASTER_TARGET_LUFS, type MasterNormalization } from '../lib/loudness';
 import {
   estimateRemainingMs,
   formatDuration,
@@ -58,7 +61,7 @@ type Phase =
    */
   | { kind: 'rendering'; progress: number; fallback?: ExportFallback }
   /** `blob` is null when the render went straight to the file the user picked. */
-  | { kind: 'done'; filename: string; blob: Blob | null }
+  | { kind: 'done'; filename: string; blob: Blob | null; normalization: MasterNormalization | null }
   | { kind: 'error'; message: string };
 
 /**
@@ -114,6 +117,18 @@ function useRenderClock(rendering: boolean, progress: number) {
   return clock;
 }
 
+/** A loudness to a tenth, in the locale: "-14,0". */
+const lufs = (v: number) =>
+  new Intl.NumberFormat(i18n.language, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(v);
+
+/** A gain in dB with its sign: "+8,4", "-2,0". */
+const signedDb = (v: number) =>
+  new Intl.NumberFormat(i18n.language, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+    signDisplay: 'exceptZero',
+  }).format(v);
+
 export function ExportSheet() {
   const { t } = useTranslation();
   const sheet = useEnterMotion({ y: '110%' });
@@ -131,6 +146,8 @@ export function ExportSheet() {
    * choice made about THIS render rather than one made once and forgotten.
    */
   const [forceMaxFps, setForceMaxFps] = useState(false);
+  /** Remembered: how the master is delivered is a habit, not a per-render call. */
+  const [normalize, setNormalize] = useState(storedNormalize);
   /**
    * The base name of the file to write, without its extension. Empty until the
    * user types one: the placeholder shows the stamped default, and typing over
@@ -197,6 +214,7 @@ export function ExportSheet() {
       exportedRegion,
       {
         forceMaxFps,
+        normalize,
         fileName,
         onFallback: (fallback) =>
           setPhase((p) => (p.kind === 'rendering' ? { ...p, fallback } : p)),
@@ -204,10 +222,10 @@ export function ExportSheet() {
     );
     handleRef.current = handle;
     handle.promise
-      .then(({ blob, filename }) => {
+      .then(({ blob, filename, normalization }) => {
         // Nothing to download when the worker streamed into the user's file.
         if (blob) downloadBlob(blob, filename);
-        setPhase({ kind: 'done', filename, blob });
+        setPhase({ kind: 'done', filename, blob, normalization });
       })
       .catch((err: unknown) => {
         // User-initiated (cancel button, or dismissing the save picker): back
@@ -351,6 +369,27 @@ export function ExportSheet() {
                   </label>
                 )}
 
+                {/* The master's level, not the clips': the volumes set on the
+                    timeline stay as they are, and one gain over the sum lands
+                    the file where the platforms play it untouched. */}
+                <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-xs text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={normalize}
+                    onChange={(e) => {
+                      setNormalize(e.target.checked);
+                      setStoredNormalize(e.target.checked);
+                    }}
+                    className="mt-0.5 h-3.5 w-3.5 accent-blue-400"
+                  />
+                  <span>
+                    {t('export.normalize', { lufs: MASTER_TARGET_LUFS })}
+                    <span className="mt-0.5 block text-2xs text-zinc-500">
+                      {t('export.normalize.hint')}
+                    </span>
+                  </span>
+                </label>
+
                 <label className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950 px-2.5 py-2 text-xs text-zinc-300">
                   <span className="flex-none text-zinc-400">{t('export.fileName')}</span>
                   <input
@@ -458,6 +497,20 @@ export function ExportSheet() {
                     components={{ name: <span className="text-xs" /> }}
                   />
                 </p>
+                {phase.normalization && (
+                  <p className="text-2xs tabular-nums text-zinc-400">
+                    {t(
+                      phase.normalization.limited
+                        ? 'export.normalized.limited'
+                        : 'export.normalized',
+                      {
+                        from: lufs(phase.normalization.measuredLufs),
+                        to: lufs(phase.normalization.resultLufs),
+                        gain: signedDb(phase.normalization.gainDb),
+                      },
+                    )}
+                  </p>
+                )}
                 <div className="flex gap-2">
                   {phase.blob && (
                     <button

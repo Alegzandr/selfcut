@@ -32,7 +32,7 @@ import { syncLuts } from './colorPass';
 import { SCOPE_SAMPLE_WIDTH } from './scopes';
 import { hasScopeListeners, publishScopeFrame } from './scopeBus';
 import { renderPreviewFrame, subscribeRenderPreview } from '../export/renderPreviewBus';
-import { MixScheduler, sameAudioMix } from './audioMix';
+import { MixScheduler, audioMixDelta } from './audioMix';
 import { TrackLevels, hasLevelListeners, publishLevels } from './meterBus';
 
 /**
@@ -616,14 +616,21 @@ export class PlaybackEngine {
       this.videoDirty = true;
       this.pruneCursors(state.project);
       ensureProjectFonts(state.project);
-      // Only an edit that changes the mix is worth tearing the graph down for:
-      // a transform drag fires updateClip on every pointermove, and
-      // rescheduling there stutters the audio for nothing.
-      if (this.wasPlaying && !sameAudioMix(previous, state.project)) {
-        // Coalesced rather than acted on here, and pushed back by every
-        // further edit so a gesture rebuilds once, at its end, not on a timer
-        // running underneath it. See MIX_SETTLE_MS.
-        this.mixDirtyAt = performance.now();
+      // Only an edit that changes the schedule is worth tearing the graph
+      // down for: a transform drag fires updateClip on every pointermove, and
+      // rescheduling there stutters the audio for nothing. A fader move is
+      // followed on the graph that is playing - a ramp, not a rebuild - which
+      // is what keeps a volume drag under a running playhead from clicking.
+      if (this.wasPlaying) {
+        const delta = audioMixDelta(previous, state.project);
+        if (delta === 'structure') {
+          // Coalesced rather than acted on here, and pushed back by every
+          // further edit so a gesture rebuilds once, at its end, not on a
+          // timer running underneath it. See MIX_SETTLE_MS.
+          this.mixDirtyAt = performance.now();
+        } else if (delta === 'volumes') {
+          this.mix?.applyVolumes(state.project, state.activeCompId);
+        }
       }
     }
 

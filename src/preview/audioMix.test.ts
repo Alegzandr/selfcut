@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Clip, Project, Track } from '../types';
-import { sameAudioMix } from './audioMix';
+import { audioMixDelta, sameAudioMix } from './audioMix';
 
 /**
  * `sameAudioMix` decides whether the preview tears down and rebuilds its whole
@@ -145,5 +145,31 @@ describe('sameAudioMix', () => {
       two.tracks = [...two.tracks, { id: 't2', kind: 'audio', clips: [] }];
       expect(sameAudioMix(project(), two)).toBe(false);
     });
+  });
+});
+
+describe('audioMixDelta', () => {
+  it('reads a volume edit as a fader move, not a schedule change', () => {
+    expect(audioMixDelta(...edited({ volume: 0.5 }))).toBe('volumes');
+    expect(audioMixDelta(project(), project({ volume: 0.5 }))).toBe('volumes');
+    expect(audioMixDelta(project({ volume: 0.5 }), project({ volume: 0.7 }))).toBe('volumes');
+  });
+
+  it('is structure for a fader lifted off silence or dropped onto it', () => {
+    // A clip at volume 0 is never scheduled, so there is nothing to ramp.
+    expect(audioMixDelta(...edited({ volume: 0 }))).toBe('structure');
+    expect(audioMixDelta(project({}, [clip({ volume: 0 })]), project())).toBe('structure');
+    expect(audioMixDelta(project({ volume: 0 }), project())).toBe('structure');
+  });
+
+  it('is structure for anything else the schedule reads', () => {
+    expect(audioMixDelta(...edited({ timelineStartMs: 100 }))).toBe('structure');
+    expect(audioMixDelta(project(), project({ muted: true }))).toBe('structure');
+    // A volume edit alongside a timing edit is still a rebuild.
+    expect(audioMixDelta(...edited({ volume: 0.5, fadeInMs: 200 }))).toBe('structure');
+  });
+
+  it('is same for what cannot change the sound', () => {
+    expect(audioMixDelta(project(), project({ opacity: 0.3 }))).toBe('same');
   });
 });

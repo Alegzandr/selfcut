@@ -10,10 +10,13 @@ import { firstUncloneable } from '../lib/cloneable';
 import { openExportScratch, readExportScratch } from '../lib/opfs';
 import { flushProjectSave } from '../lib/persistence';
 import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
+import { MasterChain } from './masterChain';
+import type { MasterNormalization } from '../lib/loudness';
 import { clearRenderPreview, publishRenderFrame } from './renderPreviewBus';
 import { nextAttempt, retryReason, type ExportAttempt } from './retryPlan';
 import { perfEnabled, type PerfSnapshot } from '../perf/probe';
 import {
+  AUDIO_CHUNK_FRAMES,
   type AudioMixInfo,
   type ExportEncoderInfo,
   ExportErrorCode,
@@ -61,14 +64,35 @@ export interface ExportOptions {
    * The sheet's checkbox; see `ResolveOptions` in `presets`.
    */
   forceMaxFps?: boolean;
+  /**
+   * Bring the whole mix to the master loudness target before encoding.
+   *
+   * The master, not the clips: every track and clip volume stays exactly as
+   * set, and one gain over the sum moves the result to where the platforms
+   * play it untouched (see `MASTER_TARGET_LUFS`), with a limiter on the peaks.
+   * Measured on a first pass over the mix, applied on the pass the encoder
+   * pulls; see `MasterChain`.
+   */
+  normalize?: boolean;
 }
 
-export interface ExportHandle {
+export interface ExportResult {
   /**
    * `blob` is null when the render streamed straight into a file the user
    * picked: the file is already on disk, so there is nothing left to download.
    */
-  promise: Promise<{ blob: Blob | null; filename: string }>;
+  blob: Blob | null;
+  filename: string;
+  /**
+   * What the master normalization did, when it was asked for and the mix had
+   * something to measure. Null otherwise - including for a silent mix, which
+   * is exported as it is rather than lifted.
+   */
+  normalization: MasterNormalization | null;
+}
+
+export interface ExportHandle {
+  promise: Promise<ExportResult>;
   cancel: () => void;
 }
 
@@ -289,12 +313,21 @@ export function startExport(
     onProgress(0.02);
     // Works out the mix's shape; the samples themselves - and the source
     // segments they read - are produced slice by slice, as the worker asks.
-    const mix = prepareAudioMix(project, assets, startMs, durationMs);
+    const mix = prepareAudioMix(project, assets, startMs, durationMs, !!options?.normalize);
     if (canceled) throw new Error(t('errors.export.canceled'));
     onProgress(0.1);
     if (preset.kind === 'mp3' && !mix) {
       throw new Error(t(ERROR_KEYS.noAudibleAudio));
     }
+    // The loudness pass starts now and overlaps the video render, which never
+    // asks for the mix before its last frame. An audio-only export has no
+    // video to hide it behind, so there it is the first stretch of the bar.
+    const measureShare = mix?.master && preset.kind === 'mp3' ? 0.4 : 0;
+    const workerBase = 0.1 + measureShare;
+    void mix?.master?.measure(
+      () => canceled,
+      measureShare > 0 ? (v) => onProgress(0.1 + v * measureShare) : undefined,
+    );
 
     // Adapt frame rate (and, with it, bitrate) to the project's source footage
     // right before encoding, so the worker receives the exact settings to use.
@@ -380,7 +413,7 @@ export function startExport(
         rejectWorkerReply = reject;
         worker!.onmessage = (e: MessageEvent<WorkerReply>) => {
           const msg = e.data;
-          if (msg.type === 'progress') onProgress(0.1 + msg.value * 0.9);
+          if (msg.type === 'progress') onProgress(workerBase + msg.value * (1 - workerBase));
           else if (msg.type === 'perf') lastPerf = msg.snapshot;
           else if (msg.type === 'needAudio') void serveAudio(msg.offset, msg.frames);
           // The frame the render is on, onto the preview monitor: for the whole
@@ -469,13 +502,16 @@ export function startExport(
         // The new attempt walks the same ground from the start: put the bar back
         // where that attempt begins rather than let it appear to freeze at
         // whatever the abandoned render had reached.
-        onProgress(0.1);
+        onProgress(workerBase);
       }
     }
     rejectWorkerReply = null;
     for (const bitmap of Object.values(stills)) bitmap.close();
 
     onProgress(1);
+    // Settled long before this point: the encoder cannot have pulled a slice
+    // of mix without it.
+    const normalization = mix?.master ? await mix.master.measure() : null;
     // Three destinations, one return shape. A render into the file the user
     // picked is already where they wanted it (blob: null, nothing to
     // download); a scratch render is on disk too, but privately, so it is
@@ -487,10 +523,13 @@ export function startExport(
     // opened before the first attempt and outlives one that never used it, so
     // an attempt that buffered would otherwise hand back that untouched file -
     // a download of nothing at all, reported as a finished export.
-    if (scratch && !attempt.bufferOutput) return { blob: await readExportScratch(scratch), filename };
+    if (scratch && !attempt.bufferOutput) {
+      return { blob: await readExportScratch(scratch), filename, normalization };
+    }
     return {
       blob: buffer.buffer ? new Blob([buffer.buffer], { type: buffer.mime }) : null,
       filename,
+      normalization,
     };
   })();
 
@@ -540,14 +579,36 @@ export function startExport(
  * that sample, not accumulated.
  */
 class AudioMixRenderer {
+  /**
+   * The master normalization over the raw mix, when the export asked for it.
+   * Its measurement pass reads the same slices the encoder will, ahead of it.
+   */
+  readonly master: MasterChain | null;
+
   constructor(
     private readonly project: Project,
     private readonly assets: Record<string, MediaAsset>,
     private readonly startMs: number,
     readonly info: AudioMixInfo,
-  ) {}
+    normalize: boolean,
+  ) {
+    this.master = normalize
+      ? new MasterChain(
+          (offset, frames) => this.renderRaw(offset, frames),
+          info.sampleRate,
+          info.channelCount,
+          info.totalFrames,
+          AUDIO_CHUNK_FRAMES,
+        )
+      : null;
+  }
 
-  async render(offset: number, frames: number): Promise<Float32Array[]> {
+  /** The `frames` of finished mix from `offset`: the master, or the raw sum. */
+  render(offset: number, frames: number): Promise<Float32Array[]> {
+    return this.master ? this.master.render(offset, frames) : this.renderRaw(offset, frames);
+  }
+
+  private async renderRaw(offset: number, frames: number): Promise<Float32Array[]> {
     const fromMs = this.startMs + (offset / this.info.sampleRate) * 1000;
     const durationMs = (Math.max(1, frames) / this.info.sampleRate) * 1000;
     // Decoded first and held for the whole render: the scheduler reads what is
@@ -653,16 +714,19 @@ function prepareAudioMix(
   assets: Record<string, MediaAsset>,
   startMs: number,
   durationMs: number,
+  normalize: boolean,
 ): AudioMixRenderer | null {
   // An asset with an audio track counts as audible; a source that turns out to
   // decode to nothing renders as silence in its slices.
   if (audibleClips(project, assets, startMs, durationMs).length === 0) return null;
   const totalFrames = Math.max(1, Math.ceil((durationMs / 1000) * AUDIO_SAMPLE_RATE));
-  return new AudioMixRenderer(project, assets, startMs, {
-    sampleRate: AUDIO_SAMPLE_RATE,
-    channelCount: 2,
-    totalFrames,
-  });
+  return new AudioMixRenderer(
+    project,
+    assets,
+    startMs,
+    { sampleRate: AUDIO_SAMPLE_RATE, channelCount: 2, totalFrames },
+    normalize,
+  );
 }
 
 /**
