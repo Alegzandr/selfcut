@@ -602,6 +602,7 @@
   "preferences.data.location.moveFailed_other": "{{count}} fichiers n'ont pas pu être déplacés et restent où ils étaient. SelfCut redémarre maintenant.",
   "preferences.data.location.restart": "Redémarrer",
   "preferences.data.location.pickFailed": "Ce dossier ne peut pas être utilisé.",
+  "preferences.data.location.unsupported": "Le choix d'un dossier de stockage pour la médiathèque demande Chrome, Edge ou un autre navigateur basé sur Chromium. Ce navigateur garde tout dans son propre stockage.",
   "preferences.data.reset.item.folder": "Les copies des médias dans votre dossier de stockage ({{name}})",
   "storage.folder.banner": "SelfCut a besoin de votre autorisation pour lire son dossier de stockage ({{name}}).",
   "storage.folder.allow": "Autoriser l'accès",

@@ -602,6 +602,7 @@
   "preferences.data.location.moveFailed_other": "{{count}} 个文件无法移动，将留在原处。SelfCut 现在重新启动。",
   "preferences.data.location.restart": "重新启动",
   "preferences.data.location.pickFailed": "无法使用该文件夹。",
+  "preferences.data.location.unsupported": "为媒体库选择存储文件夹需要 Chrome、Edge 或其他基于 Chromium 的浏览器。当前浏览器会把所有内容保存在自己的存储空间中。",
   "preferences.data.reset.item.folder": "存储文件夹（{{name}}）中的媒体副本",
   "storage.folder.banner": "SelfCut 需要你的许可才能读取其存储文件夹（{{name}}）。",
   "storage.folder.allow": "允许访问",

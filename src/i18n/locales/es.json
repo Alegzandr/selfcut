@@ -602,6 +602,7 @@
   "preferences.data.location.moveFailed_other": "{{count}} archivos no se pudieron mover y se quedan donde estaban. SelfCut se reinicia ahora.",
   "preferences.data.location.restart": "Reiniciar",
   "preferences.data.location.pickFailed": "Esa carpeta no se puede usar.",
+  "preferences.data.location.unsupported": "Elegir una carpeta de almacenamiento para la biblioteca requiere Chrome, Edge u otro navegador basado en Chromium. Este navegador guarda todo en su propio almacenamiento.",
   "preferences.data.reset.item.folder": "Las copias de los medios en tu carpeta de almacenamiento ({{name}})",
   "storage.folder.banner": "SelfCut necesita tu permiso para leer su carpeta de almacenamiento ({{name}}).",
   "storage.folder.allow": "Permitir el acceso",

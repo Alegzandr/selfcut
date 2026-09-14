@@ -602,6 +602,7 @@
   "preferences.data.location.moveFailed_other": "{{count}} files could not be moved and stay where they were. SelfCut restarts now.",
   "preferences.data.location.restart": "Restart",
   "preferences.data.location.pickFailed": "That folder could not be used.",
+  "preferences.data.location.unsupported": "Choosing a storage folder for the media library needs Chrome, Edge or another Chromium-based browser. This browser keeps everything in its own storage.",
   "preferences.data.reset.item.folder": "The media copies in your storage folder ({{name}})",
   "storage.folder.banner": "SelfCut needs your permission to read its storage folder ({{name}}).",
   "storage.folder.allow": "Allow access",

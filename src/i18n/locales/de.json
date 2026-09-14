@@ -602,6 +602,7 @@
   "preferences.data.location.moveFailed_other": "{{count}} Dateien konnten nicht verschoben werden und bleiben, wo sie waren. SelfCut startet jetzt neu.",
   "preferences.data.location.restart": "Neu starten",
   "preferences.data.location.pickFailed": "Dieser Ordner kann nicht verwendet werden.",
+  "preferences.data.location.unsupported": "Ein Speicherordner für die Mediathek braucht Chrome, Edge oder einen anderen Browser auf Chromium-Basis. Dieser Browser behält alles in seinem eigenen Speicher.",
   "preferences.data.reset.item.folder": "Die Medienkopien in deinem Speicherordner ({{name}})",
   "storage.folder.banner": "SelfCut braucht deine Erlaubnis, um seinen Speicherordner ({{name}}) zu lesen.",
   "storage.folder.allow": "Zugriff erlauben",

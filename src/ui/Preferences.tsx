@@ -303,7 +303,15 @@ function DataTab() {
           {folderSupported && <StorageLocationRow model={location} />}
         </Rows>
       )}
-      {folderSupported && <StorageLocationNotes model={location} />}
+      {folderSupported ? (
+        <StorageLocationNotes model={location} />
+      ) : (
+        // Said rather than left out: someone who read about the folder and
+        // cannot find the row would otherwise assume the build is missing it.
+        <p className="mt-3 text-2xs leading-relaxed text-zinc-500">
+          {t('preferences.data.location.unsupported')}
+        </p>
+      )}
 
       <div className="mt-4 rounded-xl border border-red-500/25 bg-red-500/5 p-3.5">
         <h3 className="text-xs font-semibold text-red-200">

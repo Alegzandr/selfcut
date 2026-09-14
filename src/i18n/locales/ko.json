@@ -602,6 +602,7 @@
   "preferences.data.location.moveFailed_other": "파일 {{count}}개를 이동하지 못해 원래 위치에 남습니다. SelfCut이 지금 다시 시작됩니다.",
   "preferences.data.location.restart": "다시 시작",
   "preferences.data.location.pickFailed": "이 폴더는 사용할 수 없습니다.",
+  "preferences.data.location.unsupported": "미디어 라이브러리의 저장 폴더를 선택하려면 Chrome, Edge 등 Chromium 기반 브라우저가 필요합니다. 이 브라우저는 모든 것을 자체 저장소에 보관합니다.",
   "preferences.data.reset.item.folder": "저장 폴더({{name}})에 있는 미디어 복사본",
   "storage.folder.banner": "SelfCut이 저장 폴더({{name}})를 읽으려면 권한이 필요합니다.",
   "storage.folder.allow": "접근 허용",

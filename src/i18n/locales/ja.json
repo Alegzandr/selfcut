@@ -602,6 +602,7 @@
   "preferences.data.location.moveFailed_other": "{{count}} 個のファイルを移動できず、元の場所に残ります。SelfCut を再起動します。",
   "preferences.data.location.restart": "再起動",
   "preferences.data.location.pickFailed": "このフォルダーは使用できません。",
+  "preferences.data.location.unsupported": "メディアライブラリの保存フォルダーを選ぶには Chrome、Edge などの Chromium ベースのブラウザーが必要です。このブラウザーではすべてがブラウザー自身の保存領域に置かれます。",
   "preferences.data.reset.item.folder": "保存フォルダー（{{name}}）内のメディアのコピー",
   "storage.folder.banner": "SelfCut が保存フォルダー（{{name}}）を読み取るには許可が必要です。",
   "storage.folder.allow": "アクセスを許可",

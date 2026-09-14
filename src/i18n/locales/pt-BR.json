@@ -602,6 +602,7 @@
   "preferences.data.location.moveFailed_other": "{{count}} arquivos não puderam ser movidos e ficam onde estavam. O SelfCut reinicia agora.",
   "preferences.data.location.restart": "Reiniciar",
   "preferences.data.location.pickFailed": "Essa pasta não pode ser usada.",
+  "preferences.data.location.unsupported": "Escolher uma pasta de armazenamento para a biblioteca exige Chrome, Edge ou outro navegador baseado em Chromium. Este navegador guarda tudo no próprio armazenamento.",
   "preferences.data.reset.item.folder": "As cópias das mídias na sua pasta de armazenamento ({{name}})",
   "storage.folder.banner": "O SelfCut precisa da sua permissão para ler a pasta de armazenamento ({{name}}).",
   "storage.folder.allow": "Permitir acesso",
