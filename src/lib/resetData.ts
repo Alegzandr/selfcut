@@ -1,8 +1,7 @@
 import { selfcutStorageKeys } from '../store/constants';
 import { closeDb, DB_NAME } from './idb';
-import { removeExportScratch } from './opfs';
+import { CAPTION_CACHE_NAME } from '../media/captionsCache';
 import { deleteFolderLibrary, suspendPersistence } from './persistence';
-import { deleteCaptionCache } from '../media/captionsCache';
 
 /**
  * Hand everything Selfcut has stored back to the user.
@@ -88,6 +87,62 @@ export interface EraseResult {
   blocked: boolean;
 }
 
+/**
+ * Every IndexedDB database on the origin, not just the one this code opens.
+ *
+ * The erase used to delete `selfcut` by name and stop, and an erase that left
+ * gigabytes behind is what showed the gap: whatever else a library, an older
+ * build or a browser quirk has put here is the user's to reclaim with one
+ * button, and enumerating is how nothing is missed. `databases()` is absent
+ * in some browsers, where the named delete is the best that can be done.
+ */
+async function deleteAllDatabases(): Promise<{ blocked: boolean }> {
+  let names = [DB_NAME];
+  try {
+    const listed = await indexedDB.databases?.();
+    if (listed) names = [...new Set([DB_NAME, ...listed.map((d) => d.name).filter((n): n is string => !!n)])];
+  } catch {
+    /* enumeration unsupported - the named delete still runs */
+  }
+  let blocked = false;
+  for (const name of names) blocked = (await deleteDatabase(name)).blocked || blocked;
+  return { blocked };
+}
+
+/**
+ * Empty the origin's private file system entirely, `exports/` included. Only
+ * SelfCut writes there and only its scratch files live there, so the whole
+ * tree is the app's to clear.
+ */
+async function clearPrivateFileSystem(): Promise<void> {
+  try {
+    const root = await navigator.storage?.getDirectory?.();
+    if (!root) return;
+    const names: string[] = [];
+    for await (const name of (root as unknown as { keys(): AsyncIterable<string> }).keys()) names.push(name);
+    for (const name of names) await root.removeEntry(name, { recursive: true }).catch(() => undefined);
+  } catch {
+    /* no OPFS, or nothing there to remove */
+  }
+}
+
+/**
+ * Every Cache Storage bucket, or every one but the model bucket when the
+ * models are to be kept. transformers.js keeps a second, small bucket of
+ * file hashes beside the weights; it goes with the models either way.
+ */
+async function clearCaches(keepModels: boolean): Promise<void> {
+  if (typeof caches === 'undefined') return;
+  try {
+    for (const name of await caches.keys()) {
+      if (keepModels && (name === CAPTION_CACHE_NAME || name.includes('transformers'))) continue;
+      await caches.delete(name).catch(() => undefined);
+    }
+  } catch {
+    /* storage denied - nothing was cached in the first place */
+  }
+}
+
 /** Erase the stored data. The caller reloads the page once this resolves. */
 export async function eraseSelfcutData({ keepModels }: EraseOptions): Promise<EraseResult> {
   suspendPersistence();
@@ -95,8 +150,8 @@ export async function eraseSelfcutData({ keepModels }: EraseOptions): Promise<Er
   // Before the database goes: the records are what say which files are ours.
   await deleteFolderLibrary();
   await closeDb();
-  const { blocked } = await deleteDatabase(DB_NAME);
-  await removeExportScratch();
-  if (!keepModels) await deleteCaptionCache();
+  const { blocked } = await deleteAllDatabases();
+  await clearPrivateFileSystem();
+  await clearCaches(keepModels);
   return { blocked };
 }
