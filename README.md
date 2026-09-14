@@ -70,7 +70,9 @@ the picture sharpens to full resolution as soon as you stop scrubbing.
 **Keep your work.** Projects live in the browser with a project browser to
 switch between them, save to a portable `.selfcut` file (timeline and metadata,
 never the media bytes), and relink their sources when the files move. Clip looks
-travel as `.sfx` presets.
+travel as `.sfx` presets. On Chromium browsers, Preferences can point the media
+library at a folder of your choice, so imported footage is kept on the drive
+you pick instead of the browser's own storage on the system disk.
 
 **Export.** YouTube 16:9, TikTok/Reels/Shorts 9:16, Instagram 1:1 and 4:5, plus
 custom presets: H.264, HEVC or AV1, 720p to 4K, a 120 fps cadence, 24p cinema, a

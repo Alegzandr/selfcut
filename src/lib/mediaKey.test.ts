@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mediaKeyOf } from './mediaKey';
+import { mediaKeyOf, mediaKeyOfParts } from './mediaKey';
 import { missingSourceFile } from './missingSource';
 
 function file(name: string, size: number, lastModified: number): File {
@@ -31,5 +31,14 @@ describe('mediaKeyOf', () => {
   // name would key to one entry that belongs to none of them.
   it('refuses to key an asset waiting to be relinked', () => {
     expect(mediaKeyOf(missingSourceFile('rip.mkv', 1700))).toBeNull();
+  });
+});
+
+describe('mediaKeyOfParts', () => {
+  // A folder-backed asset is recorded by these three values alone, and the
+  // startup cache sweep keys its entries from them without opening the file:
+  // the two must agree or the sweep deletes every such asset's transcodes.
+  it('matches the key computed from the File itself', () => {
+    expect(mediaKeyOfParts(12, 1700, 'rip #1.mkv')).toBe(mediaKeyOf(file('rip #1.mkv', 12, 1700)));
   });
 });

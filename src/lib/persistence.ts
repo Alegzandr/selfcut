@@ -14,7 +14,19 @@ import { nextSaveDelay } from './saveSchedule';
 import { ASSETS_STORE, FILES_STORE, PROJECT_STORE, db, requestDone, txDone } from './idb';
 import { loadTranscodedAudio, pruneTranscodedAudio } from './audioCache';
 import { pruneSubtitleCues } from './subtitleCache';
-import { mediaKeyOf } from './mediaKey';
+import { mediaKeyOf, mediaKeyOfParts } from './mediaKey';
+import { missingSourceFile } from './missingSource';
+import {
+  activeStorageFolder,
+  folderRefOf,
+  getStorageFolder,
+  isFolderFileRef,
+  loadStorageFolder,
+  readFolderFile,
+  removeFolderFile,
+  writeFolderFile,
+  type FolderFileRef,
+} from './storageFolder';
 import { t } from '../i18n';
 import { reportSaveFailed, reportSaveOk } from './saveHealth';
 
@@ -47,6 +59,12 @@ function reportSaveSuccess(): void {
  * handful of times right after import, the File only on import or relink, and
  * a 2 GB source must not be copied along with a 100 KB peaks array.
  *
+ * With a storage folder chosen (lib/storageFolder.ts) the File record is a
+ * `FolderFileRef` instead: the bytes are copied into that folder and the
+ * database only says where. Both kinds coexist in the same store, record by
+ * record, so a library imported before the folder was chosen, or while its
+ * access was pending, is still whole - and can be moved over later.
+ *
  * When the project JSON is actually written is decided by `saveSchedule.ts`.
  */
 
@@ -72,24 +90,126 @@ type StoredAsset = Omit<MediaAsset, 'file'> & { projectId?: string; file?: File 
 const persistedFiles = new Map<string, File>();
 
 /**
- * Queue an asset's records on `tx`, which must include ASSETS_STORE and
- * FILES_STORE. Returns what to record in `persistedFiles` once the transaction
- * commits - not before, since a write that fails at commit time has written
- * nothing.
+ * Where each folder-backed asset's copy is, for the ids this session has seen.
+ * Filled the same way as `persistedFiles`, and consulted by every removal: the
+ * record alone says which file in the folder to delete.
  */
-function putAsset(tx: IDBTransaction, asset: MediaAsset, projectId: string): [string, File] | null {
+const persistedRefs = new Map<string, FolderFileRef>();
+
+/** True while the folder is there and this session may touch it. */
+function folderReachable(): FileSystemDirectoryHandle | null {
+  const { handle, access } = getStorageFolder();
+  return handle && access === 'granted' ? handle : null;
+}
+
+/** Delete folder copies, best-effort and after the records are gone. */
+async function removeFromFolder(refs: readonly FolderFileRef[]): Promise<void> {
+  const dir = refs.length > 0 ? folderReachable() : null;
+  if (!dir) return;
+  for (const ref of refs) await removeFolderFile(dir, ref);
+}
+
+/** What a committed file write leaves to record: see `commitWritten`. */
+type WrittenFile = { id: string; file: File; ref: FolderFileRef | null };
+
+/**
+ * Queue an asset's records on `tx`, which must include ASSETS_STORE and
+ * FILES_STORE. Returns what to record once the transaction commits - not
+ * before, since a write that fails at commit time has written nothing.
+ *
+ * `ref` is the folder copy `stageFolderWrites` made for this asset, if any.
+ * Without one, a File that was itself read out of the folder is recorded by
+ * its own reference rather than copied over itself; any other File goes into
+ * the database as before.
+ */
+function putAsset(
+  tx: IDBTransaction,
+  asset: MediaAsset,
+  projectId: string,
+  ref: FolderFileRef | null = null,
+): WrittenFile | null {
   const { file, ...meta } = asset;
   tx.objectStore(ASSETS_STORE).put({ ...meta, projectId } satisfies StoredAsset);
   if (persistedFiles.get(asset.id) === file) return null;
-  tx.objectStore(FILES_STORE).put(file, asset.id);
-  return [asset.id, file];
+  const record = ref ?? folderRefOf(file) ?? null;
+  tx.objectStore(FILES_STORE).put(record ?? file, asset.id);
+  return { id: asset.id, file, ref: record };
 }
 
-/** Queue the removal of both of an asset's records. */
-function deleteAsset(tx: IDBTransaction, id: string): void {
+/**
+ * Record what a committed transaction wrote. A copy the asset no longer points
+ * at (a relink under another name) is deleted from the folder now: nothing
+ * can bring it back, and the point of the folder is that it holds the library
+ * and not its history.
+ */
+function commitWritten(written: readonly (WrittenFile | null)[]): void {
+  const stale: FolderFileRef[] = [];
+  for (const entry of written) {
+    if (!entry) continue;
+    persistedFiles.set(entry.id, entry.file);
+    const previous = persistedRefs.get(entry.id);
+    if (entry.ref) persistedRefs.set(entry.id, entry.ref);
+    else persistedRefs.delete(entry.id);
+    if (previous && previous.path !== entry.ref?.path) stale.push(previous);
+  }
+  void removeFromFolder(stale);
+}
+
+/**
+ * Copies in flight, so two saves of the same asset (an import, then its peaks
+ * landing seconds later while a 2 GB copy is still streaming) share one write
+ * instead of racing two into the same file.
+ */
+const stagingWrites = new Map<string, { file: File; promise: Promise<FolderFileRef> }>();
+
+/**
+ * Copy into the storage folder every File among `assets` that has yet to be
+ * persisted. Runs BEFORE the transaction that records the assets: a directory
+ * write is asynchronous, and an IndexedDB transaction commits the moment
+ * nothing is pending on it. Empty when the folder is not in use, or not
+ * reachable right now - those Files go into the database instead.
+ */
+async function stageFolderWrites(assets: readonly MediaAsset[]): Promise<Map<string, FolderFileRef>> {
+  const refs = new Map<string, FolderFileRef>();
+  const dir = activeStorageFolder();
+  if (!dir) return refs;
+  for (const asset of assets) {
+    const { id, file } = asset;
+    if (persistedFiles.get(id) === file) continue;
+    // Already the folder's own copy, or a `.selfcut` placeholder with no bytes
+    // worth a file of their own.
+    if (folderRefOf(file) || isMissingSource(file)) continue;
+    let pending = stagingWrites.get(id);
+    if (!pending || pending.file !== file) {
+      const promise = writeFolderFile(dir, file, id).finally(() => {
+        if (stagingWrites.get(id)?.promise === promise) stagingWrites.delete(id);
+      });
+      pending = { file, promise };
+      stagingWrites.set(id, pending);
+    }
+    refs.set(id, await pending.promise);
+  }
+  return refs;
+}
+
+/**
+ * Queue the removal of an asset's records. Returns the folder copy to delete
+ * once the transaction commits, if there is one and the folder can be reached.
+ * When it cannot, the reference record is deliberately left behind: the next
+ * sweep that can reach the folder finds it there and deletes the file, where
+ * deleting the record now would orphan the copy on disk for good.
+ */
+function deleteAsset(
+  tx: IDBTransaction,
+  id: string,
+  ref: FolderFileRef | null = persistedRefs.get(id) ?? null,
+): FolderFileRef | null {
   tx.objectStore(ASSETS_STORE).delete(id);
-  tx.objectStore(FILES_STORE).delete(id);
+  const reachable = ref ? folderReachable() !== null : true;
+  if (reachable) tx.objectStore(FILES_STORE).delete(id);
   persistedFiles.delete(id);
+  persistedRefs.delete(id);
+  return ref && reachable ? ref : null;
 }
 
 /**
@@ -99,7 +219,9 @@ function deleteAsset(tx: IDBTransaction, id: string): void {
  * invalid record. `getAll` on the file store is cheap: it hands back handles,
  * the bytes are only read when someone reads them.
  */
-async function readLibrary(tx: IDBTransaction): Promise<(StoredAsset & { file: File })[]> {
+type LibraryRecord = Omit<StoredAsset, 'file'> & { stored: File | FolderFileRef };
+
+async function readLibrary(tx: IDBTransaction): Promise<LibraryRecord[]> {
   const files = tx.objectStore(FILES_STORE);
   const [records, fileKeys, fileValues] = await Promise.all([
     requestDone(tx.objectStore(ASSETS_STORE).getAll()),
@@ -108,21 +230,47 @@ async function readLibrary(tx: IDBTransaction): Promise<(StoredAsset & { file: F
   ]);
   const filesById = new Map<IDBValidKey, unknown>();
   fileKeys.forEach((key, i) => filesById.set(key, fileValues[i]));
-  const out: (StoredAsset & { file: File })[] = [];
+  const out: LibraryRecord[] = [];
   for (const record of records) {
     if (!isValidStoredAsset(record)) continue;
+    const { file: inline, ...meta } = record;
     const stored = filesById.get(record.id);
     if (stored instanceof File) {
       persistedFiles.set(record.id, stored);
-      out.push({ ...record, file: stored });
-    } else if (record.file instanceof File) {
+      out.push({ ...meta, stored });
+    } else if (isFolderFileRef(stored)) {
+      persistedRefs.set(record.id, stored);
+      out.push({ ...meta, stored });
+    } else if (inline instanceof File) {
       // Written before FILES_STORE: the File rides on the record until the
       // asset's next write moves it, which `persistedFiles` not knowing this
       // id is what makes happen.
-      out.push({ ...record, file: record.file });
+      out.push({ ...meta, stored: inline });
     }
   }
   return out;
+}
+
+/** The cache key of a record's file, without opening it. */
+function storedMediaKey(stored: File | FolderFileRef): string | null {
+  return stored instanceof File
+    ? mediaKeyOf(stored)
+    : mediaKeyOfParts(stored.size, stored.lastModified, stored.name);
+}
+
+/**
+ * The File behind a record. A folder copy that cannot be opened - access not
+ * granted yet, or the file gone from the folder - comes back as a placeholder,
+ * so the asset restores disconnected and the banner (or a relink) can put it
+ * right, exactly like a `.selfcut` project's media.
+ */
+async function materialize(id: string, stored: File | FolderFileRef): Promise<File> {
+  if (stored instanceof File) return stored;
+  const dir = folderReachable();
+  const file = dir ? await readFolderFile(dir, stored) : null;
+  if (!file) return missingSourceFile(stored.name, stored.lastModified);
+  persistedFiles.set(id, file);
+  return file;
 }
 
 /**
@@ -269,14 +417,15 @@ export async function loadProjectById(
   const tx = d.transaction([PROJECT_STORE, ASSETS_STORE, FILES_STORE], 'readonly');
   const project = await requestDone(tx.objectStore(PROJECT_STORE).get(id));
   if (!isValidProject(project)) return null;
-  const stored = (await readLibrary(tx))
-    .filter((a) => a.projectId === id)
-    .map(({ projectId: _owner, ...asset }) => migrateAsset(asset));
+  const records = (await readLibrary(tx)).filter((a) => a.projectId === id);
   const assets = await Promise.all(
-    stored.map(async (asset) => ({
-      ...asset,
-      disconnected: isMissingSource(asset.file) || !(await isFileReadable(asset.file)),
-    })),
+    records.map(async ({ projectId: _owner, stored, ...meta }) => {
+      const asset = migrateAsset({ ...meta, file: await materialize(meta.id, stored) } as MediaAsset);
+      return {
+        ...asset,
+        disconnected: isMissingSource(asset.file) || !(await isFileReadable(asset.file)),
+      };
+    }),
   );
   return { project, assets };
 }
@@ -334,9 +483,19 @@ export async function deleteProjectFromDb(id: string): Promise<void> {
   const tx = d.transaction([PROJECT_STORE, ASSETS_STORE, FILES_STORE], 'readwrite');
   tx.objectStore(PROJECT_STORE).delete(id);
   const all = await requestDone(tx.objectStore(ASSETS_STORE).getAll());
-  for (const a of all) if (isValidStoredAsset(a) && a.projectId === id) deleteAsset(tx, a.id);
+  const files = tx.objectStore(FILES_STORE);
+  const doomed: FolderFileRef[] = [];
+  for (const a of all) {
+    if (!isValidStoredAsset(a) || a.projectId !== id) continue;
+    // This project need not be the open one, so its copies are not in
+    // `persistedRefs`: ask the record.
+    const stored = await requestDone(files.get(a.id));
+    const ref = deleteAsset(tx, a.id, isFolderFileRef(stored) ? stored : null);
+    if (ref) doomed.push(ref);
+  }
   await txDone(tx);
   persistedProjects.delete(id);
+  await removeFromFolder(doomed);
 }
 
 /** Rename a project that is NOT the open one (the open one is renamed via the store). */
@@ -358,21 +517,42 @@ async function sweepOrphanAssets(validProjectIds: Set<string>): Promise<void> {
   try {
     const d = await db();
     const tx = d.transaction([ASSETS_STORE, FILES_STORE], 'readwrite');
-    const all = await requestDone(tx.objectStore(ASSETS_STORE).getAll());
+    const files = tx.objectStore(FILES_STORE);
+    const [all, fileKeys, fileValues] = await Promise.all([
+      requestDone(tx.objectStore(ASSETS_STORE).getAll()),
+      requestDone(files.getAllKeys()),
+      requestDone(files.getAll()),
+    ]);
+    // `getAll` on the file store hands back File handles, not bytes; the
+    // values are read for the references among them, which name the copies in
+    // the folder that have to go with their records.
+    const refsByKey = new Map<IDBValidKey, FolderFileRef>();
+    fileKeys.forEach((key, i) => {
+      const value = fileValues[i];
+      if (isFolderFileRef(value)) refsByKey.set(key, value);
+    });
+    const doomed: FolderFileRef[] = [];
+    const drop = (id: string) => {
+      const ref = deleteAsset(tx, id, refsByKey.get(id) ?? null);
+      if (ref) doomed.push(ref);
+    };
     const kept = new Set<string>();
     for (const a of all) {
       if (!isValidStoredAsset(a)) continue;
       const pid = a.projectId;
-      if (pid === undefined || !validProjectIds.has(pid)) deleteAsset(tx, a.id);
+      if (pid === undefined || !validProjectIds.has(pid)) drop(a.id);
       else kept.add(a.id);
     }
     // A File whose metadata record is gone (an invalid record dropped above, or
     // a write that landed the File and lost the metadata) is unreachable and
-    // the biggest thing in the database: collect it with the rest.
-    for (const key of await requestDone(tx.objectStore(FILES_STORE).getAllKeys())) {
-      if (typeof key === 'string' && !kept.has(key)) deleteAsset(tx, key);
+    // the biggest thing in the database: collect it with the rest. This is
+    // also where a folder copy left behind by an in-session removal (see
+    // `syncAssets`) is finally deleted.
+    for (const key of fileKeys) {
+      if (typeof key === 'string' && !kept.has(key)) drop(key);
     }
     await txDone(tx);
+    await removeFromFolder(doomed);
   } catch (err) {
     console.warn('[persistence] orphan-asset sweep failed:', err);
   }
@@ -387,12 +567,14 @@ async function sweepOrphanAssets(validProjectIds: Set<string>): Promise<void> {
 export async function saveWholeProject(): Promise<void> {
   const { project, assets, currentProjectId } = useStore.getState();
   try {
+    const library = Object.values(assets);
+    const refs = await stageFolderWrites(library);
     const d = await db();
     const tx = d.transaction([PROJECT_STORE, ASSETS_STORE, FILES_STORE], 'readwrite');
     tx.objectStore(PROJECT_STORE).put({ ...project, updatedAt: Date.now() }, project.id);
-    const written = Object.values(assets).map((a) => putAsset(tx, a, currentProjectId));
+    const written = library.map((a) => putAsset(tx, a, currentProjectId, refs.get(a.id) ?? null));
     await txDone(tx);
-    for (const entry of written) if (entry) persistedFiles.set(...entry);
+    commitWritten(written);
     persistedProjects.add(project.id);
     reportSaveSuccess();
   } catch (err) {
@@ -537,6 +719,11 @@ async function syncAssets(
   // the record that makes it reachable.
   const ownerMissing = !persistedProjects.has(projectId);
   try {
+    const changed = Object.entries(next)
+      .filter(([id, asset]) => prev[id] !== asset)
+      .map(([, asset]) => asset);
+    // The bytes first, outside the transaction: see `stageFolderWrites`.
+    const refs = await stageFolderWrites(changed);
     const d = await db();
     const tx = d.transaction(
       ownerMissing
@@ -547,17 +734,26 @@ async function syncAssets(
     if (ownerMissing) {
       tx.objectStore(PROJECT_STORE).put({ ...project, updatedAt: Date.now() }, projectId);
     }
-    const written: ([string, File] | null)[] = [];
-    for (const [id, asset] of Object.entries(next)) {
-      if (prev[id] !== asset) written.push(putAsset(tx, asset, projectId));
-    }
+    const written = changed.map((asset) => putAsset(tx, asset, projectId, refs.get(asset.id) ?? null));
     // The asset itself goes now - the state is the library, and leaving its
     // blob behind would resurrect the card on the next hydrate. Its transcoded
     // audio stays: a removal is undoable for as long as the session lasts, and
     // orphans are swept at the next startup instead.
-    for (const id of Object.keys(prev)) if (!(id in next)) deleteAsset(tx, id);
+    for (const id of Object.keys(prev)) {
+      if (id in next) continue;
+      if (persistedRefs.has(id)) {
+        // A folder copy stays too, and so does its record: a File read out of
+        // the folder has no bytes of its own, so once the copy is deleted the
+        // undo that brings the card back has nothing to save. The metadata
+        // record alone is what makes the asset reachable on the next hydrate;
+        // with it gone the startup sweep collects the copy.
+        tx.objectStore(ASSETS_STORE).delete(id);
+      } else {
+        deleteAsset(tx, id);
+      }
+    }
     await txDone(tx);
-    for (const entry of written) if (entry) persistedFiles.set(...entry);
+    commitWritten(written);
     if (ownerMissing) persistedProjects.add(projectId);
     reportSaveSuccess();
   } catch (err) {
@@ -584,7 +780,7 @@ async function pruneMediaCaches(): Promise<void> {
   try {
     const d = await db();
     const stored = await readLibrary(d.transaction([ASSETS_STORE, FILES_STORE], 'readonly'));
-    const keys = stored.map((asset) => mediaKeyOf(asset.file));
+    const keys = stored.map((asset) => storedMediaKey(asset.stored));
     // An asset still on a `.selfcut` placeholder has no media key at all, so it
     // cannot vouch for its own cache - and its entries would read as orphaned
     // and be deleted, wiping hours of transcoding out from under a project the
@@ -602,6 +798,220 @@ async function pruneMediaCaches(): Promise<void> {
   await Promise.all([pruneTranscodedAudio(live), pruneSubtitleCues(live)]);
 }
 
+/** One step of a library move, for a progress line. */
+export interface MoveProgress {
+  done: number;
+  total: number;
+  /** The file being moved; empty once the last one has landed. */
+  name: string;
+}
+
+/** What a library move managed. Failures leave the file where it was. */
+export interface MoveResult {
+  moved: number;
+  failed: number;
+}
+
+/**
+ * Every file record with its key, read in one transaction. Handles, not
+ * bytes: the values are cheap until someone reads them.
+ */
+async function readFileRecords(): Promise<[string, unknown][]> {
+  const d = await db();
+  const store = d.transaction(FILES_STORE, 'readonly').objectStore(FILES_STORE);
+  const [keys, values] = await Promise.all([
+    requestDone(store.getAllKeys()),
+    requestDone(store.getAll()),
+  ]);
+  const out: [string, unknown][] = [];
+  keys.forEach((key, i) => {
+    if (typeof key === 'string') out.push([key, values[i]]);
+  });
+  return out;
+}
+
+/** True for a record whose bytes sit in the database and are worth moving. */
+function isBrowserHeld(value: unknown): value is File {
+  return value instanceof File && !isMissingSource(value);
+}
+
+/** How many library files the browser still holds, folder or no folder. */
+export async function countBrowserHeldFiles(): Promise<number> {
+  try {
+    return (await readFileRecords()).filter(([, value]) => isBrowserHeld(value)).length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Replace one file record, provided it is still the one the move started from.
+ * The asset can have been removed while its bytes were copying, and a record
+ * that is gone must stay gone: the caller then deletes the copy it just made.
+ */
+async function swapFileRecord(
+  id: string,
+  stillCurrent: (value: unknown) => boolean,
+  next: File | FolderFileRef,
+): Promise<boolean> {
+  const d = await db();
+  const tx = d.transaction(FILES_STORE, 'readwrite');
+  const store = tx.objectStore(FILES_STORE);
+  const current = await requestDone(store.get(id));
+  const keep = stillCurrent(current);
+  if (keep) store.put(next, id);
+  await txDone(tx);
+  return keep;
+}
+
+/**
+ * Move every library file into `dir`: the ones the database holds, and the
+ * ones in `from`, the previous folder, when there is one that can be read.
+ * Idempotent, so it doubles as the "move what is still in the browser" action
+ * for a library that was partly imported while folder access was pending.
+ *
+ * The caller reloads the page afterwards. A File read out of IndexedDB or out
+ * of the old folder is still in the editor's hands, and whether its bytes stay
+ * readable once the record or the copy behind them is gone is the browser's
+ * business, not a promise this code can make. The restore reads from the new
+ * records and is the one path known to be right.
+ */
+export async function moveLibraryToFolder(
+  dir: FileSystemDirectoryHandle,
+  from: FileSystemDirectoryHandle | null,
+  onProgress: (progress: MoveProgress) => void,
+): Promise<MoveResult> {
+  const pending = (await readFileRecords()).filter(
+    ([, value]) => isBrowserHeld(value) || (from !== null && isFolderFileRef(value)),
+  );
+  const result: MoveResult = { moved: 0, failed: 0 };
+  for (const [i, [id, value]] of pending.entries()) {
+    const name = value instanceof File ? value.name : (value as FolderFileRef).name;
+    onProgress({ done: i, total: pending.length, name });
+    try {
+      const source =
+        value instanceof File ? value : await readFolderFile(from!, value as FolderFileRef);
+      if (!source) throw new Error(`${name} is no longer in the previous folder`);
+      const ref = await writeFolderFile(dir, source, id);
+      const kept = await swapFileRecord(
+        id,
+        (current) =>
+          value instanceof File
+            ? current instanceof File
+            : isFolderFileRef(current) && current.path === (value as FolderFileRef).path,
+        ref,
+      );
+      if (!kept) {
+        await removeFolderFile(dir, ref);
+        continue;
+      }
+      if (isFolderFileRef(value) && from) await removeFolderFile(from, value);
+      persistedRefs.set(id, ref);
+      result.moved += 1;
+    } catch (err) {
+      console.warn('[persistence] could not move', name, 'to the storage folder:', err);
+      result.failed += 1;
+    }
+  }
+  onProgress({ done: pending.length, total: pending.length, name: '' });
+  return result;
+}
+
+/**
+ * The reverse: copy every folder-backed file back into the database and delete
+ * the copy. A file that cannot be read (gone from the folder) is left as it
+ * is, so the caller can decide whether to give the folder up with it still
+ * referenced - once the folder is forgotten such an asset restores
+ * disconnected, and a relink puts it right.
+ */
+export async function moveLibraryToBrowser(
+  dir: FileSystemDirectoryHandle,
+  onProgress: (progress: MoveProgress) => void,
+): Promise<MoveResult> {
+  const pending = (await readFileRecords()).filter((entry): entry is [string, FolderFileRef] =>
+    isFolderFileRef(entry[1]),
+  );
+  const result: MoveResult = { moved: 0, failed: 0 };
+  for (const [i, [id, ref]] of pending.entries()) {
+    onProgress({ done: i, total: pending.length, name: ref.name });
+    try {
+      const copy = await readFolderFile(dir, ref);
+      if (!copy) throw new Error(`${ref.name} is no longer in the folder`);
+      // The bytes have to be the browser's own before the folder copy goes. A
+      // File read out of a directory is a reference to the path, and what the
+      // database keeps of one is not always a copy: an ephemeral (incognito)
+      // profile keeps the reference, and the record would then die with the
+      // file it points at. Draining the stream into a Blob hands the bytes to
+      // the browser's blob storage - paged to disk when large, never all in
+      // memory at once - which the database stores by content.
+      const bytes = await new Response(copy.stream()).blob();
+      const file = new File([bytes], ref.name, { type: ref.type, lastModified: ref.lastModified });
+      const kept = await swapFileRecord(
+        id,
+        (current) => isFolderFileRef(current) && current.path === ref.path,
+        file,
+      );
+      if (kept) await removeFolderFile(dir, ref);
+      persistedRefs.delete(id);
+      result.moved += 1;
+    } catch (err) {
+      console.warn('[persistence] could not move', ref.name, 'back into the browser:', err);
+      result.failed += 1;
+    }
+  }
+  onProgress({ done: pending.length, total: pending.length, name: '' });
+  return result;
+}
+
+/**
+ * Open every folder-backed asset the restore had to leave disconnected, now
+ * that access has been granted. Goes through the relink path on purpose: a
+ * reconnect re-probes the file and re-registers its decoder under the same id,
+ * which is exactly what an asset restored on a placeholder needs.
+ */
+export async function reconnectFolderAssets(): Promise<void> {
+  const dir = folderReachable();
+  if (!dir) return;
+  const s = useStore.getState();
+  const pending = Object.values(s.assets).filter((a) => a.disconnected);
+  if (pending.length === 0) return;
+  const d = await db();
+  const store = d.transaction(FILES_STORE, 'readonly').objectStore(FILES_STORE);
+  const records = await Promise.all(pending.map((a) => requestDone(store.get(a.id))));
+  const reconnected: MediaAsset[] = [];
+  for (const [i, asset] of pending.entries()) {
+    const ref = records[i];
+    if (!isFolderFileRef(ref)) continue;
+    const file = await readFolderFile(dir, ref);
+    if (!file) continue;
+    persistedRefs.set(asset.id, ref);
+    await s.reconnectAsset(asset.id, file);
+    const current = useStore.getState().assets[asset.id];
+    if (current && current.file === file) reconnected.push(current);
+  }
+  // What the startup restore would have done had the files been readable then.
+  void restoreTranscodedTracks(reconnected);
+}
+
+/**
+ * Delete every copy the library keeps in the storage folder. Part of the data
+ * erase: those copies are SelfCut's, not the user's originals, and a "delete my
+ * data" that left gigabytes in a folder the user had forgotten about would be
+ * the erase lying. Only the files the records name are touched.
+ */
+export async function deleteFolderLibrary(): Promise<void> {
+  const dir = folderReachable();
+  if (!dir) return;
+  try {
+    const refs = (await readFileRecords())
+      .map(([, value]) => value)
+      .filter(isFolderFileRef);
+    for (const ref of refs) await removeFolderFile(dir, ref);
+  } catch (err) {
+    console.warn('[persistence] folder copies could not be deleted:', err);
+  }
+}
+
 let started = false;
 
 /**
@@ -616,6 +1026,9 @@ export async function initPersistence(): Promise<void> {
   // been installed at hydrate time.
   let hydratedAssets = useStore.getState().assets;
   try {
+    // Before the restore: whether a folder-backed asset can be opened, or has
+    // to wait for the banner, is decided by what this answers.
+    await loadStorageFolder();
     await migrateSingleProject();
     const metas = await listProjectMetas();
     const chosen = pickCurrentProjectId(metas);

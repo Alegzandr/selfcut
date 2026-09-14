@@ -7,7 +7,7 @@
  */
 
 export const DB_NAME = 'selfcut';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 export const PROJECT_STORE = 'project';
 /** Asset metadata (everything on a MediaAsset except its File), keyed by asset id. */
@@ -50,6 +50,15 @@ export const AUDIO_META_STORE = 'transcodedAudioMeta';
 export const SUBTITLE_STORE = 'subtitleCues';
 /** Bookkeeping for SUBTITLE_STORE under the same keys. See AUDIO_META_STORE. */
 export const SUBTITLE_META_STORE = 'subtitleCuesMeta';
+/**
+ * Machine-wide settings that cannot live in localStorage, keyed by name.
+ *
+ * Today that is one entry: the `FileSystemDirectoryHandle` of the folder the
+ * user chose for the media library (see lib/storageFolder.ts). A handle is an
+ * object with a browser-side identity, not a string, so IndexedDB is the only
+ * place that can keep it across sessions.
+ */
+export const SETTINGS_STORE = 'settings';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -68,6 +77,10 @@ export function db(): Promise<IDBDatabase> {
       // them all during the upgrade would copy every library file again, on
       // the startup path, before the editor has appeared.
       if (!d.objectStoreNames.contains(FILES_STORE)) d.createObjectStore(FILES_STORE);
+      // v6: the storage-folder handle. FILES_STORE is unchanged in shape but
+      // gains a second kind of value, a reference to a file in that folder,
+      // which persistence tells apart from a File on read.
+      if (!d.objectStoreNames.contains(SETTINGS_STORE)) d.createObjectStore(SETTINGS_STORE);
       // Dropped rather than migrated, twice over now. v2 stored bare
       // Uint8Arrays with no sizes and no timestamps, which is exactly what
       // eviction needs and cannot reconstruct; v3 keyed them by asset id, a
