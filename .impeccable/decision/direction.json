@@ -1,0 +1,132 @@
+{
+  "title": "SelfCut · monde visuel de la landing",
+  "question": "Le tirage a désigné « Mire de diffusion ». La garder, prendre une alternative, ou relancer.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Mire de diffusion",
+      "kicker": "THE ROLL",
+      "lineage": "Mires SMPTE/EBU, salles de contrôle QC, incrustations de timecode",
+      "thesis": "La page est une vidéo qui passe le contrôle qualité : on ne vend pas un outil rapide, on livre un signal propre.",
+      "palette": ["#0b0b0c", "#ebebeb", "#e8d21d", "#22c3d6", "#2fbf4a", "#c43bd0", "#e0322b", "#2a3fd6"],
+      "materials": ["barres de couleur pleine largeur", "cadres title-safe / action-safe", "timecode incrusté (BITC)", "graticule de vectorscope"],
+      "viewport": "Un cadre 16:9 plein écran qui démarre sur la mire puis coupe vers les vraies images ; le titre tient dans la zone title-safe, timecode qui défile en bas, CTA dans le cadre.",
+      "risk": "Peut sentir le rétro-broadcast si les barres deviennent du décor au lieu de porter chaque section.",
+      "raised": [
+        { "from": "challenger-cloud", "raise": "La couleur ne vit qu'en bandes et en bords ; tout texte courant reste achromatique." },
+        { "from": "challenger-tanaka", "raise": "Chaque barre a un rôle : une couleur = une fonction (couper, sous-titrer, formats, étalonnage, chez soi)." },
+        { "from": "challenger-eboy", "raise": "Une seule unité de grille dure partagée par les barres, le texte et les images." },
+        { "from": "challenger-phosphor", "raise": "Les états s'impriment en incrustation (« SIGNAL LOCAL · 0 octet envoyé ») au lieu de badges." },
+        { "from": "challenger-onebit", "raise": "Les contrôles s'inversent à l'appui, pas d'ombres ni de halos." }
+      ],
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-phosphor-terminal-midnight-hero.webp"
+    },
+    {
+      "id": "model-pick",
+      "label": "La page-timeline",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "Timelines Vegas / Premiere",
+      "thesis": "Le scroll est une tête de lecture : chaque section est un clip sur des pistes, coupé quand on avance.",
+      "palette": ["#09090b", "#18181b", "#7c3aed", "#38bdf8", "#6ee7b7"],
+      "materials": ["pistes et clips", "tête de lecture", "filmstrips", "forme d'onde"],
+      "viewport": "Une timeline géante sur toute la largeur, la tête de lecture suit le scroll et le moniteur montre la section en cours.",
+      "risk": "Familier : c'est là que la plupart des landings d'éditeurs atterrissent, et proche de la page actuelle."
+    },
+    {
+      "id": "challenger-cloud",
+      "label": "Bord irisé",
+      "verdict": "declined",
+      "lineage": "nuages iridescents",
+      "thesis": "Fond blanc calme, couleur confinée à une frange spectrale.",
+      "palette": ["#f7f7f5", "#5b6470", "#9fe3c9", "#f0a5b8", "#a78bfa"],
+      "materials": ["blanc nuage", "frange spectrale"],
+      "viewport": "Grand champ blanc, une frange colorée sur le bord de l'aperçu vidéo.",
+      "risk": "Ne parle ni aux créateurs ni au montage.",
+      "case": "Perd sur les deux axes : aucun lien avec le monde des créateurs.",
+      "kept": "Couleur confinée aux bords, texte achromatique.",
+      "hero": "https://impeccable.style/worlds/cards/clouds-storms-auroras-iridescent-cloud-edge-hero.webp"
+    },
+    {
+      "id": "challenger-cel",
+      "label": "Multiplane d'animation",
+      "verdict": "declined",
+      "lineage": "banc-titre multiplane",
+      "thesis": "Plans peints qui glissent à des vitesses différentes.",
+      "palette": ["#2f4a2a", "#9fb0b8", "#3a2a1c", "#f2b44a"],
+      "materials": ["gouache", "plans superposés"],
+      "viewport": "Parallaxe à travers des plans peints.",
+      "risk": "Trop conte, loin du gameplay et du face caméra.",
+      "case": "Perd sur les deux axes : le public ne s'y reconnaît pas.",
+      "kept": "Le texte toujours sur son propre plan net, jamais posé sur l'image sans support.",
+      "hero": "https://impeccable.style/worlds/cards/cinema-cinematography-editing-multiplane-cel-dawn-hero.webp"
+    },
+    {
+      "id": "challenger-tanaka",
+      "label": "Plans Tanaka",
+      "verdict": "declined",
+      "lineage": "affiches d'Ikko Tanaka",
+      "thesis": "Quelques aplats géométriques sur une grille calme.",
+      "palette": ["#efe9dc", "#e2462c", "#2b3a8c", "#e2b23a", "#111111"],
+      "materials": ["aplats", "papier"],
+      "viewport": "Une figure monumentale faite de cinq plans.",
+      "risk": "Élégant mais muet sur le montage vidéo.",
+      "case": "Perd sur la clarté produit.",
+      "kept": "Économie : retirer un plan casse l'ensemble.",
+      "hero": "https://impeccable.style/worlds/cards/tanaka-plane-portrait-hero.webp"
+    },
+    {
+      "id": "challenger-eboy",
+      "label": "Pixorama",
+      "verdict": "declined",
+      "lineage": "eBoy",
+      "thesis": "Ville isométrique en pixels RVB saturés.",
+      "palette": ["#ff2a2a", "#00d0ff", "#ffd400", "#111111"],
+      "materials": ["pixel dur", "isométrie"],
+      "viewport": "Une ville pixel zoomable.",
+      "risk": "Parle aux joueurs mais fait jouet.",
+      "case": "Tient l'identification (joueurs), perd la clarté produit et frôle l'anti-référence « jouet ».",
+      "kept": "Une unité de grille dure partagée par tout.",
+      "hero": "https://impeccable.style/worlds/cards/eboy-pixorama-metropolis-hero.webp"
+    },
+    {
+      "id": "challenger-phosphor",
+      "label": "Terminal phosphore",
+      "verdict": "declined",
+      "lineage": "terminaux à phosphore vert",
+      "thesis": "Transcript vert sur verre noir.",
+      "palette": ["#050805", "#33ff66", "#1a7a33"],
+      "materials": ["phosphore", "monospace"],
+      "viewport": "Un transcript qui défile.",
+      "risk": "Orientation dev, explicitement refusée pour cette landing.",
+      "case": "Perd sur les deux axes.",
+      "kept": "Les états s'impriment d'eux-mêmes au lieu d'apparaître en chrome.",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-phosphor-terminal-midnight-hero.webp"
+    },
+    {
+      "id": "challenger-onebit",
+      "label": "Bureau 1 bit",
+      "verdict": "declined",
+      "lineage": "premiers bureaux 1 bit",
+      "thesis": "Noir et blanc tramé, fenêtres et fourmis.",
+      "palette": ["#ffffff", "#000000"],
+      "materials": ["trame", "chrome 1 px"],
+      "viewport": "Des fenêtres qui se chevauchent.",
+      "risk": "Nostalgie informatique, hors sujet vidéo.",
+      "case": "Perd sur les deux axes.",
+      "kept": "Appui = inversion, sans ombre.",
+      "hero": "https://impeccable.style/worlds/cards/medium-native-one-bit-desktop-hero.webp"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "canon": true,
+  "canonCard": {
+    "label": "Le standard de la catégorie",
+    "thesis": "Hero sombre, capture de l'éditeur, grille de fonctionnalités, FAQ, exécuté au mieux.",
+    "palette": ["#09090b", "#fafafa", "#7c3aed"],
+    "materials": ["capture produit", "grille propre"],
+    "viewport": "Titre à gauche, éditeur à droite, CTA violet.",
+    "risk": "Indiscernable des concurrents, par construction."
+  },
+  "steer": true,
+  "buildPath": { "value": "code", "toggle": false }
+}

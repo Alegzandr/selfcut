@@ -86,36 +86,44 @@
   --emerald-950: oklch(26.2% 0.051 172.552);
   --red-500: oklch(63.7% 0.237 25.331);
 
-  /* Roles. */
-  --bg: var(--zinc-950);
+  /* Roles. `--panel` and `--line` are the editor's own zinc-900 / zinc-800:
+     the replica draws its chrome with them, so they stay opaque and exact.
+     The page itself draws with the translucent hairlines below, which sit on
+     any ground the way Linear-style rules do. */
+  --bg: oklch(11.5% 0.004 286);
+  --raised: oklch(15.5% 0.005 286);
   --panel: var(--zinc-900);
   --line: var(--zinc-800);
   --line-strong: var(--zinc-700);
-  --text: var(--zinc-100);
-  --muted: var(--zinc-400);
-  /* Not zinc-500: the editor uses it for chrome a user is already looking at,
-     but on this page it carries the footer and the CTA notes, and against
-     zinc-950 it lands at 4.1:1 - under AA. Nudged up until it clears 4.5. */
-  --faint: oklch(61% 0.016 285.938);
-  /* Violet leads, blue supports - the same split the editor runs on: the
-     chrome the visitor acts on is violet, the work surface inside the hero's
-     editor replica stays blue. */
+  --hair: oklch(100% 0 0 / 0.075);
+  --hair-strong: oklch(100% 0 0 / 0.13);
+  --text: oklch(97% 0.002 286);
+  --muted: oklch(72% 0.012 286);
+  /* The quietest text that still clears 4.5:1 on --bg: notes, footer. */
+  --faint: oklch(62% 0.014 286);
+  /* The second clause of every heading: one heading, two tones, the way the
+     sentence reads (the claim, then what it means for you). 3:1+ at display
+     sizes, which is the bar for large text. */
+  --heading-dim: oklch(56% 0.014 286);
   --accent: var(--brand-600);
+  --accent-hover: var(--brand-500);
   --accent-text: var(--brand-300);
 
-  /* Type. Two families, one voice: Display carries the headings, Text the
-     copy. The replica of the editor deliberately opts out of both and runs on
-     `--font-app`, which is the stack the editor itself renders in. */
+  /* Type. Display carries the headings, Text the copy; the replica opts out
+     of both and runs on `--font-app`, the stack the editor renders in. */
   --font-display: "Madefor Display", system-ui, sans-serif;
   --font-text: "Madefor Text", system-ui, sans-serif;
   --font-app:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  --pad: clamp(1.25rem, 4vw, 4rem);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --pad: clamp(1.25rem, 4vw, 3rem);
   --measure: 62ch;
-  /* The content column. Sections pad to it; the hero lets the editor run past
-     its right edge. */
-  --column: 74rem;
+  --column: 72rem;
+  --section-gap: clamp(5.5rem, 11vw, 9.5rem);
+
+  color-scheme: dark;
+  accent-color: var(--brand-500);
 }
 
 * {
@@ -129,13 +137,16 @@
   }
 }
 
-/* The hero's editor runs past the right edge on purpose. `clip` rather than
-   `hidden`: hidden would turn the element into a scroll container, which is
-   what breaks the sticky header. Both elements, because clipping on `body`
-   alone still lets the viewport scroll. */
+/* `clip` rather than `hidden`: hidden would make the element a scroll
+   container, which breaks the sticky header. */
 html,
 body {
   overflow-x: clip;
+}
+
+html {
+  scroll-padding-top: 5rem;
+  scrollbar-color: var(--zinc-700) var(--bg);
 }
 
 body {
@@ -143,25 +154,31 @@ body {
   color: var(--text);
   font-family: var(--font-text);
   font-size: 1.0625rem;
-  /* Light type on a dark ground reads lighter than it is; the extra leading is
-     what keeps a paragraph from tightening up. */
-  line-height: 1.7;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
 }
 
 a {
   color: inherit;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
 }
 
 ::selection {
-  background: var(--accent);
+  background: var(--brand-700);
   color: white;
 }
 
 :focus-visible {
   outline: 2px solid var(--brand-400);
   outline-offset: 3px;
-  border-radius: 2px;
+  border-radius: 4px;
 }
 
 .skip-link {
@@ -173,16 +190,15 @@ a {
   background: var(--accent);
   color: white;
   padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
   font-weight: 600;
   text-decoration: none;
-  transition: translate 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: translate 0.2s var(--ease-out);
 }
 .skip-link:focus {
   translate: 0 0;
 }
 
-/* Visible to assistive tech and to search, not on screen: used by the section
-   whose three claims are the heading. */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -193,98 +209,161 @@ a {
   white-space: nowrap;
 }
 
-/* Sections span the full viewport; hairlines run edge to edge and the content
-   sits in a centered column via the inline padding. Global because the
-   elements it lines up live in a different component each. */
-header,
+/* The centered column. Sections run edge to edge so a visual can bleed; the
+   content inside lines up on one column through the inline padding. */
+.wrap,
 section,
-footer,
-.hero {
+footer {
   padding-inline: max(var(--pad), calc((100% - var(--column)) / 2));
 }
 
 section {
-  padding-block: clamp(3rem, 6vw, 5rem);
-  border-top: 1px solid var(--line);
+  position: relative;
+  padding-block: var(--section-gap) 0;
 }
 
-/* Headings. One family, real weight and size contrast, no width axis: the
-   editor's own chrome has no display face, so a stretched one on the landing
-   read as a different product. */
+/* Headings: one family, real size steps, tight but not crushed. The second
+   clause of a heading comes in as <em> from the dictionary and steps down to
+   the dim tone: emphasis by value, never by italics or colour. */
 h1,
 h2,
 h3 {
   font-family: var(--font-display);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.028em;
   text-wrap: balance;
+}
+/* CJK scripts have no tracking to tighten: negative letter-spacing only
+   crowds the glyphs. */
+:lang(ja) :is(h1, h2, h3),
+:lang(zh) :is(h1, h2, h3),
+:lang(ko) :is(h1, h2, h3) {
+  letter-spacing: 0;
+}
+/* Japanese breaks at phrase boundaries, never inside a word. */
+:lang(ja) :is(h1, h2, h3, p, dd, li) {
+  word-break: auto-phrase;
+  line-break: strict;
+}
+h1 em,
+h2 em {
+  font-style: normal;
+  color: var(--heading-dim);
 }
 
 h2 {
-  font-size: clamp(1.9rem, 3.6vw, 2.9rem);
-  line-height: 1.08;
-  max-width: 20ch;
+  font-size: clamp(2.1rem, 4.4vw, 3.4rem);
+  line-height: 1.05;
+  max-width: 22ch;
 }
 
-/* The one lead paragraph shape, under a heading. */
+h3 {
+  font-size: 1.0625rem;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+  line-height: 1.35;
+}
+
 .lede {
-  margin-top: 1.1rem;
-  max-width: 46ch;
+  margin-top: 1.4rem;
+  max-width: 48ch;
   color: var(--muted);
+  font-size: clamp(1.0625rem, 1.3vw, 1.1875rem);
+  line-height: 1.6;
   text-wrap: pretty;
 }
 
-/* Used by the header, the hero and the closing section. */
+.note {
+  color: var(--faint);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* Buttons. One primary shape, one secondary; pressed sinks a pixel. */
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.6rem 1.1rem;
   min-height: 44px;
+  padding: 0.6rem 1.15rem;
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: 0.9875rem;
   font-weight: 650;
   letter-spacing: -0.01em;
+  line-height: 1.2;
   text-decoration: none;
+  white-space: nowrap;
   border: 1px solid transparent;
-  /* rounded-lg, the radius every button in the editor is drawn with. */
-  border-radius: 0.5rem;
+  border-radius: 0.625rem;
   transition:
-    background-color 0.15s ease-out,
-    border-color 0.15s ease-out,
+    background-color 0.18s var(--ease-out),
+    border-color 0.18s var(--ease-out),
+    color 0.18s var(--ease-out),
     translate 0.1s ease-out;
 }
 .btn:active {
   translate: 0 1px;
 }
+.btn svg {
+  width: 0.95em;
+  height: 0.95em;
+  flex: none;
+  transition: translate 0.25s var(--ease-out);
+}
+.btn:hover svg {
+  translate: 0.15em 0;
+}
 .btn-primary {
   background: var(--accent);
-  /* White, not zinc-950: the accent moved from a bright cyan to the brand
-     violet, and dark-on-violet lands at 3.8:1. White clears AA at 6.2. */
+  /* White on brand-600 is 6.2:1. */
   color: white;
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / 0.18),
+    0 1px 2px oklch(0% 0 0 / 0.4);
 }
 .btn-primary:hover {
-  background: var(--brand-500);
+  background: var(--accent-hover);
 }
 .btn-ghost {
-  border-color: var(--line-strong);
-  color: var(--zinc-200);
+  border-color: var(--hair-strong);
+  background: oklch(100% 0 0 / 0.03);
+  color: var(--text);
 }
 .btn-ghost:hover {
-  background: color-mix(in oklab, var(--zinc-800) 70%, transparent);
+  border-color: oklch(100% 0 0 / 0.22);
+  background: oklch(100% 0 0 / 0.07);
 }
 
-/* Keyboard hints, in the app's own idiom: a key cap, not a code span. */
+/* Keyboard hints, in the app's idiom: a key cap. */
 kbd {
+  display: inline-block;
+  min-width: 1.6em;
   font-family: var(--font-app);
-  font-variant-numeric: tabular-nums;
   font-size: 0.8em;
   font-weight: 600;
-  color: var(--zinc-200);
+  line-height: 1.5;
+  text-align: center;
+  color: var(--zinc-100);
   background: var(--zinc-800);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--zinc-700);
   border-bottom-width: 2px;
-  border-radius: 4px;
-  padding: 0.15em 0.45em;
+  border-radius: 5px;
+  padding: 0 0.4em;
   white-space: nowrap;
+}
+
+/* The one rule that separates two blocks: a hairline that fades out at both
+   ends, so it reads as light on an edge rather than as a drawn box. */
+.rule {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--hair-strong) 20%,
+    var(--hair-strong) 80%,
+    transparent
+  );
 }

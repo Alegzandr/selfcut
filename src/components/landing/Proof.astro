@@ -14,52 +14,88 @@ const CLAIMS = [
 ];
 ---
 
-{/* Three claims and nothing else. The heading exists for the outline and for
-    search; on screen the three titles say it faster than a sentence would. */}
-<section id="privacy" class="proof" aria-labelledby="proof-title">
-  <h2 id="proof-title" class="sr-only">{strings['proof.title']}</h2>
-  <div class="claims">
+{/* The quiet passage between two dense ones: no picture, the statement at
+    full size, and what it makes possible underneath. */}
+<section id="privacy" class="privacy" aria-labelledby="proof-title">
+  <svg class="lock" viewBox="0 0 15 15" aria-hidden="true"><use href="#i-LockClosed"></use></svg>
+  <h2 id="proof-title" set:html={strings['proof.title']} />
+  <p class="lede">{strings['proof.lead']}</p>
+  <ul class="claims">
     {
       CLAIMS.map((claim) => (
-        <div>
+        <li>
           <h3>{claim.title}</h3>
           <p>{claim.body}</p>
-        </div>
+        </li>
       ))
     }
-  </div>
+  </ul>
 </section>
 
 <style>
-  /* A zinc-900 band on the zinc-950 page: the same figure/ground the editor
-     uses for a panel, and the one break in the page's surface. */
-  .proof {
-    padding-block: clamp(2.25rem, 4vw, 3.25rem);
-    border-bottom: 1px solid var(--line);
-    background: var(--panel);
+  .privacy {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
   }
+  .lock {
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0.7rem;
+    margin-bottom: 1.75rem;
+    border: 1px solid var(--hair-strong);
+    border-radius: 0.75rem;
+    background: var(--raised);
+    color: var(--text);
+  }
+  h2 {
+    font-size: clamp(2.3rem, 5.2vw, 4rem);
+    max-width: 18ch;
+  }
+  .lede {
+    max-width: 52ch;
+  }
+
   .claims {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-    gap: 1.75rem clamp(1.5rem, 4vw, 3.5rem);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: clamp(3rem, 6vw, 4.5rem);
+    padding: 0;
+    list-style: none;
+    text-align: left;
+    border-top: 1px solid var(--hair);
   }
-  /* Hairline separators, not boxes: the same rule that divides two panels in
-     the editor. */
-  @media (min-width: 52rem) {
-    .claims > div + div {
-      padding-left: clamp(1.5rem, 4vw, 3.5rem);
-      margin-left: calc(clamp(1.5rem, 4vw, 3.5rem) * -1);
-      border-left: 1px solid var(--line);
-    }
+  .claims li {
+    padding: 1.75rem clamp(1.25rem, 3vw, 2.5rem) 0 0;
   }
-  h3 {
-    font-size: 1.3rem;
-    font-weight: 700;
+  .claims li + li {
+    padding-left: clamp(1.25rem, 3vw, 2.5rem);
+    border-left: 1px solid var(--hair);
   }
-  p {
-    margin-top: 0.4rem;
+  .claims p {
+    margin-top: 0.5rem;
     color: var(--muted);
-    font-size: 0.9875rem;
+    font-size: 0.9375rem;
+    line-height: 1.6;
     text-wrap: pretty;
+  }
+
+  @media (max-width: 48rem) {
+    .privacy {
+      align-items: flex-start;
+      text-align: left;
+    }
+    .claims {
+      grid-template-columns: 1fr;
+    }
+    .claims li,
+    .claims li + li {
+      padding: 1.5rem 0;
+      border-left: 0;
+    }
+    .claims li + li {
+      border-top: 1px solid var(--hair);
+    }
   }
 </style>

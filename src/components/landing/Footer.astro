@@ -48,7 +48,7 @@ const currentName = LANGS.find((lang) => lang.code === current)?.name;
     <div class="lang-dialog-head">
       <h2 id="lang-title">{strings['footer.langLabel']}</h2>
       <button class="lang-close" type="button" data-lang-close aria-label={strings['footer.langClose']}
-        >×</button
+        ><svg viewBox="0 0 15 15" aria-hidden="true"><path d="M11.7816 4.03157C12.0062 3.80702 12.0062 3.44295 11.7816 3.2184C11.5571 2.99385 11.193 2.99385 10.9685 3.2184L7.50005 6.68682L4.03164 3.2184C3.80708 2.99385 3.44301 2.99385 3.21846 3.2184C2.99391 3.44295 2.99391 3.80702 3.21846 4.03157L6.68688 7.49999L3.21846 10.9684C2.99391 11.193 2.99391 11.557 3.21846 11.7816C3.44301 12.0061 3.80708 12.0061 4.03164 11.7816L7.50005 8.31316L10.9685 11.7816C11.193 12.0061 11.5571 12.0061 11.7816 11.7816C12.0062 11.557 12.0062 11.193 11.7816 10.9684L8.31322 7.49999L11.7816 4.03157Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg></button
       >
     </div>
     <nav>
@@ -71,7 +71,8 @@ const currentName = LANGS.find((lang) => lang.code === current)?.name;
 
 <style>
   footer {
-    border-top: 1px solid var(--line);
+    margin-top: 0;
+    border-top: 1px solid var(--hair);
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -120,7 +121,7 @@ const currentName = LANGS.find((lang) => lang.code === current)?.name;
     margin: auto;
     padding: 0;
     border: 1px solid var(--line-strong);
-    border-radius: 8px;
+    border-radius: 0.75rem;
     background: var(--panel);
     color: var(--text);
   }
@@ -139,25 +140,26 @@ const currentName = LANGS.find((lang) => lang.code === current)?.name;
   .lang-dialog-head h2 {
     font-size: 1.05rem;
     font-weight: 700;
-    font-stretch: 110%;
   }
   .lang-close {
     display: grid;
     place-items: center;
     width: 2.75rem;
     height: 2.75rem;
-    /* Pull the enlarged hit area back so the × stays visually in the
+    /* Pull the enlarged hit area back so the cross stays visually in the
        corner of the dialog. */
     margin: -0.7rem -0.7rem -0.7rem 0;
     border: 0;
     background: none;
     color: var(--faint);
     font: inherit;
-    font-size: 1.4rem;
-    line-height: 1;
     cursor: pointer;
     padding: 0;
-    border-radius: 4px;
+    border-radius: 0.375rem;
+  }
+  .lang-close svg {
+    width: 1.1rem;
+    height: 1.1rem;
   }
   .lang-close:hover {
     color: var(--text);
@@ -168,21 +170,27 @@ const currentName = LANGS.find((lang) => lang.code === current)?.name;
   }
   .lang-dialog nav a {
     padding: 0.55rem 0.65rem;
-    border-radius: 4px;
+    border-radius: 0.375rem;
     text-decoration: none;
     color: var(--muted);
   }
   .lang-dialog nav a:hover {
-    background: var(--line);
+    background: var(--hair);
     color: var(--text);
   }
   .lang-dialog nav a[aria-current] {
     color: var(--text);
     font-weight: 650;
   }
+  /* The current language: a brand dot after its name. */
   .lang-dialog nav a[aria-current]::after {
-    content: '¹3';
-    margin-left: 0.5rem;
-    color: var(--accent-text);
+    content: '';
+    display: inline-block;
+    width: 0.4rem;
+    height: 0.4rem;
+    margin-left: 0.55rem;
+    vertical-align: 0.15em;
+    border-radius: 50%;
+    background: var(--accent-text);
   }
 </style>

@@ -12,7 +12,6 @@ const SPEC = [
   { dt: strings['spec.sound.dt'], dd: strings['spec.sound.dd'] },
   { dt: strings['spec.import.dt'], dd: strings['spec.import.dd'] },
   { dt: strings['spec.preview.dt'], dd: strings['spec.preview.dd'] },
-  { dt: strings['spec.mobile.dt'], dd: strings['spec.mobile.dd'] },
   { dt: strings['spec.lang.dt'], dd: strings['spec.lang.dd'] },
   { dt: strings['spec.resume.dt'], dd: strings['spec.resume.dd'] },
 ];
@@ -33,26 +32,36 @@ const SPEC = [
 </section>
 
 <style>
+  /* A spec sheet, not another column grid: one row per fact, the name on
+     the left and the detail beside it, read straight down. */
   .spec {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
-    gap: 0 clamp(1.5rem, 4vw, 3.5rem);
-    margin-top: clamp(1.75rem, 3vw, 2.5rem);
+    margin-top: clamp(2rem, 4vw, 3rem);
+    border-bottom: 1px solid var(--hair);
   }
   .spec > div {
-    padding-block: 1.05rem;
-    border-top: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 0.35rem clamp(1.5rem, 4vw, 3rem);
+    align-items: baseline;
+    padding-block: 1.25rem;
+    border-top: 1px solid var(--hair);
   }
   dt {
     font-family: var(--font-display);
-    font-size: 1.05rem;
     font-weight: 650;
     letter-spacing: -0.01em;
   }
   dd {
-    margin: 0.25rem 0 0;
+    margin: 0;
+    max-width: 60ch;
     color: var(--muted);
     font-size: 0.9375rem;
+    line-height: 1.55;
     text-wrap: pretty;
+  }
+  @media (max-width: 36rem) {
+    .spec > div {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

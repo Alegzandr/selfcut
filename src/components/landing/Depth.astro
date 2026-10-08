@@ -1,71 +1,682 @@
 ---
+import { appStringsFor } from '../../landing/appStrings';
 import type { LandingStrings } from '../../landing/strings';
+import type { LangCode } from '../../landing/langs';
 
 interface Props {
   strings: LandingStrings;
+  code: LangCode;
 }
 
-const { strings } = Astro.props;
+const { strings, code } = Astro.props;
+// Every label inside the fragments is the editor's own, from its dictionaries,
+// so each panel reads in the page's language and names the control the way
+// the inspector does.
+const app = appStringsFor(code);
 
-// The advanced tier, in one paragraph each. No pictures here, deliberately:
-// the page is meant to read as simple editing first, and a row of grading
-// screenshots would outweigh the timeline this section sits below. Whatever
-// this section grows into later, it stays typographic.
-const ROWS = [
-  { dt: strings['depth.grade.dt'], dd: strings['depth.grade.dd'] },
-  { dt: strings['depth.keyframes.dt'], dd: strings['depth.keyframes.dd'] },
-  { dt: strings['depth.masks.dt'], dd: strings['depth.masks.dd'] },
-  { dt: strings['depth.text.dt'], dd: strings['depth.text.dd'] },
+// Illustrative values: a warm, punchy grade on the right half of the frame.
+const ADJUST = [
+  { label: app['inspector.adjust.brightness'], at: 56, value: '+8' },
+  { label: app['inspector.adjust.contrast'], at: 64, value: '+18' },
+  { label: app['inspector.adjust.saturation'], at: 70, value: '+24' },
+  { label: app['inspector.adjust.temperature'], at: 44, value: '-6' },
+];
+
+// Keyframe lanes under a clip: one row per animated property, keys in %.
+const LANES = [
+  { label: app['inspector.positionX'], keys: [8, 46, 88] },
+  { label: app['inspector.scale'], keys: [8, 30, 70] },
+  { label: app['inspector.opacity'], keys: [8, 18, 92] },
+  { label: app['inspector.positionY'], keys: [8, 60, 92] },
+  { label: app['inspector.rotation'], keys: [8, 34, 76] },
+];
+
+const TRANSITIONS = [
+  app['inspector.transition.dissolve'],
+  app['inspector.transition.dipBlack'],
+  app['inspector.transition.wipe'],
+  app['inspector.transition.zoom'],
 ];
 ---
 
 <section id="advanced" aria-labelledby="depth-title">
-  <div class="head">
-    <h2 id="depth-title">{strings['depth.title']}</h2>
-    <p class="lede">{strings['depth.lead']}</p>
-  </div>
+  <h2 id="depth-title" set:html={strings['depth.title']} />
+  <p class="lede">{strings['depth.lead']}</p>
 
   <dl class="depth">
-    {
-      ROWS.map((row) => (
-        <div>
-          <dt>{row.dt}</dt>
-          <dd>{row.dd}</dd>
+    {/* Grading: a before/after split on a real frame, beside the Adjust panel
+        that made the difference. */}
+    <div class="row grade">
+      <div class="art" aria-hidden="true">
+        <div class="still">
+          <img src="/landing/monitor-16.webp" alt="" width="960" height="540" loading="lazy" />
+          <img class="graded" src="/landing/monitor-16.webp" alt="" width="960" height="540" loading="lazy" />
+          <span class="divider"></span>
         </div>
-      ))
-    }
+        <div class="ui panel">
+          <div class="ui-head">{app['inspector.adjust']}</div>
+          {
+            ADJUST.map((row) => (
+              <div class="ui-row">
+                <span class="ui-label">{row.label}</span>
+                <span class="slider" style={`--at: ${row.at}%`} />
+                <span class="ui-value">{row.value}</span>
+              </div>
+            ))
+          }
+          <div class="ui-head">{app['inspector.curves']}</div>
+          <div class="chips">
+            <i>{app['inspector.curves.master.short']}</i><i class="on">{app['inspector.curves.r.short']}</i
+            ><i>{app['inspector.curves.g.short']}</i><i>{app['inspector.curves.b.short']}</i>
+          </div>
+          <svg class="curve" viewBox="0 0 120 60" preserveAspectRatio="none">
+            <path class="grid" d="M30 0V60M60 0V60M90 0V60M0 15H120M0 30H120M0 45H120" />
+            <path class="line" d="M0 60C30 60 40 36 60 30S94 2 120 0" />
+          </svg>
+        </div>
+      </div>
+      <div class="copy">
+        <dt>{strings['depth.grade.dt']}</dt>
+        <dd>{strings['depth.grade.dd']}</dd>
+      </div>
+    </div>
+
+    {/* Keyframes: property lanes under the clip, as the timeline expands them. */}
+    <div class="cell keys">
+      <div class="art" aria-hidden="true">
+        <div class="ui lanes">
+          <div class="lane-clip"><b>highlight_03.mp4</b></div>
+          {
+            LANES.map((lane) => (
+              <div class="lane-row">
+                <span class="ui-label">{lane.label}</span>
+                <span class="lane-track">
+                  <span
+                    class="lane-span"
+                    style={`--a: ${lane.keys[0]}%; --b: ${lane.keys[lane.keys.length - 1]}%`}
+                  />
+                  {lane.keys.map((at, i) => (
+                    <span class:list={['key', { sel: i === 1 }]} style={`--at: ${at}%`} />
+                  ))}
+                  <span class="head-line" />
+                </span>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+      <dt>{strings['depth.keyframes.dt']}</dt>
+      <dd>{strings['depth.keyframes.dd']}</dd>
+    </div>
+
+    {/* Masks: an ellipse on the frame, everything around it held back, the
+        tracker's path, and the mask controls underneath. */}
+    <div class="cell mask">
+      <div class="art" aria-hidden="true">
+        <div class="mask-frame">
+          <img src="/landing/monitor-73.webp" alt="" width="960" height="540" loading="lazy" />
+          <svg viewBox="0 0 240 135" preserveAspectRatio="none">
+            <defs>
+              <mask id="depth-hole">
+                <rect width="240" height="135" fill="white" />
+                <ellipse cx="150" cy="62" rx="40" ry="30" fill="black" />
+              </mask>
+            </defs>
+            <rect class="dim" width="240" height="135" mask="url(#depth-hole)" />
+            <path class="track" d="M48 104C78 98 104 84 126 72" />
+            <ellipse class="outline" cx="150" cy="62" rx="40" ry="30" />
+            <rect class="grip" x="107" y="59" width="6" height="6" />
+            <rect class="grip" x="187" y="59" width="6" height="6" />
+            <rect class="grip" x="147" y="29" width="6" height="6" />
+            <rect class="grip" x="147" y="89" width="6" height="6" />
+          </svg>
+        </div>
+        <div class="ui strip">
+          <span class="chips">
+            <i>{app['inspector.mask.rect']}</i><i class="on">{app['inspector.mask.ellipse']}</i><i
+              >{app['inspector.mask.pen']}</i
+            >
+          </span>
+          <span class="feather">
+            <span class="ui-label">{app['inspector.mask.feather']}</span>
+            <span class="slider" style="--at: 38%"></span>
+          </span>
+          <span class="btn-track">
+            <svg viewBox="0 0 15 15"><use href="#i-Target"></use></svg>{app['inspector.mask.track']}
+          </span>
+        </div>
+      </div>
+      <dt>{strings['depth.masks.dt']}</dt>
+      <dd>{strings['depth.masks.dd']}</dd>
+    </div>
+
+    {/* Text and transitions: a title on V2, two clips crossing on V1, and
+        the transition picker naming what the overlap renders. */}
+    <div class="row text">
+      <div class="copy">
+        <dt>{strings['depth.text.dt']}</dt>
+        <dd>{strings['depth.text.dd']}</dd>
+      </div>
+      <div class="art" aria-hidden="true">
+        <div class="ui tracks">
+          <div class="t-lane">
+            <span class="t-clip title" style="--from: 14%; --to: 62%"
+              ><svg viewBox="0 0 15 15"><use href="#i-Text"></use></svg><b>Highlights #12</b></span
+            >
+          </div>
+          <div class="t-lane">
+            <span class="t-clip video a" style="--from: 0%; --to: 62%"><b>highlight_01.mp4</b></span>
+            <span class="t-clip video b" style="--from: 38%; --to: 100%"><b>highlight_02.mp4</b></span>
+            <span class="xfade" style="--from: 38%; --to: 62%"><i>{TRANSITIONS[0]}</i></span>
+          </div>
+        </div>
+        <div class="ui picker">
+          <div class="ui-head">{app['inspector.transition']}</div>
+          {TRANSITIONS.map((name, i) => <span class:list={['pick', { on: i === 0 }]}>{name}</span>)}
+        </div>
+      </div>
+    </div>
   </dl>
 </section>
 
 <style>
-  .head {
-    max-width: 46rem;
-  }
-
-  /* Two columns at most, and a rule above each row rather than a box around
-     it: the quietest shape the page already uses (`Spec`), given more room to
-     breathe because these entries run to three lines. */
+  /* One panel, cut by hairlines: grading leads on a wide row, two
+     half-width cells follow, and text closes on a wide row, mirrored. */
   .depth {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr));
-    gap: 0 clamp(1.5rem, 4vw, 3.5rem);
-    margin-top: clamp(1.75rem, 3vw, 2.5rem);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: clamp(2.5rem, 5vw, 4rem);
+    border: 1px solid var(--hair);
+    border-radius: 1rem;
+    overflow: hidden;
+    background: var(--raised);
   }
   .depth > div {
-    padding-block: 1.25rem;
-    border-top: 1px solid var(--line);
+    padding: clamp(1.5rem, 3vw, 2.5rem);
   }
+  .row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: clamp(1.75rem, 4vw, 3.5rem);
+    align-items: center;
+  }
+  .row.text {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+    border-top: 1px solid var(--hair);
+  }
+  .cell {
+    border-top: 1px solid var(--hair);
+  }
+  .cell.keys {
+    border-right: 1px solid var(--hair);
+  }
+  .cell .art {
+    margin-bottom: 1.75rem;
+  }
+  /* The lanes are shorter than the masked frame beside them: the keyframes
+     cell lets its picture take the spare height, centred, so both halves of
+     the row end on the same line. */
+  .cell.keys {
+    display: flex;
+    flex-direction: column;
+  }
+  .cell.keys .art {
+    flex: 1;
+    display: flex;
+    align-items: center;
+  }
+  .cell.keys .lanes {
+    width: 100%;
+  }
+
   dt {
     font-family: var(--font-display);
-    font-size: 1.05rem;
+    font-size: 1.125rem;
     font-weight: 650;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.012em;
+  }
+  .row dt {
+    font-size: 1.375rem;
   }
   dd {
-    margin: 0.35rem 0 0;
+    margin: 0.5rem 0 0;
+    max-width: 52ch;
     color: var(--muted);
     font-size: 0.9375rem;
-    line-height: 1.55;
+    line-height: 1.6;
     text-wrap: pretty;
+  }
+
+  /* The editor's panel idiom: zinc-900, zinc-800 hairlines, text-xs. */
+  .ui {
+    font-family: var(--font-app);
+    font-size: 0.75rem;
+    line-height: 1.3;
+    color: var(--zinc-300);
+    background: var(--zinc-900);
+    border: 1px solid var(--line);
+    border-radius: 0.625rem;
+    box-shadow: 0 1rem 2.5rem -1.25rem oklch(0% 0 0 / 0.8);
+  }
+  .ui-head {
+    padding: 0.6rem 0.75rem 0.35rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--zinc-400);
+  }
+  .ui-row {
+    display: grid;
+    grid-template-columns: minmax(0, 5.5rem) 1fr 2rem;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.3rem 0.75rem;
+  }
+  .ui-label {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--zinc-300);
+  }
+  .ui-value {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--zinc-400);
+  }
+  .slider {
+    position: relative;
+    flex: 1;
+    min-width: 3rem;
+    height: 0.25rem;
+    border-radius: 99px;
+    background: linear-gradient(
+      to right,
+      var(--zinc-300) var(--at),
+      var(--zinc-700) var(--at)
+    );
+  }
+  .slider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: var(--at);
+    width: 0.7rem;
+    height: 0.7rem;
+    translate: -50% -50%;
+    border-radius: 50%;
+    background: white;
+  }
+  .chips {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0 0.75rem;
+  }
+  .chips i {
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.375rem;
+    font-style: normal;
+    white-space: nowrap;
+    color: var(--zinc-400);
+    background: var(--zinc-800);
+  }
+  .chips i.on {
+    color: white;
+    background: var(--blue-700);
+  }
+
+  /* Grading */
+  .grade .art {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 0.9rem;
+    align-items: center;
+  }
+  .still {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.625rem;
+    box-shadow: 0 0 0 1px var(--hair-strong);
+  }
+  .still img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+  }
+  .still .graded {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    clip-path: inset(0 0 0 50%);
+    filter: contrast(1.18) saturate(1.45) brightness(1.06) sepia(0.12);
+  }
+  .divider {
+    position: absolute;
+    inset-block: 0;
+    left: 50%;
+    width: 2px;
+    translate: -50% 0;
+    background: white;
+  }
+  .divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0.9rem;
+    height: 0.9rem;
+    translate: -50% -50%;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 1px 4px oklch(0% 0 0 / 0.5);
+  }
+  .panel {
+    padding-bottom: 0.75rem;
+  }
+  .curve {
+    display: block;
+    width: calc(100% - 1.5rem);
+    height: 3.75rem;
+    margin: 0.5rem 0.75rem 0;
+    border: 1px solid var(--line);
+    border-radius: 0.375rem;
+    background: var(--zinc-950);
+  }
+  .curve .grid {
+    fill: none;
+    stroke: var(--zinc-800);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  .curve .line {
+    fill: none;
+    stroke: var(--red-500);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+  }
+
+  /* Keyframes */
+  .lanes {
+    padding: 0.6rem 0.75rem 0.7rem;
+  }
+  .lane-clip {
+    position: relative;
+    height: 1.75rem;
+    margin-left: 6.6rem;
+    border: 1px solid var(--blue-900);
+    border-radius: 0.375rem;
+    background: var(--blue-950) url(/landing/strip-c.webp) 0 0 / auto 100% repeat-x;
+  }
+  .lane-clip b {
+    position: absolute;
+    left: 0.4rem;
+    bottom: 0.1rem;
+    font-size: 0.625rem;
+    font-weight: 500;
+    color: white;
+    text-shadow: 0 1px 2px oklch(0% 0 0 / 0.7);
+  }
+  .lane-row {
+    display: grid;
+    grid-template-columns: 6rem 1fr;
+    align-items: center;
+    gap: 0.6rem;
+    height: 1.9rem;
+    border-top: 1px solid color-mix(in oklab, var(--line) 50%, transparent);
+  }
+  .lane-row:first-of-type {
+    margin-top: 0.4rem;
+  }
+  .lane-track {
+    position: relative;
+    height: 100%;
+    background: color-mix(in oklab, var(--zinc-900) 30%, var(--zinc-950));
+  }
+  .lane-span {
+    position: absolute;
+    top: 50%;
+    left: var(--a);
+    width: calc(var(--b) - var(--a));
+    height: 1px;
+    background: var(--zinc-700);
+  }
+  /* KeyframeIcon: zinc-100 at rest, blue-400 when selected. */
+  .key {
+    position: absolute;
+    top: 50%;
+    left: var(--at);
+    width: 0.55rem;
+    height: 0.55rem;
+    translate: -50% -50%;
+    rotate: 45deg;
+    background: var(--zinc-100);
+    border: 1px solid var(--zinc-900);
+  }
+  .key.sel {
+    background: var(--blue-400);
+    border-color: var(--blue-300);
+  }
+  /* The playhead, drawn lane by lane so it lines up with the tracks. */
+  .head-line {
+    position: absolute;
+    inset-block: 0;
+    left: 46%;
+    width: 2px;
+    translate: -50% 0;
+    background: var(--red-500);
+  }
+
+  /* Masks */
+  .mask .art {
+    display: grid;
+    gap: 0.6rem;
+  }
+  .mask-frame {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border-radius: 0.625rem;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px var(--hair-strong);
+  }
+  .mask-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .mask-frame svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    fill: none;
+  }
+  .dim {
+    fill: oklch(0% 0 0 / 0.55);
+  }
+  .outline {
+    stroke: var(--blue-300);
+    stroke-width: 1.5;
+  }
+  .grip {
+    fill: white;
+    stroke: var(--blue-500);
+    stroke-width: 1;
+  }
+  .track {
+    stroke: var(--blue-300);
+    stroke-dasharray: 2 4;
+    stroke-width: 1.25;
+  }
+  .strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem 0.75rem;
+    padding: 0.55rem 0.6rem;
+  }
+  .strip .chips {
+    padding: 0;
+  }
+  .feather {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 8rem;
+  }
+  .btn-track {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    background: var(--zinc-800);
+    color: var(--zinc-100);
+    white-space: nowrap;
+  }
+  .btn-track svg {
+    width: 0.8rem;
+    height: 0.8rem;
+  }
+
+  /* Text and transitions */
+  .text .art {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 0.9rem;
+    align-items: center;
+  }
+  .tracks {
+    padding: 0.5rem 0;
+  }
+  .t-lane {
+    position: relative;
+    height: 2.75rem;
+    margin: 0 0.6rem;
+  }
+  .t-lane + .t-lane {
+    border-top: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+  }
+  .t-clip,
+  .xfade {
+    position: absolute;
+    top: 0.25rem;
+    bottom: 0.25rem;
+    left: var(--from);
+    width: calc(var(--to) - var(--from));
+    border: 1px solid;
+    border-radius: 0.375rem;
+    overflow: hidden;
+  }
+  .t-clip b {
+    position: absolute;
+    left: 0.4rem;
+    bottom: 0.15rem;
+    font-size: 0.625rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .t-clip.title {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--brand-900) 60%, transparent),
+      var(--brand-950)
+    );
+    border-color: var(--brand-700);
+    color: var(--brand-300);
+  }
+  .t-clip.title svg {
+    position: absolute;
+    left: 0.4rem;
+    top: 0.3rem;
+    width: 0.7rem;
+    height: 0.7rem;
+  }
+  .t-clip.title b {
+    left: 1.4rem;
+    top: 0.2rem;
+    bottom: auto;
+  }
+  .t-clip.video {
+    background-color: var(--blue-950);
+    background-size: auto 100%;
+    background-repeat: repeat-x;
+    border-color: var(--blue-900);
+  }
+  .t-clip.a {
+    background-image: url(/landing/strip-a.webp);
+  }
+  .t-clip.b {
+    background-image: url(/landing/strip-b.webp);
+  }
+  /* The incoming clip names itself at its far end, clear of the overlap. */
+  .t-clip.b b {
+    left: auto;
+    right: 0.4rem;
+  }
+  .t-clip.video b {
+    color: white;
+    text-shadow: 0 1px 2px oklch(0% 0 0 / 0.7);
+  }
+  /* The overlap, where the transition renders: a light band named after
+     the transition it holds. */
+  .xfade {
+    display: grid;
+    place-items: center;
+    border-color: white;
+    background: oklch(100% 0 0 / 0.16);
+  }
+  .xfade i {
+    max-width: 95%;
+    overflow: hidden;
+    padding: 0.05rem 0.35rem;
+    border-radius: 0.25rem;
+    font-size: 0.625rem;
+    font-style: normal;
+    font-weight: 600;
+    color: var(--zinc-950);
+    background: white;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .picker {
+    display: grid;
+    padding-bottom: 0.4rem;
+  }
+  .pick {
+    margin: 0 0.4rem;
+    padding: 0.35rem 0.45rem;
+    border-radius: 0.375rem;
+    color: var(--zinc-400);
+  }
+  .pick.on {
+    color: white;
+    background: var(--blue-700);
+  }
+
+  @media (max-width: 56rem) {
+    .depth {
+      grid-template-columns: 1fr;
+    }
+    .row,
+    .row.text {
+      grid-template-columns: 1fr;
+    }
+    /* Picture first on every entry once they stack. */
+    .row.text .copy {
+      order: 2;
+    }
+    .cell.keys {
+      border-right: 0;
+    }
+  }
+  @media (max-width: 36rem) {
+    .grade .art,
+    .text .art {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

@@ -12,98 +12,155 @@ const { strings, code } = Astro.props;
 ---
 
 <div class="hero">
-  <div class="copy">
-    {/* Carries a <br /> and the <em> that accents the second line. */}
+  <div class="copy wrap">
+    {/* Carries a <br /> and the <em> that steps the second clause down. */}
     <h1 set:html={strings['hero.title']} />
     <p class="lede">{strings['hero.lead']}</p>
     <div class="cta">
-      <a class="btn btn-primary big" href="/app/">{strings['hero.cta']}</a>
-      <span class="note">{strings['hero.note']}</span>
+      <a class="btn btn-primary big" href="/app/"
+        >{strings['hero.cta']}<svg viewBox="0 0 15 15" aria-hidden="true"
+          ><use href="#i-ArrowRight"></use></svg
+        ></a
+      >
+      <a class="btn btn-ghost big" href="#features">{strings['hero.more']}</a>
     </div>
-    {/* Stated before the click, not after it: WebCodecs is a real gate, and a
-        visitor whose browser lacks it should read that here rather than meet
-        the editor's explanation screen. */}
-    <p class="req">{strings['hero.req']}</p>
+    {/* Browser support is answered in the FAQ; the hero keeps one line of
+        reassurance under the buttons. */}
+    <p class="note">{strings['hero.note']}</p>
   </div>
 
-  {/* The editor runs off the right edge of the viewport: what is on screen is
-      a real desktop editor at a real size, and there is visibly more of it. */}
-  <div class="stage"><Editor code={code} eager /></div>
+  {/* The real editor, at a real size: the one picture on the page that says
+      "this is a complete tool" faster than any sentence. */}
+  <div class="stage">
+    <div class="tilt"><Editor code={code} eager /></div>
+  </div>
 </div>
 
 <style>
   .hero {
-    display: grid;
-    grid-template-columns: minmax(0, 30rem) 1fr;
+    position: relative;
+    isolation: isolate;
+    /* The editor bleeds off the right edge on a phone; clipped here so the
+       page itself never scrolls sideways. */
+    overflow-x: clip;
+    padding-top: clamp(2.5rem, 4vw, 3rem);
+  }
+  /* Light from above: a wide, faint violet wash behind the headline that
+     falls off before the editor, so the product sits in the lit area. */
+  .hero::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0 0 auto;
+    height: min(62rem, 120vh);
+    background:
+      radial-gradient(
+        60% 50% at 50% 0%,
+        oklch(52% 0.2 293 / 0.2),
+        transparent 70%
+      ),
+      radial-gradient(
+        35% 30% at 50% 0%,
+        oklch(80% 0.06 293 / 0.08),
+        transparent 80%
+      );
+    pointer-events: none;
+  }
+
+  .copy {
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: clamp(2rem, 4vw, 4.5rem);
-    padding-block: clamp(2.75rem, 6vw, 5rem) clamp(3rem, 7vw, 5.5rem);
+    text-align: center;
   }
 
   h1 {
-    font-size: clamp(2.6rem, 5.4vw, 4rem);
-    line-height: 1.02;
-    font-weight: 800;
-    letter-spacing: -0.035em;
+    font-size: clamp(2.75rem, 6.2vw, 4.5rem);
+    line-height: 0.98;
+    letter-spacing: -0.038em;
+    max-width: 16ch;
   }
-  /* :global because the <em> comes from the translated string, so it is not in
-     this template and never gets the scoping attribute. */
-  h1 :global(em) {
-    font-style: normal;
-    color: var(--brand-400);
+  h1:is(:lang(ja), :lang(zh), :lang(ko)) {
+    letter-spacing: 0;
   }
 
   .copy .lede {
-    margin-top: 1.35rem;
-    font-size: 1.1rem;
+    margin-top: 1.25rem;
+    max-width: 44rem;
+    font-size: clamp(1.0625rem, 1.5vw, 1.25rem);
   }
 
   .cta {
-    margin-top: 2.25rem;
+    margin-top: 1.5rem;
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 0.75rem 1.25rem;
+    justify-content: center;
+    gap: 0.75rem;
   }
   .big {
-    padding: 0.85rem 1.5rem;
+    min-height: 3rem;
+    padding: 0.75rem 1.4rem;
     font-size: 1.0625rem;
   }
-  .note {
-    color: var(--faint);
-    font-size: 0.9375rem;
-  }
-  .req {
-    margin-top: 0.85rem;
-    color: var(--faint);
+  .copy .note {
+    margin-top: 1rem;
     font-size: 0.875rem;
   }
 
+  /* The editor. It sizes itself from `.app`'s font-size (everything inside is
+     in em, 64em wide), so one clamp fits it to the column on desktop and lets
+     it run off the right edge on a phone rather than shrink into a stamp. */
   .stage {
-    /* The replica is wider than this column on purpose; `body` clips it at the
-       viewport edge. */
+    margin-top: clamp(1.75rem, 2.5vw, 2rem);
+    padding-inline: var(--pad);
     display: flex;
-    min-width: 0;
+    justify-content: center;
+    perspective: 2400px;
+    /* The bottom of the editor dissolves into the page: it is a window onto a
+       working tool, not a framed screenshot. */
+    mask-image: linear-gradient(to bottom, black 62%, transparent 98%);
+  }
+  .tilt {
+    transform-origin: 50% 0%;
   }
   .stage :global(.app) {
-    font-size: clamp(9px, 0.95vw, 15px);
-    box-shadow: 0 1rem 3rem -1.5rem oklch(0% 0 0 / 0.7);
+    font-size: clamp(7.5px, calc((100vw - 2 * var(--pad)) / 64), 17px);
+    border-color: var(--hair-strong);
+    box-shadow:
+      0 0 0 1px oklch(0% 0 0 / 0.6),
+      0 2.5rem 6rem -1rem oklch(0% 0 0 / 0.7),
+      0 -1px 0 0 oklch(100% 0 0 / 0.12);
   }
 
-  @media (max-width: 62rem) {
-    .hero {
-      grid-template-columns: 1fr;
-      gap: clamp(2.5rem, 7vw, 3.5rem);
+  /* The one authored motion: the editor rests tilted back and lays itself flat
+     as the page scrolls toward it. Scroll-driven, so it costs nothing on the
+     main thread; without support (or with reduced motion) it is simply flat. */
+  @supports (animation-timeline: scroll()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .tilt {
+        animation: lay-flat linear both;
+        animation-timeline: scroll(root);
+        animation-range: 0 70vh;
+      }
+      @keyframes lay-flat {
+        from {
+          transform: rotateX(16deg) scale(0.95) translateY(0);
+        }
+        to {
+          transform: rotateX(0deg) scale(1) translateY(-1.5rem);
+        }
+      }
     }
-    /* Pull the replica back to the page edge: cropped by the viewport rather
-       than by the gutter, which reads as a window onto something bigger
-       instead of an image that did not fit. */
+  }
+
+  @media (max-width: 40rem) {
     .stage {
-      margin-inline: calc(var(--pad) * -1);
-      padding-left: var(--pad);
+      justify-content: flex-start;
+      padding-right: 0;
     }
     .stage :global(.app) {
-      font-size: clamp(7px, 2.1vw, 15px);
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
     }
   }
 </style>

@@ -29,13 +29,19 @@ interface Props {
   /**
    * `full` is the whole editor. `timeline` keeps only the part a section about
    * cutting is actually about - same markup, same measurements, the chrome
-   * above it simply not rendered.
+   * above it simply not rendered. `split` is that timeline caught mid-edit:
+   * the middle clip just split at the playhead, its right half selected and
+   * its tail being trimmed until it snaps to the playhead.
    */
-  variant?: 'full' | 'timeline';
+  variant?: 'full' | 'timeline' | 'split';
 }
 
 const { code, eager = false, variant = 'full' } = Astro.props;
 const full = variant === 'full';
+const split = variant === 'split';
+// Where the split landed, and where the trimmed tail snaps to: the playhead.
+const SPLIT_AT = 43;
+const SNAP_AT = 55;
 const app = appStringsFor(code);
 
 const MENUS = [
@@ -61,7 +67,7 @@ const CUT_A = 24;
 const CUT_B = 62;
 ---
 
-<div class:list={['app', { 'only-timeline': !full }]} aria-hidden="true">
+<div class:list={['app', { 'only-timeline': !full, split }]} aria-hidden="true">
   {full && (
   <div class="menubar">
     <span class="wm"><img src="/landing/logo-48.png" alt="" width="48" height="48" />SelfCut</span>
@@ -211,12 +217,31 @@ const CUT_B = 62;
         <span class="clip video" style={`--from: 0%; --to: ${CUT_A}%; --strip: url(/landing/strip-a.webp)`}>
           <b>highlight_01.mp4</b>
         </span>
-        <span
-          class="clip video sel"
-          style={`--from: ${CUT_A}%; --to: ${CUT_B}%; --strip: url(/landing/strip-b.webp)`}
-        >
-          <b>highlight_02.mp4</b><i class="grab left"></i><i class="grab right"></i>
-        </span>
+        {split ? (
+          <>
+            <span
+              class="clip video"
+              style={`--from: ${CUT_A}%; --to: ${SPLIT_AT}%; --strip: url(/landing/strip-b.webp)`}
+            >
+              <b>highlight_02.mp4</b>
+            </span>
+            {/* The trimmed-away tail: still there, outlined, until it is let go. */}
+            <span class="clip ghost" style={`--from: ${SPLIT_AT}%; --to: ${CUT_B}%`}></span>
+            <span
+              class="clip video sel trim"
+              style={`--from: ${SPLIT_AT}%; --to: ${CUT_B}%; --snap: ${SNAP_AT - SPLIT_AT}%; --strip: url(/landing/strip-b.webp); background-position: -9em 0`}
+            >
+              <b>highlight_02.mp4</b><i class="grab left"></i><i class="grab right"></i>
+            </span>
+          </>
+        ) : (
+          <span
+            class="clip video sel"
+            style={`--from: ${CUT_A}%; --to: ${CUT_B}%; --strip: url(/landing/strip-b.webp)`}
+          >
+            <b>highlight_02.mp4</b><i class="grab left"></i><i class="grab right"></i>
+          </span>
+        )}
         <span class="clip video" style={`--from: ${CUT_B}%; --to: 100%; --strip: url(/landing/strip-c.webp)`}>
           <b>highlight_03.mp4</b>
         </span>
@@ -229,7 +254,15 @@ const CUT_B = 62;
         </span>
       </div>
 
-      <div class="sweep"><span class="playhead"></span></div>
+      {split && (
+        <>
+          <span class="split-mark" style={`--at: ${SPLIT_AT}%`}>
+            <svg viewBox="0 0 15 15"><use href="#i-Scissors"></use></svg><kbd>S</kbd>
+          </span>
+          <span class="snap-guide" style={`--at: ${SNAP_AT}%`}></span>
+        </>
+      )}
+      <div class="sweep" style={split ? `--park: ${SNAP_AT}%` : undefined}><span class="playhead"></span></div>
     </div>
   </div>
 </div>
@@ -753,6 +786,95 @@ const CUT_B = 62;
     top: 0.35em;
     width: 0.8em;
     height: 0.8em;
+  }
+
+  /* The `split` variant: the edit caught in the middle. */
+  .clip.ghost {
+    border: 1px dashed color-mix(in oklab, var(--blue-400) 55%, transparent);
+    background: color-mix(in oklab, var(--blue-950) 45%, transparent);
+  }
+  .clip.trim .grab.right {
+    background: var(--blue-300);
+  }
+  .split-mark {
+    position: absolute;
+    top: 0;
+    left: var(--at);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+    height: 1.5em;
+    padding: 0 0.4em;
+    translate: -50% 0;
+    border-radius: 0 0 0.375em 0.375em;
+    background: var(--zinc-100);
+    color: var(--zinc-950);
+    /* A ring of ruler colour so the tick labels it lands on stop at its edge
+       instead of running under it. */
+    box-shadow: 0 0 0 0.35em var(--panel);
+  }
+  .split-mark svg {
+    width: 0.8em;
+    height: 0.8em;
+  }
+  .split-mark kbd {
+    font: 600 0.625em/1 var(--font-app);
+  }
+  /* The snapping guide: the line the dragged edge locked onto. */
+  .snap-guide {
+    position: absolute;
+    top: 1.5em;
+    bottom: 0;
+    left: var(--at);
+    z-index: 2;
+    width: 0;
+    border-left: 1px dashed var(--zinc-100);
+    opacity: 0;
+  }
+  .split .sweep {
+    animation: none;
+    translate: var(--park) 0;
+  }
+  .split .playhead {
+    left: 0;
+  }
+  .split .clip.trim {
+    width: var(--snap);
+  }
+  .split .snap-guide {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    /* Drag, snap, hold: the tail shortens until the edge meets the playhead,
+       the guide flashes on contact, then the loop starts over. */
+    .split .clip.trim {
+      animation: trim 5s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+    }
+    .split .snap-guide {
+      animation: snap 5s step-end infinite;
+    }
+    @keyframes trim {
+      0%,
+      18% {
+        width: calc(var(--to) - var(--from));
+      }
+      55%,
+      100% {
+        width: var(--snap);
+      }
+    }
+    @keyframes snap {
+      0% {
+        opacity: 0;
+      }
+      55% {
+        opacity: 1;
+      }
+      92% {
+        opacity: 0;
+      }
+    }
   }
 
   /* The playhead. `.sweep` is as wide as the lanes, so translating it by 100%

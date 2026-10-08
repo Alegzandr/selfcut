@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-08T00:00:00Z",
+  "title": "Design System: SelfCut Landing",
+  "extensions": {
+    "colorMeta": {
+      "ground": { "role": "neutral", "displayName": "Ground", "canonical": "oklch(11.5% 0.004 286)", "tonalRamp": ["oklch(11.5% 0.004 286)", "oklch(14.1% 0.005 285.823)", "oklch(21% 0.006 285.885)", "oklch(27.4% 0.006 286.033)", "oklch(37% 0.013 285.805)", "oklch(55.2% 0.016 285.938)", "oklch(70.5% 0.015 286.067)", "oklch(92% 0.004 286.32)"] },
+      "raised": { "role": "neutral", "displayName": "Raised", "canonical": "oklch(15.5% 0.005 286)", "tonalRamp": ["oklch(11.5% 0.005 286)", "oklch(15.5% 0.005 286)", "oklch(21% 0.006 286)", "oklch(27.4% 0.006 286)", "oklch(37% 0.013 286)", "oklch(55% 0.016 286)", "oklch(72% 0.012 286)", "oklch(92% 0.004 286)"] },
+      "panel": { "role": "neutral", "displayName": "App Panel (zinc-900)", "canonical": "oklch(21% 0.006 285.885)" },
+      "line": { "role": "neutral", "displayName": "App Line (zinc-800)", "canonical": "oklch(27.4% 0.006 286.033)" },
+      "line-strong": { "role": "neutral", "displayName": "App Line Strong (zinc-700)", "canonical": "oklch(37% 0.013 285.805)" },
+      "hair": { "role": "neutral", "displayName": "Hairline", "canonical": "oklch(100% 0 0 / 0.075)" },
+      "hair-strong": { "role": "neutral", "displayName": "Hairline Strong", "canonical": "oklch(100% 0 0 / 0.13)" },
+      "text": { "role": "neutral", "displayName": "Text", "canonical": "oklch(97% 0.002 286)" },
+      "muted": { "role": "neutral", "displayName": "Muted", "canonical": "oklch(72% 0.012 286)" },
+      "faint": { "role": "neutral", "displayName": "Faint", "canonical": "oklch(62% 0.014 286)" },
+      "heading-dim": { "role": "neutral", "displayName": "Heading Dim", "canonical": "oklch(56% 0.014 286)" },
+      "on-accent": { "role": "neutral", "displayName": "White on Violet", "canonical": "#ffffff" },
+      "violet-action": { "role": "primary", "displayName": "Action Violet (brand-600)", "canonical": "oklch(52.2% 0.245 293.2)", "tonalRamp": ["oklch(18.5% 0.085 293)", "oklch(28% 0.13 292)", "oklch(44% 0.215 292)", "oklch(52.2% 0.245 293.2)", "oklch(56.5% 0.25 298)", "oklch(60.6% 0.254 302.9)", "oklch(78% 0.135 303.5)", "oklch(88% 0.085 304)"] },
+      "violet-action-hover": { "role": "primary", "displayName": "Lifted Violet (brand-500)", "canonical": "oklch(56.5% 0.25 298)" },
+      "violet-focus": { "role": "primary", "displayName": "Focus Violet (brand-400)", "canonical": "oklch(60.6% 0.254 302.9)" },
+      "violet-text": { "role": "primary", "displayName": "Soft Violet (brand-300)", "canonical": "oklch(78% 0.135 303.5)" },
+      "violet-selection": { "role": "primary", "displayName": "Selection Violet (brand-700)", "canonical": "oklch(44% 0.215 292)" },
+      "replica-ground": { "role": "neutral", "displayName": "App Ground (zinc-950)", "canonical": "oklch(14.1% 0.005 285.823)" },
+      "replica-blue": { "role": "secondary", "displayName": "Pick Blue (blue-500)", "canonical": "oklch(68.7% 0.14 234)", "tonalRamp": ["oklch(22% 0.086 264)", "oklch(33% 0.141 265)", "oklch(41% 0.18 264)", "oklch(49.6% 0.224 263.5)", "oklch(68.7% 0.14 234)", "oklch(75.5% 0.121 232.5)", "oklch(81.5% 0.098 231.5)", "oklch(92% 0.04 231)"] },
+      "replica-blue-pick": { "role": "secondary", "displayName": "Picked Chip Blue (blue-700)", "canonical": "oklch(49.6% 0.224 263.5)" },
+      "replica-blue-deep": { "role": "secondary", "displayName": "Video Clip Blue (blue-950)", "canonical": "oklch(22% 0.086 264)" },
+      "replica-emerald": { "role": "tertiary", "displayName": "Waveform Emerald (emerald-900)", "canonical": "oklch(37.8% 0.077 168.94)", "tonalRamp": ["oklch(18% 0.04 172)", "oklch(26.2% 0.051 172.552)", "oklch(37.8% 0.077 168.94)", "oklch(50% 0.1 166)", "oklch(62% 0.12 165)", "oklch(74% 0.135 165)", "oklch(84.5% 0.143 164.978)", "oklch(94% 0.06 165)"] },
+      "replica-emerald-deep": { "role": "tertiary", "displayName": "Audio Clip Emerald (emerald-950)", "canonical": "oklch(26.2% 0.051 172.552)" },
+      "replica-emerald-text": { "role": "tertiary", "displayName": "Audio Label Emerald (emerald-300)", "canonical": "oklch(84.5% 0.143 164.978)" },
+      "playhead-red": { "role": "tertiary", "displayName": "Playhead Red (red-500)", "canonical": "oklch(63.7% 0.237 25.331)" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The hero headline only, two-tone." },
+      "headline": { "displayName": "Headline", "purpose": "Every section heading, two-tone; stepped up for the privacy and closing statements." },
+      "title": { "displayName": "Title", "purpose": "Point titles, spec terms, FAQ questions, figure caption names." },
+      "lede": { "displayName": "Lede", "purpose": "The one muted sentence under each heading." },
+      "body": { "displayName": "Body", "purpose": "Base copy." },
+      "body-small": { "displayName": "Body Small", "purpose": "Descriptions, definitions, captions, notes." },
+      "label": { "displayName": "Label", "purpose": "Button labels in the Display face." },
+      "app": { "displayName": "App", "purpose": "Everything inside a product fragment, at the app's own sizes, in the app's system stack." }
+    },
+    "shadows": [
+      { "name": "button-primary-lift", "value": "inset 0 1px 0 oklch(100% 0 0 / 0.18), 0 1px 2px oklch(0% 0 0 / 0.4)", "purpose": "Top highlight and contact shadow on the violet button only." },
+      { "name": "hero-editor", "value": "0 0 0 1px oklch(0% 0 0 / 0.6), 0 2.5rem 6rem -1rem oklch(0% 0 0 / 0.7), 0 -1px 0 0 oklch(100% 0 0 / 0.12)", "purpose": "The hero editor replica: the largest object on the page." },
+      { "name": "sheet", "value": "0 0 0 1px oklch(0% 0 0 / 0.5), 0 2rem 4rem -1.5rem oklch(0% 0 0 / 0.85)", "purpose": "The export dialog fragment." },
+      { "name": "frame", "value": "0 1.5rem 4rem -1.5rem oklch(0% 0 0 / 0.75)", "purpose": "Video stills (captions demo)." },
+      { "name": "app-panel", "value": "0 1rem 2.5rem -1.25rem oklch(0% 0 0 / 0.8)", "purpose": "Small inspector fragments in the depth panel." },
+      { "name": "hairline-ring", "value": "0 0 0 1px oklch(100% 0 0 / 0.13)", "purpose": "An edge on images without a border box." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Default easing for hovers, button state changes, FAQ reveal, skip link." },
+      { "name": "state-duration", "value": "0.18s", "purpose": "Button color and border transitions; nav links use 0.15s ease-out." },
+      { "name": "lay-flat", "value": "rotateX(16deg) scale(0.95) to rotateX(0) scale(1) translateY(-1.5rem), scroll(root), range 0 to 70vh", "purpose": "The one authored scroll motion: the hero editor lays itself flat." },
+      { "name": "replica-loop", "value": "12s linear playhead sweep, step-end shot cuts", "purpose": "The replica's playhead sweeps and the monitor cuts to the shot under it." },
+      { "name": "captions-loop", "value": "9s step-end, three cues on one clock", "purpose": "Burnt-in caption and cue list highlight change together." },
+      { "name": "trim-loop", "value": "5s cubic-bezier(0.45, 0, 0.2, 1)", "purpose": "The split variant's tail trims until it snaps to the playhead." }
+    ],
+    "breakpoints": [
+      { "name": "narrow", "value": "32rem" },
+      { "name": "spec-stack", "value": "36rem" },
+      { "name": "phone", "value": "40rem" },
+      { "name": "columns-stack", "value": "48rem" },
+      { "name": "header-compact", "value": "52rem" },
+      { "name": "split-stack", "value": "56rem" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one violet action: open the editor. Header, hero and closing.",
+      "html": "<a class=\"ds-btn ds-btn-primary\" href=\"#\">Start editing<svg viewBox=\"0 0 15 15\" aria-hidden=\"true\"><path d=\"M8.15 3.15a.5.5 0 0 1 .7 0l4 4a.5.5 0 0 1 0 .7l-4 4a.5.5 0 0 1-.7-.7L11.29 8H2.5a.5.5 0 0 1 0-1h8.79L8.15 3.85a.5.5 0 0 1 0-.7Z\" fill=\"currentColor\"/></svg></a>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 44px; padding: 0.6rem 1.15rem; font-family: 'Madefor Display', system-ui, sans-serif; font-size: 0.9875rem; font-weight: 650; letter-spacing: -0.01em; line-height: 1.2; text-decoration: none; white-space: nowrap; border: 1px solid transparent; border-radius: 0.625rem; transition: background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), translate 0.1s ease-out; } .ds-btn svg { width: 0.95em; height: 0.95em; transition: translate 0.25s cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn:hover svg { translate: 0.15em 0; } .ds-btn:active { translate: 0 1px; } .ds-btn:focus-visible { outline: 2px solid var(--brand-400, oklch(60.6% 0.254 302.9)); outline-offset: 3px; } .ds-btn-primary { background: var(--accent, oklch(52.2% 0.245 293.2)); color: white; box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.18), 0 1px 2px oklch(0% 0 0 / 0.4); } .ds-btn-primary:hover { background: var(--accent-hover, oklch(56.5% 0.25 298)); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "The secondary action beside the primary in the hero.",
+      "html": "<a class=\"ds-btn-ghost\" href=\"#\">See what it does</a>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; min-height: 44px; padding: 0.6rem 1.15rem; font-family: 'Madefor Display', system-ui, sans-serif; font-size: 0.9875rem; font-weight: 650; letter-spacing: -0.01em; text-decoration: none; color: var(--text, oklch(97% 0.002 286)); background: oklch(100% 0 0 / 0.03); border: 1px solid var(--hair-strong, oklch(100% 0 0 / 0.13)); border-radius: 0.625rem; transition: background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn-ghost:hover { background: oklch(100% 0 0 / 0.07); border-color: oklch(100% 0 0 / 0.22); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--brand-400, oklch(60.6% 0.254 302.9)); outline-offset: 3px; }"
+    },
+    {
+      "name": "Header",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Sticky translucent header: wordmark, centered section links, primary button.",
+      "html": "<header class=\"ds-header\"><span class=\"ds-wm\">SelfCut</span><nav class=\"ds-nav\"><a href=\"#\">Features</a><a href=\"#\">Formats</a><a href=\"#\">Privacy</a><a href=\"#\">FAQ</a></nav><a class=\"ds-header-cta\" href=\"#\">Open the editor</a></header>",
+      "css": ".ds-header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1rem; height: 4rem; padding-inline: 1.5rem; border-bottom: 1px solid var(--hair, oklch(100% 0 0 / 0.075)); background: color-mix(in oklab, oklch(11.5% 0.004 286) 78%, transparent); backdrop-filter: blur(14px) saturate(1.4); color: oklch(97% 0.002 286); } .ds-wm { font-family: 'Madefor Display', system-ui, sans-serif; font-weight: 700; font-size: 1.125rem; letter-spacing: -0.02em; } .ds-nav { display: flex; gap: 0.25rem; } .ds-nav a { padding: 0.5rem 0.8rem; border-radius: 0.5rem; color: var(--muted, oklch(72% 0.012 286)); font-size: 0.9375rem; text-decoration: none; transition: color 0.15s ease-out; } .ds-nav a:hover { color: var(--text, oklch(97% 0.002 286)); } .ds-nav a:focus-visible, .ds-header-cta:focus-visible { outline: 2px solid oklch(60.6% 0.254 302.9); outline-offset: 3px; } .ds-header-cta { justify-self: end; padding: 0.4rem 0.9rem; min-height: 2.25rem; display: inline-flex; align-items: center; border-radius: 0.625rem; background: oklch(52.2% 0.245 293.2); color: white; font-family: 'Madefor Display', system-ui, sans-serif; font-weight: 650; font-size: 0.9375rem; text-decoration: none; } .ds-header-cta:hover { background: oklch(56.5% 0.25 298); }"
+    },
+    {
+      "name": "Two-Tone Heading",
+      "kind": "custom",
+      "refersTo": "headline",
+      "description": "Every section heading: the claim, then its consequence stepped down to heading-dim.",
+      "html": "<h2 class=\"ds-h2\">One edit, <em>every format.</em></h2>",
+      "css": ".ds-h2 { font-family: 'Madefor Display', system-ui, sans-serif; font-size: clamp(2.1rem, 4.4vw, 3.4rem); font-weight: 700; line-height: 1.05; letter-spacing: -0.028em; max-width: 22ch; text-wrap: balance; color: var(--text, oklch(97% 0.002 286)); } .ds-h2 em { font-style: normal; color: var(--heading-dim, oklch(56% 0.014 286)); }"
+    },
+    {
+      "name": "Spec Row List",
+      "kind": "custom",
+      "refersTo": "title",
+      "description": "Facts as term and detail on hairlines, read straight down; used for spec and export defaults.",
+      "html": "<dl class=\"ds-spec\"><div><dt>Loudness</dt><dd>The mix is brought to -14 LUFS with a limiter at -1 dB.</dd></div><div><dt>Frame rate</dt><dd>Follows your footage, up to 120 fps.</dd></div></dl>",
+      "css": ".ds-spec { margin: 0; border-bottom: 1px solid var(--hair, oklch(100% 0 0 / 0.075)); color: oklch(97% 0.002 286); } .ds-spec > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 0.35rem 2rem; align-items: baseline; padding-block: 1.25rem; border-top: 1px solid var(--hair, oklch(100% 0 0 / 0.075)); } .ds-spec dt { font-family: 'Madefor Display', system-ui, sans-serif; font-weight: 650; letter-spacing: -0.01em; } .ds-spec dd { margin: 0; color: var(--muted, oklch(72% 0.012 286)); font-size: 0.9375rem; line-height: 1.55; }"
+    },
+    {
+      "name": "FAQ Item",
+      "kind": "custom",
+      "description": "Native details on a hairline, question in Display, plus icon rotating to a cross.",
+      "html": "<details class=\"ds-faq\"><summary>Are my videos uploaded to a server?<svg viewBox=\"0 0 15 15\" aria-hidden=\"true\"><path d=\"M8 2.75a.5.5 0 0 0-1 0V7H2.75a.5.5 0 0 0 0 1H7v4.25a.5.5 0 0 0 1 0V8h4.25a.5.5 0 0 0 0-1H8V2.75Z\" fill=\"currentColor\"/></svg></summary><p>No. Everything runs in your browser.</p></details>",
+      "css": ".ds-faq { border-block: 1px solid var(--hair, oklch(100% 0 0 / 0.075)); color: oklch(97% 0.002 286); } .ds-faq summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; min-height: 44px; padding: 1.3rem 0; font-family: 'Madefor Display', system-ui, sans-serif; font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.012em; transition: color 0.15s ease-out; } .ds-faq summary::-webkit-details-marker { display: none; } .ds-faq summary:hover { color: white; } .ds-faq summary:focus-visible { outline: 2px solid oklch(60.6% 0.254 302.9); outline-offset: 3px; } .ds-faq svg { width: 1.1rem; height: 1.1rem; color: oklch(72% 0.012 286); transition: rotate 0.25s cubic-bezier(0.16, 1, 0.3, 1); } .ds-faq[open] svg { rotate: 45deg; } .ds-faq p { margin: 0; padding: 0 2.5rem 1.5rem 0; max-width: 62ch; color: oklch(72% 0.012 286); font-size: 0.9875rem; line-height: 1.65; }"
+    },
+    {
+      "name": "Raised Panel",
+      "kind": "card",
+      "refersTo": "raised-panel",
+      "description": "The one lifted landing surface: hosts the format bench and the depth panel, cut by hairlines inside.",
+      "html": "<div class=\"ds-raised\"><div class=\"ds-cell\">Keyframes</div><div class=\"ds-cell\">Masks and tracking</div></div>",
+      "css": ".ds-raised { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--hair, oklch(100% 0 0 / 0.075)); border-radius: 1rem; overflow: hidden; background: radial-gradient(80% 60% at 50% 0%, oklch(100% 0 0 / 0.035), transparent 70%), var(--raised, oklch(15.5% 0.005 286)); color: oklch(97% 0.002 286); font-family: 'Madefor Display', system-ui, sans-serif; font-weight: 650; } .ds-cell { padding: clamp(1.5rem, 3vw, 2.5rem); } .ds-cell + .ds-cell { border-left: 1px solid var(--hair, oklch(100% 0 0 / 0.075)); }"
+    },
+    {
+      "name": "Key Cap",
+      "kind": "chip",
+      "description": "Inline keyboard shortcut in the app's idiom.",
+      "html": "<span class=\"ds-copy\">Split a clip with <kbd class=\"ds-kbd\">S</kbd></span>",
+      "css": ".ds-copy { color: oklch(72% 0.012 286); font-family: 'Madefor Text', system-ui, sans-serif; } .ds-kbd { display: inline-block; min-width: 1.6em; font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 0.8em; font-weight: 600; line-height: 1.5; text-align: center; color: oklch(96.7% 0.001 286.375); background: oklch(27.4% 0.006 286.033); border: 1px solid oklch(37% 0.013 285.805); border-bottom-width: 2px; border-radius: 5px; padding: 0 0.4em; }"
+    },
+    {
+      "name": "App Panel Fragment",
+      "kind": "custom",
+      "refersTo": "app-panel",
+      "description": "A piece of the editor's inspector drawn with the app's own tokens: zinc-900, opaque zinc-800 line, blue for what is picked.",
+      "html": "<div class=\"ds-ui\"><div class=\"ds-ui-head\">Mask</div><div class=\"ds-chips\"><i>Rectangle</i><i class=\"on\">Ellipse</i><i>Pen</i></div><div class=\"ds-ui-row\"><span>Feather</span><span class=\"ds-slider\" style=\"--at: 38%\"></span></div></div>",
+      "css": ".ds-ui { width: 16rem; padding-bottom: 0.75rem; font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 0.75rem; line-height: 1.3; color: oklch(87.1% 0.006 286.286); background: oklch(21% 0.006 285.885); border: 1px solid oklch(27.4% 0.006 286.033); border-radius: 0.625rem; box-shadow: 0 1rem 2.5rem -1.25rem oklch(0% 0 0 / 0.8); } .ds-ui-head { padding: 0.6rem 0.75rem 0.35rem; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: oklch(70.5% 0.015 286.067); } .ds-chips { display: flex; gap: 0.25rem; padding: 0 0.75rem; } .ds-chips i { padding: 0.2rem 0.5rem; border-radius: 0.375rem; font-style: normal; color: oklch(70.5% 0.015 286.067); background: oklch(27.4% 0.006 286.033); } .ds-chips i.on { color: white; background: oklch(49.6% 0.224 263.5); } .ds-ui-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.75rem 0; } .ds-slider { position: relative; flex: 1; height: 0.25rem; border-radius: 99px; background: linear-gradient(to right, oklch(87.1% 0.006 286.286) var(--at), oklch(37% 0.013 285.805) var(--at)); } .ds-slider::after { content: ''; position: absolute; top: 50%; left: var(--at); width: 0.7rem; height: 0.7rem; translate: -50% -50%; border-radius: 50%; background: white; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Lit Workbench",
+    "overview": "A near-black room with one light above it, and the real tool on the bench. The page is dark, quiet and exact; the editor replica is the brightest, densest object in it, and every section proves a capability by showing the interface that does it rather than illustrating it. The finish bar is a top-tier product page: hairline rules that read as light on an edge, tight-tracked display headings, generous vertical rhythm, and one violet accent that is spent almost entirely on the action.\n\nDensity is deliberately uneven. Copy passages are sparse and centered or left on one column; product passages (the replica, the export sheet, the grading and keyframe fragments) are as dense as the app itself, set in the app's own system stack at the app's own sizes. The contrast between the two is the argument: a calm page around a serious tool.\n\nConfirmed rejections carried from the product: no generic SaaS look (no card grids, no decorative gradients, no dashboard tiles), no neon pill overlays floating on the preview (a caption is burnt into the frame as the editor renders it), and nothing developer-oriented on the page.",
+    "keyCharacteristics": [
+      "Near-black zinc ground with a single faint violet wash from above in the hero, returned from below at the close.",
+      "Two-tone headings: the claim in near-white, its consequence stepped down to a dim zinc in the same sentence.",
+      "Translucent white hairlines (7.5% and 13%) for every page-level rule and border; opaque zinc lines only inside product fragments.",
+      "Madefor Display for headings, buttons and term labels; Madefor Text for copy; the system stack for anything that is a piece of the app.",
+      "Product fragments built from the app's own tokens and dictionaries, never screenshots of UI.",
+      "One authored scroll motion (the hero editor laying itself flat) and looping product demos on shared clocks; everything stills under reduced motion."
+    ],
+    "rules": [
+      { "name": "The One Voice Rule", "body": "Violet belongs to the action, focus, selection and the ambient light. It is never a heading color, a border, a badge or a section tint.", "section": "colors" },
+      { "name": "The Borrowed Palette Rule", "body": "Blue, emerald and red appear only inside a piece of the app (the replica, the export sheet, the depth fragments). If it is not something the editor would draw, it is zinc and violet.", "section": "colors" },
+      { "name": "The Two Kinds of Line Rule", "body": "The page draws with translucent hairlines; the app draws with opaque zinc-800. Never mix them on the same object.", "section": "colors" },
+      { "name": "The Two-Tone Heading Rule", "body": "A heading is one sentence in two tones: the claim in text, its consequence in heading-dim, delivered as an `<em>` with `font-style: normal`. Emphasis is by value, never by italics or color.", "section": "typography" },
+      { "name": "The Flat Tracking for CJK Rule", "body": "Negative tracking applies to Latin scripts only; Japanese, Chinese and Korean headings run at 0, and Japanese breaks at phrase boundaries.", "section": "typography" },
+      { "name": "The Pictures Cast Shadows Rule", "body": "Landing chrome (buttons aside, sections, lists, the raised bench) is flat; only depictions of the product or footage lift off the page.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do split every section heading into a claim and its consequence, with the second clause in heading-dim via a normal-style `<em>`.",
+      "Do draw every landing border and separator with the translucent hair (7.5%) or hair-strong (13%) whites.",
+      "Do prove a capability with a fragment of the app built from its tokens and its own localized labels, not with an illustration or a screenshot of UI.",
+      "Do keep violet to the primary action, focus, selection and the hero and closing light.",
+      "Do keep every motion behind `prefers-reduced-motion: no-preference` and make the still state read correctly.",
+      "Do keep touch targets at 44px, even where the visible control is smaller.",
+      "Do keep tracking at 0 for CJK headings."
+    ],
+    "donts": [
+      "Don't use blue, emerald or red outside a depiction of the app.",
+      "Don't build card grids, decorative gradients or dashboard-style tiles; group facts with hairlines and space.",
+      "Don't float neon pills or pulsing dots over a preview; burn the caption into the frame the way the editor does.",
+      "Don't use italics or a new color for emphasis inside headings.",
+      "Don't use em dashes in copy, titles or UI strings; use a colon, a middle dot or a hyphen.",
+      "Don't add developer-oriented touches (console messages, DevTools references) to the page.",
+      "Don't put shadows on landing chrome; only pictures of the product or footage lift."
+    ]
+  }
+}

@@ -12,30 +12,67 @@ const { strings, code } = Astro.props;
 // The preset names come from the editor's export dialog: what the page
 // promises is spelled the way the button that delivers it is spelled.
 const app = appStringsFor(code);
+
+// What the export gets right with nothing touched: the "good by default"
+// promise, stated as the values it actually ships with (see
+// MASTER_TARGET_LUFS and PEAK_CEILING_DB in lib/loudness.ts).
+const DEFAULTS = [
+  { dt: strings['defaults.loud.dt'], dd: strings['defaults.loud.dd'] },
+  { dt: strings['defaults.frame.dt'], dd: strings['defaults.frame.dd'] },
+  { dt: strings['defaults.fill.dt'], dd: strings['defaults.fill.dd'] },
+  { dt: strings['defaults.files.dt'], dd: strings['defaults.files.dd'] },
+];
+
+// The export sheet, as it opens: the same labels, the default preset picked
+// and the loudness box already ticked. Placeholders are filled with the
+// values the sheet would show for 60 fps footage.
+const fill = (text: string, values: Record<string, string>) =>
+  text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => values[key] ?? '');
+const PRESETS = [
+  {
+    label: app['export.preset.youtube.label'],
+    description: fill(app['export.preset.youtube.description'], { fps: '60' }),
+    on: true,
+  },
+  {
+    label: app['export.preset.tiktok.label'],
+    description: fill(app['export.preset.tiktok.description'], { fps: '60' }),
+    on: false,
+  },
+  {
+    label: app['export.preset.mp3.label'],
+    description: app['export.preset.mp3.description'],
+    on: false,
+  },
+];
+const QUALITIES = [
+  { label: app['export.quality.720'], on: false },
+  { label: app['export.quality.1080'], on: true },
+  { label: app['export.quality.1440'], on: false },
+  { label: app['export.quality.4k'], on: false },
+];
 ---
 
 <section id="formats" aria-labelledby="formats-title">
-  <h2 id="formats-title">{strings['formats.title']}</h2>
+  <h2 id="formats-title" set:html={strings['formats.title']} />
   <p class="lede">{strings['formats.lead']}</p>
 
   {/* One frame of the edit, in each shape it can leave as. Different sizes on
       purpose: these are aspect ratios, and equal boxes would hide the one
       thing the section is about. */}
-  <div class="formats">
+  <div class="bench">
     <figure class="wide">
       <img src="/landing/format-169.webp" alt="" width="640" height="360" loading="lazy" />
       <figcaption>
         <strong>{app['export.preset.youtube.label']}</strong>{strings['formats.169']}
       </figcaption>
     </figure>
-
     <figure class="tall">
       <img src="/landing/format-916.webp" alt="" width="405" height="720" loading="lazy" />
       <figcaption>
         <strong>{app['export.preset.tiktok.label']}</strong>{strings['formats.916']}
       </figcaption>
     </figure>
-
     <figure class="sound">
       <div class="wave"></div>
       <figcaption>
@@ -44,23 +81,79 @@ const app = appStringsFor(code);
     </figure>
   </div>
 
+  <div class="defaults">
+    <div>
+      <h3>{strings['defaults.title']}</h3>
+      <dl>
+        {
+          DEFAULTS.map((row) => (
+            <div>
+              <dt>{row.dt}</dt>
+              <dd>{row.dd}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </div>
+
+    {/* The export sheet the promise above comes from, drawn from the app's
+        own labels: nothing on it has been touched. */}
+    <div class="sheet" aria-hidden="true">
+      <div class="sheet-head">
+        {app['export.title']}
+        <svg viewBox="0 0 15 15"><use href="#i-Download"></use></svg>
+      </div>
+      <div class="door">
+        <span class="on">{app['export.door.publish']}</span><span>{app['export.door.handoff']}</span>
+      </div>
+      <div class="presets">
+        {
+          PRESETS.map((preset) => (
+            <div class:list={['preset', { on: preset.on }]}>
+              <b>{preset.label}</b>
+              <span>{preset.description}</span>
+            </div>
+          ))
+        }
+      </div>
+      <div class="qualities">
+        {QUALITIES.map((q) => <span class:list={{ on: q.on }}>{q.label}</span>)}
+      </div>
+      <div class="check">
+        <span class="box"><svg viewBox="0 0 15 15"><path d="M3.5 7.8 6.2 10.4 11.5 4.6"></path></svg></span>
+        <span class="check-text">
+          <b>{fill(app['export.normalize'], { lufs: '-14' })}</b>
+          <span>{app['export.normalize.hint']}</span>
+        </span>
+      </div>
+      <div class="sheet-foot">
+        <span>{app['export.privacy']}</span>
+        <span class="go">{fill(app['export.cta'], { preset: app['export.preset.youtube.label'] })}</span>
+      </div>
+    </div>
+  </div>
+
   {/* The three pictures are the aspect ratios; everything else the export
       sheet offers is a list, and reads better as one. */}
-  <p class="more">{strings['formats.more']}</p>
+  <p class="note more">{strings['formats.more']}</p>
 </section>
 
 <style>
   /* Pictures share one baseline, captions hang below it on a row of their
-     own: a two-line caption then cannot push its picture out of line. Column
-     widths are deliberately unequal - these are aspect ratios, and equal boxes
-     would hide the one thing the section is about. */
-  .formats {
+     own, so a two-line caption cannot push its picture out of line. */
+  .bench {
     display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(0, 0.72fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.62fr) minmax(0, 1fr);
     grid-template-rows: auto auto;
     align-items: end;
-    gap: 0.85rem clamp(1.5rem, 4vw, 3rem);
-    margin-top: clamp(1.75rem, 3vw, 2.5rem);
+    gap: 1.1rem clamp(1.5rem, 3.5vw, 3rem);
+    margin-top: clamp(2.5rem, 5vw, 4rem);
+    padding: clamp(1.5rem, 3.5vw, 3rem);
+    border: 1px solid var(--hair);
+    border-radius: 1rem;
+    background:
+      radial-gradient(80% 60% at 50% 0%, oklch(100% 0 0 / 0.035), transparent 70%),
+      var(--raised);
   }
   figure {
     display: grid;
@@ -71,55 +164,279 @@ const app = appStringsFor(code);
   figure > :first-child {
     align-self: end;
   }
+  /* The waveform has no picture height to match: it sits mid-row, level
+     with the middle of the frames beside it, instead of hugging the floor
+     under an empty band. */
+  .sound > :first-child {
+    align-self: center;
+  }
   figure img,
   .wave {
-    display: block;
     width: 100%;
     height: auto;
+    border-radius: 0.625rem;
+    box-shadow:
+      0 0 0 1px var(--hair-strong),
+      0 1.25rem 2.5rem -1.25rem oklch(0% 0 0 / 0.8);
+  }
+  /* The audio export, drawn the way the editor draws an audio clip: the
+     footage's own waveform over the emerald body. */
+  .wave {
+    aspect-ratio: 16 / 6;
+    background:
+      center / 90% 58% no-repeat url(/landing/waveform.webp),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklab, var(--emerald-900) 60%, transparent),
+        var(--emerald-950)
+      );
+  }
+  figcaption {
+    color: var(--muted);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+  figcaption strong {
+    display: block;
+    margin-bottom: 0.15rem;
+    font-family: var(--font-display);
+    font-size: 1.0625rem;
+    font-weight: 650;
+    letter-spacing: -0.012em;
+    color: var(--text);
+  }
+
+  /* What the export gets right, beside the sheet it comes from. */
+  .defaults {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    gap: clamp(2.5rem, 6vw, 5rem);
+    align-items: center;
+    margin-top: clamp(3.5rem, 7vw, 5rem);
+  }
+  .defaults h3 {
+    font-size: clamp(1.375rem, 2.2vw, 1.75rem);
+    max-width: 22ch;
+  }
+  .defaults dl {
+    margin-top: 1.5rem;
+    border-bottom: 1px solid var(--hair);
+  }
+  .defaults dl > div {
+    display: grid;
+    grid-template-columns: minmax(0, 7.5rem) 1fr;
+    gap: 0.25rem 1.5rem;
+    align-items: baseline;
+    padding-block: 1rem;
+    border-top: 1px solid var(--hair);
+  }
+  dt {
+    font-family: var(--font-display);
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+  dd {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+
+  /* The sheet: the editor's dialog idiom, zinc-900 on a zinc-800 hairline,
+     blue for what is picked, the CTA in the brand violet as in the app. */
+  .sheet {
+    font-family: var(--font-app);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: var(--zinc-300);
+    background: var(--zinc-900);
+    border: 1px solid var(--line);
+    border-radius: 0.875rem;
+    box-shadow:
+      0 0 0 1px oklch(0% 0 0 / 0.5),
+      0 2rem 4rem -1.5rem oklch(0% 0 0 / 0.85);
+    overflow: hidden;
+  }
+  .sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--line);
+    font-weight: 600;
+    color: var(--zinc-100);
+  }
+  .sheet-head svg {
+    width: 0.95rem;
+    height: 0.95rem;
+    color: var(--zinc-400);
+  }
+  .door {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem;
+    margin: 0.85rem 1rem 0;
+    padding: 0.2rem;
+    border-radius: 0.5rem;
+    background: var(--zinc-950);
+  }
+  .door span {
+    padding: 0.4rem;
+    border-radius: 0.375rem;
+    text-align: center;
+    color: var(--zinc-400);
+  }
+  .door .on {
+    background: var(--zinc-800);
+    color: var(--zinc-100);
+  }
+  .presets {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0.75rem 1rem 0;
+  }
+  .preset {
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.55rem 0.7rem;
     border: 1px solid var(--line);
     border-radius: 0.5rem;
   }
+  .preset b {
+    font-weight: 600;
+    color: var(--zinc-100);
+  }
+  .preset span {
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--zinc-400);
+  }
+  .preset.on {
+    border-color: var(--blue-500);
+    background: color-mix(in oklab, var(--blue-950) 70%, transparent);
+  }
+  .qualities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin: 0.75rem 1rem 0;
+  }
+  .qualities span {
+    padding: 0.25rem 0.55rem;
+    border-radius: 0.375rem;
+    background: var(--zinc-800);
+    color: var(--zinc-400);
+    font-size: 0.75rem;
+  }
+  .qualities .on {
+    background: var(--blue-700);
+    color: white;
+  }
+  .check {
+    display: flex;
+    gap: 0.6rem;
+    margin: 0.85rem 1rem 0;
+    padding: 0.7rem;
+    border-radius: 0.5rem;
+    background: var(--zinc-950);
+  }
+  .check-text {
+    display: grid;
+    gap: 0.15rem;
+  }
+  .check-text b {
+    font-weight: 600;
+    color: var(--zinc-100);
+  }
+  .check-text span {
+    font-size: 0.6875rem;
+    color: var(--zinc-400);
+  }
+  .box {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.05rem;
+    border-radius: 0.25rem;
+    background: var(--blue-500);
+  }
+  .box svg {
+    width: 0.8rem;
+    height: 0.8rem;
+    fill: none;
+    stroke: white;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .sheet-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.9rem;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.6875rem;
+    color: var(--zinc-400);
+  }
+  .go {
+    flex: none;
+    padding: 0.45rem 0.8rem;
+    border-radius: 0.5rem;
+    background: var(--brand-600);
+    color: white;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .more {
+    margin-top: clamp(2.5rem, 4vw, 3rem);
+    max-width: var(--measure);
+  }
+
+  @media (max-width: 56rem) {
+    .defaults {
+      grid-template-columns: 1fr;
+    }
+  }
   @media (max-width: 52rem) {
-    .formats {
+    .bench {
       grid-template-columns: minmax(0, 1fr) minmax(0, 0.5fr);
     }
     .sound {
       grid-column: 1 / -1;
     }
   }
-  /* The audio export, drawn as the editor draws an audio clip: the footage's
-     own waveform over the emerald body. */
-  .wave {
-    aspect-ratio: 16 / 5;
-    background:
-      center / 92% 60% no-repeat url(/landing/waveform.webp),
-      linear-gradient(
-        to bottom,
-        color-mix(in oklab, var(--emerald-900) 60%, transparent),
-        var(--emerald-950)
-      );
-    border-color: var(--emerald-900);
-  }
-
-  figcaption {
-    color: var(--muted);
-    font-size: 0.9375rem;
-    text-wrap: pretty;
-  }
-  .more {
-    margin-top: clamp(1.5rem, 3vw, 2rem);
-    max-width: var(--measure);
-    color: var(--faint);
-    font-size: 0.9375rem;
-    text-wrap: pretty;
-  }
-
-  figcaption strong {
-    display: block;
-    font-family: var(--font-display);
-    font-size: 1.05rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    color: var(--text);
+  @media (max-width: 32rem) {
+    /* Too narrow for three ratios side by side: stack them, the vertical one
+       held to half width so it still reads as 9:16 next to the 16:9. */
+    .bench {
+      grid-template-columns: 1fr;
+      row-gap: 2rem;
+    }
+    figure {
+      grid-row: auto;
+      grid-template-rows: auto auto;
+      gap: 0.9rem;
+    }
+    .tall img {
+      width: 52%;
+    }
+    .defaults dl > div {
+      grid-template-columns: 1fr;
+    }
+    .sheet-foot {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .go {
+      text-align: center;
+    }
   }
 </style>

@@ -9,44 +9,89 @@ interface Props {
 }
 
 const { strings, code } = Astro.props;
+
+// Each point carries <kbd> markup for the shortcuts it names.
+const POINTS = [
+  { title: strings['cut.p1.title'], body: strings['cut.p1.body'] },
+  { title: strings['cut.p2.title'], body: strings['cut.p2.body'] },
+  { title: strings['cut.p3.title'], body: strings['cut.p3.body'] },
+];
 ---
 
 <section id="features" aria-labelledby="cut-title">
-  <div class="head">
-    <h2 id="cut-title">{strings['cut.title']}</h2>
-    {/* Carries the <kbd> for the split shortcut. */}
-    <p class="lede" set:html={strings['cut.lead']} />
-  </div>
+  <h2 id="cut-title" set:html={strings['cut.title']} />
+  {/* Carries the <kbd> for the split shortcut. */}
+  <p class="lede" set:html={strings['cut.lead']} />
 
   {/* The same replica as the hero, cropped to the part this section is
-      about - so what is described and what is shown cannot disagree. */}
-  <div class="stage"><Editor code={code} variant="timeline" /></div>
+      about, so what is described and what is shown cannot disagree. */}
+  <div class="stage"><Editor code={code} variant="split" /></div>
 
-  <p class="note">{strings['cut.note']}</p>
+  <ul class="points">
+    {
+      POINTS.map((point) => (
+        <li>
+          <h3>{point.title}</h3>
+          <p set:html={point.body} />
+        </li>
+      ))
+    }
+  </ul>
 </section>
 
 <style>
-  .head {
-    max-width: 46rem;
-  }
   .stage {
     display: flex;
-    margin-top: clamp(2rem, 4vw, 3rem);
-    /* Bleed to the page edges: the timeline is a strip, and a strip reads
+    margin-top: clamp(2.5rem, 5vw, 4rem);
+    /* Bleed to the page edges: a timeline is a strip, and a strip reads
        better running the full width than boxed inside the column. */
     margin-inline: calc(max(var(--pad), (100vw - var(--column)) / 2) * -1);
-    padding-inline: clamp(0rem, 2vw, 2rem);
+    border-block: 1px solid var(--hair);
+    background: var(--zinc-950);
   }
   .stage :global(.app) {
     width: 100%;
     max-width: none;
     font-size: clamp(11px, 1.15vw, 17px);
+    border: 0;
     border-radius: 0;
-    border-inline: 0;
   }
-  .note {
-    margin-top: 1.5rem;
-    color: var(--faint);
-    font-size: 0.9375rem;
+
+  .points {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: clamp(2.5rem, 5vw, 3.5rem);
+    padding: 0;
+    list-style: none;
+  }
+  .points li {
+    padding-right: clamp(1.25rem, 3vw, 2.5rem);
+  }
+  .points li + li {
+    padding-left: clamp(1.25rem, 3vw, 2.5rem);
+    border-left: 1px solid var(--hair);
+  }
+  .points p {
+    margin-top: 0.5rem;
+    color: var(--muted);
+    font-size: 0.9875rem;
+    text-wrap: pretty;
+  }
+
+  @media (max-width: 48rem) {
+    .points {
+      grid-template-columns: 1fr;
+      gap: 1.75rem;
+    }
+    .points li,
+    .points li + li {
+      padding: 1.75rem 0 0;
+      border-left: 0;
+      border-top: 1px solid var(--hair);
+    }
+    .points li:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
   }
 </style>

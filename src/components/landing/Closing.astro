@@ -8,27 +8,56 @@ interface Props {
 const { strings } = Astro.props;
 ---
 
-{/* One line and the button. Everything that would go in a paragraph here has
-    already been said, twice. */}
+{/* The page ends where it began: the mark, one line, the button. */}
 <section class="closing" aria-labelledby="closing-title">
+  <img src="/landing/logo-48.png" alt="" width="48" height="48" loading="lazy" />
   <h2 id="closing-title">{strings['closing.title']}</h2>
-  <a class="btn btn-primary" href="/app/">{strings['closing.cta']}</a>
+  <p class="note">{strings['hero.note']}</p>
+  <a class="btn btn-primary big" href="/app/"
+    >{strings['hero.cta']}<svg viewBox="0 0 15 15" aria-hidden="true"
+      ><use href="#i-ArrowRight"></use></svg
+    ></a
+  >
 </section>
 
 <style>
   .closing {
+    isolation: isolate;
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem 3rem;
-    padding-block: clamp(3.5rem, 8vw, 6rem);
+    text-align: center;
+    padding-bottom: var(--section-gap);
   }
-  .closing h2 {
-    max-width: 16ch;
+  /* The hero's light, returned from below: the page closes lit. */
+  .closing::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 15% 0 0;
+    background: radial-gradient(
+      50% 60% at 50% 100%,
+      oklch(52% 0.2 293 / 0.16),
+      transparent 70%
+    );
+    pointer-events: none;
   }
-  .closing .btn-primary {
-    padding: 0.9rem 1.6rem;
+  img {
+    width: 3.5rem;
+    height: 3.5rem;
+    margin-bottom: 2rem;
+  }
+  h2 {
+    font-size: clamp(2.4rem, 5.6vw, 4.25rem);
+    max-width: 14ch;
+  }
+  .note {
+    margin-top: 1.1rem;
+  }
+  .big {
+    margin-top: 2.25rem;
+    min-height: 3rem;
+    padding: 0.75rem 1.5rem;
     font-size: 1.0625rem;
   }
 </style>
