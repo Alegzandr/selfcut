@@ -24,8 +24,10 @@ Créateurs de contenu court (YouTube, TikTok, Reels) et toute personne qui doit 
 
 Deux contextes d'utilisation :
 
-- **Mobile (pointeur grossier)** : montage au pouce, debout ou en déplacement. Les réflexes viennent de CapCut : barre d'actions contextuelle, gestes tactiles, une action à la fois.
-- **Desktop (pointeur fin)** : montage assis. Les réflexes viennent de Vegas et Premiere : timeline dense, raccourcis clavier (P punch-in, N snap, S split, Ctrl+E export, Ctrl+A), panneaux fixes, inspecteur permanent.
+- **Mobile (pointeur grossier)** : montage au pouce, debout ou en déplacement. Les réflexes viennent de CapCut : barre d'actions contextuelle, gestes tactiles, une action à la fois. Les utilisateurs adorent cette approche sur mobile et la rejettent sur desktop : elle n'en sort pas.
+- **Desktop (pointeur fin)** : montage assis. La base est Vegas, l'interface que les utilisateurs comprennent le mieux : timeline dense, raccourcis clavier (P zoom instantané, N magnétisme, S diviser, Ctrl+E export, Ctrl+A), panneaux fixes, inspecteur permanent. Les bizarreries de Vegas sont corrigées en reprenant l'approche Adobe, leur deuxième référence. Vegas d'abord, Adobe pour corriger, jamais l'inverse.
+
+Ce qui fait fuir la concurrence, débutants comme monteurs expérimentés, c'est une interface où l'on galère à trouver comment faire ce qu'on a à faire : Premiere demande trop de tutoriels pour qu'on l'installe encore, DaVinci n'a pas su se simplifier, OpenCut a été rejeté. La découvrabilité est le premier critère de chaque décision d'interface.
 
 ## Product Purpose
 

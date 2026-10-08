@@ -37,7 +37,7 @@ async function standing(page: Page): Promise<{ compId: string | null; comps: num
   }, url);
 }
 
-const trailOf = (page: Page) => page.getByRole('navigation', { name: 'Composition path' });
+const trailOf = (page: Page) => page.getByRole('navigation', { name: 'Nest path' });
 const clips = (page: Page) => page.locator('[data-clip-id]');
 
 /**
@@ -109,9 +109,9 @@ test('the composition lands in the library, and opens from there', async ({ page
 
   // A precomp is a source the user made, so it belongs in the bin beside the
   // footage - and the card says what is inside without opening it.
-  const card = page.getByRole('button', { name: 'Open composition' });
+  const card = page.getByRole('button', { name: 'Open nest' });
   await expect(card).toBeVisible();
-  await expect(page.getByText('Layers: 1').first()).toBeVisible();
+  await expect(page.getByText('Clips: 1').first()).toBeVisible();
   await card.click();
   await expect(trailOf(page)).toBeVisible();
   await expect(clips(page)).toHaveCount(2);
@@ -158,7 +158,7 @@ test('un-precomposing puts the clips back on the timeline', async ({ page }) => 
 
   await selectClip(page);
   await page.getByRole('button', { name: 'Clip', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Un-precompose' }).click();
+  await page.getByRole('menuitem', { name: 'Un-nest' }).click();
 
   await expect(clips(page)).toHaveCount(2);
   // Nothing plays the composition any more, so it leaves the library with it.

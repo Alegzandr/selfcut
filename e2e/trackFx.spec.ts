@@ -270,7 +270,7 @@ test('the header FX button opens the lane pane, and the catalogue fills it', asy
   await page.getByRole('button', { name: 'Track effects…' }).first().click();
   // The pane names the lane it is pointed at, so two open headers can never be
   // confused for one another.
-  await expect(page.getByRole('heading', { name: /Track FX · V1/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Track effects · V1/ })).toBeVisible();
 
   // With the pane up, the catalogue applies to the LANE rather than to the clip
   // selection - which is the only path a touch device has, since there is no
