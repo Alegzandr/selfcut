@@ -32,7 +32,8 @@ lockable, with per-track gain, opacity and level meters. Markers, a loop region
 
 **Adjust each clip.** Volume, pan, mono downmix, speed, fades, crop, position,
 scale, non-uniform stretch and rotation - dragged in the preview or typed in
-the inspector.
+the inspector, which is grouped by what you are doing: sound, timing, framing,
+colour, and the areas of the picture.
 
 **Grade.** Brightness, contrast, saturation, white balance, tint, vignette,
 blur and sharpening; per-channel tone curves; `.cube` LUTs imported into the project and reused
@@ -81,10 +82,20 @@ travel as `.sfx` presets. On Chromium browsers, Preferences can point the media
 library at a folder of your choice, so imported footage is kept on the drive
 you pick instead of the browser's own storage on the system disk.
 
-**Export.** YouTube 16:9, TikTok/Reels/Shorts 9:16, Instagram 1:1 and 4:5, plus
-custom presets: H.264, HEVC or AV1, 720p to 4K, a 120 fps cadence, 24p cinema, a
-light file for email, or MP3 for the audio mix alone. The frame rate follows the
-footage unless the preset pins it.
+**Publish.** YouTube 16:9, TikTok/Reels/Shorts 9:16, Instagram 1:1 and 4:5, plus
+other finished files: HEVC or AV1, 24p cinema, a light file for email, or MP3 for
+the audio mix alone. The frame rate follows the footage unless the preset pins
+it. Before you export, a last look lists what a seasoned editor would catch -
+black gaps, text under the app's buttons, footage that leaves black bands,
+spoken video without subtitles, the platform loudness switched off - each with
+a one-click fix or a button that takes you there.
+
+**Hand it to an editor.** The other export door makes material, not a final
+file: an editing folder with the timeline as XML (opens in Premiere Pro and
+DaVinci Resolve with every cut, track, speed and level, linked to the rushes),
+one 24-bit WAV per track that makes sound, and the rushes themselves; or a
+video master (1080p, 4K, up to 120 fps). Sound behind that door always leaves
+raw, the final mix is the editor's.
 
 Interface available in English, French, German, Spanish, Brazilian
 Portuguese, Japanese, Simplified Chinese and Korean.
@@ -186,7 +197,7 @@ multi-threaded one used when the document is `crossOriginIsolated`.
 See `src/types.ts`. A clip's timeline duration is
 `(sourceOutMs - sourceInMs) / speed`; export maps
 `sourceTime = sourceInMs + (t - timelineStartMs) * speed`. Video z-order =
-track order (last track on top); audio tracks are mixed together. The model math
+track order (first track on top, as the timeline shows it); audio tracks are mixed together. The model math
 (durations, fades, crossfades, output geometry, keyframe sampling, curves,
 chroma key, mask motion) lives in `src/model/`; `src/types.ts` is types only.
 

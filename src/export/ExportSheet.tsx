@@ -202,9 +202,17 @@ export function ExportSheet() {
 
   // The last look before publishing. Only behind the Publish door: material
   // for an editor is not a finished video, and its black gaps and missing
-  // captions are the editor's to decide.
+  // captions are the editor's to decide. Only while the sheet is open: it is
+  // mounted for the whole session, and the project changes on every frame of
+  // a drag.
   const reviewTarget =
-    door !== 'publish' ? null : selected.kind === 'mp3' ? 'audio' : active.group === 'social' ? 'social' : 'video';
+    !open || door !== 'publish'
+      ? null
+      : selected.kind === 'mp3'
+        ? 'audio'
+        : active.group === 'social'
+          ? 'social'
+          : 'video';
   const issues = useMemo(
     () =>
       reviewTarget
