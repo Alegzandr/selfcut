@@ -11,6 +11,7 @@ import { openExportScratch, readExportScratch } from '../lib/opfs';
 import { flushProjectSave } from '../lib/persistence';
 import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
 import { MasterChain } from './masterChain';
+import { WavWriter } from './handoff/wav';
 import type { MasterNormalization } from '../lib/loudness';
 import { clearRenderPreview, publishRenderFrame } from './renderPreviewBus';
 import { nextAttempt, retryReason, type ExportAttempt } from './retryPlan';
@@ -727,6 +728,37 @@ function prepareAudioMix(
     { sampleRate: AUDIO_SAMPLE_RATE, channelCount: 2, totalFrames },
     normalize,
   );
+}
+
+/**
+ * Render the mix of `project` over a span as a 24-bit WAV, the way the export
+ * hears it: same scheduler, same clip and lane gains, same effects, and never
+ * the master normalization - a stem is raw material for someone else's mix.
+ *
+ * Resolves to null when nothing in the span is audible, so a caller rendering
+ * one stem per lane skips the silent ones instead of shipping empty files.
+ */
+export async function renderMixWav(
+  project: Project,
+  assets: Record<string, MediaAsset>,
+  startMs: number,
+  durationMs: number,
+  isCanceled: () => boolean,
+  onProgress?: (value: number) => void,
+): Promise<Blob | null> {
+  const mix = prepareAudioMix(project, assets, startMs, durationMs, false);
+  if (!mix) return null;
+  const wav = new WavWriter(mix.info.sampleRate, mix.info.channelCount);
+  let heard = false;
+  for (let offset = 0; offset < mix.info.totalFrames; offset += AUDIO_CHUNK_FRAMES) {
+    if (isCanceled()) throw new ExportCanceledError(t('errors.export.canceled'));
+    const frames = Math.min(AUDIO_CHUNK_FRAMES, mix.info.totalFrames - offset);
+    const slice = await mix.render(offset, frames);
+    if (!heard && !WavWriter.isSilent(slice)) heard = true;
+    wav.push(slice.map((ch) => ch.subarray(0, frames)));
+    onProgress?.(Math.min(1, (offset + frames) / mix.info.totalFrames));
+  }
+  return heard ? wav.finish() : null;
 }
 
 /**

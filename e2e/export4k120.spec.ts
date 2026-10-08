@@ -61,7 +61,8 @@ test('exports the 120 fps 4K preset without running out of memory', async ({ pag
     })
     .toBe(true);
 
-  await sheet.getByRole('button', { name: 'Custom' }).click();
+  // The masters meant to be re-cut live behind the editor's door.
+  await sheet.getByRole('button', { name: /^For my editor/ }).click();
   // The 120 fps family is offered at three rungs; the 4K one is the row whose
   // quality reads "4K".
   //

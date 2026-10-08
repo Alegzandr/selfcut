@@ -55,16 +55,16 @@ describe('presetsForAspect', () => {
 
   it('every custom preset says what it is for; the social ones need no hint', () => {
     for (const p of PRESETS) {
-      if (p.group === 'custom') expect(p.hintKey).toBeTruthy();
+      if (p.group === 'custom' || p.group === 'handoff') expect(p.hintKey).toBeTruthy();
       else expect(p.hintKey).toBeUndefined();
     }
   });
 });
 
 describe('presetSectionsForAspect', () => {
-  it('lists social, then custom, then audio, with no empty section', () => {
+  it('lists social, custom and audio, then the editor masters, with no empty section', () => {
     const sections = presetSectionsForAspect('9:16');
-    expect(sections.map((s) => s.group)).toEqual(['social', 'custom', 'audio']);
+    expect(sections.map((s) => s.group)).toEqual(['social', 'custom', 'audio', 'handoff']);
     for (const section of sections) {
       expect(section.titleKey).toBeTruthy();
       expect(section.presets.length).toBeGreaterThan(0);

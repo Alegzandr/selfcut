@@ -6,11 +6,24 @@ import type { ParseKeys } from 'i18next';
 
 /**
  * Sections of the export sheet. `social` holds the platform-shaped presets,
- * `custom` the off-the-shelf ones an editor eventually asks for (a 120 fps
- * cadence, a 4K master, a file small enough to email), `audio` the audio-only
- * exports.
+ * `custom` the other finished files (a smaller codec, 24p, a file small enough
+ * to email), `audio` the audio-only exports. `handoff` holds the masters meant
+ * for an editor to re-cut (a 4K master, the 120 fps family): they live behind
+ * the sheet's "For my editor" door rather than among the finished files.
  */
-export type PresetGroup = 'social' | 'custom' | 'audio';
+export type PresetGroup = 'social' | 'custom' | 'handoff' | 'audio';
+
+/** The sheet's two doors: a finished file, or material for an editor. */
+export type ExportDoor = 'publish' | 'handoff';
+
+/** Display order of the sections: the platform presets stay the first thing seen. */
+const GROUP_ORDER: readonly PresetGroup[] = ['social', 'custom', 'audio', 'handoff'];
+
+/** Which door each section sits behind. */
+export const DOOR_GROUPS: Record<ExportDoor, readonly PresetGroup[]> = {
+  publish: ['social', 'custom', 'audio'],
+  handoff: ['handoff'],
+};
 
 interface BaseExportPreset {
   id: string;
@@ -200,6 +213,8 @@ interface CustomFormat {
    * is the point regardless of the rushes - 24p - says `fixed`.
    */
   fpsMode?: FpsMode;
+  /** Behind the "For my editor" door instead of among the finished files. */
+  handoff?: boolean;
 }
 
 const CUSTOM_FORMATS: readonly CustomFormat[] = [
@@ -245,6 +260,7 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
     tier: '4k',
     bitrateScale: 1.35,
     fps: PROJECT_FPS,
+    handoff: true,
   },
   {
     // 3x an upload's 1080p bitrate: generational loss stops being visible, so
@@ -256,6 +272,7 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
     tier: '1080',
     bitrateScale: 3,
     fps: PROJECT_FPS,
+    handoff: true,
   },
   // The 120 fps family: a hand-off, not a final cut. Above the export ladder on
   // purpose - but as a ceiling, since 120 fps of source only exists for
@@ -281,6 +298,7 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
     tier: '1080',
     bitrateScale: 2,
     fps: 120,
+    handoff: true,
   },
   {
     id: 'smooth120-1440',
@@ -293,6 +311,7 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
     // rung would overspend at the top exactly where the file is already heaviest.
     bitrateScale: 1.8,
     fps: 120,
+    handoff: true,
   },
   {
     id: 'smooth120-4k',
@@ -302,6 +321,7 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
     tier: '4k',
     bitrateScale: 1.4,
     fps: 120,
+    handoff: true,
   },
   {
     // The same hand-off at the same rung, in AV1: the row above is the heaviest
@@ -321,6 +341,7 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
     bitrateScale: 0.7,
     fps: 120,
     codec: 'av1',
+    handoff: true,
   },
   {
     // Film cadence, whatever the timeline holds. Doubled rung bitrate so the
@@ -348,7 +369,11 @@ const CUSTOM_FORMATS: readonly CustomFormat[] = [
   },
 ];
 
-export const PRESETS: ExportPreset[] = [
+/**
+ * Every preset, in section order: flattening the sheet's sections gives back
+ * this list, so the first preset is always the first row shown.
+ */
+export const PRESETS: ExportPreset[] = ([
   ...SOCIAL_FORMATS.flatMap((format) =>
     SOCIAL_TIERS.map((tier) =>
       videoPreset({
@@ -369,7 +394,7 @@ export const PRESETS: ExportPreset[] = [
         // The aspect ratio is part of the id: unlike a social preset, whose name
         // implies one shape, every custom preset exists for all four.
         id: `${format.id}-${aspect.replace(':', 'x')}`,
-        group: 'custom',
+        group: format.handoff ? 'handoff' : 'custom',
         labelKey: format.labelKey,
         hintKey: format.hintKey,
         qualityKey: format.qualityKey,
@@ -387,7 +412,7 @@ export const PRESETS: ExportPreset[] = [
     ['192', 192_000],
     ['320', 320_000],
   ]),
-];
+] as ExportPreset[]).sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group));
 
 type AudioQuality = readonly [id: '128' | '192' | '320', bitrate: number];
 
@@ -453,11 +478,11 @@ export interface PresetSection {
 const GROUP_TITLES: Record<PresetGroup, ParseKeys> = {
   social: 'export.group.social',
   custom: 'export.group.custom',
+  handoff: 'export.group.handoff',
   audio: 'export.group.audio',
 };
 
-/** Display order of the sections: the platform presets stay the first thing seen. */
-const GROUP_ORDER: readonly PresetGroup[] = ['social', 'custom', 'audio'];
+
 
 /**
  * The export sheet's sections for a project shape, in display order. Flattening
@@ -716,10 +741,15 @@ export function audioBitrateForProject(
   return audible ? Math.round(presetBitrate * MONO_AUDIO_SCALE) : presetBitrate;
 }
 
-export function exportFileName(preset: ExportPreset): string {
+/** "selfcut-<what>-20261008-1412": the default name of anything the sheet writes. */
+export function stampedBaseName(what: string): string {
   const now = new Date();
   const pad = (n: number) => n.toString().padStart(2, '0');
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+  return `${APP_NAME.toLowerCase()}-${what}-${stamp}`;
+}
+
+export function exportFileName(preset: ExportPreset): string {
   const ext = preset.kind === 'mp3' ? 'mp3' : 'mp4';
-  return `${APP_NAME.toLowerCase()}-${preset.id}-${stamp}.${ext}`;
+  return `${stampedBaseName(preset.id)}.${ext}`;
 }

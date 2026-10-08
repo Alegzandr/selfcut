@@ -46,8 +46,14 @@ test('a real export lands on the bitrate its preset asked for', async ({ page })
   // row simply is not in the DOM to click.
   await sheet.getByRole('button', { name: 'Custom', exact: true }).click();
   const rows = sheet.locator('button.block');
-  const names = await rows.allInnerTexts();
-  const index = names.findIndex((name) => name.startsWith(PRESET));
+  let names = await rows.allInnerTexts();
+  let index = names.findIndex((name) => name.startsWith(PRESET));
+  if (index < 0) {
+    // The masters (120 fps family, 4K) sit behind the editor's door.
+    await sheet.getByRole('button', { name: /^For my editor/ }).click();
+    names = await rows.allInnerTexts();
+    index = names.findIndex((name) => name.startsWith(PRESET));
+  }
   if (index < 0) {
     throw new Error(`no preset row starts with '${PRESET}'. Rows: ${names.join(' | ')}`);
   }
