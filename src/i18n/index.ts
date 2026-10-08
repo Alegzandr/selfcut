@@ -34,7 +34,7 @@ export type Locale = keyof typeof LOCALES;
 
 export const STORAGE_KEY = 'selfcut.lang';
 
-void i18n
+const initialized = i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
@@ -42,7 +42,10 @@ void i18n
     // Adding a bundle after init must re-render what is already mounted, which
     // is exactly what a language switch does once the app is running.
     react: { bindI18nStore: 'added' },
-    supportedLngs: Object.keys(LOCALES),
+    // With `nonExplicitSupportedLngs`, i18next checks a tag by its base
+    // language: "pt-BR" passes only if "pt" is listed. Without the two bases,
+    // Portuguese and Chinese were refused even when picked in Preferences.
+    supportedLngs: [...Object.keys(LOCALES), 'pt', 'zh'],
     fallbackLng: {
       // A browser reporting plain "pt" gets the Brazilian dictionary rather
       // than falling straight through to English.
@@ -60,7 +63,10 @@ void i18n
     detection: {
       order: ['localStorage', 'navigator'],
       lookupLocalStorage: STORAGE_KEY,
-      caches: ['localStorage'],
+      // Only an explicit choice is remembered (see `setLocale`). Caching the
+      // detected language would pin a first visit's English fallback ahead of
+      // the browser's list, and stop following a browser language change.
+      caches: [],
     },
     interpolation: {
       // React already escapes everything it renders.
@@ -83,27 +89,82 @@ const LOADERS: Record<string, () => Promise<{ default: Record<string, string> }>
 };
 
 /**
+ * The dictionary a language tag is served by: itself, its base language
+ * ("fr-CA" by "fr"), or the regional variant we ship for it ("pt" by "pt-BR").
+ */
+function loaderKey(lng: string | undefined): string | undefined {
+  if (!lng) return undefined;
+  if (lng in LOADERS) return lng;
+  const base = lng.split('-')[0]!;
+  if (base in LOADERS) return base;
+  return Object.keys(LOADERS).find((k) => k.split('-')[0] === base);
+}
+
+/**
  * Make sure a language's dictionary is loaded. Resolves immediately for English
  * and for anything already fetched; a failed fetch resolves too, leaving
  * i18next on its English fallback rather than blocking the editor from booting
- * over a missing translation file.
+ * over a missing translation file. Returns whether a dictionary was added.
  */
-export async function ensureLocale(lng: string | undefined): Promise<void> {
-  const base = lng && lng in LOADERS ? lng : (lng ?? '').split('-')[0];
-  const load = base ? LOADERS[base] : undefined;
-  if (!load || i18n.hasResourceBundle(base!, 'translation')) return;
+export async function ensureLocale(lng: string | undefined): Promise<boolean> {
+  const key = loaderKey(lng);
+  if (!key || i18n.hasResourceBundle(key, 'translation')) return false;
   try {
-    const mod = await load();
-    i18n.addResourceBundle(base!, 'translation', mod.default, true, true);
+    const mod = await LOADERS[key]!();
+    i18n.addResourceBundle(key, 'translation', mod.default, true, true);
+    return true;
   } catch {
     /* stay on the English fallback */
+    return false;
   }
 }
 
-// A language picked in Preferences (or restored from localStorage on a later
-// visit) has to bring its dictionary with it.
+/**
+ * Switch language, dictionary first. i18next resolves `resolvedLanguage`
+ * against the bundles present at switch time, so switching before the fetch
+ * lands leaves it on English: the Preferences picker then shows English while
+ * the UI reads in the chosen language.
+ */
+export async function setLocale(lng: string): Promise<void> {
+  await ensureLocale(lng);
+  await i18n.changeLanguage(lng);
+  try {
+    localStorage.setItem(STORAGE_KEY, lng);
+  } catch {
+    /* private mode / no storage - the choice just will not persist */
+  }
+}
+
+/**
+ * Load the detected language before the first render. Awaits init so the
+ * detector has run (`resolvedLanguage` is still "en" then, because only the
+ * English bundle exists), then switches again once the dictionary is in, so
+ * `resolvedLanguage` and the document language follow.
+ */
+export async function loadInitialLocale(): Promise<void> {
+  await initialized.catch(() => undefined);
+  // The detector's own ranking (stored choice, then the browser's list), read
+  // again here: i18next drops a tag it cannot match exactly, so a browser
+  // reporting plain "pt" or "zh" would otherwise land on English.
+  const detected = i18n.services.languageDetector?.detect();
+  const candidates = (Array.isArray(detected) ? detected : [detected ?? i18n.language]).filter(Boolean) as string[];
+  for (const lng of candidates) {
+    if (lng.split('-')[0] === 'en') return;
+    const key = loaderKey(lng);
+    if (!key) continue;
+    await ensureLocale(key);
+    if (i18n.hasResourceBundle(key, 'translation')) await i18n.changeLanguage(key);
+    return;
+  }
+}
+
+// A language changed by anything other than `setLocale` (the detector, a
+// direct `changeLanguage`) still has to bring its dictionary with it, and
+// then re-resolve so `resolvedLanguage` stops reporting the fallback.
 i18n.on('languageChanged', (lng) => {
-  void ensureLocale(lng);
+  void ensureLocale(lng).then((added) => {
+    if (added && i18n.language === lng) void i18n.changeLanguage(lng);
+  });
 });
 
 /** Keep the document in sync so screen readers and hyphenation follow the UI. */
@@ -111,7 +172,7 @@ function syncDocumentLang(lng: string): void {
   document.documentElement.lang = lng;
 }
 syncDocumentLang(i18n.resolvedLanguage ?? 'en');
-i18n.on('languageChanged', syncDocumentLang);
+i18n.on('languageChanged', () => syncDocumentLang(i18n.resolvedLanguage ?? 'en'));
 
 /** Imperative translator, for the modules that have no access to hooks. */
 export const t = i18n.t.bind(i18n);
