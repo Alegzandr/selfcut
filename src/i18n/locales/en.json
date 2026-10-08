@@ -30,7 +30,7 @@
   "transport.timecode.goto": "Jump to a time · minutes:seconds.frame",
   "transport.total": "Total duration - click for time remaining",
   "transport.remaining": "Time remaining - click for total duration",
-  "timeline.dropzone.title": "Drop your clips here - they line up on the timeline, ready to cut.",
+  "timeline.dropzone.title": "Drop your clips here. <dim>They line up on the timeline, ready to cut.</dim>",
   "timeline.dropzone.choose": "Choose files",
   "timeline.hint": "Then: <kbd>Space</kbd> play · <kbd>S</kbd> split · <kbd>P</kbd> quick zoom · <kbd>?</kbd> all shortcuts",
   "timeline.importing": "Importing…",

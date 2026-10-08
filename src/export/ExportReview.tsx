@@ -78,7 +78,7 @@ export function ExportReview({ issues, actions }: { issues: ReviewIssue[]; actio
       <h3 className="py-1 text-2xs font-semibold uppercase tracking-wide text-amber-200/90">
         {t('review.title')}
       </h3>
-      <ul className="divide-y divide-zinc-800/80">
+      <ul className="divide-y divide-hair">
         {issues.map((issue) => {
           switch (issue.id) {
             case 'disconnected':

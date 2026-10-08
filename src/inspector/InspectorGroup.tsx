@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDownIcon } from '@radix-ui/react-icons';
 
@@ -57,7 +57,9 @@ export function useGroupOpen(
   const lastActivity = useRef(activity);
   // Read through a ref, not watched: a user folding the group must not reopen it.
   const openRef = useRef(open);
-  openRef.current = open;
+  useLayoutEffect(() => {
+    openRef.current = open;
+  });
   useEffect(() => {
     const grew = activity > lastActivity.current;
     lastActivity.current = activity;
@@ -93,7 +95,7 @@ export function InspectorGroup({
   const [open, setOpen] = useGroupOpen(id, defaultOpen, activity, reveal);
   const bodyId = `inspector-group-${id}`;
   return (
-    <section className={nested ? 'space-y-3' : 'space-y-3 border-t border-zinc-700/70 pt-3'} data-inspector-group={id}>
+    <section className={nested ? 'space-y-3' : 'space-y-3 border-t border-hair-strong pt-3'} data-inspector-group={id}>
       <button
         type="button"
         aria-expanded={open}

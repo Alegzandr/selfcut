@@ -338,14 +338,14 @@ export function ShortcutsHelp() {
             aria-modal="true"
             aria-labelledby="shortcuts-title"
             tabIndex={-1}
-            className="flex max-h-[85dvh] w-full max-w-4xl flex-col xl:max-w-6xl overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black outline-none"
+            className="flex max-h-[85dvh] w-full max-w-4xl flex-col xl:max-w-6xl overflow-hidden sheet outline-none"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={trapTab}
           >
             {/* Outside the scroller: with nine groups to page through, the way
                 out must not scroll away with them. */}
-            <div className="flex flex-none items-center justify-between border-b border-zinc-800 px-5 py-3">
-              <h2 id="shortcuts-title" className="text-sm font-semibold text-zinc-100">
+            <div className="flex flex-none items-center justify-between border-b border-hair px-5 py-3">
+              <h2 id="shortcuts-title" className="title-display text-sm text-zinc-50">
                 {t('shortcuts.title')}
               </h2>
               <Tooltip label={t('shortcuts.close')} shortcut="Esc">
@@ -367,7 +367,7 @@ export function ShortcutsHelp() {
               <div className="gap-x-8 sm:columns-2 xl:columns-3">
                 {GROUPS.map((g) => (
                   <section key={g.title} className="mb-4 break-inside-avoid">
-                    <h3 className="mb-2 border-b border-zinc-800 pb-1.5 text-2xs font-semibold uppercase tracking-wide text-zinc-400">
+                    <h3 className="mb-2 border-b border-hair pb-1.5 text-2xs font-semibold uppercase tracking-wide text-zinc-400">
                       {t(g.title)}
                     </h3>
                     <dl className="space-y-1">

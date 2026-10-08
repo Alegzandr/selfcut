@@ -134,7 +134,7 @@ export const TrackKeyframeLanes = memo(function TrackKeyframeLanes({
         <div
           key={prop}
           data-track-lane={prop}
-          className="relative border-t border-zinc-800/50 bg-zinc-900/30"
+          className="relative border-t border-hair bg-zinc-900/30"
           style={{ height: KEYFRAME_LANE_HEIGHT_PX }}
         >
           {track.clips.map((clip) => {

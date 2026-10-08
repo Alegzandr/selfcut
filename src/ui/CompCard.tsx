@@ -26,7 +26,7 @@ export function CompsPane() {
   if (comps.length === 0) return null;
 
   return (
-    <section className="flex flex-none flex-col border-b border-zinc-800">
+    <section className="flex flex-none flex-col border-b border-hair">
       <div className="flex h-7 flex-none items-center gap-1.5 px-2 text-2xs font-semibold uppercase tracking-wide text-zinc-400">
         <StackIcon className="h-3.5 w-3.5" />
         {t('comp.library')}
@@ -58,7 +58,7 @@ function CompCard({ comp }: { comp: Composition }) {
   return (
     <div
       className={`group overflow-hidden rounded-md border bg-zinc-900 ${
-        active ? 'border-blue-400' : 'border-zinc-800'
+        active ? 'border-blue-400' : 'border-hair'
       }`}
       draggable={!renaming}
       onDragStart={(e) => {
@@ -95,7 +95,7 @@ function CompCard({ comp }: { comp: Composition }) {
         <span className={`absolute left-1 top-1 h-2 w-2 rounded-full ${colors.dot}`} />
       </button>
 
-      <div className="flex items-center gap-1 border-t border-zinc-800 bg-zinc-950/60 px-1 py-0.5 text-4xs text-zinc-500">
+      <div className="flex items-center gap-1 border-t border-hair bg-zinc-950/60 px-1 py-0.5 text-4xs text-zinc-500">
         <span className="truncate">{t('comp.layers', { count: comp.tracks.length })}</span>
         <span className="ml-auto flex-none">
           {uses > 0 ? t('comp.used', { count: uses }) : t('comp.unused')}

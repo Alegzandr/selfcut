@@ -136,7 +136,7 @@ export function CurvesSection({ clip }: { clip: Clip }) {
   const channelEdited = !!curves && CURVE_CHANNELS.some((ch) => ch === channel && curves[ch]);
 
   return (
-    <div className="space-y-2 border-t border-zinc-800 pt-3">
+    <div className="space-y-2 border-t border-hair pt-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
           {t('inspector.curves')}
@@ -165,7 +165,7 @@ export function CurvesSection({ clip }: { clip: Clip }) {
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VB} ${VB}`}
-        className="aspect-square w-full touch-none rounded-md border border-zinc-800 bg-zinc-950"
+        className="aspect-square w-full touch-none rounded-md border border-hair bg-zinc-950"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

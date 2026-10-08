@@ -44,7 +44,7 @@ function LutRow({ clip }: { clip: Clip }) {
           onChange={(e) =>
             e.target.value ? setClipsLut(targets(), e.target.value) : clearClipLut(clip.id)
           }
-          className="min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-brand-500"
+          className="min-w-0 flex-1 rounded-md border border-hair-strong bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-brand-500"
         >
           <option value="">{t('inspector.lut.none')}</option>
           {luts.map((lut) => (
@@ -55,7 +55,7 @@ function LutRow({ clip }: { clip: Clip }) {
         </select>
         <button
           type="button"
-          className="touch-hit flex-none rounded-md border border-zinc-700 px-2 py-1 text-2xs text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
+          className="touch-hit flex-none rounded-md border border-hair-strong px-2 py-1 text-2xs text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
           onClick={() => importLutFromDisk((id) => setClipsLut(targets(), id))}
           title={t('inspector.lut.import')}
         >
@@ -126,7 +126,7 @@ export function ColorSection({ clip }: { clip: Clip }) {
   const boxed = selectedKeyframes.length;
 
   return (
-    <div className="space-y-3 border-t border-zinc-800 pt-3">
+    <div className="space-y-3 border-t border-hair pt-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
           {t('inspector.adjust')}

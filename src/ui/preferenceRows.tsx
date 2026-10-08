@@ -17,9 +17,9 @@ export function Row({ label, children }: { label: string; children: ReactNode })
 
 /** Rows in a section, hairline-separated the way the single list used to be. */
 export function Rows({ children }: { children: ReactNode }) {
-  return <div className="divide-y divide-zinc-800">{children}</div>;
+  return <div className="divide-y divide-hair">{children}</div>;
 }
 
 /** The secondary button of a row: a bordered pill next to the value it acts on. */
 export const ROW_BUTTON_CLASS =
-  'rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 hover:border-zinc-600 disabled:cursor-default disabled:opacity-50';
+  'rounded-lg border border-hair-strong bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 hover:border-zinc-600 disabled:cursor-default disabled:opacity-50';

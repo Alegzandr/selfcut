@@ -55,7 +55,7 @@ function LibraryTabs() {
     { id: 'transitions', label: t('library.tab.transitions') },
   ];
   return (
-    <div className="flex h-8 flex-none items-center gap-0.5 border-b border-zinc-800 px-1">
+    <div className="flex h-8 flex-none items-center gap-0.5 border-b border-hair px-1">
       {tabs.map(({ id, label }) => (
         <button
           key={id}
@@ -155,7 +155,7 @@ export function MediaLibrary() {
       // as the column so it can straddle the border without being clipped.
       <>
         <aside
-          className="flex flex-none flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900/60"
+          className="flex flex-none flex-col overflow-hidden border-r border-hair bg-zinc-900/60"
           style={{ width: libraryWidthPx }}
         >
           {body}
@@ -186,7 +186,7 @@ export function MediaLibrary() {
             // w-64, not the w-44 this drawer used to be: it now carries a
             // three-tab strip plus the close button, and anything narrower
             // truncates the longest label ("Transitions") mid-word.
-            className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-zinc-800 bg-zinc-900 pt-[env(safe-area-inset-top)] shadow-2xl shadow-black"
+            className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-hair bg-zinc-900 pt-[env(safe-area-inset-top)] shadow-2xl shadow-black"
           >
             {body}
           </m.aside>
@@ -252,7 +252,7 @@ function trackNames(
 /** The strip both track lists render into, under the thumbnail. */
 function TrackList({ children }: { children: React.ReactNode }) {
   return (
-    <div className="space-y-1 border-t border-zinc-800 bg-zinc-950/60 px-1 py-1">{children}</div>
+    <div className="space-y-1 border-t border-hair bg-zinc-950/60 px-1 py-1">{children}</div>
   );
 }
 
@@ -542,7 +542,7 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
   return (
     <div
       className={`group overflow-hidden rounded-md border bg-zinc-900 ${
-        disconnected ? 'border-amber-500/60' : 'border-zinc-800'
+        disconnected ? 'border-amber-500/60' : 'border-hair'
       }`}
       draggable={!disconnected}
       onDragStart={(e) => {

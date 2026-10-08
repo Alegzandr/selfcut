@@ -177,7 +177,7 @@ export function RampEditor({ clip }: { clip: Clip & { velocity: Keyframe[] } }) 
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
-        className="w-full touch-none rounded-md border border-zinc-800 bg-zinc-900/60"
+        className="w-full touch-none rounded-md border border-hair bg-zinc-900/60"
         onDoubleClick={(e) => {
           e.stopPropagation();
           addPoint(e);

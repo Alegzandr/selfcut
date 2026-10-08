@@ -2,55 +2,7 @@
    component boundaries (the page gutter, the button, the section rhythm).
    Everything that belongs to one section lives in that section's component. */
 
-/* Wix Madefor, the landing's own voice: a UI superfamily (Display for headings,
-   Text for copy), neutral enough to sit beside the editor screenshots without
-   arguing with them. Two subsets each, split on unicode-range exactly like
-   Google Fonts serves them, so a French page never downloads the ext file it
-   does not need. */
-@font-face {
-  font-family: "Madefor Display";
-  font-style: normal;
-  font-weight: 400 800;
-  font-display: swap;
-  src: url("/fonts/madefor-display-latin.woff2") format("woff2-variations");
-  unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
-    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
-    U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: "Madefor Display";
-  font-style: normal;
-  font-weight: 400 800;
-  font-display: swap;
-  src: url("/fonts/madefor-display-latin-ext.woff2") format("woff2-variations");
-  unicode-range:
-    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
-    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
-    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-  font-family: "Madefor Text";
-  font-style: normal;
-  font-weight: 400 800;
-  font-display: swap;
-  src: url("/fonts/madefor-text-latin.woff2") format("woff2-variations");
-  unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
-    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
-    U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: "Madefor Text";
-  font-style: normal;
-  font-weight: 400 800;
-  font-display: swap;
-  src: url("/fonts/madefor-text-latin-ext.woff2") format("woff2-variations");
-  unicode-range:
-    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
-    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
-    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
+@import "./fonts.css";
 
 :root {
   /* The editor's Tailwind tokens, spelled out. The landing paints the same
@@ -86,17 +38,18 @@
   --emerald-950: oklch(26.2% 0.051 172.552);
   --red-500: oklch(63.7% 0.237 25.331);
 
-  /* Roles. `--panel` and `--line` are the editor's own zinc-900 / zinc-800:
-     the replica draws its chrome with them, so they stay opaque and exact.
-     The page itself draws with the translucent hairlines below, which sit on
-     any ground the way Linear-style rules do. */
+  /* Roles. `--panel` is the editor's own zinc-900. `--line` and
+     `--line-strong` are the editor's hairlines (`hair` / `hair-strong` in
+     `src/index.css`): the app draws with the same translucent rules as the
+     page now, so the replica and the product fragments read from the same
+     values the editor paints with. */
   --bg: oklch(11.5% 0.004 286);
   --raised: oklch(15.5% 0.005 286);
   --panel: var(--zinc-900);
-  --line: var(--zinc-800);
-  --line-strong: var(--zinc-700);
   --hair: oklch(100% 0 0 / 0.075);
   --hair-strong: oklch(100% 0 0 / 0.13);
+  --line: var(--hair);
+  --line-strong: var(--hair-strong);
   --text: oklch(97% 0.002 286);
   --muted: oklch(72% 0.012 286);
   /* The quietest text that still clears 4.5:1 on --bg: notes, footer. */
@@ -109,12 +62,14 @@
   --accent-hover: var(--brand-500);
   --accent-text: var(--brand-300);
 
-  /* Type. Display carries the headings, Text the copy; the replica opts out
-     of both and runs on `--font-app`, the stack the editor renders in. */
+  /* Type. Display carries the headings, Text the copy; the replica and the
+     product fragments run on `--font-app`, the editor's own `font-sans`,
+     which is Madefor Text too: page and tool share one voice. */
   --font-display: "Madefor Display", system-ui, sans-serif;
   --font-text: "Madefor Text", system-ui, sans-serif;
   --font-app:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    "Madefor Text", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --pad: clamp(1.25rem, 4vw, 3rem);

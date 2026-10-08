@@ -136,7 +136,7 @@ function DesktopTools() {
         >
           {/* Leading rather than trailing, so the group carries its own divider
               into the width measurement and none is ever left dangling. */}
-          {i > 0 && <div className="h-5 w-px bg-zinc-800" />}
+          {i > 0 && <div className="h-5 w-px bg-hair" />}
           {group.map(({ id, command }) => (
             <ToolButton key={id} command={command} />
           ))}
@@ -207,7 +207,7 @@ export function TopBar() {
   };
 
   return (
-    <header className="flex h-12 flex-none items-center gap-1 border-b border-zinc-800 bg-zinc-900 px-2 sm:gap-2 sm:px-3">
+    <header className="flex h-12 flex-none items-center gap-1 border-b border-hair bg-zinc-900 px-2 sm:gap-2 sm:px-3">
       {/* Desktop shows the logo/name in the menu bar above; only mobile
           (which has no menu bar) needs the branding here. */}
       {coarse && (
@@ -278,7 +278,7 @@ export function TopBar() {
             target on every device, not an icon among twenty in the tool row. */}
         <Tooltip label={t('topbar.exportHint')} shortcut="Ctrl+E">
           <button
-            className="touch-hit flex items-center gap-1.5 rounded-lg bg-brand-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-500 active:bg-brand-700"
+            className="touch-hit flex items-center gap-1.5 rounded-lg brand-action px-2.5 py-1.5 text-xs font-semibold"
             onClick={() => setExportOpen(true)}
           >
             <DownloadIcon className="h-4 w-4" />
@@ -286,7 +286,7 @@ export function TopBar() {
           </button>
         </Tooltip>
 
-        <div className="flex overflow-hidden rounded-lg border border-zinc-700">
+        <div className="flex overflow-hidden rounded-lg border border-hair-strong">
           {ASPECTS.map(({ value, titleKey }) => (
             <Tooltip
               key={value}

@@ -195,7 +195,7 @@ export function Inspector() {
           // tab overflows and the subtitles tab often does not, and without it
           // every switch between the two shifted the whole column sideways by
           // the width of the scrollbar.
-          className="flex-none space-y-3 overflow-x-hidden overflow-y-auto border-l border-zinc-800 bg-zinc-900/60 p-3 [scrollbar-gutter:stable]"
+          className="flex-none space-y-3 overflow-x-hidden overflow-y-auto border-l border-hair bg-zinc-900/60 p-3 [scrollbar-gutter:stable]"
           style={{ width: inspectorWidthPx }}
         >
           <InspectorTabs cueCount={cueCount} />
@@ -228,7 +228,7 @@ export function Inspector() {
           key={showSubtitles ? 'subtitles' : fxTrack ? `track:${fxTrack.id}` : clip!.id}
           {...sheet}
           transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-          className="fixed inset-x-0 bottom-0 z-40 max-h-[55dvh] space-y-3 overflow-x-hidden overflow-y-auto rounded-t-2xl [scrollbar-gutter:stable] border-t border-zinc-800 bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black"
+          className="fixed inset-x-0 bottom-0 z-40 max-h-[55dvh] space-y-3 overflow-x-hidden overflow-y-auto rounded-t-2xl [scrollbar-gutter:stable] border-t border-hair bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black"
         >
           <InspectorTabs cueCount={cueCount} />
           {showSubtitles ? (
@@ -286,7 +286,7 @@ function InspectorBody({
   return (
     <>
       <div className="flex items-center gap-2">
-        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-100">{name}</h2>
+        <h2 className="min-w-0 flex-1 truncate title-display text-sm text-zinc-50">{name}</h2>
         <Tooltip label={t('inspector.deleteClip')}>
           <button
             className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:p-2.5"

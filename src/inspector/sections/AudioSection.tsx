@@ -145,7 +145,7 @@ export function AudioSection({ clip }: { clip: Clip }) {
       {/* The effects this clip actually runs, each with its intensity and a way
           off. The roster of available effects lives in the library's Effects
           tab: listing it here too would say the same thing twice. */}
-      <div className="space-y-2 border-t border-zinc-800 pt-3">
+      <div className="space-y-2 border-t border-hair pt-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
           {t('inspector.audioFx')}
         </h3>

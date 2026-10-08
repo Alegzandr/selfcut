@@ -54,7 +54,7 @@ export function MenuPanel({
   return (
     <m.div
       role="menu"
-      className={`absolute z-40 max-w-[calc(100vw-1rem)] rounded-lg border border-zinc-700 bg-zinc-900/95 p-1 shadow-xl shadow-black/50 backdrop-blur ${className}`}
+      className={`absolute z-40 max-w-[calc(100vw-1rem)] popover p-1 ${className}`}
       {...enter}
       // Leaves faster than it arrives, and without travelling: a menu that
       // lingers on its way out reads as lag on the click that dismissed it.

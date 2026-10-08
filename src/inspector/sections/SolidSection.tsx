@@ -28,11 +28,11 @@ export function SolidSection({ clip }: { clip: SolidClip }) {
       <div className="flex items-center gap-3 text-xs text-zinc-400">
         <span className="w-16 flex-none">{t('inspector.colors')}</span>
         <Tooltip label={t('inspector.solid.firstColor')}>
-          <input type="color" value={solid.color} className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-zinc-800" onFocus={beginGesture} onBlur={endGesture} onChange={(e) => setSolid({ color: e.target.value })} />
+          <input type="color" value={solid.color} className="h-7 w-10 cursor-pointer rounded border border-hair-strong bg-zinc-800" onFocus={beginGesture} onBlur={endGesture} onChange={(e) => setSolid({ color: e.target.value })} />
         </Tooltip>
         {solid.kind === 'gradient' && (
           <Tooltip label={t('inspector.solid.secondColor')}>
-            <input type="color" value={solid.color2 ?? solid.color} className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-zinc-800" onFocus={beginGesture} onBlur={endGesture} onChange={(e) => setSolid({ color2: e.target.value })} />
+            <input type="color" value={solid.color2 ?? solid.color} className="h-7 w-10 cursor-pointer rounded border border-hair-strong bg-zinc-800" onFocus={beginGesture} onBlur={endGesture} onChange={(e) => setSolid({ color2: e.target.value })} />
           </Tooltip>
         )}
       </div>

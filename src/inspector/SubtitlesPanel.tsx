@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ParseKeys } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
@@ -163,7 +163,7 @@ function Field({
         {label}
       </span>
       <select
-        className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200 hover:border-zinc-600 focus:border-brand-500 focus:outline-none"
+        className="w-full rounded-md border border-hair-strong bg-zinc-950 px-2 py-1 text-xs text-zinc-200 hover:border-zinc-600 focus:border-brand-500 focus:outline-none"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -249,7 +249,11 @@ function CaptionGenerator({
       : null;
   }, [sharedAsset, targets, pickableTracks]);
   // A choice made by hand survives until the selection points somewhere else.
-  useEffect(() => setPickedTrack(null), [clipTrack]);
+  const [pickedFor, setPickedFor] = useState(clipTrack);
+  if (pickedFor !== clipTrack) {
+    setPickedFor(clipTrack);
+    setPickedTrack(null);
+  }
   const audioTrack = pickedTrack ?? clipTrack ?? "clip";
 
   const run = () => {
@@ -309,7 +313,7 @@ function CaptionGenerator({
           : t("subtitles.scope.many", { count: targets.length });
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+    <div className="rounded-xl border border-hair bg-zinc-900/60 p-3">
       <div className="flex items-center gap-2">
         <MagicWandIcon className="h-3.5 w-3.5 flex-none text-brand-400" />
         <span className="flex-1 text-xs font-medium text-zinc-100">
@@ -418,17 +422,19 @@ export function SubtitlesPanel() {
   // exactly when re-running it is what they want. So the last audible selection
   // stays the target until another one replaces it - re-resolved against the
   // project every time, so a clip that has since been deleted drops out.
-  const remembered = useRef<string[]>([]);
-  useEffect(() => {
-    if (selectedTargets.length > 0)
-      remembered.current = selectedTargets.map((x) => x.clip.id);
-  }, [selectedTargets]);
+  const [remembered, setRemembered] = useState<string[]>([]);
+  if (
+    selectedTargets.length > 0 &&
+    (selectedTargets.length !== remembered.length ||
+      selectedTargets.some((x, i) => x.clip.id !== remembered[i]))
+  )
+    setRemembered(selectedTargets.map((x) => x.clip.id));
   const targets = useMemo(
     () =>
       selectedTargets.length > 0
         ? selectedTargets
-        : audibleTargets(lanes, assets, new Set(remembered.current)),
-    [selectedTargets, lanes, assets],
+        : audibleTargets(lanes, assets, new Set(remembered)),
+    [selectedTargets, lanes, assets, remembered],
   );
 
   const importSubtitles = () =>
@@ -436,7 +442,7 @@ export function SubtitlesPanel() {
 
   const importButton = (
     <button
-      className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-800/70"
+      className="flex items-center gap-1.5 rounded-md border border-hair-strong px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-800/70"
       onClick={importSubtitles}
     >
       <FilePlusIcon className="h-3.5 w-3.5" />
@@ -634,7 +640,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
       className={`group rounded-md border px-2.5 py-2 ${
         selected
           ? "border-blue-600/80 bg-blue-700/25"
-          : "border-zinc-800 bg-zinc-900/60"
+          : "border-hair bg-zinc-900/60"
       }`}
     >
       <div className="flex items-center gap-2">
@@ -678,7 +684,7 @@ function CueRow({ clip, selected }: { clip: TextClip; selected: boolean }) {
         aria-label={t("a11y.subtitles.cue")}
         // resize-none + auto-grow: the field is already the size of its cue, so
         // the native grip had nothing left to do but crowd the row's corner.
-        className="mt-1 block w-full resize-none overflow-hidden rounded border border-transparent bg-transparent px-1 py-0.5 text-xs leading-relaxed text-zinc-100 outline-none hover:border-zinc-700 focus:border-brand-500 focus:bg-zinc-800"
+        className="mt-1 block w-full resize-none overflow-hidden rounded border border-transparent bg-transparent px-1 py-0.5 text-xs leading-relaxed text-zinc-100 outline-none hover:border-hair-strong focus:border-brand-500 focus:bg-zinc-800"
         // The gesture snapshots the text as it was on entry, so a whole retype
         // undoes in one step instead of one entry per keystroke.
         onFocus={() => {

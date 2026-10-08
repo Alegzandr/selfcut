@@ -88,7 +88,7 @@ export function TransformSection({ clip, isVideo }: { clip: Clip; isVideo: boole
   const showEasing = boxed > 0 || easeAtPlayhead !== null;
 
   return (
-    <div className="space-y-3 border-t border-zinc-800 pt-3">
+    <div className="space-y-3 border-t border-hair pt-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
           {t('inspector.transform')}

@@ -52,10 +52,10 @@ export function ConfirmDialog() {
             role="alertdialog"
             aria-modal="true"
             aria-label={request.title}
-            className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl shadow-black"
+            className="w-full max-w-sm sheet p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-sm font-semibold text-zinc-100">{request.title}</h2>
+            <h2 className="title-display text-sm text-zinc-50">{request.title}</h2>
             <p className="mt-2 text-xs leading-relaxed text-zinc-400">{request.message}</p>
 
             <div className="mt-5 flex justify-end gap-2">

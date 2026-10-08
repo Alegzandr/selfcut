@@ -49,9 +49,9 @@ export function TrackSettingsSheet() {
             role="dialog"
             aria-modal="true"
             aria-label={t('track.settings')}
-            className="fixed inset-x-0 bottom-0 z-[60] rounded-t-2xl border-t border-zinc-700 bg-zinc-900 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black"
+            className="fixed inset-x-0 bottom-0 z-[60] rounded-t-2xl border-t border-hair-strong bg-zinc-900 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black"
           >
-            <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2">
+            <div className="flex items-center gap-2 border-b border-hair px-3 py-2">
               <span className="text-xs font-semibold text-zinc-200">{t('track.settings')}</span>
               <button
                 type="button"
@@ -65,7 +65,7 @@ export function TrackSettingsSheet() {
             {/* The name, first: on touch this sheet is the only place a lane
                 can be called "Music" instead of A2. Committed on blur, so a
                 tap on the fader below saves it. */}
-            <label className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 text-xs text-zinc-300">
+            <label className="flex items-center gap-2 border-b border-hair px-3 py-2 text-xs text-zinc-300">
               <Pencil1Icon className="h-4 w-4 flex-none text-zinc-400" aria-hidden="true" />
               <input
                 key={track?.id}
@@ -73,7 +73,7 @@ export function TrackSettingsSheet() {
                 defaultValue={track?.name ?? ''}
                 placeholder={t(track?.kind === 'video' ? 'track.label.video' : 'track.label.audio', { n: ordinal })}
                 aria-label={t('track.rename')}
-                className="min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-brand-500"
+                className="min-w-0 flex-1 rounded-md border border-hair-strong bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-brand-500"
                 onBlur={(e) => track && renameTrack(track.id, e.target.value)}
                 onKeyDown={(e) => {
                   e.stopPropagation();

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   LoopIcon,
@@ -29,7 +29,9 @@ function TimeReadout() {
   // The DOM writes below run outside React, so the subscription reads the mode
   // from a ref rather than closing over a stale state value.
   const remainingRef = useRef(showRemaining);
-  remainingRef.current = showRemaining;
+  useLayoutEffect(() => {
+    remainingRef.current = showRemaining;
+  });
   /** Click-to-type on the current time: a draft string until it parses. */
   const [draft, setDraft] = useState<string | null>(null);
   const [invalid, setInvalid] = useState(false);
@@ -194,7 +196,7 @@ function TimelineViewTools() {
     <div className="flex items-center gap-0.5">
       <ViewToolButton id="view.snap" />
       <TrackHeightMenu />
-      <div className="mx-1 h-5 w-px bg-zinc-800" />
+      <div className="mx-1 h-5 w-px bg-hair" />
       <ViewToolButton id="view.zoomOut" />
       <ViewToolButton id="view.zoomIn" />
       <ViewToolButton id="view.zoomFit" />
@@ -233,7 +235,7 @@ export function Transport() {
     useStore.getState();
 
   return (
-    <div className="flex h-11 flex-none items-center justify-center border-y border-zinc-800 bg-zinc-900 px-2">
+    <div className="flex h-11 flex-none items-center justify-center border-y border-hair bg-zinc-900 px-2">
       {/* The two flanks split what is left over evenly, so the playback cluster
           stays optically centred whichever side happens to be wider. */}
       {!coarse && (
@@ -272,7 +274,7 @@ export function Transport() {
         </Tooltip>
         <TimeReadout />
 
-        <div className="mx-1 h-5 w-px bg-zinc-800" />
+        <div className="mx-1 h-5 w-px bg-hair" />
 
         <Tooltip label={t("transport.loop")}>
           <button

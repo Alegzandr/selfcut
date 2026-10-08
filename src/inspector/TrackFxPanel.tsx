@@ -37,7 +37,7 @@ export function TrackFxPanel({ track }: { track: Track }) {
   return (
     <>
       <div className="flex items-center gap-2">
-        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-100">
+        <h2 className="min-w-0 flex-1 truncate title-display text-sm text-zinc-50">
           {t('track.fx.title', { name: trackDisplayName(track, ordinal, t) })}
         </h2>
         {video && (
@@ -82,7 +82,7 @@ function TrackGrade({ track }: { track: Track }) {
   const lut = track.color?.lut;
 
   return (
-    <div className="space-y-3 border-t border-zinc-800 pt-3">
+    <div className="space-y-3 border-t border-hair pt-3">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
         {t('inspector.adjust')}
       </h3>
@@ -91,7 +91,7 @@ function TrackGrade({ track }: { track: Track }) {
         <select
           value={lut?.id ?? ''}
           onChange={(e) => setTrackLut(track.id, e.target.value || null)}
-          className="min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-brand-500"
+          className="min-w-0 flex-1 rounded-md border border-hair-strong bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-brand-500"
         >
           <option value="">{t('inspector.lut.none')}</option>
           {luts.map((entry) => (
@@ -102,7 +102,7 @@ function TrackGrade({ track }: { track: Track }) {
         </select>
         <button
           type="button"
-          className="touch-hit flex-none rounded-md border border-zinc-700 px-2 py-1 text-2xs text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
+          className="touch-hit flex-none rounded-md border border-hair-strong px-2 py-1 text-2xs text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
           onClick={() => importLutFromDisk((id) => setTrackLut(track.id, id))}
           title={t('inspector.lut.import')}
         >
@@ -152,7 +152,7 @@ function TrackAudioFx({ track }: { track: Track }) {
   const chain = track.audioFx ?? [];
 
   return (
-    <div className="space-y-2 border-t border-zinc-800 pt-3">
+    <div className="space-y-2 border-t border-hair pt-3">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
         {t('inspector.audioFx')}
       </h3>

@@ -196,7 +196,7 @@ export function Tooltip({
               // slides back out draws the eye to the thing being dismissed.
               exit={{ ...pill.exit, transition: { duration: 0.08 } }}
               transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-              className="pointer-events-none z-[200] flex max-w-64 items-center gap-2 rounded-md border border-zinc-700/70 bg-zinc-950/95 px-2 py-1 text-xs font-medium leading-snug text-zinc-100 shadow-lg shadow-black/50 ring-1 ring-white/5 backdrop-blur-sm"
+              className="pointer-events-none z-[200] flex max-w-64 items-center gap-2 rounded-md border border-hair-strong bg-zinc-950/95 px-2 py-1 text-xs font-medium leading-snug text-zinc-100 shadow-lg shadow-black/50 ring-1 ring-white/5 backdrop-blur-sm"
             >
               <span>{label}</span>
               {shortcut && (
@@ -206,8 +206,8 @@ export function Tooltip({
               <span
                 className={`absolute left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-zinc-950 ${
                   pos.place === 'top'
-                    ? 'bottom-px translate-y-1/2 border-b border-r border-zinc-700/70'
-                    : 'top-px -translate-y-1/2 border-l border-t border-zinc-700/70'
+                    ? 'bottom-px translate-y-1/2 border-b border-r border-hair-strong'
+                    : 'top-px -translate-y-1/2 border-l border-t border-hair-strong'
                 }`}
               />
             </m.div>

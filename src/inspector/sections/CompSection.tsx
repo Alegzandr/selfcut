@@ -29,7 +29,7 @@ export function CompSection({ clip }: { clip: CompClip }) {
   const fitted = playsWholeComp(clip, fullMs);
 
   return (
-    <div className={`space-y-2 rounded-lg border border-zinc-800 p-2 ${colors.body}`}>
+    <div className={`space-y-2 rounded-lg border border-hair p-2 ${colors.body}`}>
       <div className="flex items-center gap-2">
         <StackIcon className={`h-4 w-4 flex-none ${colors.ink}`} />
         <span className={`min-w-0 flex-1 truncate text-xs font-semibold ${colors.ink}`}>

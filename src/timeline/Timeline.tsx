@@ -248,15 +248,28 @@ export function Timeline() {
 
   if (empty) {
     return (
+      // The one place the editor speaks in the landing's voice: an empty project
+      // is a first impression, so the timeline lends it the page's two-tone
+      // heading and its faint violet light from above. Both go the moment the
+      // first clip lands; the working timeline stays plain.
       <div
-        className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center"
+        className="flex flex-1 flex-col items-center justify-center gap-5 bg-[radial-gradient(ellipse_60%_70%_at_50%_0%,oklch(52%_0.2_293/0.13),transparent_70%)] p-6 text-center"
         onDragOver={onAssetDragOver}
         onDrop={onAssetDrop}
       >
-        <p className="text-sm text-zinc-500">
-          {importing ? t('timeline.importing') : t('timeline.dropzone.title')}
+        <p className="title-display max-w-[30ch] text-balance text-xl leading-snug tracking-[-0.02em] text-zinc-50 sm:text-2xl">
+          {importing ? (
+            t('timeline.importing')
+          ) : (
+            // One sentence, one key: the dimmed consequence is markup inside
+            // the translation, so translators keep the split where it reads.
+            <Trans
+              i18nKey="timeline.dropzone.title"
+              components={{ dim: <span className="text-zinc-500" /> }}
+            />
+          )}
         </p>
-        <label className="cursor-pointer rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-700/60 active:bg-zinc-700">
+        <label className="touch-hit cursor-pointer rounded-[0.625rem] border border-hair-strong bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-zinc-50 transition-colors hover:border-white/20 hover:bg-white/[0.07] active:bg-white/10 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-400">
           {t('timeline.dropzone.choose')}
           <input
             type="file"
@@ -273,12 +286,16 @@ export function Timeline() {
           />
         </label>
         {!coarse && !importing && (
-          <p className="text-xs text-zinc-400">
+          <p className="text-xs leading-6 text-zinc-400">
             {/* One sentence, one key: the <kbd> keycaps are markup inside the translation,
                 so translators keep control of the word order around them. */}
             <Trans
               i18nKey="timeline.hint"
-              components={{ kbd: <kbd className="text-zinc-500" /> }}
+              components={{
+                kbd: (
+                  <kbd className="mx-0.5 rounded-[5px] border border-b-2 border-hair-strong bg-zinc-800 px-1.5 py-0.5 text-3xs text-zinc-200" />
+                ),
+              }}
             />
           </p>
         )}
@@ -422,14 +439,14 @@ export function Timeline() {
 
       {/* Fixed header pane, outside the scroller: the timeline cannot reach it. */}
       <div
-        className="flex shrink-0 flex-col border-r border-zinc-800 bg-zinc-900"
+        className="flex shrink-0 flex-col border-r border-hair bg-zinc-900"
         style={{ width: headerWidth, paddingBottom: hBarPx }}
       >
         {/* Corner block, matching the marker bar + ruler so row N of the pane
             lines up with row N of the scroller. It carries the graph editor
             toggle: the one timeline-wide control, at the timeline's own origin. */}
         <div
-          className="flex shrink-0 items-center border-b border-zinc-800 px-1.5"
+          className="flex shrink-0 items-center border-b border-hair px-1.5"
           style={{ height: MARKER_BAR_HEIGHT_PX + RULER_HEIGHT_PX }}
         >
           <CurveEditorToggle />
@@ -540,14 +557,14 @@ export function Timeline() {
               reachable however far the timeline is scrolled. */}
             <div className="sticky left-0 z-20 flex w-fit gap-2 bg-zinc-950 p-2">
               <button
-                className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:py-2"
+                className="touch-hit rounded-md border border-dashed border-hair-strong px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:py-2"
                 onClick={() => addTrack('video')}
               >
                 <PlusIcon className="mr-1 inline h-3 w-3" />
                 {t('timeline.addVideoTrack')}
               </button>
               <button
-                className="touch-hit rounded-md border border-dashed border-zinc-700 px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:py-2"
+                className="touch-hit rounded-md border border-dashed border-hair-strong px-2 py-1 text-2xs text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 pointer-coarse:py-2"
                 onClick={() => addTrack('audio')}
               >
                 <PlusIcon className="mr-1 inline h-3 w-3" />

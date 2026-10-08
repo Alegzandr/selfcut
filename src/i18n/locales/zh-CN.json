@@ -30,7 +30,7 @@
   "transport.timecode.goto": "跳到某个时间 · 分:秒.帧",
   "transport.total": "总时长 · 点击查看剩余时间",
   "transport.remaining": "剩余时间 · 点击查看总时长",
-  "timeline.dropzone.title": "把片段拖到这里 · 它们会排到时间线上，随时可剪。",
+  "timeline.dropzone.title": "把片段拖到这里。<dim>它们会排到时间线上，随时可剪。</dim>",
   "timeline.dropzone.choose": "选择文件",
   "timeline.hint": "接着：<kbd>Space</kbd> 播放 · <kbd>S</kbd> 分割 · <kbd>P</kbd> 快速缩放 · <kbd>?</kbd> 全部快捷键",
   "timeline.importing": "正在导入…",

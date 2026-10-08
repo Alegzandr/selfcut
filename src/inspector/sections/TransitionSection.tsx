@@ -21,7 +21,7 @@ export function TransitionSection({ clip }: { clip: Clip }) {
   const inMs = track ? trackCrossfades(track.clips).get(clip.id)?.inMs ?? 0 : 0;
 
   return (
-    <div className="space-y-2 border-t border-zinc-800 pt-3">
+    <div className="space-y-2 border-t border-hair pt-3">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
         {t('inspector.transition')}
       </h3>

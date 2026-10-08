@@ -226,7 +226,7 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
 
   return (
     <div
-      className={`flex flex-col border-b border-zinc-800/80 bg-zinc-900 ${
+      className={`flex flex-col border-b border-hair bg-zinc-900 ${
         fxDragOver ? 'ring-1 ring-inset ring-brand-500' : ''
       }`}
       onContextMenu={(e) => {
@@ -485,7 +485,7 @@ export const TrackHeader = memo(function TrackHeader({ track, ordinal }: Props) 
           {lanes.map((prop) => (
             <div
               key={prop}
-              className="flex items-center gap-1 border-t border-zinc-800/50 bg-zinc-900/40 px-1.5 text-4xs uppercase tracking-wide text-zinc-500"
+              className="flex items-center gap-1 border-t border-hair bg-zinc-900/40 px-1.5 text-4xs uppercase tracking-wide text-zinc-500"
               style={{ height: KEYFRAME_LANE_HEIGHT_PX }}
             >
               <ComponentInstanceIcon className="h-2 w-2 text-zinc-500" />

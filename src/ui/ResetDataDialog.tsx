@@ -117,7 +117,7 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
             role="alertdialog"
             aria-modal="true"
             aria-label={t('preferences.data.reset.title')}
-            className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl shadow-black"
+            className="w-full max-w-md sheet p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3">
@@ -125,7 +125,7 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
                 <ExclamationTriangleIcon className="h-4 w-4 text-red-300" />
               </span>
               <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-zinc-100">
+                <h2 className="title-display text-sm text-zinc-50">
                   {t('preferences.data.reset.title')}
                 </h2>
                 <p className="mt-2 text-xs leading-relaxed text-zinc-400">
@@ -168,7 +168,7 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
             )}
 
             {offerModels && !blocked && (
-              <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
+              <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-hair bg-zinc-950/40 p-3">
                 <input
                   type="checkbox"
                   className="mt-0.5 h-3.5 w-3.5 flex-none accent-blue-500"

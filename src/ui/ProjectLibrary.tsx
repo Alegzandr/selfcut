@@ -80,11 +80,11 @@ export function ProjectLibrary() {
             role="dialog"
             aria-modal="true"
             aria-label={t('projects.title')}
-            className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black"
+            className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden sheet"
             onClick={(e) => e.stopPropagation()}
           >
-            <header className="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
-              <h2 className="text-sm font-semibold text-zinc-100">{t('projects.title')}</h2>
+            <header className="flex items-center justify-between border-b border-hair px-5 py-3">
+              <h2 className="title-display text-sm text-zinc-50">{t('projects.title')}</h2>
               <button
                 className="touch-hit rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
                 onClick={close}
@@ -119,7 +119,7 @@ export function ProjectLibrary() {
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') commitRename();
                               }}
-                              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-brand-500"
+                              className="w-full rounded border border-hair-strong bg-zinc-800 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-brand-500"
                             />
                           ) : (
                             <button
@@ -164,7 +164,7 @@ export function ProjectLibrary() {
               )}
             </div>
 
-            <footer className="border-t border-zinc-800 p-2">
+            <footer className="border-t border-hair p-2">
               <button
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-white"
                 onClick={() => {

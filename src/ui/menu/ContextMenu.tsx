@@ -66,7 +66,7 @@ function ContextMenuPanel({ menu }: { menu: ContextMenuState }) {
     <div
       ref={ref}
       role="menu"
-      className="fixed z-[200] min-w-52 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl shadow-black/50"
+      className="fixed z-[200] min-w-52 popover p-1"
       style={{
         left: pos?.left ?? menu.x,
         top: pos?.top ?? menu.y,

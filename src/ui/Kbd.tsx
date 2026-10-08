@@ -13,7 +13,7 @@ export function Kbd({ children, strong }: { children: ReactNode; strong?: boolea
   return (
     <kbd
       className={
-        'flex-none rounded border border-zinc-700 bg-zinc-800/80 leading-none tracking-tight ' +
+        'flex-none rounded-[5px] border border-b-2 border-hair-strong bg-zinc-800/80 leading-none tracking-tight ' +
         // `min-w-6` on the strong variant: without it a cap holding a comma or a
         // bracket shrinks to a sliver and reads as an empty box next to `Space`.
         (strong

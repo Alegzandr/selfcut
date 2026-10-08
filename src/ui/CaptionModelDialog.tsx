@@ -46,9 +46,9 @@ import { formatBytes } from '../lib/bytes';
 
 const FIT_STYLE: Record<CaptionFit, string> = {
   recommended: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
-  usable: 'border-zinc-700 bg-zinc-800/60 text-zinc-300',
+  usable: 'border-hair-strong bg-zinc-800/60 text-zinc-300',
   slow: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
-  unsupported: 'border-zinc-700 bg-zinc-800/40 text-zinc-500',
+  unsupported: 'border-hair-strong bg-zinc-800/40 text-zinc-500',
 };
 
 /** Four segments, filled to the model's rank: a size in MB does not say "better". */
@@ -102,7 +102,7 @@ function ModelRow({
         className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${
           active
             ? 'border-brand-500/70 bg-brand-500/10'
-            : 'border-zinc-800 bg-zinc-900/60 hover:border-zinc-700'
+            : 'border-hair bg-zinc-900/60 hover:border-hair-strong'
         } ${unsupported ? 'cursor-not-allowed opacity-50' : ''}`}
       >
         <input
@@ -276,11 +276,11 @@ export function CaptionModelDialog({
             role="dialog"
             aria-modal="true"
             aria-label={t('captions.models.title')}
-            className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl shadow-black"
+            className="flex max-h-[80vh] w-full max-w-lg flex-col sheet p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-1 flex items-start justify-between gap-2">
-              <h2 className="min-w-0 text-sm font-semibold text-zinc-100">
+              <h2 className="min-w-0 title-display text-sm text-zinc-50">
                 {t('captions.models.title')}
               </h2>
               <Tooltip label={t('library.tracks.close')} shortcut="Esc">
@@ -297,7 +297,7 @@ export function CaptionModelDialog({
 
             {/* The machine's own verdict, stated once at the top: every badge
                 below is relative to this line. */}
-            <div className="mt-3 flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2">
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-hair bg-zinc-950 px-3 py-2">
               <LightningBoltIcon
                 className={`h-3.5 w-3.5 flex-none ${caps?.device === 'webgpu' ? 'text-emerald-400' : 'text-zinc-500'}`}
               />

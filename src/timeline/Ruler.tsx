@@ -89,7 +89,7 @@ export const Ruler = memo(function Ruler({ durationMs, pxPerMs, overscanMs }: Pr
     <div
       // select-none: without it a mouse drag across the ruler highlights the
       // tick labels, and the scrub ends up dragging a text selection with it.
-      className="sticky z-30 cursor-col-resize touch-none select-none border-b border-zinc-800 bg-zinc-900/95"
+      className="sticky z-30 cursor-col-resize touch-none select-none border-b border-hair bg-zinc-900/95"
       style={{ top: MARKER_BAR_HEIGHT_PX, height: RULER_HEIGHT_PX }}
       {...scrub}
     >

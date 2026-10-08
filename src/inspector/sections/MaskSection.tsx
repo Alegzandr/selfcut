@@ -52,7 +52,7 @@ export function MaskSection({ clip }: { clip: Clip }) {
   };
 
   return (
-    <div className="space-y-3 border-t border-zinc-800 pt-3">
+    <div className="space-y-3 border-t border-hair pt-3">
       <label className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
           {t('inspector.mask')}

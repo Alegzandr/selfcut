@@ -128,7 +128,7 @@ export function CurveEditor() {
 
   return (
     <div
-      className="absolute left-2 z-40 w-[220px] rounded-lg border border-zinc-700 bg-zinc-900/95 p-2 shadow-xl shadow-black/50 backdrop-blur"
+      className="absolute left-2 z-40 w-[220px] popover p-2"
       // Hangs from its corner button, clearing the ruler. Anchored over the
       // track-header pane rather than the lanes: a panel that hid the very
       // diamonds it edits would be worse than no panel.

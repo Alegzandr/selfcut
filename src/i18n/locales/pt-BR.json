@@ -30,7 +30,7 @@
   "transport.timecode.goto": "Ir para um tempo · minutos:segundos.quadro",
   "transport.total": "Duração total · clique para o tempo restante",
   "transport.remaining": "Tempo restante · clique para a duração total",
-  "timeline.dropzone.title": "Solte seus clipes aqui – eles estão alinhados na linha do tempo, prontos para serem cortados.",
+  "timeline.dropzone.title": "Solte seus clipes aqui. <dim>Eles se alinham na linha do tempo, prontos para cortar.</dim>",
   "timeline.dropzone.choose": "Escolha os arquivos",
   "timeline.hint": "Então: <kbd>Space</kbd> reproduzir · <kbd>S</kbd> dividir · <kbd>P</kbd> zoom rápido · <kbd>?</kbd> todos os atalhos",
   "timeline.importing": "Importando…",

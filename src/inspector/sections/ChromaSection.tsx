@@ -37,7 +37,7 @@ export function ChromaSection({ clip }: { clip: Clip }) {
   };
 
   return (
-    <div className="space-y-3 border-t border-zinc-800 pt-3">
+    <div className="space-y-3 border-t border-hair pt-3">
       <label className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
           {t('inspector.chroma')}
@@ -64,7 +64,7 @@ export function ChromaSection({ clip }: { clip: Clip }) {
                 set({ color: e.target.value });
                 st.endGesture();
               }}
-              className="h-7 w-10 flex-none cursor-pointer rounded border border-zinc-700 bg-zinc-800"
+              className="h-7 w-10 flex-none cursor-pointer rounded border border-hair-strong bg-zinc-800"
               aria-label={t('inspector.chroma.color')}
             />
             <span className="flex-1 text-2xs uppercase text-zinc-400">{key!.color}</span>

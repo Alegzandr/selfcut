@@ -43,7 +43,7 @@ export function ScopesMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full left-0 mb-1.5 w-36 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900/95 py-1 shadow-xl shadow-black/50 backdrop-blur"
+          className="absolute bottom-full left-0 mb-1.5 w-36 overflow-hidden rounded-lg border border-hair-strong bg-zinc-900/95 py-1 shadow-xl shadow-black/50 backdrop-blur"
         >
           {OPTIONS.map((opt) => (
             <button
@@ -70,7 +70,7 @@ export function ScopesMenu() {
         title={`${t('preview.scopes.title')} · ${t('preview.scopes.hint')}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`touch-hit flex items-center gap-1.5 rounded-md border border-zinc-700/70 bg-zinc-900/70 px-2 py-1 text-2xs font-medium backdrop-blur transition-colors hover:bg-zinc-800/80 ${
+        className={`touch-hit flex items-center gap-1.5 rounded-md border border-hair-strong bg-zinc-900/70 px-2 py-1 text-2xs font-medium backdrop-blur transition-colors hover:bg-zinc-800/80 ${
           mode !== 'off' ? 'text-blue-300' : 'text-zinc-300'
         }`}
         onClick={() => setOpen((v) => !v)}

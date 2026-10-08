@@ -71,7 +71,7 @@ const BACKGROUNDS: readonly { value: string; labelKey: ParseKeys }[] = [
 ];
 
 const SELECT_CLASS =
-  'min-w-44 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-brand-500';
+  'min-w-44 rounded-lg border border-hair-strong bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-brand-500';
 
 /**
  * The sections, in the order the rail lists them.
@@ -172,7 +172,7 @@ function PreviewTab() {
                 className={`h-6 w-6 rounded-md border ${
                   previewBackground === value
                     ? 'border-blue-500 ring-1 ring-blue-500'
-                    : 'border-zinc-700 hover:border-zinc-500'
+                    : 'border-hair-strong hover:border-zinc-500'
                 }`}
                 style={{ backgroundColor: value }}
               />
@@ -184,7 +184,7 @@ function PreviewTab() {
             <input
               type="color"
               aria-label={t('a11y.preferences.previewBackground')}
-              className="h-6 w-8 cursor-pointer rounded-md border border-zinc-700 bg-zinc-800"
+              className="h-6 w-8 cursor-pointer rounded-md border border-hair-strong bg-zinc-800"
               value={previewBackground}
               onChange={(e) => setPreviewBackground(e.target.value)}
             />
@@ -230,7 +230,7 @@ function CaptionsTab() {
           <button
             type="button"
             onClick={() => setModelsOpen(true)}
-            className="flex min-w-44 items-center justify-between gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 hover:border-zinc-600"
+            className="flex min-w-44 items-center justify-between gap-2 rounded-lg border border-hair-strong bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 hover:border-zinc-600"
           >
             {captionModel(model).name}
             <MixerHorizontalIcon className="h-3.5 w-3.5 text-zinc-400" />
@@ -438,11 +438,11 @@ export function Preferences() {
             role="dialog"
             aria-modal="true"
             aria-label={t('preferences.title')}
-            className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black"
+            className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden sheet"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex flex-none items-center justify-between border-b border-zinc-800 px-5 py-3.5">
-              <h2 className="text-sm font-semibold text-zinc-100">
+            <div className="flex flex-none items-center justify-between border-b border-hair px-5 py-3.5">
+              <h2 className="title-display text-sm text-zinc-50">
                 {t('preferences.title')}
               </h2>
               <Tooltip label={t('preferences.close')} shortcut="Esc">
@@ -464,7 +464,7 @@ export function Preferences() {
                 aria-orientation="vertical"
                 aria-label={t('preferences.title')}
                 onKeyDown={onRailKey}
-                className="flex flex-none gap-1 overflow-x-auto border-b border-zinc-800 p-2 sm:w-44 sm:flex-col sm:overflow-x-visible sm:overflow-y-auto sm:border-b-0 sm:border-r sm:p-3"
+                className="flex flex-none gap-1 overflow-x-auto border-b border-hair p-2 sm:w-44 sm:flex-col sm:overflow-x-visible sm:overflow-y-auto sm:border-b-0 sm:border-r sm:p-3"
               >
                 {tabs.map(({ id, labelKey, Icon }) => (
                   <button

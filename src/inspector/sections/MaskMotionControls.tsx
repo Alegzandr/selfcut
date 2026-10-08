@@ -119,7 +119,7 @@ export function MaskMotionControls({
     // Animated motion: keyframe these to move the shape over time, or let motion
     // tracking fill them in. The diamonds work exactly like the colour/transform
     // keyframes.
-    <div className="space-y-2 border-t border-zinc-800/70 pt-2">
+    <div className="space-y-2 border-t border-hair pt-2">
       <h4 className="text-2xs font-semibold uppercase tracking-wide text-zinc-600">
         {t('inspector.mask.motion')}
       </h4>
@@ -181,7 +181,7 @@ export function MaskMotionControls({
                 onClick={clearMotion}
                 title={t('inspector.mask.clearMotion')}
                 aria-label={t('inspector.mask.clearMotion')}
-                className="touch-hit rounded-md border border-zinc-700 px-2 py-1.5 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
+                className="touch-hit rounded-md border border-hair-strong px-2 py-1.5 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800"
               >
                 <ResetIcon className="h-3.5 w-3.5" />
               </button>

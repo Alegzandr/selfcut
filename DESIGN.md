@@ -68,7 +68,7 @@ typography:
     lineHeight: 1.2
     letterSpacing: "-0.01em"
   app:
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+    fontFamily: "Madefor Text, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 400
     lineHeight: 1.3
@@ -134,7 +134,7 @@ components:
 
 # Design System: SelfCut Landing
 
-Scope: this file documents the marketing landing only (`src/pages/index.astro`, `src/pages/[lang]/index.astro`, `src/layouts/Landing.astro`, `src/components/landing/`, tokens in `src/styles/landing.css`). The editor app has its own Tailwind theme in `src/index.css`. The landing mirrors those app tokens (zinc, brand violet, blue, emerald, red) as custom properties so that the editor replica and the product fragments inside the page stay pixel-identical to the app; outside those fragments, the landing speaks its own vocabulary below.
+Scope: this file documents the marketing landing only (`src/pages/index.astro`, `src/pages/[lang]/index.astro`, `src/layouts/Landing.astro`, `src/components/landing/`, tokens in `src/styles/landing.css`). The editor app has its own Tailwind theme in `src/index.css`, and since the in-app redesign it shares this world: Madefor Text as its one UI family (Display for surface titles via `title-display`), the same translucent hairlines (`border-hair`, `border-hair-strong`), the violet `brand-action` finish on Export, `sheet` and `popover` shells for dialogs and menus, and the two-tone heading with the hero light on the empty timeline. The landing mirrors those app tokens (zinc, brand violet, blue, emerald, red, hairlines, font) as custom properties so that the editor replica and the product fragments inside the page stay pixel-identical to the app; outside those fragments, the landing speaks its own vocabulary below.
 
 ## Overview
 
@@ -142,15 +142,15 @@ Scope: this file documents the marketing landing only (`src/pages/index.astro`, 
 
 A near-black room with one light above it, and the real tool on the bench. The page is dark, quiet and exact; the editor replica is the brightest, densest object in it, and every section proves a capability by showing the interface that does it rather than illustrating it. The finish bar is a top-tier product page: hairline rules that read as light on an edge, tight-tracked display headings, generous vertical rhythm, and one violet accent that is spent almost entirely on the action.
 
-Density is deliberately uneven. Copy passages are sparse and centered or left on one column; product passages (the replica, the export sheet, the grading and keyframe fragments) are as dense as the app itself, set in the app's own system stack at the app's own sizes. The contrast between the two is the argument: a calm page around a serious tool.
+Density is deliberately uneven. Copy passages are sparse and centered or left on one column; product passages (the replica, the export sheet, the grading and keyframe fragments) are as dense as the app itself, set in the app's own face at the app's own sizes. The contrast between the two is the argument: a calm page around a serious tool.
 
 Confirmed rejections carried from the product: no generic SaaS look (no card grids, no decorative gradients, no dashboard tiles), no neon pill overlays floating on the preview (a caption is burnt into the frame as the editor renders it), and nothing developer-oriented on the page.
 
 **Key Characteristics:**
 - Near-black zinc ground with a single faint violet wash from above in the hero, returned from below at the close.
 - Two-tone headings: the claim in near-white, its consequence stepped down to a dim zinc in the same sentence.
-- Translucent white hairlines (7.5% and 13%) for every page-level rule and border; opaque zinc lines only inside product fragments.
-- Madefor Display for headings, buttons and term labels; Madefor Text for copy; the system stack for anything that is a piece of the app.
+- Translucent white hairlines (7.5% and 13%) for every rule and border, on the page and inside the product fragments alike, because the app draws with them too.
+- Madefor Display for headings, buttons and term labels; Madefor Text for copy and for anything that is a piece of the app.
 - Product fragments built from the app's own tokens and dictionaries, never screenshots of UI.
 - One authored scroll motion (the hero editor laying itself flat) and looping product demos on shared clocks; everything stills under reduced motion.
 
@@ -188,13 +188,13 @@ A monochrome zinc world with a single violet voice; the app's blue and emerald a
 
 **The Borrowed Palette Rule.** Blue, emerald and red appear only inside a piece of the app (the replica, the export sheet, the depth fragments). If it is not something the editor would draw, it is zinc and violet.
 
-**The Two Kinds of Line Rule.** The page draws with translucent hairlines; the app draws with opaque zinc-800. Never mix them on the same object.
+**The One Kind of Line Rule.** Page and app draw with the same translucent hairlines: hair (7.5%) divides, hair-strong (13%) outlines something you can act on. No opaque zinc borders anywhere.
 
 ## Typography
 
 **Display Font:** Madefor Display (with system-ui, sans-serif), variable 400 to 800, self-hosted, latin and latin-ext subsets.
 **Body Font:** Madefor Text (with system-ui, sans-serif), variable 400 to 800, self-hosted.
-**Label/Mono Font:** the app stack (ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto) for product fragments, key caps and timecodes.
+**App Font:** Madefor Text at the app's sizes (`--font-app`, the editor's `font-sans`) for product fragments, key caps and timecodes.
 
 **Character:** a neutral UI superfamily that sits beside the editor's interface without arguing with it; weight and tracking carry the authority, not a showy face.
 
@@ -205,7 +205,7 @@ A monochrome zinc world with a single violet voice; the app's blue and emerald a
 - **Lede** (400, clamp(1.0625rem, 1.3vw, 1.1875rem), 1.6, max 48ch, muted): the one sentence under each heading.
 - **Body** (400, 1.0625rem, 1.65): base copy. Supporting copy (descriptions, dd, captions) runs at 0.9375 to 0.9875rem in muted.
 - **Label** (650, 0.9875rem, tracking -0.01em, Display face): buttons.
-- **App** (system stack, 0.75 to 0.8125rem): everything inside a product fragment, at the app's own sizes.
+- **App** (Madefor Text, 0.75 to 0.8125rem): everything inside a product fragment, at the app's own sizes.
 
 ### Named Rules
 **The Two-Tone Heading Rule.** A heading is one sentence in two tones: the claim in text, its consequence in heading-dim, delivered as an `<em>` with `font-style: normal`. Emphasis is by value, never by italics or color.
@@ -268,13 +268,13 @@ Confident and compact, Display face at 650.
 Native `details`; question in Display 650 at 1.0625rem with a plus icon that rotates 45 degrees when open; answer in muted at 62ch, fading down 0.35rem on open; hairline between items.
 
 ### Key caps
-Inline `kbd` in the app stack: zinc-800 fill, zinc-700 border with a 2px bottom edge, 5px radius, used wherever copy names a shortcut.
+Inline `kbd` in the app face: zinc-800 fill, hair-strong border with a 2px bottom edge, 5px radius, used wherever copy names a shortcut.
 
 ### Editor replica (signature)
 A fixed-width (64em) replica of the desktop editor built from the app's tokens, dictionaries and icon sprite, scaled by one font-size knob. Menu bar, toolbar with the violet Export button, media panel, monitor, inspector, and a timeline with blue video, violet text and emerald audio clips under a red playhead. It loops on one 12s clock: the playhead sweeps and the monitor cuts to whichever real shot it is over. A cropped "split" variant shows a split and a trim snapping to the playhead. In the hero it rests tilted back (rotateX 16deg, scale 0.95) and lays itself flat on scroll; its bottom dissolves into the page with a mask. Under reduced motion it is a still with the playhead parked inside a clip.
 
 ### Product fragments
-The export sheet, the Adjust/curves panel, keyframe lanes, mask strip and transition picker are smaller pieces of the app drawn the same way: panel fill, opaque line borders, 0.625 to 0.875rem radius, app stack at 0.6875 to 0.8125rem, blue for what is picked, uppercase 0.04em-tracked section heads in zinc-400 as the app's inspector does. Captions are burnt into the frame as the app's text clip renders them (white bold Display on a 72% black rounded box), with the cue list beside them on the same clock.
+The export sheet, the Adjust/curves panel, keyframe lanes, mask strip and transition picker are smaller pieces of the app drawn the same way: panel fill, hairline borders, 0.625 to 0.875rem radius, app face at 0.6875 to 0.8125rem, blue for what is picked, uppercase 0.04em-tracked section heads in zinc-400 as the app's inspector does. Captions are burnt into the frame as the app's text clip renders them (white bold Display on a 72% black rounded box), with the cue list beside them on the same clock.
 
 ## Do's and Don'ts
 

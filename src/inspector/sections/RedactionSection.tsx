@@ -67,7 +67,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
   };
 
   return (
-    <div className="space-y-3 border-t border-zinc-800 pt-3">
+    <div className="space-y-3 border-t border-hair pt-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
           {t('inspector.redaction')}
@@ -91,7 +91,7 @@ export function RedactionSection({ clip }: { clip: Clip }) {
           <div
             key={region.id}
             className={`space-y-2 rounded-md border px-2 py-1.5 ${
-              open ? 'border-brand-600/50 bg-brand-700/15' : 'border-zinc-800 bg-zinc-900/40'
+              open ? 'border-brand-600/50 bg-brand-700/15' : 'border-hair bg-zinc-900/40'
             }`}
           >
             <div className="flex items-center gap-1.5">

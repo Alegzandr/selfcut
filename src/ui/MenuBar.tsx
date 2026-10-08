@@ -41,7 +41,7 @@ export function MenuBar() {
   return (
     <div
       ref={barRef}
-      className="relative z-40 flex h-8 flex-none items-center gap-0.5 border-b border-zinc-800 bg-zinc-900 px-2 text-xs"
+      className="relative z-40 flex h-8 flex-none items-center gap-0.5 border-b border-hair bg-zinc-900 px-2 text-xs"
     >
       <div className="flex select-none items-center gap-1.5 pr-2">
         <img src={logoUrl} alt="" className="h-4 w-4" draggable={false} />
@@ -62,7 +62,7 @@ export function MenuBar() {
               {t(menu.titleKey)}
             </button>
             {isOpen && (
-              <div role="menu" className="absolute left-0 top-full z-50 mt-0.5 min-w-56 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl shadow-black/50">
+              <div role="menu" className="absolute left-0 top-full z-50 mt-0.5 min-w-56 popover p-1">
                 <MenuList
                   items={menu.items
                     .map((item): MenuEntry | null => (item === '---' ? '---' : commands[item] ?? null))

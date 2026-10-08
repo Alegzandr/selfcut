@@ -13,7 +13,7 @@
  * scales the whole curve and keeps its shape - nothing is destroyed, and there
  * is no dialog warning that it would be.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LockClosedIcon, LockOpen1Icon } from '@radix-ui/react-icons';
 import { useStore } from '../../store/store';
@@ -76,7 +76,13 @@ export function SpeedControl({ clip }: { clip: Clip }) {
   const { t } = useTranslation();
   const { updateClipCommitted } = useStore.getState();
   const [text, setText] = useState(String(clip.speed));
-  useEffect(() => setText(String(clip.speed)), [clip.id, clip.speed]);
+  // Resync the field during render when the clip or its speed changes.
+  const source = `${clip.id}:${clip.speed}`;
+  const [shownSource, setShownSource] = useState(source);
+  if (shownSource !== source) {
+    setShownSource(source);
+    setText(String(clip.speed));
+  }
 
   const commit = () => {
     const v = parseFloat(text.replace(',', '.'));
@@ -129,7 +135,7 @@ export function SpeedControl({ clip }: { clip: Clip }) {
               onChange={(e) => setText(e.target.value)}
               onBlur={commit}
               onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-              className="w-14 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-zinc-200 outline-none focus:border-brand-500"
+              className="w-14 rounded-md border border-hair-strong bg-zinc-800 px-2 py-1 text-right text-zinc-200 outline-none focus:border-brand-500"
             />
             <span>×</span>
           </div>
@@ -156,7 +162,7 @@ export function SpeedControl({ clip }: { clip: Clip }) {
                 key={preset}
                 type="button"
                 onClick={() => applyPreset(preset)}
-                className="touch-hit flex items-center gap-2 rounded-md border border-zinc-700/70 bg-zinc-800/60 px-2 py-1.5 text-2xs text-zinc-300 outline-none transition-colors hover:border-zinc-600 hover:bg-zinc-700/60 focus-visible:ring-2 focus-visible:ring-brand-500 active:bg-zinc-700"
+                className="touch-hit flex items-center gap-2 rounded-md border border-hair-strong bg-zinc-800/60 px-2 py-1.5 text-2xs text-zinc-300 outline-none transition-colors hover:border-zinc-600 hover:bg-zinc-700/60 focus-visible:ring-2 focus-visible:ring-brand-500 active:bg-zinc-700"
               >
                 <PresetCurve preset={preset} />
                 <span className="min-w-0 flex-1 truncate text-left leading-none">

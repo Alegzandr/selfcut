@@ -68,7 +68,7 @@ export function MenuList({ items, onRun }: { items: MenuEntry[]; onRun: () => vo
     <>
       {collapseSeparators(items).map((item, i) =>
         item === '---' ? (
-          <div key={`sep-${i}`} className="my-1 h-px bg-zinc-800" />
+          <div key={`sep-${i}`} className="my-1 h-px bg-hair" />
         ) : (
           <MenuItemRow key={item.id} command={item} onRun={onRun} />
         ),

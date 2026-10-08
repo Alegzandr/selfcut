@@ -63,7 +63,7 @@ export function CompBreadcrumb() {
           {...enter}
           transition={{ type: 'spring', damping: 30, stiffness: 420 }}
           aria-label={t('comp.breadcrumb')}
-          className="flex h-8 flex-none items-center gap-1 overflow-hidden border-b border-zinc-800 bg-zinc-900/80 px-1.5"
+          className="flex h-8 flex-none items-center gap-1 overflow-hidden border-b border-hair bg-zinc-900/80 px-1.5"
         >
           <Tooltip label={t('comp.up')} shortcut={coarse ? undefined : 'Esc'}>
             <button

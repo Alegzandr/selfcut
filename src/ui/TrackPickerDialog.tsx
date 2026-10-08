@@ -130,11 +130,11 @@ export function TrackPickerDialog({
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className="flex max-h-[75vh] w-full max-w-md flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl shadow-black"
+            className="flex max-h-[75vh] w-full max-w-md flex-col sheet p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-1 flex items-start justify-between gap-2">
-              <h2 className="min-w-0 text-sm font-semibold text-zinc-100">{title}</h2>
+              <h2 className="min-w-0 title-display text-sm text-zinc-50">{title}</h2>
               <Tooltip label={t('library.tracks.close')} shortcut="Esc">
                 <button
                   className="touch-hit -mt-1 flex-none rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800"
@@ -150,7 +150,7 @@ export function TrackPickerDialog({
               // The border lives on the wrapper, so focus has to be shown there
               // too: `outline-none` on the input alone left the field with no
               // visible focus at all.
-              <div className="mt-3 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 focus-within:border-blue-500">
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-hair-strong bg-zinc-950 px-2 py-1.5 focus-within:border-blue-500">
                 <MagnifyingGlassIcon className="h-3.5 w-3.5 flex-none text-zinc-500" />
                 <input
                   className="min-w-0 flex-1 bg-transparent text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
@@ -168,7 +168,7 @@ export function TrackPickerDialog({
                   {t('library.tracks.noMatch')}
                 </p>
               ) : (
-                <ul className="divide-y divide-zinc-800">
+                <ul className="divide-y divide-hair">
                   {shown.map((track) => (
                     <li key={track.index} className="py-2">
                       {track.progress ? (
@@ -228,7 +228,7 @@ export function TrackPickerDialog({
               // Always mounted, disabled while nothing is ticked: a button that
               // appears on the first tick shifts the list under the finger that
               // just tapped it.
-              <div className="mt-3 flex items-center justify-between gap-3 border-t border-zinc-800 pt-3">
+              <div className="mt-3 flex items-center justify-between gap-3 border-t border-hair pt-3">
                 <span className="min-w-0 truncate text-2xs text-zinc-500">
                   {t('library.tracks.selected', { count: picked.length })}
                 </span>

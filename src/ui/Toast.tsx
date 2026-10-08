@@ -40,7 +40,7 @@ export function Toast() {
           className={`fixed bottom-4 left-1/2 z-50 flex max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm shadow-xl ${
             isError
               ? 'border-red-900 bg-red-950 text-red-200'
-              : 'border-zinc-700 bg-zinc-900 text-zinc-200'
+              : 'border-hair-strong bg-zinc-900 text-zinc-200'
           }`}
           onClick={() => {
             const s = useStore.getState();

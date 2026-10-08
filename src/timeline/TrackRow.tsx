@@ -46,7 +46,7 @@ export const TrackRow = memo(function TrackRow({ track, ordinal, pxPerMs }: Prop
     <div
       role="listitem"
       aria-label={rowLabel}
-      className={`relative border-b border-zinc-800/80 ${track.hidden || soloedOut ? 'opacity-40' : ''}`}
+      className={`relative border-b border-hair ${track.hidden || soloedOut ? 'opacity-40' : ''}`}
       style={{ height: rowHeight }}
       data-rowbg
       data-track-id={track.id}

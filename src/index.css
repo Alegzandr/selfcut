@@ -1,4 +1,31 @@
 @import "tailwindcss";
+@import "./styles/fonts.css";
+
+@theme {
+  /* The landing's world, carried into the editor: one type superfamily and
+     translucent hairlines that read as light on an edge. The ground stays
+     zinc-950: the landing's own page sits a step darker precisely so its
+     replica of the editor reads as an object on it. `src/styles/landing.css` spells the same values for the page and its
+     replica of the editor; keep the two in step.
+
+     Madefor Text is the chrome's one family, labels, read-outs and buttons
+     alike. Madefor Display is kept for the few titles that head a surface (a
+     dialog, the inspector's clip name, the empty timeline): weight and a
+     little negative tracking carry them, never size. */
+  --font-sans:
+    "Madefor Text", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+  --font-display:
+    "Madefor Display", "Madefor Text", ui-sans-serif, system-ui, sans-serif;
+
+  /* Hairlines. Every structural rule and outline in the chrome: panel edges,
+     dividers, control and card outlines. Translucent white rather than an
+     opaque zinc, so one line reads the same on the ground, on a panel and on a
+     raised control. `hair` divides, `hair-strong` outlines something you can
+     act on. */
+  --color-hair: oklch(100% 0 0 / 0.075);
+  --color-hair-strong: oklch(100% 0 0 / 0.13);
+}
 
 @theme {
   /* SelfCut brand ramps.
@@ -135,6 +162,75 @@
   }
 }
 
+/* The primary action: Export, and the button that confirms it. The landing's
+   violet button, finish included: a top highlight and a contact shadow make it
+   the one lit object in the chrome. There is only ever one of these on screen,
+   which is what keeps it meaning "this is the way out". */
+@utility brand-action {
+  background-color: var(--color-brand-600);
+  color: white;
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / 0.18),
+    0 1px 2px oklch(0% 0 0 / 0.4);
+  transition: background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &:hover {
+    background-color: var(--color-brand-500);
+  }
+
+  &:active {
+    background-color: var(--color-brand-700);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.1);
+  }
+
+  &:disabled {
+    background-color: var(--color-zinc-800);
+    color: var(--color-zinc-500);
+    box-shadow: none;
+  }
+}
+
+/* A sheet: every dialog's shell. A panel-coloured object lifted off the ground
+   by one deep, soft, black shadow, with a hairline edge and a top highlight,
+   the way the landing draws its export sheet. Declared once so the eight
+   dialogs cannot drift apart. */
+@utility sheet {
+  background-color: var(--color-zinc-900);
+  border: 1px solid var(--color-hair-strong);
+  border-radius: 0.875rem;
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / 0.05),
+    0 2rem 4rem -1.5rem oklch(0% 0 0 / 0.85),
+    0 0 0 1px oklch(0% 0 0 / 0.5);
+}
+
+/* A popover: menus, the context menu and small floating panels. Same object
+   as a sheet at a smaller scale. */
+@utility popover {
+  background-color: color-mix(in oklab, var(--color-zinc-900) 96%, transparent);
+  border: 1px solid var(--color-hair-strong);
+  border-radius: 0.625rem;
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / 0.05),
+    0 1rem 2.5rem -1rem oklch(0% 0 0 / 0.8),
+    0 0 0 1px oklch(0% 0 0 / 0.45);
+  backdrop-filter: blur(14px);
+}
+
+/* A surface title in the landing's voice: Display, tight-tracked. Latin
+   scripts only; CJK runs flat, as on the landing. */
+@utility title-display {
+  font-family: var(--font-display);
+  font-weight: 650;
+  letter-spacing: -0.012em;
+
+  &:lang(ja),
+  &:lang(zh),
+  &:lang(ko) {
+    letter-spacing: 0;
+  }
+}
+
 /* The one focus treatment, for every keyboard-reachable control.
    Applied here rather than as a utility every button has to remember: there are
    over a hundred of them, and the one that forgets is the accessibility bug.
@@ -166,6 +262,24 @@ body,
 body {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis: none;
+  color-scheme: dark;
+  accent-color: var(--color-brand-500);
+}
+
+/* The browser's own surfaces, in the palette: selection in deep violet with
+   white text, a violet caret in every field. */
+::selection {
+  background-color: var(--color-brand-700);
+  color: white;
+}
+
+input,
+textarea,
+[contenteditable] {
+  caret-color: var(--color-brand-400);
 }
 
 input,

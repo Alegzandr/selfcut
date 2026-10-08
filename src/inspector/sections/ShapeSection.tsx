@@ -49,7 +49,7 @@ export function ShapeSection({ clip }: { clip: ShapeClip }) {
           <input
             type="color"
             value={shape.fill}
-            className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-zinc-800"
+            className="h-7 w-10 cursor-pointer rounded border border-hair-strong bg-zinc-800"
             onFocus={beginGesture}
             onBlur={endGesture}
             onChange={(e) => setShape({ fill: e.target.value })}
@@ -61,7 +61,7 @@ export function ShapeSection({ clip }: { clip: ShapeClip }) {
             // No stroke yet: offer the fill colour as the starting point rather
             // than a black swatch that reads as "already set to black".
             value={shape.stroke ?? shape.fill}
-            className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-zinc-800"
+            className="h-7 w-10 cursor-pointer rounded border border-hair-strong bg-zinc-800"
             onFocus={beginGesture}
             onBlur={endGesture}
             onChange={(e) =>

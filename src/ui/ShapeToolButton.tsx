@@ -94,7 +94,7 @@ export function ShapeToolButton() {
       {open && (
         <div
           role="menu"
-          className="absolute left-0 top-full z-50 mt-1 min-w-40 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl shadow-black/50"
+          className="absolute left-0 top-full z-50 mt-1 min-w-40 popover p-1"
         >
           {SHAPES.map(({ kind, icon: ShapeIcon, labelKey }) => (
             <button

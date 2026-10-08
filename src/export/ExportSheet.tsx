@@ -107,19 +107,18 @@ function useRenderClock(rendering: boolean, progress: number) {
   }, []);
 
   useEffect(() => {
-    if (!rendering) {
-      startedAtRef.current = null;
-      samplesRef.current = [];
-      setClock({ elapsedMs: 0, remainingMs: null });
-      return;
-    }
+    if (!rendering) return;
     const startedAt = performance.now();
     startedAtRef.current = startedAt;
     samplesRef.current = [{ atMs: startedAt, progress: 0 }];
-    setClock({ elapsedMs: 0, remainingMs: null });
     // Twice a second, so a whole-second readout never lags visibly behind.
     const id = window.setInterval(update, 500);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      startedAtRef.current = null;
+      samplesRef.current = [];
+      setClock({ elapsedMs: 0, remainingMs: null });
+    };
   }, [rendering, update]);
 
   useEffect(() => {
@@ -398,10 +397,10 @@ export function ExportSheet() {
             role="dialog"
             aria-modal="true"
             aria-label={t('export.title')}
-            className="fixed inset-x-0 bottom-0 z-50 max-h-[calc(100dvh-1rem)] space-y-3 overflow-y-auto overscroll-contain rounded-t-2xl border-t border-zinc-800 bg-zinc-900 p-4 md:max-h-[calc(100dvh-4rem)] pb-[max(1rem,env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:bottom-8 md:w-[26rem] md:-translate-x-1/2 md:rounded-2xl md:border"
+            className="fixed inset-x-0 bottom-0 z-50 max-h-[calc(100dvh-1rem)] space-y-3 overflow-y-auto overscroll-contain rounded-t-2xl border-t border-hair bg-zinc-900 p-4 md:max-h-[calc(100dvh-4rem)] pb-[max(1rem,env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:bottom-8 md:w-[26rem] md:-translate-x-1/2 md:rounded-2xl md:border"
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-zinc-100">{t('export.title')}</h2>
+              <h2 className="title-display text-sm text-zinc-50">{t('export.title')}</h2>
               <button
                 className="touch-hit rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800/70 active:bg-zinc-800 disabled:opacity-40 pointer-coarse:p-2.5"
                 aria-label={t('export.close')}
@@ -435,7 +434,7 @@ export function ExportSheet() {
                       className={`touch-hit rounded-xl border px-3 py-2 text-left ${
                         door === d
                           ? 'border-brand-600 bg-brand-700/25'
-                          : 'border-zinc-700 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'
+                          : 'border-hair-strong bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'
                       }`}
                     >
                       <span className="block text-sm font-medium text-zinc-100">{t(`export.door.${d}`)}</span>
@@ -471,7 +470,7 @@ export function ExportSheet() {
                 <div className="max-h-[min(30rem,40vh)] space-y-2 overflow-y-auto overscroll-contain pr-1">
                   {door === 'handoff' && (
                     <button
-                      className={`block w-full rounded-xl border p-3 text-left ${folderSelected ? 'border-brand-600 bg-brand-700/25' : 'border-zinc-700 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'}`}
+                      className={`block w-full rounded-xl border p-3 text-left ${folderSelected ? 'border-brand-600 bg-brand-700/25' : 'border-hair-strong bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'}`}
                       onClick={() => setSelectedId(null)}
                     >
                       <div className="text-sm font-medium text-zinc-100">{t('handoff.folder.label')}</div>
@@ -490,7 +489,7 @@ export function ExportSheet() {
                     return (
                       <button
                         key={preset.id}
-                        className={`block w-full rounded-xl border p-3 text-left ${!folderSelected && selected.id === preset.id ? 'border-brand-600 bg-brand-700/25' : 'border-zinc-700 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'}`}
+                        className={`block w-full rounded-xl border p-3 text-left ${!folderSelected && selected.id === preset.id ? 'border-brand-600 bg-brand-700/25' : 'border-hair-strong bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'}`}
                         onClick={() => setSelectedId(preset.id)}
                       >
                         <div className="text-sm font-medium text-zinc-100">
@@ -522,7 +521,7 @@ export function ExportSheet() {
                     120 fps preset already encodes at 120, and asking would be a
                     question with one answer. */}
                 {folderSelected && (
-                  <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-xs text-zinc-300">
+                  <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-hair-strong bg-zinc-950 p-2.5 text-xs text-zinc-300">
                     <input
                       type="checkbox"
                       checked={includeRushes}
@@ -537,7 +536,7 @@ export function ExportSheet() {
                 )}
 
                 {!folderSelected && selected.kind === 'mp4' && fpsCapBinds(selected, project, assets) && (
-                  <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-xs text-zinc-300">
+                  <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-hair-strong bg-zinc-950 p-2.5 text-xs text-zinc-300">
                     <input
                       type="checkbox"
                       checked={forceMaxFps}
@@ -559,11 +558,11 @@ export function ExportSheet() {
                     timeline stay as they are, and one gain over the sum lands
                     the file where the platforms play it untouched. */}
                 {door === 'handoff' ? (
-                  <p className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-2.5 text-2xs text-zinc-400">
+                  <p className="rounded-xl border border-hair bg-zinc-950/60 p-2.5 text-2xs text-zinc-400">
                     {t('handoff.rawSound')}
                   </p>
                 ) : (
-                <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-xs text-zinc-300">
+                <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-hair-strong bg-zinc-950 p-2.5 text-xs text-zinc-300">
                   <input
                     type="checkbox"
                     checked={normalize}
@@ -582,7 +581,7 @@ export function ExportSheet() {
                 </label>
                 )}
 
-                <label className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950 px-2.5 py-2 text-xs text-zinc-300">
+                <label className="flex items-center gap-2 rounded-xl border border-hair-strong bg-zinc-950 px-2.5 py-2 text-xs text-zinc-300">
                   <span className="flex-none text-zinc-400">{t('export.fileName')}</span>
                   <input
                     type="text"
@@ -619,7 +618,7 @@ export function ExportSheet() {
                 )}
 
                 <button
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white hover:bg-brand-500 active:bg-brand-700"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl brand-action py-3 text-sm font-semibold"
                   onClick={() => run(selected)}
                 >
                   <DownloadIcon className="h-4 w-4" />
@@ -669,7 +668,7 @@ export function ExportSheet() {
                   </p>
                 )}
                 <button
-                  className="w-full rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
+                  className="w-full rounded-xl border border-hair-strong py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
                   onClick={() => {
                     runRef.current++;
                     canceledRef.current = true;
@@ -714,14 +713,14 @@ export function ExportSheet() {
                 <div className="flex gap-2">
                   {phase.blob && (
                     <button
-                      className="flex-1 rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
+                      className="flex-1 rounded-xl border border-hair-strong py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
                       onClick={() => downloadBlob(phase.blob!, phase.filename)}
                     >
                       {t('export.downloadAgain')}
                     </button>
                   )}
                   <button
-                    className="flex-1 rounded-xl bg-brand-600 py-2 text-sm font-semibold text-white hover:bg-brand-500 active:bg-brand-700"
+                    className="flex-1 rounded-xl brand-action py-2 text-sm font-semibold"
                     onClick={() => setPhase({ kind: 'idle' })}
                   >
                     {t('export.newExport')}
@@ -736,7 +735,7 @@ export function ExportSheet() {
                 {/* Already translated by the exporter, worker codes included. */}
                 <p className="text-sm text-red-300">{phase.message}</p>
                 <button
-                  className="w-full rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
+                  className="w-full rounded-xl border border-hair-strong py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
                   onClick={() => setPhase({ kind: 'idle' })}
                 >
                   {t('export.back')}

@@ -275,7 +275,7 @@ export function MobileBottomBar() {
     : TOOL_TILES;
 
   return (
-    <nav className="flex-none border-t border-zinc-800 bg-zinc-900/95 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur">
+    <nav className="flex-none border-t border-hair bg-zinc-900/95 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur">
       <AnimatePresence mode="wait" initial={false}>
         <m.div
           key={showPreviewRail ? 'preview' : showClip ? 'clip' : 'tools'}

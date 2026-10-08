@@ -48,11 +48,11 @@ function CatalogTile({
       onClick={coarse ? onApply : undefined}
       onDoubleClick={coarse ? undefined : onApply}
       disabled={coarse && !enabled}
-      className={`touch-hit select-none rounded border border-zinc-800 bg-zinc-800/60 px-2 py-1.5 text-left text-2xs font-medium pointer-coarse:py-2.5 ${
+      className={`touch-hit select-none rounded border border-hair bg-zinc-800/60 px-2 py-1.5 text-left text-2xs font-medium pointer-coarse:py-2.5 ${
         coarse ? '' : 'cursor-grab active:cursor-grabbing'
       } ${
         enabled
-          ? 'text-zinc-200 hover:border-zinc-700 hover:bg-zinc-700/60 active:bg-zinc-700'
+          ? 'text-zinc-200 hover:border-hair-strong hover:bg-zinc-700/60 active:bg-zinc-700'
           : 'text-zinc-500 hover:bg-zinc-800'
       }`}
       title={label}

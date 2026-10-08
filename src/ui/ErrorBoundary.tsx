@@ -73,26 +73,26 @@ function CrashScreen({ error, onRetry }: { error: Error; onRetry: () => void }) 
     >
       <ExclamationTriangleIcon className="h-10 w-10 text-amber-400" aria-hidden="true" />
       <div className="flex max-w-md flex-col gap-2 text-center">
-        <h1 className="text-lg font-semibold">{t('crash.title')}</h1>
+        <h1 className="title-display text-lg">{t('crash.title')}</h1>
         <p className="text-sm text-zinc-400">{t('crash.body')}</p>
       </div>
       <div className="flex flex-wrap items-center justify-center gap-3">
         <button
-          className="flex items-center gap-2 rounded bg-brand-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-500"
+          className="flex items-center gap-2 rounded-lg brand-action px-3.5 py-2 text-sm font-semibold"
           onClick={rescue}
         >
           <DownloadIcon className="h-4 w-4" aria-hidden="true" />
           {t('crash.save')}
         </button>
         <button
-          className="flex items-center gap-2 rounded bg-zinc-800 px-3.5 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-700"
+          className="flex items-center gap-2 rounded-lg border border-hair-strong bg-white/[0.03] px-3.5 py-2 text-sm font-medium text-zinc-100 hover:bg-white/[0.07]"
           onClick={onRetry}
         >
           <ResetIcon className="h-4 w-4" aria-hidden="true" />
           {t('crash.retry')}
         </button>
         <button
-          className="rounded px-3.5 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+          className="rounded-lg px-3.5 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
           onClick={() => window.location.reload()}
         >
           {t('crash.reload')}

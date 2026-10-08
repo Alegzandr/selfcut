@@ -30,7 +30,7 @@
   "transport.timecode.goto": "특정 시간으로 이동 · 분:초.프레임",
   "transport.total": "전체 길이 · 클릭하면 남은 시간",
   "transport.remaining": "남은 시간 · 클릭하면 전체 길이",
-  "timeline.dropzone.title": "여기에 클립을 놓으세요 · 타임라인에 정렬되어 바로 자를 수 있습니다.",
+  "timeline.dropzone.title": "여기에 클립을 놓으세요. <dim>타임라인에 정렬되어 바로 자를 수 있습니다.</dim>",
   "timeline.dropzone.choose": "파일 선택",
   "timeline.hint": "다음은: <kbd>Space</kbd> 재생 · <kbd>S</kbd> 자르기 · <kbd>P</kbd> 빠른 줌 · <kbd>?</kbd> 전체 단축키",
   "timeline.importing": "가져오는 중…",

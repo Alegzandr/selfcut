@@ -142,7 +142,7 @@ export default function App() {
       <StorageFolderBanner />
       <DisconnectedBanner />
       <div
-        className="flex flex-none border-b border-zinc-800"
+        className="flex flex-none border-b border-hair"
         style={{ height: coarse ? "34dvh" : `${previewFrac * 100}dvh` }}
       >
         <MediaLibrary />

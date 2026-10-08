@@ -48,9 +48,9 @@ export function MobileMenuSheet({ open, onClose }: { open: boolean; onClose: () 
             // Capped at 80dvh and scrolled inside: the full menu set is longer
             // than a phone screen, and a sheet that runs off the bottom hides
             // its own last section.
-            className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[80dvh] flex-col rounded-t-2xl border-t border-zinc-700 bg-zinc-900 pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-black"
+            className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[80dvh] flex-col rounded-t-2xl border-t border-hair-strong bg-zinc-900 pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-black"
           >
-            <div className="flex flex-none items-center gap-2 border-b border-zinc-800 px-3 py-2">
+            <div className="flex flex-none items-center gap-2 border-b border-hair px-3 py-2">
               <span className="text-xs font-semibold text-zinc-200">{t('topbar.menu')}</span>
               <div className="ml-auto flex items-center gap-1">
                 <MasterVolume />

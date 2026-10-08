@@ -71,7 +71,7 @@ function AdjustParams({ clip, adjust }: { clip: Clip; adjust: ClipLocalAdjust })
   };
 
   return (
-    <div className="space-y-2 border-t border-zinc-800/70 pt-2">
+    <div className="space-y-2 border-t border-hair pt-2">
       <h4 className="text-2xs font-semibold uppercase tracking-wide text-zinc-600">
         {t('inspector.adjust')}
       </h4>
@@ -135,7 +135,7 @@ export function LocalAdjustSection({ clip }: { clip: Clip }) {
     // Named for the e2e that drives it: both this section and the clip's own
     // Adjust panel render a slider called "Brightness", so a spec asserting on
     // the regional one has to be able to say which panel it means.
-    <div data-local-adjusts className="space-y-3 border-t border-zinc-800 pt-3">
+    <div data-local-adjusts className="space-y-3 border-t border-hair pt-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
           {t('inspector.localAdjust')}
@@ -161,7 +161,7 @@ export function LocalAdjustSection({ clip }: { clip: Clip }) {
           <div
             key={region.id}
             className={`space-y-2 rounded-md border px-2 py-1.5 ${
-              open ? 'border-amber-600/50 bg-amber-700/15' : 'border-zinc-800 bg-zinc-900/40'
+              open ? 'border-amber-600/50 bg-amber-700/15' : 'border-hair bg-zinc-900/40'
             }`}
           >
             <div className="flex items-center gap-1.5">
@@ -213,7 +213,7 @@ export function LocalAdjustSection({ clip }: { clip: Clip }) {
               <>
                 <AdjustParams clip={clip} adjust={active} />
 
-                <div className="flex items-center gap-2 border-t border-zinc-800/70 pt-2">
+                <div className="flex items-center gap-2 border-t border-hair pt-2">
                   <span className="w-16 flex-none text-xs text-zinc-500">
                     {t('inspector.mask.shape')}
                   </span>

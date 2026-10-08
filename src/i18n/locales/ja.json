@@ -30,7 +30,7 @@
   "transport.timecode.goto": "指定の時間へ移動 · 分:秒.フレーム",
   "transport.total": "全体の長さ · クリックで残り時間",
   "transport.remaining": "残り時間 · クリックで全体の長さ",
-  "timeline.dropzone.title": "ここにクリップをドロップ · タイムラインに並び、すぐカットできます。",
+  "timeline.dropzone.title": "ここにクリップをドロップ。<dim>タイムラインに並び、すぐカットできます。</dim>",
   "timeline.dropzone.choose": "ファイルを選択",
   "timeline.hint": "次に：<kbd>Space</kbd> 再生 · <kbd>S</kbd> 分割 · <kbd>P</kbd> クイックズーム · <kbd>?</kbd> ショートカット一覧",
   "timeline.importing": "読み込み中…",

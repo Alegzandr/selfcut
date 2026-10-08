@@ -264,8 +264,8 @@ export function Scopes() {
   if (mode === 'off' || coarse) return null;
 
   return (
-    <div className="absolute right-2 top-2 z-20 w-56 overflow-hidden rounded-lg border border-zinc-700/70 bg-zinc-900/80 shadow-xl shadow-black/50 backdrop-blur">
-      <div className="flex items-center justify-between border-b border-zinc-800 px-2 py-1">
+    <div className="absolute right-2 top-2 z-20 w-56 overflow-hidden rounded-lg border border-hair-strong bg-zinc-900/80 shadow-xl shadow-black/50 backdrop-blur">
+      <div className="flex items-center justify-between border-b border-hair px-2 py-1">
         <span className="text-2xs font-medium uppercase tracking-wide text-zinc-400">
           {t(`preview.scopes.${mode}`)}
         </span>

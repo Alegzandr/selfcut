@@ -121,13 +121,13 @@ export function PreviewToolbar() {
   if (coarse) return null;
 
   return (
-    <div className="absolute left-2 top-2 z-20 flex items-center gap-0.5 rounded-lg border border-zinc-700/70 bg-zinc-900/70 p-0.5 backdrop-blur">
+    <div className="absolute left-2 top-2 z-20 flex items-center gap-0.5 rounded-lg border border-hair-strong bg-zinc-900/70 p-0.5 backdrop-blur">
       {TOOL_IDS.map((id) => (
         <ToolButton key={id} command={commands[id]} />
       ))}
       <ShapeToolButton />
       <PenToolButton />
-      <div className="mx-0.5 h-5 w-px bg-zinc-700/70" />
+      <div className="mx-0.5 h-5 w-px bg-hair-strong" />
       <GuidesMenuButton commands={commands} />
       <ToolButton command={commands['preview.resetView']} />
     </div>

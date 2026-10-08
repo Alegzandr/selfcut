@@ -30,7 +30,7 @@
   "transport.timecode.goto": "Zu einer Zeit springen · Minuten:Sekunden.Frame",
   "transport.total": "Gesamtdauer · klicken für die Restzeit",
   "transport.remaining": "Restzeit · klicken für die Gesamtdauer",
-  "timeline.dropzone.title": "Legen Sie Ihre Clips hier ab – sie werden auf der Timeline ausgerichtet und sind bereit zum Schneiden.",
+  "timeline.dropzone.title": "Legen Sie Ihre Clips hier ab. <dim>Sie reihen sich auf der Timeline auf, bereit zum Schneiden.</dim>",
   "timeline.dropzone.choose": "Wählen Sie Dateien aus",
   "timeline.hint": "Dann: <kbd>Space</kbd> Abspielen · <kbd>S</kbd> Teilen · <kbd>P</kbd> Schnellzoom · <kbd>?</kbd> alle Tastenkürzel",
   "timeline.importing": "Importieren…",

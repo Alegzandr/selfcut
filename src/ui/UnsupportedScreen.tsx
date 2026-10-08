@@ -8,7 +8,7 @@ export function UnsupportedScreen() {
     <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-zinc-950 p-8 text-center">
       <DesktopIcon className="h-14 w-14 text-zinc-500" />
       {/* APP_NAME is a brand: interpolated, never translated. */}
-      <h1 className="text-xl font-semibold text-zinc-100">{t('unsupported.title', { app: APP_NAME })}</h1>
+      <h1 className="title-display text-xl text-zinc-100">{t('unsupported.title', { app: APP_NAME })}</h1>
       {/* One sentence, one key: the emphasis spans are markup inside the translation,
           so translators keep control of the word order around them. */}
       <p className="max-w-md text-sm leading-relaxed text-zinc-400">

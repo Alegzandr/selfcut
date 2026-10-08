@@ -32,11 +32,12 @@ export function PerfOverlay() {
   }, []);
 
   useEffect(() => {
-    if (!open) {
+    if (!open) return;
+    const unsubscribe = subscribePerf(setSnap);
+    return () => {
+      unsubscribe();
       setSnap(null);
-      return;
-    }
-    return subscribePerf(setSnap);
+    };
   }, [open]);
 
   if (!open) return null;
@@ -47,11 +48,11 @@ export function PerfOverlay() {
 
   return (
     <div
-      className="pointer-events-auto absolute right-2 top-2 z-30 w-60 select-none rounded border border-zinc-700 bg-zinc-900/95 p-2 text-[10px] leading-relaxed text-zinc-300 shadow-lg"
+      className="pointer-events-auto absolute right-2 top-2 z-30 w-60 select-none rounded border border-hair-strong bg-zinc-900/95 p-2 text-[10px] leading-relaxed text-zinc-300 shadow-lg"
       role="status"
       aria-label="Performance"
     >
-      <div className="mb-1 flex items-center justify-between border-b border-zinc-700 pb-1">
+      <div className="mb-1 flex items-center justify-between border-b border-hair-strong pb-1">
         <span className="font-semibold tracking-wider text-zinc-100">PERF</span>
         <button
           className="rounded px-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
@@ -77,7 +78,7 @@ export function PerfOverlay() {
             detail={`of ${snap.frames} frames`}
             warn={overPct > 10}
           />
-          <div className="my-1 border-t border-zinc-800" />
+          <div className="my-1 border-t border-hair" />
           {snap.timings
             .filter((t) => t.name !== 'frame' && t.mean > 0.005)
             .slice(0, 7)
@@ -89,7 +90,7 @@ export function PerfOverlay() {
                 detail={`p95 ${t.p95.toFixed(1)}`}
               />
             ))}
-          <div className="my-1 border-t border-zinc-800" />
+          <div className="my-1 border-t border-hair" />
           {snap.counters
             .filter((c) => c.mean > 0)
             .slice(0, 6)
