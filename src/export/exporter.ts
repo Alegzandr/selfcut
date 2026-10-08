@@ -11,7 +11,9 @@ import { openExportScratch, readExportScratch } from '../lib/opfs';
 import { flushProjectSave } from '../lib/persistence';
 import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
 import { MasterChain } from './masterChain';
-import type { MasterNormalization } from '../lib/loudness';
+import { WavWriter } from './handoff/wav';
+import { disconnectedSourceNames, exportSpan } from './span';
+import { LoudnessMeter, type LoudnessResult, type MasterNormalization } from '../lib/loudness';
 import { clearRenderPreview, publishRenderFrame } from './renderPreviewBus';
 import { nextAttempt, retryReason, type ExportAttempt } from './retryPlan';
 import { perfEnabled, type PerfSnapshot } from '../perf/probe';
@@ -254,11 +256,8 @@ export function startExport(
     // Synchronous, so it does not cost the picker its user activation.
     flushProjectSave();
 
-    const projectMs = projectDurationMs(project);
-    if (projectMs <= 0) throw new Error(t('errors.export.emptyProject'));
-
-    const startMs = region ? Math.max(0, Math.min(region.startMs, projectMs)) : 0;
-    const durationMs = (region ? Math.min(region.endMs, projectMs) : projectMs) - startMs;
+    if (projectDurationMs(project) <= 0) throw new Error(t('errors.export.emptyProject'));
+    const { startMs, durationMs } = exportSpan(project, region);
     if (durationMs <= 0) {
       throw new Error(t('errors.export.emptyRegion'));
     }
@@ -267,15 +266,9 @@ export function startExport(
     // audio from the mp3 mix) when it reads the stale File: refuse upfront with
     // a clear message. Cheap scan, so it runs for every preset. Checked before
     // the save picker so a doomed export never asks where to put its output.
-    const disconnected = new Set<string>();
-    forEachProjectClip(project, (clip) => {
-      const asset = assets[clip.assetId];
-      if (asset?.disconnected) disconnected.add(asset.file.name);
-    });
-    if (disconnected.size > 0) {
-      throw new Error(
-        t('errors.export.disconnectedSources', { names: [...disconnected].join(', ') }),
-      );
+    const disconnected = disconnectedSourceNames(project, assets);
+    if (disconnected.length > 0) {
+      throw new Error(t('errors.export.disconnectedSources', { names: disconnected.join(', ') }));
     }
 
     // First await of the run: everything above is synchronous so the picker
@@ -727,6 +720,66 @@ function prepareAudioMix(
     { sampleRate: AUDIO_SAMPLE_RATE, channelCount: 2, totalFrames },
     normalize,
   );
+}
+
+/**
+ * The integrated loudness and sample peak of `project`'s mix over a span, as
+ * the export hears it: same scheduler, gains, mono downmix, pan, speed and
+ * effects. Null when nothing in the span is audible.
+ *
+ * What the auto-balance measures, so a clip is balanced on what it plays and
+ * not on its source file: a mono file is heard on both speakers, a downmixed
+ * one-sided recording at half its amplitude, and a compressor after the fader
+ * answers a volume change with less than the change.
+ */
+export async function measureMixLoudness(
+  project: Project,
+  assets: Record<string, MediaAsset>,
+  startMs: number,
+  durationMs: number,
+  isCanceled: () => boolean = () => false,
+): Promise<LoudnessResult | null> {
+  const mix = prepareAudioMix(project, assets, startMs, durationMs, false);
+  if (!mix) return null;
+  const meter = new LoudnessMeter(mix.info.sampleRate, mix.info.channelCount);
+  for (let offset = 0; offset < mix.info.totalFrames; offset += AUDIO_CHUNK_FRAMES) {
+    if (isCanceled()) return null;
+    const frames = Math.min(AUDIO_CHUNK_FRAMES, mix.info.totalFrames - offset);
+    const slice = await mix.render(offset, frames);
+    meter.process(slice.map((ch) => ch.subarray(0, frames)));
+  }
+  return meter.result();
+}
+
+/**
+ * Render the mix of `project` over a span as a 24-bit WAV, the way the export
+ * hears it: same scheduler, same clip and lane gains, same effects, and never
+ * the master normalization - a stem is raw material for someone else's mix.
+ *
+ * Resolves to null when nothing in the span is audible, so a caller rendering
+ * one stem per lane skips the silent ones instead of shipping empty files.
+ */
+export async function renderMixWav(
+  project: Project,
+  assets: Record<string, MediaAsset>,
+  startMs: number,
+  durationMs: number,
+  isCanceled: () => boolean,
+  onProgress?: (value: number) => void,
+): Promise<Blob | null> {
+  const mix = prepareAudioMix(project, assets, startMs, durationMs, false);
+  if (!mix) return null;
+  const wav = new WavWriter(mix.info.sampleRate, mix.info.channelCount);
+  let heard = false;
+  for (let offset = 0; offset < mix.info.totalFrames; offset += AUDIO_CHUNK_FRAMES) {
+    if (isCanceled()) throw new ExportCanceledError(t('errors.export.canceled'));
+    const frames = Math.min(AUDIO_CHUNK_FRAMES, mix.info.totalFrames - offset);
+    const slice = await mix.render(offset, frames);
+    if (!heard && !WavWriter.isSilent(slice)) heard = true;
+    wav.push(slice.map((ch) => ch.subarray(0, frames)));
+    onProgress?.(Math.min(1, (offset + frames) / mix.info.totalFrames));
+  }
+  return heard ? wav.finish() : null;
 }
 
 /**

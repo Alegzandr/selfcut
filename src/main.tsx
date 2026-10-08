@@ -6,7 +6,7 @@ import { registerCoopWorker } from './app/coop';
 import { warmMediabunny } from './media/mediabunnyModule';
 import { installGlobalErrorHandlers } from './app/globalErrors';
 import { ErrorBoundary } from './ui/ErrorBoundary';
-import i18n, { ensureLocale } from './i18n';
+import { loadInitialLocale } from './i18n';
 import './index.css';
 
 // Before anything else mounts: a throw during boot is exactly the kind of
@@ -57,4 +57,4 @@ function mount(): void {
 // Awaited before the first render so the editor never paints in the wrong
 // language, and never blocking for long: it is a few kilobytes fetched in
 // parallel with everything else the page is already loading.
-void ensureLocale(i18n.resolvedLanguage).finally(mount);
+void loadInitialLocale().finally(mount);

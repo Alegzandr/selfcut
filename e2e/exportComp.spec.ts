@@ -64,7 +64,7 @@ test('a pre-composed cut renders the same file as the flat one', async ({ page }
   await page.keyboard.press('Control+Shift+C');
   // The trail appearing is what says the editor really stepped inside: the clip
   // count alone cannot tell "inside the composition" from "never left the cut".
-  const trail = page.getByRole('navigation', { name: 'Composition path' });
+  const trail = page.getByRole('navigation', { name: 'Nest path' });
   await expect(trail).toBeVisible();
   await expect(page.locator('[data-clip-id]')).toHaveCount(6);
 

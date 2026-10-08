@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { useEnterMotion } from '../ui/motion';
 import { Trans, useTranslation } from 'react-i18next';
@@ -13,9 +13,12 @@ import { useStore } from '../store/store';
 import i18n from '../i18n';
 import { formatTime } from '../lib/time';
 import {
+  DOOR_GROUPS,
+  type ExportDoor,
   exportFileName,
   fpsCapBinds,
   presetSectionsForAspect,
+  stampedBaseName,
   projectSourceFps,
   resolveMp4Preset,
   ExportPreset,
@@ -43,6 +46,11 @@ import {
   ExportHandle,
 } from './exporter';
 import { setStoredNormalize, storedNormalize } from './exportPrefs';
+import { startHandoff } from './handoff/handoff';
+import { cleanName } from './handoff/folder';
+import { reviewProject, type ReviewIssue } from './review';
+import { ExportReview, type ReviewActions } from './ExportReview';
+import { forEachProjectClip } from '../model';
 import { MASTER_TARGET_LUFS, type MasterNormalization } from '../lib/loudness';
 import {
   estimateRemainingMs,
@@ -60,8 +68,17 @@ type Phase =
    * user and a progress bar that visibly went backwards for no reason.
    */
   | { kind: 'rendering'; progress: number; fallback?: ExportFallback }
-  /** `blob` is null when the render went straight to the file the user picked. */
-  | { kind: 'done'; filename: string; blob: Blob | null; normalization: MasterNormalization | null }
+  /**
+   * `blob` is null when the render went straight to the file the user picked.
+   * `stems` is set for an editor's folder: how many audio lanes it carries.
+   */
+  | {
+      kind: 'done';
+      filename: string;
+      blob: Blob | null;
+      normalization: MasterNormalization | null;
+      stems?: number;
+    }
   | { kind: 'error'; message: string };
 
 /**
@@ -139,6 +156,10 @@ export function ExportSheet() {
   const region = useStore((s) => s.loopRegion);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [group, setGroup] = useState<PresetGroup>('social');
+  /** A finished file to publish, or material for an editor to re-cut. */
+  const [door, setDoor] = useState<ExportDoor>('publish');
+  /** Whether the editor's folder carries the rushes, or only refers to them. */
+  const [includeRushes, setIncludeRushes] = useState(true);
   const [regionOnly, setRegionOnly] = useState(true);
   /**
    * Off by default, and deliberately not remembered between exports: the extra
@@ -155,25 +176,100 @@ export function ExportSheet() {
    */
   const [baseName, setBaseName] = useState('');
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
-  const handleRef = useRef<ExportHandle | null>(null);
+  const handleRef = useRef<Pick<ExportHandle, 'cancel'> | null>(null);
   // Set when the user cancels: the promise then rejects with "canceled", which
   // must land back on the idle screen, not on the error screen.
   const canceledRef = useRef(false);
+  /**
+   * Which run the sheet is showing. Bumped by every start and every cancel, so
+   * a run that is still winding down after a cancel - the editor's folder only
+   * stops between slices - can no longer move the bar, reset the screen or
+   * drop the handle of the run that replaced it.
+   */
+  const runRef = useRef(0);
 
   // Never empty: the audio presets fit every aspect ratio, and 'social' always
   // has the destination for this one.
-  const sections = presetSectionsForAspect(aspectRatio);
+  const sections = presetSectionsForAspect(aspectRatio).filter((s) => DOOR_GROUPS[door].includes(s.group));
   const active = sections.find((s) => s.group === group) ?? sections[0]!;
   // The pick is resolved inside the visible category, so switching category
   // falls back to its first preset and the CTA always names a row on screen -
   // while `selectedId` still remembers the choice made in another category.
+  // Behind the editor's door the folder is the first row, and the default.
+  const folderSelected =
+    door === 'handoff' && !active.presets.some((p) => p.id === selectedId);
   const selected = active.presets.find((p) => p.id === selectedId) ?? active.presets[0]!;
   const exportedRegion = region && regionOnly ? region : null;
-  const ext = selected.kind === 'mp3' ? 'mp3' : 'mp4';
-  const defaultBase = exportFileName(selected).replace(/\.[^.]+$/, '');
+  const ext = folderSelected ? 'zip' : selected.kind === 'mp3' ? 'mp3' : 'mp4';
+  const defaultBase = folderSelected
+    ? stampedBaseName('editor')
+    : exportFileName(selected).replace(/\.[^.]+$/, '');
+  // Material for an editor leaves raw: the master normalization moves the whole
+  // mix, and that is the editor's call to make, not the one handing over.
+  const effectiveNormalize = door === 'publish' && normalize;
+
+  // The last look before publishing. Only behind the Publish door: material
+  // for an editor is not a finished video, and its black gaps and missing
+  // captions are the editor's to decide. Only while the sheet is open: it is
+  // mounted for the whole session, and the project changes on every frame of
+  // a drag.
+  const reviewTarget =
+    !open || door !== 'publish'
+      ? null
+      : selected.kind === 'mp3'
+        ? 'audio'
+        : active.group === 'social'
+          ? 'social'
+          : 'video';
+  const issues = useMemo(
+    () =>
+      reviewTarget
+        ? reviewProject({ project, assets, region: exportedRegion, target: reviewTarget, normalize })
+        : [],
+    [project, assets, exportedRegion, reviewTarget, normalize],
+  );
+
+  const reviewActions: ReviewActions = {
+    fix: (issue: ReviewIssue) => {
+      const st = useStore.getState();
+      if (issue.id === 'uiZone' || issue.id === 'letterbox') st.applyClipFraming(issue.fixes);
+      if (issue.id === 'loudness') {
+        setNormalize(true);
+        setStoredNormalize(true);
+      }
+    },
+    show: (issue: ReviewIssue) => {
+      const st = useStore.getState();
+      close();
+      if (issue.id === 'disconnected') {
+        // The media library is where a missing source is reconnected.
+        st.setLibraryTab('media');
+        st.setLibraryOpen(true);
+      }
+      if (issue.id === 'blackGaps') st.seek(issue.gaps[0]!.startMs);
+      if (issue.id === 'uiZone') {
+        const first = issue.clipIds.find((id) => !issue.fixes.some((f) => f.clipId === id)) ?? issue.clipIds[0]!;
+        st.selectClip(first);
+        forEachProjectClip(st.project, (clip) => {
+          if (clip.id === first) st.seek(clip.timelineStartMs);
+        });
+      }
+      if (issue.id === 'noCaptions') {
+        // Auto-captions run on the selected clip: hand the pane a clip that
+        // talks, the first footage with sound on the cut.
+        let speaker: string | null = null;
+        forEachProjectClip(st.project, (clip) => {
+          if (!speaker && st.assets[clip.assetId]?.kind === 'video' && st.assets[clip.assetId]?.hasAudio) speaker = clip.id;
+        });
+        if (speaker) st.selectClip(speaker);
+        st.setInspectorTab('subtitles');
+        st.setInspectorOpen(true);
+      }
+    },
+  };
   // Characters no file system accepts, dropped rather than rejected: a save
   // dialog that refuses the name is worse than one that quietly fixes it.
-  const cleanBase = baseName.replace(/[\\/:*?"<>|]+/g, '').trim();
+  const cleanBase = cleanName(baseName);
   const fileName = `${cleanBase || defaultBase}.${ext}`;
   const { elapsedMs, remainingMs } = useRenderClock(
     phase.kind === 'rendering',
@@ -181,6 +277,7 @@ export function ExportSheet() {
   );
 
   const close = () => {
+    runRef.current++;
     canceledRef.current = true;
     handleRef.current?.cancel();
     handleRef.current = null;
@@ -202,32 +299,21 @@ export function ExportSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, phase.kind]);
 
-  const run = (preset: ExportPreset) => {
+  /** Start a run: the screen follows it until another run starts or it is canceled. */
+  const begin = () => {
+    const id = ++runRef.current;
     canceledRef.current = false;
     setPhase({ kind: 'rendering', progress: 0 });
-    const handle = startExport(
-      project,
-      assets,
-      preset,
-      (progress) =>
-        setPhase((p) => (p.kind === 'rendering' ? { ...p, kind: 'rendering', progress } : p)),
-      exportedRegion,
-      {
-        forceMaxFps,
-        normalize,
-        fileName,
-        onFallback: (fallback) =>
-          setPhase((p) => (p.kind === 'rendering' ? { ...p, fallback } : p)),
-      },
-    );
-    handleRef.current = handle;
-    handle.promise
-      .then(({ blob, filename, normalization }) => {
-        // Nothing to download when the worker streamed into the user's file.
-        if (blob) downloadBlob(blob, filename);
-        setPhase({ kind: 'done', filename, blob, normalization });
+    return () => runRef.current === id;
+  };
+
+  const settle = <T,>(promise: Promise<T>, isCurrent: () => boolean, onDone: (result: T) => void) =>
+    promise
+      .then((result) => {
+        if (isCurrent()) onDone(result);
       })
       .catch((err: unknown) => {
+        if (!isCurrent()) return;
         // User-initiated (cancel button, or dismissing the save picker): back
         // to idle, not an error.
         if (canceledRef.current || err instanceof ExportCanceledError) {
@@ -237,8 +323,55 @@ export function ExportSheet() {
         setPhase({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
       })
       .finally(() => {
-        handleRef.current = null;
+        if (isCurrent()) handleRef.current = null;
       });
+
+  const runFolder = () => {
+    const isCurrent = begin();
+    const handle = startHandoff(
+      project,
+      assets,
+      { baseName: cleanBase || defaultBase, region: exportedRegion, includeRushes },
+      (progress) => {
+        if (isCurrent()) setPhase((p) => (p.kind === 'rendering' ? { ...p, progress } : p));
+      },
+    );
+    handleRef.current = handle;
+    void settle(handle.promise, isCurrent, ({ blob, filename, stems }) => {
+      downloadBlob(blob, filename);
+      setPhase({ kind: 'done', filename, blob, normalization: null, stems });
+    });
+  };
+
+  const run = (preset: ExportPreset) => {
+    if (folderSelected) {
+      runFolder();
+      return;
+    }
+    const isCurrent = begin();
+    const handle = startExport(
+      project,
+      assets,
+      preset,
+      (progress) => {
+        if (isCurrent()) setPhase((p) => (p.kind === 'rendering' ? { ...p, kind: 'rendering', progress } : p));
+      },
+      exportedRegion,
+      {
+        forceMaxFps,
+        normalize: effectiveNormalize,
+        fileName,
+        onFallback: (fallback) => {
+          if (isCurrent()) setPhase((p) => (p.kind === 'rendering' ? { ...p, fallback } : p));
+        },
+      },
+    );
+    handleRef.current = handle;
+    void settle(handle.promise, isCurrent, ({ blob, filename, normalization }) => {
+      // Nothing to download when the worker streamed into the user's file.
+      if (blob) downloadBlob(blob, filename);
+      setPhase({ kind: 'done', filename, blob, normalization });
+    });
   };
 
   return (
@@ -265,7 +398,7 @@ export function ExportSheet() {
             role="dialog"
             aria-modal="true"
             aria-label={t('export.title')}
-            className="fixed inset-x-0 bottom-0 z-50 space-y-3 rounded-t-2xl border-t border-zinc-800 bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:bottom-8 md:w-[26rem] md:-translate-x-1/2 md:rounded-2xl md:border"
+            className="fixed inset-x-0 bottom-0 z-50 max-h-[calc(100dvh-1rem)] space-y-3 overflow-y-auto overscroll-contain rounded-t-2xl border-t border-zinc-800 bg-zinc-900 p-4 md:max-h-[calc(100dvh-4rem)] pb-[max(1rem,env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:bottom-8 md:w-[26rem] md:-translate-x-1/2 md:rounded-2xl md:border"
           >
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-zinc-100">{t('export.title')}</h2>
@@ -285,8 +418,35 @@ export function ExportSheet() {
 
             {phase.kind === 'idle' && (
               <>
+                {/* Two doors before any list: a finished file to post, or the
+                    cut handed to an editor. They want different things - a
+                    platform-ready level versus raw sound and the rushes - so
+                    each door only shows what serves its own goal. */}
+                <div className="grid grid-cols-2 gap-1.5" role="group" aria-label={t('export.door')}>
+                  {(['publish', 'handoff'] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      aria-pressed={door === d}
+                      onClick={() => {
+                        setDoor(d);
+                        setGroup(DOOR_GROUPS[d][0]!);
+                      }}
+                      className={`touch-hit rounded-xl border px-3 py-2 text-left ${
+                        door === d
+                          ? 'border-brand-600 bg-brand-700/25'
+                          : 'border-zinc-700 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'
+                      }`}
+                    >
+                      <span className="block text-sm font-medium text-zinc-100">{t(`export.door.${d}`)}</span>
+                      <span className="block text-2xs text-zinc-400">{t(`export.door.${d}.hint`)}</span>
+                    </button>
+                  ))}
+                </div>
+
                 {/* One category at a time: all three lists stacked would bury
                     everything but the platform presets under a scroll. */}
+                {sections.length > 1 && (
                 <div className="flex gap-1" role="group" aria-label={t('export.category')}>
                   {sections.map((section) => (
                     <button
@@ -304,10 +464,21 @@ export function ExportSheet() {
                     </button>
                   ))}
                 </div>
+                )}
 
                 {/* Still scrollable: a category fits on a desktop sheet, not on a
                     phone in landscape. */}
-                <div className="max-h-[min(30rem,52vh)] space-y-2 overflow-y-auto overscroll-contain pr-1">
+                <div className="max-h-[min(30rem,40vh)] space-y-2 overflow-y-auto overscroll-contain pr-1">
+                  {door === 'handoff' && (
+                    <button
+                      className={`block w-full rounded-xl border p-3 text-left ${folderSelected ? 'border-brand-600 bg-brand-700/25' : 'border-zinc-700 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'}`}
+                      onClick={() => setSelectedId(null)}
+                    >
+                      <div className="text-sm font-medium text-zinc-100">{t('handoff.folder.label')}</div>
+                      <div className="mt-0.5 text-xs text-zinc-400">{t('handoff.folder.description')}</div>
+                      <div className="mt-1 text-2xs text-zinc-500">{t('handoff.folder.hint')}</div>
+                    </button>
+                  )}
                   {active.presets.map((preset) => {
                     // Resolved per preset, not once for the sheet: a custom preset
                     // can pin its own frame rate (and with it, its bitrate), so
@@ -319,7 +490,7 @@ export function ExportSheet() {
                     return (
                       <button
                         key={preset.id}
-                        className={`block w-full rounded-xl border p-3 text-left ${selected.id === preset.id ? 'border-brand-600 bg-brand-700/25' : 'border-zinc-700 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'}`}
+                        className={`block w-full rounded-xl border p-3 text-left ${!folderSelected && selected.id === preset.id ? 'border-brand-600 bg-brand-700/25' : 'border-zinc-700 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800'}`}
                         onClick={() => setSelectedId(preset.id)}
                       >
                         <div className="text-sm font-medium text-zinc-100">
@@ -350,7 +521,22 @@ export function ExportSheet() {
                 {/* Only where it changes the outcome: over 120 fps rushes a
                     120 fps preset already encodes at 120, and asking would be a
                     question with one answer. */}
-                {selected.kind === 'mp4' && fpsCapBinds(selected, project, assets) && (
+                {folderSelected && (
+                  <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-xs text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={includeRushes}
+                      onChange={(e) => setIncludeRushes(e.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 accent-blue-400"
+                    />
+                    <span>
+                      {t('handoff.includeRushes')}
+                      <span className="mt-0.5 block text-2xs text-zinc-500">{t('handoff.includeRushes.hint')}</span>
+                    </span>
+                  </label>
+                )}
+
+                {!folderSelected && selected.kind === 'mp4' && fpsCapBinds(selected, project, assets) && (
                   <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-xs text-zinc-300">
                     <input
                       type="checkbox"
@@ -372,6 +558,11 @@ export function ExportSheet() {
                 {/* The master's level, not the clips': the volumes set on the
                     timeline stay as they are, and one gain over the sum lands
                     the file where the platforms play it untouched. */}
+                {door === 'handoff' ? (
+                  <p className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-2.5 text-2xs text-zinc-400">
+                    {t('handoff.rawSound')}
+                  </p>
+                ) : (
                 <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-xs text-zinc-300">
                   <input
                     type="checkbox"
@@ -389,6 +580,7 @@ export function ExportSheet() {
                     </span>
                   </span>
                 </label>
+                )}
 
                 <label className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950 px-2.5 py-2 text-xs text-zinc-300">
                   <span className="flex-none text-zinc-400">{t('export.fileName')}</span>
@@ -408,6 +600,8 @@ export function ExportSheet() {
                   />
                   <span className="flex-none text-zinc-500">.{ext}</span>
                 </label>
+
+                {reviewTarget && <ExportReview issues={issues} actions={reviewActions} />}
 
                 {region && (
                   <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs text-zinc-300">
@@ -429,9 +623,11 @@ export function ExportSheet() {
                   onClick={() => run(selected)}
                 >
                   <DownloadIcon className="h-4 w-4" />
-                  {t(exportedRegion ? 'export.cta.region' : 'export.cta', {
-                    preset: `${t(selected.labelKey)}${selected.qualityKey ? ` · ${t(selected.qualityKey)}` : ''}`,
-                  })}
+                  {folderSelected
+                    ? t(exportedRegion ? 'handoff.cta.region' : 'handoff.cta')
+                    : t(exportedRegion ? 'export.cta.region' : 'export.cta', {
+                        preset: `${t(selected.labelKey)}${selected.qualityKey ? ` · ${t(selected.qualityKey)}` : ''}`,
+                      })}
                 </button>
                 <p className="text-center text-2xs text-zinc-400">{t('export.privacy')}</p>
               </>
@@ -475,6 +671,7 @@ export function ExportSheet() {
                 <button
                   className="w-full rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
                   onClick={() => {
+                    runRef.current++;
                     canceledRef.current = true;
                     handleRef.current?.cancel();
                     handleRef.current = null;
@@ -497,6 +694,9 @@ export function ExportSheet() {
                     components={{ name: <span className="text-xs" /> }}
                   />
                 </p>
+                {phase.stems !== undefined && (
+                  <p className="text-2xs text-zinc-400">{t('handoff.done', { count: phase.stems })}</p>
+                )}
                 {phase.normalization && (
                   <p className="text-2xs tabular-nums text-zinc-400">
                     {t(

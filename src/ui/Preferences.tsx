@@ -12,7 +12,7 @@ import {
   MixerHorizontalIcon,
   TrashIcon,
 } from '@radix-ui/react-icons';
-import i18n, { LOCALES, type Locale } from '../i18n';
+import i18n, { LOCALES, setLocale, type Locale } from '../i18n';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
 import type { TimeFormat } from '../lib/time';
@@ -109,7 +109,7 @@ function GeneralTab() {
           className={SELECT_CLASS}
           aria-label={t('a11y.preferences.language')}
           value={currentLang}
-          onChange={(e) => void i18n.changeLanguage(e.target.value)}
+          onChange={(e) => void setLocale(e.target.value)}
         >
           {(Object.keys(LOCALES) as Locale[]).map((code) => (
             <option key={code} value={code}>

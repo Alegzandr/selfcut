@@ -8,6 +8,7 @@ import {
   ClipMask,
   ClipRedaction,
   ClipShape,
+  ClipTransform,
   ColorProp,
   MaskMotionProp,
   ProjectSummary,
@@ -514,6 +515,15 @@ export interface EditorState {
   updateClip: (clipId: string, patch: ClipPatch) => void;
   /** Same targeting as `updateClip`, committed as one history entry. */
   updateClipCommitted: (clipId: string, patch: ClipPatch) => void;
+  /**
+   * Reframe exactly these clips, as one undo step: each gets its transform,
+   * and a text clip its wrap width when one is given. Unlike
+   * `updateClipCommitted` it never spreads to the selection: a fix computed
+   * per clip (the pre-export review) must land on that clip alone.
+   */
+  applyClipFraming: (
+    entries: readonly { clipId: string; transform: ClipTransform; widthFrac?: number }[],
+  ) => void;
   /**
    * Set the volume of several clips at once, as ONE undo step. What the
    * auto-balance commits after measuring: one Ctrl+Z has to bring every clip
