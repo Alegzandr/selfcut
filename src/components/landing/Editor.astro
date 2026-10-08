@@ -500,10 +500,18 @@ const CUT_B = 62;
     border-left: 1px solid var(--line);
     font-size: 0.75em;
   }
+  /* The app's `title-display`: the clip name heads the inspector in Display. */
   .insp-title {
     padding-bottom: 0.5em;
-    font-weight: 600;
-    color: var(--zinc-100);
+    font-family: var(--font-display);
+    font-weight: 650;
+    letter-spacing: -0.012em;
+    color: var(--zinc-50);
+  }
+  .insp-title:lang(ja),
+  .insp-title:lang(zh),
+  .insp-title:lang(ko) {
+    letter-spacing: 0;
   }
   .row {
     display: flex;
@@ -570,7 +578,10 @@ const CUT_B = 62;
     background: var(--zinc-300);
   }
 
+  /* A top-level inspector group opens on a hair-strong rule, as in the app. */
   .insp-section {
+    margin-top: 0.5em;
+    border-top: 1px solid var(--line-strong);
     padding-top: 0.75em;
     padding-bottom: 0.15em;
     font-size: 0.85em;

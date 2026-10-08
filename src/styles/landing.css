@@ -10,6 +10,7 @@
      pixel-identical to the real thing - so both read from one set of values
      rather than from two eyeballed approximations. Keep in sync with the `@theme`
      block in `src/index.css` when the app's palette moves. */
+  --zinc-50: oklch(98.5% 0 0);
   --zinc-100: oklch(96.7% 0.001 286.375);
   --zinc-200: oklch(92% 0.004 286.32);
   --zinc-300: oklch(87.1% 0.006 286.286);
@@ -302,7 +303,7 @@ kbd {
   text-align: center;
   color: var(--zinc-100);
   background: var(--zinc-800);
-  border: 1px solid var(--zinc-700);
+  border: 1px solid var(--hair-strong);
   border-bottom-width: 2px;
   border-radius: 5px;
   padding: 0 0.4em;
