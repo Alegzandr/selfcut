@@ -47,6 +47,15 @@ const project = (clips: Clip[]): Project => ({
 });
 
 describe('cuesFromProject', () => {
+  it('reads a vertical bottom caption back as bottom, not as a thirds rule would', () => {
+    // 9:16 places its bottom captions at 0.62, above the feed's caption block:
+    // fixed thirds read that as "middle" and moved it on the next import.
+    const p: Project = { ...project([text('cue', 0, 1000, { transform: { crop: { x: 0, y: 0, w: 1, h: 1 }, x: 0.5, y: 0.62, scale: 1 } } as Partial<TextClip>)]), aspectRatio: '9:16' };
+    expect(sx.cuesFromProject(p)[0]).not.toHaveProperty('vAlign');
+    const middle: Project = { ...project([text('cue', 0, 1000, { transform: { crop: { x: 0, y: 0, w: 1, h: 1 }, x: 0.5, y: 0.5, scale: 1 } } as Partial<TextClip>)]), aspectRatio: '9:16' };
+    expect(sx.cuesFromProject(middle)[0]!.vAlign).toBe('middle');
+  });
+
   it('reads every text clip in timeline order, whatever lane it sits on', () => {
     const p: Project = {
       ...project([text('late', 5000, 6000)]),

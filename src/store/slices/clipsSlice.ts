@@ -1,7 +1,6 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { ClipPatch, EditorState } from '../editorState';
 import {
-  AspectRatio,
   Clip,
   ClipAnimation,
   Channel,
@@ -55,26 +54,9 @@ import {
 import { clamp } from '../../lib/time';
 import { announce } from '../../lib/a11yBus';
 import { MAX_CLIP_SPEED, MIN_CLIP_DURATION_MS, MIN_CLIP_SPEED } from '../../app/config';
-import type { SubtitleVAlign } from '../../lib/subtitles';
 
-/**
- * Where each vertical band puts a caption's centre, as a fraction of the output
- * height. Top and bottom keep a margin off the frame edge - a caption flush
- * against it reads as clipped, and players traditionally leave that room.
- *
- * How much room depends on the frame. Landscape follows the broadcast habit of
- * a tight lower third, near the bottom safe area; vertical and square sit
- * noticeably higher, because a phone player paints its own controls, caption
- * button and account handle over the last stretch of the frame and a subtitle
- * placed by broadcast rules ends up underneath them.
- */
-const CAPTION_Y: Record<AspectRatio, Record<SubtitleVAlign, number>> = {
-  '16:9': { top: 0.1, middle: 0.5, bottom: 0.88 },
-  '9:16': { top: 0.14, middle: 0.5, bottom: 0.82 },
-  '1:1': { top: 0.12, middle: 0.5, bottom: 0.85 },
-  '4:5': { top: 0.13, middle: 0.5, bottom: 0.83 },
-};
 import { t as translate } from '../../i18n';
+import { CAPTION_Y } from '../../model/captions';
 
 /**
  * Overlapping (and touching) spans folded into one, latest first.
@@ -167,6 +149,7 @@ export function createClipsSlice(
   | 'addShapeClip'
   | 'updateClip'
   | 'updateClipCommitted'
+  | 'setClipTransforms'
   | 'setClipVolumes'
   | 'updateClipTransformLive'
   | 'updateClipColorLive'
@@ -614,6 +597,16 @@ export function createClipsSlice(
             if ('velocity' in fields) partner.clip.velocity = fields.velocity;
             if ('velocityLocked' in fields) partner.clip.velocityLocked = fields.velocityLocked;
           }
+        }
+      });
+    },
+
+    setClipTransforms: (entries) => {
+      if (entries.length === 0) return;
+      withHistory((p) => {
+        for (const { clipId, transform } of entries) {
+          const found = findClip(p, clipId);
+          if (found) found.clip.transform = structuredClone(transform);
         }
       });
     },

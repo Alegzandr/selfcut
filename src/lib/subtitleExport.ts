@@ -1,5 +1,6 @@
 import { clipEndMs, isTextClip } from '../model';
-import type { Project, TextClip } from '../types';
+import { CAPTION_Y, captionBandOf } from '../model/captions';
+import type { AspectRatio, Project, TextClip } from '../types';
 import { downloadBlob } from './download';
 import { PROJECT_FILE_EXT, SaveCanceledError } from './projectFile';
 import {
@@ -30,15 +31,13 @@ const MIME: Record<SubtitleFormat, string> = {
 };
 
 /**
- * The band a clip's vertical position reads as. Mirrors the placement the
- * importer applies (see CAPTION_Y in the clips slice): thirds of the frame,
- * which is all a subtitle format can express anyway. The importer's exact
- * fractions vary with the project's aspect ratio, but every one of them lands
- * well inside its third, so the round trip holds whatever the frame.
+ * The band a clip's vertical position reads as: the nearest of the placements
+ * the importer applies on this frame (see `CAPTION_Y`), which is all a
+ * subtitle format can express anyway. Read against the project's own aspect
+ * ratio, so a cue round-trips to the band it came from whatever the frame.
  */
-function vAlignOf(clip: TextClip): SubtitleVAlign {
-  const y = clip.transform?.y ?? 0.82;
-  return y < 0.34 ? 'top' : y < 0.67 ? 'middle' : 'bottom';
+function vAlignOf(clip: TextClip, aspect: AspectRatio): SubtitleVAlign {
+  return captionBandOf(clip.transform?.y ?? CAPTION_Y[aspect].bottom, aspect);
 }
 
 /** Every text clip in the project as a cue, in timeline order. */
@@ -49,7 +48,7 @@ export function cuesFromProject(project: Project): SubtitleCue[] {
     .filter((clip) => clip.text.content.trim() !== '')
     .sort((a, b) => a.timelineStartMs - b.timelineStartMs)
     .map((clip) => {
-      const vAlign = vAlignOf(clip);
+      const vAlign = vAlignOf(clip, project.aspectRatio);
       return {
         startMs: clip.timelineStartMs,
         endMs: clipEndMs(clip),

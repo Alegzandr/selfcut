@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { socialChrome } from '../preview/guides';
+import { captionBandOf } from '../model/captions';
 import type { MediaAsset } from '../types';
 import { linkableSelection } from './projectOps';
 
@@ -396,9 +398,15 @@ describe('addSubtitleClips', () => {
     const vertical = captions()[0]!.transform!.y;
 
     expect(landscape).toBeGreaterThan(vertical);
-    // Both stay inside the bottom third, which is all a subtitle file can say.
-    for (const y of [landscape, vertical]) expect(y).toBeGreaterThan(0.67);
+    expect(landscape).toBeGreaterThan(0.67);
     expect(landscape).toBeLessThan(1);
+    // Vertical clears the feed's caption block (drawn from y = 0.68 by the
+    // platform guide), with room for a second line under the centre.
+    const block = socialChrome('9:16').find((r) => r.x === 0 && r.y > 0.5)!;
+    expect(vertical + 0.05).toBeLessThan(block.y);
+    // And both still read back as the bottom band.
+    expect(captionBandOf(landscape, '16:9')).toBe('bottom');
+    expect(captionBandOf(vertical, '9:16')).toBe('bottom');
   });
 
   it('leaves a loose .srt unlinked', () => {

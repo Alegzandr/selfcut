@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { useEnterMotion } from '../ui/motion';
 import { Trans, useTranslation } from 'react-i18next';
@@ -47,6 +47,9 @@ import {
 } from './exporter';
 import { setStoredNormalize, storedNormalize } from './exportPrefs';
 import { startHandoff } from './handoff/handoff';
+import { reviewProject, type ReviewIssue } from './review';
+import { ExportReview, type ReviewActions } from './ExportReview';
+import { forEachProjectClip } from '../model';
 import { MASTER_TARGET_LUFS, type MasterNormalization } from '../lib/loudness';
 import {
   estimateRemainingMs,
@@ -196,6 +199,53 @@ export function ExportSheet() {
   // Material for an editor leaves raw: the master normalization moves the whole
   // mix, and that is the editor's call to make, not the one handing over.
   const effectiveNormalize = door === 'publish' && normalize;
+
+  // The last look before publishing. Only behind the Publish door: material
+  // for an editor is not a finished video, and its black gaps and missing
+  // captions are the editor's to decide.
+  const reviewTarget =
+    door !== 'publish' ? null : selected.kind === 'mp3' ? 'audio' : active.group === 'social' ? 'social' : 'video';
+  const issues = useMemo(
+    () =>
+      reviewTarget
+        ? reviewProject({ project, assets, region: exportedRegion, target: reviewTarget, normalize })
+        : [],
+    [project, assets, exportedRegion, reviewTarget, normalize],
+  );
+
+  const reviewActions: ReviewActions = {
+    fix: (issue: ReviewIssue) => {
+      const st = useStore.getState();
+      if (issue.id === 'uiZone' || issue.id === 'letterbox') st.setClipTransforms(issue.fixes);
+      if (issue.id === 'loudness') {
+        setNormalize(true);
+        setStoredNormalize(true);
+      }
+    },
+    show: (issue: ReviewIssue) => {
+      const st = useStore.getState();
+      close();
+      if (issue.id === 'blackGaps') st.seek(issue.gaps[0]!.startMs);
+      if (issue.id === 'uiZone') {
+        const first = issue.clipIds.find((id) => !issue.fixes.some((f) => f.clipId === id)) ?? issue.clipIds[0]!;
+        st.selectClip(first);
+        forEachProjectClip(st.project, (clip) => {
+          if (clip.id === first) st.seek(clip.timelineStartMs);
+        });
+      }
+      if (issue.id === 'noCaptions') {
+        // Auto-captions run on the selected clip: hand the pane a clip that
+        // talks, the first footage with sound on the cut.
+        let speaker: string | null = null;
+        forEachProjectClip(st.project, (clip) => {
+          if (!speaker && st.assets[clip.assetId]?.kind === 'video' && st.assets[clip.assetId]?.hasAudio) speaker = clip.id;
+        });
+        if (speaker) st.selectClip(speaker);
+        st.setInspectorTab('subtitles');
+        st.setInspectorOpen(true);
+      }
+    },
+  };
   // Characters no file system accepts, dropped rather than rejected: a save
   // dialog that refuses the name is worse than one that quietly fixes it.
   const cleanBase = baseName.replace(/[\\/:*?"<>|]+/g, '').trim();
@@ -518,6 +568,8 @@ export function ExportSheet() {
                   />
                   <span className="flex-none text-zinc-500">.{ext}</span>
                 </label>
+
+                {reviewTarget && <ExportReview issues={issues} actions={reviewActions} />}
 
                 {region && (
                   <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs text-zinc-300">
