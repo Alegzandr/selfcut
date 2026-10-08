@@ -1,9 +1,10 @@
 import { useStore } from '../store/store';
 import { findClip, linkedPartnerIds } from '../store/projectOps';
-import { audioTrackForClip } from '../model';
-import { isTrackPlayable, type Clip, type MediaAsset, type Project } from '../types';
-import { measureClipLoudness } from '../media/clipLoudness';
+import { audioTrackForClip, clipEndMs, forEachTrackSet } from '../model';
+import { isTrackPlayable, type Clip, type MediaAsset, type Project, type Track } from '../types';
+import { measureMixLoudness } from '../export/exporter';
 import { balanceGain } from '../lib/loudness';
+import { MAX_DB, MIN_DB, dbToGain } from '../lib/gain';
 import { t } from '../i18n';
 
 /**
@@ -24,20 +25,21 @@ import { t } from '../i18n';
  */
 
 /**
- * The clip whose volume carries `clipId`'s sound: the audio member of its link
- * group when it has one (the video side is silent in the mix, so setting its
- * volume would balance nothing), else the clip itself. Scoped to the clip's
- * own composition through `linkedPartnerIds`.
+ * The clips whose volumes carry `clipId`'s sound: every audio member of its
+ * link group when it has some (the video side is silent in the mix, so setting
+ * its volume would balance nothing, and a camera with two mics brings two of
+ * them), else the clip itself. Scoped to the clip's own composition through
+ * `linkedPartnerIds`.
  */
-function audioClipFor(project: Project, clipId: string): Clip | null {
+function audioClipsFor(project: Project, clipId: string): Clip[] {
   const found = findClip(project, clipId);
-  if (!found) return null;
-  if (found.track.kind === 'audio' || !found.clip.linkId) return found.clip;
-  for (const pid of linkedPartnerIds(project, clipId)) {
-    const partner = findClip(project, pid);
-    if (partner && partner.track.kind === 'audio') return partner.clip;
-  }
-  return found.clip;
+  if (!found) return [];
+  if (!found.clip.linkId) return [found.clip];
+  const members = [found.clip.id, ...linkedPartnerIds(project, clipId)]
+    .map((id) => findClip(project, id))
+    .filter((f): f is NonNullable<typeof f> => !!f && f.track.kind === 'audio')
+    .map((f) => f.clip);
+  return members.length ? members : [found.clip];
 }
 
 /** Whether there is decodable sound behind a clip to measure. */
@@ -51,7 +53,20 @@ function measurable(clip: Clip, asset: MediaAsset | undefined): asset is MediaAs
 }
 
 /**
- * The clips an auto-balance aimed at `clipIds` will actually measure, deduped
+ * What one balance acts on: the clips that sound together as one shot (a
+ * link group's audio members) and get one common gain, so the balance between
+ * two mics of the same take survives.
+ */
+export interface BalanceTarget {
+  /** The first member: what the shot is named and reported by. */
+  clip: Clip;
+  asset: MediaAsset;
+  /** Every clip whose volume the balance writes, `clip` included. */
+  members: Clip[];
+}
+
+/**
+ * The shots an auto-balance aimed at `clipIds` will actually measure, deduped
  * and resolved to their audio side. Exported for the command's enabled flag,
  * so a menu row is greyed out exactly when pressing it would say "nothing to
  * measure".
@@ -60,17 +75,99 @@ export function balanceTargets(
   project: Project,
   assets: Record<string, MediaAsset>,
   clipIds: readonly string[],
-): { clip: Clip; asset: MediaAsset }[] {
+): BalanceTarget[] {
   const seen = new Set<string>();
-  const out: { clip: Clip; asset: MediaAsset }[] = [];
+  const out: BalanceTarget[] = [];
   for (const id of clipIds) {
-    const clip = audioClipFor(project, id);
-    if (!clip || seen.has(clip.id)) continue;
-    seen.add(clip.id);
-    const asset = assets[clip.assetId];
-    if (measurable(clip, asset)) out.push({ clip, asset });
+    const members = audioClipsFor(project, id).filter((c) => !seen.has(c.id) && measurable(c, assets[c.assetId]));
+    if (members.length === 0) continue;
+    for (const c of members) seen.add(c.id);
+    out.push({ clip: members[0]!, asset: assets[members[0]!.assetId]!, members });
   }
   return out;
+}
+
+/**
+ * The shot alone, as it plays: its clips at their volumes times `scale`, with
+ * their mono, pan, speed and effects, and nothing of the mix around them -
+ * no neighbours, no fades, no lane gain or lane effects, no mute or solo.
+ * Fades are a shape over time and the lane is the user's mix: the balance sets
+ * the level of the shot itself.
+ */
+export function isolateShot(
+  project: Project,
+  members: readonly Clip[],
+  scale: number,
+): { project: Project; startMs: number; durationMs: number } {
+  const ids = new Set(members.map((c) => c.id));
+  const tracks: Track[] = [];
+  forEachTrackSet(project, (set) => {
+    for (const track of set) {
+      const clips = track.clips
+        .filter((c) => ids.has(c.id))
+        .map((c) => ({ ...c, volume: c.volume * scale, fadeInMs: 0, fadeOutMs: 0 }));
+      if (clips.length) {
+        tracks.push({ ...track, clips, muted: false, solo: false, volume: 1, audioFx: undefined });
+      }
+    }
+  });
+  const startMs = Math.min(...members.map((c) => c.timelineStartMs));
+  const endMs = Math.max(...members.map(clipEndMs));
+  return { project: { ...project, tracks }, startMs, durationMs: endMs - startMs };
+}
+
+/** Passes before the balance settles for what it has: a compressor converges in two. */
+const MAX_PASSES = 4;
+/** Close enough to the target to stop measuring. */
+const SETTLED_DB = 0.1;
+
+/**
+ * Measure one shot as it plays and find the common gain that brings it to the
+ * target, or null when there is nothing audible to measure.
+ *
+ * Iterative because what follows the fader is not always linear: a compressor
+ * answers +6 dB at its input with +2 at its output, so the shot is measured
+ * again at the gain just found until it lands. The peak ceiling is read off
+ * the same render, so it is the peak that will actually play.
+ */
+async function balanceShot(
+  project: Project,
+  assets: Record<string, MediaAsset>,
+  members: readonly Clip[],
+): Promise<{ scale: number; limited: boolean } | null> {
+  let scale = 1;
+  let limited = false;
+  let measuredOnce = false;
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    const shot = isolateShot(project, members, scale);
+    const measured = await measureMixLoudness(shot.project, assets, shot.startMs, shot.durationMs);
+    // Silence, or nothing decodable: left where it is. Lifting an empty room
+    // by +12 dB is not balance.
+    if (!measured || !isFinite(measured.lufs)) return measuredOnce ? { scale, limited } : null;
+    measuredOnce = true;
+    const decision = balanceGain(measured);
+    if (!decision) return { scale, limited };
+    // `balanceGain` answers the gain from unity; relative to the render that
+    // is the change still needed.
+    const deltaDb = 20 * Math.log10(decision.gain);
+    limited = decision.limited;
+    if (Math.abs(deltaDb) < SETTLED_DB) break;
+    // The fader's own range bounds every member: past it, nothing more moves.
+    const loudest = Math.max(...members.map((c) => c.volume * scale));
+    const quietest = Math.min(...members.map((c) => c.volume * scale));
+    let next = deltaDb;
+    if (loudest > 0 && 20 * Math.log10(loudest) + next > MAX_DB) {
+      next = MAX_DB - 20 * Math.log10(loudest);
+      limited = true;
+    }
+    if (quietest > 0 && 20 * Math.log10(quietest) + next < MIN_DB) {
+      next = MIN_DB - 20 * Math.log10(quietest);
+      limited = true;
+    }
+    scale *= dbToGain(next);
+    if (Math.abs(next) < SETTLED_DB) break;
+  }
+  return { scale, limited };
 }
 
 /**
@@ -93,18 +190,21 @@ export async function balanceClipVolumes(clipIds: readonly string[]): Promise<vo
   state.setNotice(t('volume.balance.running', { count: targets.length }));
   try {
     const volumes: Record<string, number> = {};
+    let balanced = 0;
     let limited = 0;
-    for (const { clip, asset } of targets) {
-      const measured = await measureClipLoudness(asset, clip);
-      const decision = measured && balanceGain(measured);
-      // Silence, or nothing decodable: left where it is. Lifting an empty
-      // room by +12 dB is not balance.
-      if (!decision) continue;
-      volumes[clip.id] = decision.gain;
-      if (decision.limited) limited++;
+    for (const { members } of targets) {
+      const result = await balanceShot(state.project, state.assets, members);
+      if (!result) continue;
+      balanced++;
+      if (result.limited) limited++;
+      for (const clip of members) {
+        // Quantized to the 0.1 dB every fader stores, so the inspector reads
+        // back exactly what was set.
+        const db = Math.min(MAX_DB, Math.max(MIN_DB, 20 * Math.log10(clip.volume * result.scale)));
+        volumes[clip.id] = dbToGain(Math.round(db * 10) / 10);
+      }
     }
-    const count = Object.keys(volumes).length;
-    if (count === 0) {
+    if (balanced === 0) {
       useStore.getState().setError(t('errors.volume.balance.none'));
       return;
     }
@@ -113,8 +213,8 @@ export async function balanceClipVolumes(clipIds: readonly string[]): Promise<vo
       .getState()
       .setNotice(
         limited > 0
-          ? t('volume.balance.doneLimited', { count, limited })
-          : t('volume.balance.done', { count }),
+          ? t('volume.balance.doneLimited', { count: balanced, limited })
+          : t('volume.balance.done', { count: balanced }),
       );
   } catch (err) {
     console.warn('[volume] auto-balance failed:', err);

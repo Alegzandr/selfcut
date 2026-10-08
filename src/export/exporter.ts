@@ -13,7 +13,7 @@ import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
 import { MasterChain } from './masterChain';
 import { WavWriter } from './handoff/wav';
 import { disconnectedSourceNames, exportSpan } from './span';
-import type { MasterNormalization } from '../lib/loudness';
+import { LoudnessMeter, type LoudnessResult, type MasterNormalization } from '../lib/loudness';
 import { clearRenderPreview, publishRenderFrame } from './renderPreviewBus';
 import { nextAttempt, retryReason, type ExportAttempt } from './retryPlan';
 import { perfEnabled, type PerfSnapshot } from '../perf/probe';
@@ -720,6 +720,35 @@ function prepareAudioMix(
     { sampleRate: AUDIO_SAMPLE_RATE, channelCount: 2, totalFrames },
     normalize,
   );
+}
+
+/**
+ * The integrated loudness and sample peak of `project`'s mix over a span, as
+ * the export hears it: same scheduler, gains, mono downmix, pan, speed and
+ * effects. Null when nothing in the span is audible.
+ *
+ * What the auto-balance measures, so a clip is balanced on what it plays and
+ * not on its source file: a mono file is heard on both speakers, a downmixed
+ * one-sided recording at half its amplitude, and a compressor after the fader
+ * answers a volume change with less than the change.
+ */
+export async function measureMixLoudness(
+  project: Project,
+  assets: Record<string, MediaAsset>,
+  startMs: number,
+  durationMs: number,
+  isCanceled: () => boolean = () => false,
+): Promise<LoudnessResult | null> {
+  const mix = prepareAudioMix(project, assets, startMs, durationMs, false);
+  if (!mix) return null;
+  const meter = new LoudnessMeter(mix.info.sampleRate, mix.info.channelCount);
+  for (let offset = 0; offset < mix.info.totalFrames; offset += AUDIO_CHUNK_FRAMES) {
+    if (isCanceled()) return null;
+    const frames = Math.min(AUDIO_CHUNK_FRAMES, mix.info.totalFrames - offset);
+    const slice = await mix.render(offset, frames);
+    meter.process(slice.map((ch) => ch.subarray(0, frames)));
+  }
+  return meter.result();
 }
 
 /**
