@@ -974,5 +974,12 @@
   "shortcuts.edit.precompose": "Aninhar a seleção e abri-la",
   "shortcuts.edit.openComp": "Abrir o aninhamento selecionado",
   "shortcuts.edit.leaveComp": "Sair do aninhamento",
-  "shortcuts.key.enter": "Enter"
+  "shortcuts.key.enter": "Enter",
+  "inspector.group.sound": "Som",
+  "inspector.group.timing": "Tempo",
+  "inspector.group.framing": "Enquadramento",
+  "inspector.group.color": "Cor",
+  "inspector.group.colorAdvanced": "Avançado: curvas, tela verde",
+  "inspector.group.areas": "Áreas: desfocar, ajustar, mascarar",
+  "inspector.group.active": "Tem ajustes"
 }

@@ -974,5 +974,12 @@
   "shortcuts.edit.precompose": "Auswahl verschachteln und öffnen",
   "shortcuts.edit.openComp": "Ausgewählte Verschachtelung öffnen",
   "shortcuts.edit.leaveComp": "Verschachtelung verlassen",
-  "shortcuts.key.enter": "Enter"
+  "shortcuts.key.enter": "Enter",
+  "inspector.group.sound": "Ton",
+  "inspector.group.timing": "Timing",
+  "inspector.group.framing": "Bildausschnitt",
+  "inspector.group.color": "Farbe",
+  "inspector.group.colorAdvanced": "Erweitert: Kurven, Greenscreen",
+  "inspector.group.areas": "Bereiche: verwischen, anpassen, maskieren",
+  "inspector.group.active": "Enthält Einstellungen"
 }

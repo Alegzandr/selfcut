@@ -9,7 +9,7 @@ import { SubtitlesPanel } from './SubtitlesPanel';
 import { useCaptionJob } from '../media/captionJob';
 import { Tooltip } from '../ui/Tooltip';
 import { Clip } from '../types';
-import { isTextClip } from '../model';
+import { isTextClip, curvesAreIdentity } from '../model';
 import { useIsCoarsePointer } from '../lib/device';
 import { ResizeHandle } from '../ui/ResizeHandle';
 import { INSPECTOR_WIDTH_PX } from '../app/config';
@@ -31,6 +31,7 @@ import { RedactionSection } from './sections/RedactionSection';
 import { LocalAdjustSection } from './sections/LocalAdjustSection';
 import { TransitionSection } from './sections/TransitionSection';
 import { TrackFxPanel } from './TrackFxPanel';
+import { InspectorGroup } from './InspectorGroup';
 import { clipDisplayName } from '../ui/clipName';
 
 /**
@@ -205,6 +206,7 @@ export function Inspector() {
           ) : (
             clip && (
               <InspectorBody
+                key={clip.id}
                 clip={clip}
                 audioClip={audioClip ?? clip}
                 isVideo={pictureLayer}
@@ -236,6 +238,7 @@ export function Inspector() {
           ) : (
             clip && (
               <InspectorBody
+                key={clip.id}
                 clip={clip}
                 audioClip={audioClip ?? clip}
                 isVideo={pictureLayer}
@@ -269,6 +272,16 @@ function InspectorBody({
   const coarse = useIsCoarsePointer();
   const isText = clip.kind === 'text';
   const isShape = clip.kind === 'shape';
+  const picture = isVideo || isText || isShape;
+  // What each foldable group holds for this clip: a folded group with settings
+  // in it shows a dot, and one whose content grows opens itself.
+  const advancedActivity = (curvesAreIdentity(clip.color?.curves) ? 0 : 1) + (clip.color?.chromaKey ? 1 : 0);
+  const areasActivity = (clip.mask ? 1 : 0) + (clip.redactions?.length ?? 0) + (clip.localAdjusts?.length ?? 0);
+  const areaSelected = useStore(
+    (s) =>
+      (!!s.selectedRedactionId && !!clip.redactions?.some((r) => r.id === s.selectedRedactionId)) ||
+      (!!s.selectedLocalAdjustId && !!clip.localAdjusts?.some((r) => r.id === s.selectedLocalAdjustId)),
+  );
 
   return (
     <>
@@ -299,33 +312,69 @@ function InspectorBody({
       {clip.kind === 'solid' && <SolidSection clip={clip} />}
       {clip.kind === 'shape' && <ShapeSection clip={clip} />}
 
-      {hasAudio && <AudioSection clip={audioClip} />}
-      {!isText && <SpeedControl clip={clip} />}
-      <FadeSection clip={clip} />
-
-      {isVideo && (
-        <SliderRow
-          label={t('inspector.zoomAnim')}
-          value={clip.zoomEnd ?? 1}
-          min={0.5}
-          max={2}
-          step={0.05}
-          format={(v) => (v === 1 ? t('inspector.zoomAnim.off') : `→${Math.round(v * 100)}%`)}
-          entry={PERCENT_ENTRY}
-          // 1 is the "off" end of this slider: no push in, no pull out.
-          defaultValue={1}
-          onChange={(v) => updateClip(clip.id, { zoomEnd: v })}
-        />
+      {/* Grouped by what the user is trying to do, not by how it is built:
+          sound, timing, framing, colour, then the areas of the picture. */}
+      {hasAudio && (
+        <InspectorGroup id="sound" title={t('inspector.group.sound')}>
+          <AudioSection clip={audioClip} />
+        </InspectorGroup>
       )}
 
-      {(isVideo || isText || isShape) && <TransformSection clip={clip} isVideo={isVideo} />}
-      {(isVideo || isText || isShape) && <MaskSection clip={clip} />}
-      {(isVideo || isText || isShape) && <RedactionSection clip={clip} />}
-      {isVideo && <ColorSection clip={clip} />}
-      {(isVideo || isText || isShape) && <LocalAdjustSection clip={clip} />}
-      {isVideo && <CurvesSection clip={clip} />}
-      {isVideo && <ChromaSection clip={clip} />}
-      {(isVideo || isText || isShape) && <TransitionSection clip={clip} />}
+      <InspectorGroup id="timing" title={t('inspector.group.timing')}>
+        {!isText && <SpeedControl clip={clip} />}
+        <FadeSection clip={clip} />
+        {picture && <TransitionSection clip={clip} />}
+      </InspectorGroup>
+
+      {picture && (
+        <InspectorGroup id="framing" title={t('inspector.group.framing')}>
+          {isVideo && (
+            <SliderRow
+              label={t('inspector.zoomAnim')}
+              value={clip.zoomEnd ?? 1}
+              min={0.5}
+              max={2}
+              step={0.05}
+              format={(v) => (v === 1 ? t('inspector.zoomAnim.off') : `→${Math.round(v * 100)}%`)}
+              entry={PERCENT_ENTRY}
+              // 1 is the "off" end of this slider: no push in, no pull out.
+              defaultValue={1}
+              onChange={(v) => updateClip(clip.id, { zoomEnd: v })}
+            />
+          )}
+          <TransformSection clip={clip} isVideo={isVideo} />
+        </InspectorGroup>
+      )}
+
+      {isVideo && (
+        <InspectorGroup id="color" title={t('inspector.group.color')}>
+          <ColorSection clip={clip} />
+          <InspectorGroup
+            id="colorAdvanced"
+            title={t('inspector.group.colorAdvanced')}
+            defaultOpen={false}
+            activity={advancedActivity}
+            nested
+          >
+            <CurvesSection clip={clip} />
+            <ChromaSection clip={clip} />
+          </InspectorGroup>
+        </InspectorGroup>
+      )}
+
+      {picture && (
+        <InspectorGroup
+          id="areas"
+          title={t('inspector.group.areas')}
+          defaultOpen={false}
+          activity={areasActivity}
+          reveal={areaSelected}
+        >
+          <RedactionSection clip={clip} />
+          <LocalAdjustSection clip={clip} />
+          <MaskSection clip={clip} />
+        </InspectorGroup>
+      )}
     </>
   );
 }

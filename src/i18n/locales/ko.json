@@ -974,5 +974,12 @@
   "shortcuts.edit.precompose": "선택 항목을 중첩하고 열기",
   "shortcuts.edit.openComp": "선택한 중첩 열기",
   "shortcuts.edit.leaveComp": "중첩에서 나가기",
-  "shortcuts.key.enter": "Enter"
+  "shortcuts.key.enter": "Enter",
+  "inspector.group.sound": "사운드",
+  "inspector.group.timing": "타이밍",
+  "inspector.group.framing": "프레이밍",
+  "inspector.group.color": "색",
+  "inspector.group.colorAdvanced": "고급: 커브, 그린 스크린",
+  "inspector.group.areas": "영역: 흐림, 조정, 마스크",
+  "inspector.group.active": "설정 있음"
 }

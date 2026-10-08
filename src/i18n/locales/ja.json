@@ -974,5 +974,12 @@
   "shortcuts.edit.precompose": "選択範囲をネストして開く",
   "shortcuts.edit.openComp": "選択したネストを開く",
   "shortcuts.edit.leaveComp": "ネストから出る",
-  "shortcuts.key.enter": "Enter"
+  "shortcuts.key.enter": "Enter",
+  "inspector.group.sound": "サウンド",
+  "inspector.group.timing": "タイミング",
+  "inspector.group.framing": "フレーミング",
+  "inspector.group.color": "カラー",
+  "inspector.group.colorAdvanced": "詳細：カーブ、グリーンバック",
+  "inspector.group.areas": "エリア：ぼかし、調整、マスク",
+  "inspector.group.active": "設定あり"
 }

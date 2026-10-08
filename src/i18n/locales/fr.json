@@ -974,5 +974,12 @@
   "shortcuts.edit.precompose": "Imbriquer la sélection et l'ouvrir",
   "shortcuts.edit.openComp": "Ouvrir l'imbrication sélectionnée",
   "shortcuts.edit.leaveComp": "Quitter l'imbrication",
-  "shortcuts.key.enter": "Entrée"
+  "shortcuts.key.enter": "Entrée",
+  "inspector.group.sound": "Son",
+  "inspector.group.timing": "Temps",
+  "inspector.group.framing": "Cadrage",
+  "inspector.group.color": "Couleur",
+  "inspector.group.colorAdvanced": "Avancé : courbes, fond vert",
+  "inspector.group.areas": "Zones : flouter, régler, masquer",
+  "inspector.group.active": "Contient des réglages"
 }

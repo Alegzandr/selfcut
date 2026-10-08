@@ -974,5 +974,12 @@
   "shortcuts.edit.precompose": "嵌套所选内容并打开",
   "shortcuts.edit.openComp": "打开所选嵌套",
   "shortcuts.edit.leaveComp": "离开嵌套",
-  "shortcuts.key.enter": "Enter"
+  "shortcuts.key.enter": "Enter",
+  "inspector.group.sound": "声音",
+  "inspector.group.timing": "时间",
+  "inspector.group.framing": "构图",
+  "inspector.group.color": "颜色",
+  "inspector.group.colorAdvanced": "高级：曲线、绿幕",
+  "inspector.group.areas": "区域：模糊、调整、蒙版",
+  "inspector.group.active": "有设置"
 }

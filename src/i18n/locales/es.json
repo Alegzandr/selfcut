@@ -974,5 +974,12 @@
   "shortcuts.edit.precompose": "Anidar la selección y abrirla",
   "shortcuts.edit.openComp": "Abrir la anidación seleccionada",
   "shortcuts.edit.leaveComp": "Salir de la anidación",
-  "shortcuts.key.enter": "Intro"
+  "shortcuts.key.enter": "Intro",
+  "inspector.group.sound": "Sonido",
+  "inspector.group.timing": "Tiempo",
+  "inspector.group.framing": "Encuadre",
+  "inspector.group.color": "Color",
+  "inspector.group.colorAdvanced": "Avanzado: curvas, pantalla verde",
+  "inspector.group.areas": "Áreas: desenfocar, ajustar, enmascarar",
+  "inspector.group.active": "Tiene ajustes"
 }

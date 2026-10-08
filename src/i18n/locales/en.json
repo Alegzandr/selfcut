@@ -974,5 +974,12 @@
   "shortcuts.edit.precompose": "Nest the selection and open it",
   "shortcuts.edit.openComp": "Open the selected nest",
   "shortcuts.edit.leaveComp": "Leave the nest",
-  "shortcuts.key.enter": "Enter"
+  "shortcuts.key.enter": "Enter",
+  "inspector.group.sound": "Sound",
+  "inspector.group.timing": "Timing",
+  "inspector.group.framing": "Framing",
+  "inspector.group.color": "Colour",
+  "inspector.group.colorAdvanced": "Advanced: curves, green screen",
+  "inspector.group.areas": "Areas: blur, adjust, mask",
+  "inspector.group.active": "Has settings"
 }
