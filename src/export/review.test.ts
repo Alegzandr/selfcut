@@ -118,6 +118,11 @@ describe('reviewProject', () => {
     expect(issue && 'fixes' in issue && issue.fixes.map((f) => f.clipId)).toEqual(['cap']);
   });
 
+  it('reads a partly written transform over the defaults', () => {
+    const partial = title('cap', 0, 1000, 0.85, { transform: { y: 0.85 } as Clip['transform'] });
+    expect(ids(project([lane('t', [partial]), lane('v', [clip('c', 0, 1000)])]))).toContain('uiZone');
+  });
+
   it('only checks the platform interface when publishing to a platform', () => {
     const p = project([lane('t', [title('cap', 0, 1000, 0.82)]), lane('v', [clip('c', 0, 1000)])]);
     expect(ids(p, { target: 'video' })).not.toContain('uiZone');

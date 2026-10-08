@@ -179,7 +179,9 @@ export function reviewProject(input: ReviewInput): ReviewIssue[] {
       for (const track of visibleTracks) {
         for (const clip of track.clips) {
           if (!isTextClip(clip) || !overlaps(clip, startMs, endMs) || !clip.text.content.trim()) continue;
-          const t = clip.transform ?? DEFAULT_TRANSFORM;
+          // Merged over the defaults like the compositor does: a transform
+          // written field by field may lack x or y.
+          const t = { ...DEFAULT_TRANSFORM, ...clip.transform };
           const box = {
             x: t.x,
             y: t.y,
