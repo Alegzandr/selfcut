@@ -47,6 +47,7 @@ import {
 } from './exporter';
 import { setStoredNormalize, storedNormalize } from './exportPrefs';
 import { startHandoff } from './handoff/handoff';
+import { cleanName } from './handoff/folder';
 import { reviewProject, type ReviewIssue } from './review';
 import { ExportReview, type ReviewActions } from './ExportReview';
 import { forEachProjectClip } from '../model';
@@ -179,6 +180,13 @@ export function ExportSheet() {
   // Set when the user cancels: the promise then rejects with "canceled", which
   // must land back on the idle screen, not on the error screen.
   const canceledRef = useRef(false);
+  /**
+   * Which run the sheet is showing. Bumped by every start and every cancel, so
+   * a run that is still winding down after a cancel - the editor's folder only
+   * stops between slices - can no longer move the bar, reset the screen or
+   * drop the handle of the run that replaced it.
+   */
+  const runRef = useRef(0);
 
   // Never empty: the audio presets fit every aspect ratio, and 'social' always
   // has the destination for this one.
@@ -224,7 +232,7 @@ export function ExportSheet() {
   const reviewActions: ReviewActions = {
     fix: (issue: ReviewIssue) => {
       const st = useStore.getState();
-      if (issue.id === 'uiZone' || issue.id === 'letterbox') st.setClipTransforms(issue.fixes);
+      if (issue.id === 'uiZone' || issue.id === 'letterbox') st.applyClipFraming(issue.fixes);
       if (issue.id === 'loudness') {
         setNormalize(true);
         setStoredNormalize(true);
@@ -233,6 +241,11 @@ export function ExportSheet() {
     show: (issue: ReviewIssue) => {
       const st = useStore.getState();
       close();
+      if (issue.id === 'disconnected') {
+        // The media library is where a missing source is reconnected.
+        st.setLibraryTab('media');
+        st.setLibraryOpen(true);
+      }
       if (issue.id === 'blackGaps') st.seek(issue.gaps[0]!.startMs);
       if (issue.id === 'uiZone') {
         const first = issue.clipIds.find((id) => !issue.fixes.some((f) => f.clipId === id)) ?? issue.clipIds[0]!;
@@ -256,7 +269,7 @@ export function ExportSheet() {
   };
   // Characters no file system accepts, dropped rather than rejected: a save
   // dialog that refuses the name is worse than one that quietly fixes it.
-  const cleanBase = baseName.replace(/[\\/:*?"<>|]+/g, '').trim();
+  const cleanBase = cleanName(baseName);
   const fileName = `${cleanBase || defaultBase}.${ext}`;
   const { elapsedMs, remainingMs } = useRenderClock(
     phase.kind === 'rendering',
@@ -264,6 +277,7 @@ export function ExportSheet() {
   );
 
   const close = () => {
+    runRef.current++;
     canceledRef.current = true;
     handleRef.current?.cancel();
     handleRef.current = null;
@@ -285,9 +299,21 @@ export function ExportSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, phase.kind]);
 
-  const settle = (promise: Promise<unknown>) =>
+  /** Start a run: the screen follows it until another run starts or it is canceled. */
+  const begin = () => {
+    const id = ++runRef.current;
+    canceledRef.current = false;
+    setPhase({ kind: 'rendering', progress: 0 });
+    return () => runRef.current === id;
+  };
+
+  const settle = <T,>(promise: Promise<T>, isCurrent: () => boolean, onDone: (result: T) => void) =>
     promise
+      .then((result) => {
+        if (isCurrent()) onDone(result);
+      })
       .catch((err: unknown) => {
+        if (!isCurrent()) return;
         // User-initiated (cancel button, or dismissing the save picker): back
         // to idle, not an error.
         if (canceledRef.current || err instanceof ExportCanceledError) {
@@ -297,25 +323,24 @@ export function ExportSheet() {
         setPhase({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
       })
       .finally(() => {
-        handleRef.current = null;
+        if (isCurrent()) handleRef.current = null;
       });
 
   const runFolder = () => {
-    canceledRef.current = false;
-    setPhase({ kind: 'rendering', progress: 0 });
+    const isCurrent = begin();
     const handle = startHandoff(
       project,
       assets,
       { baseName: cleanBase || defaultBase, region: exportedRegion, includeRushes },
-      (progress) => setPhase((p) => (p.kind === 'rendering' ? { ...p, progress } : p)),
+      (progress) => {
+        if (isCurrent()) setPhase((p) => (p.kind === 'rendering' ? { ...p, progress } : p));
+      },
     );
     handleRef.current = handle;
-    void settle(
-      handle.promise.then(({ blob, filename, stems }) => {
-        downloadBlob(blob, filename);
-        setPhase({ kind: 'done', filename, blob, normalization: null, stems });
-      }),
-    );
+    void settle(handle.promise, isCurrent, ({ blob, filename, stems }) => {
+      downloadBlob(blob, filename);
+      setPhase({ kind: 'done', filename, blob, normalization: null, stems });
+    });
   };
 
   const run = (preset: ExportPreset) => {
@@ -323,31 +348,30 @@ export function ExportSheet() {
       runFolder();
       return;
     }
-    canceledRef.current = false;
-    setPhase({ kind: 'rendering', progress: 0 });
+    const isCurrent = begin();
     const handle = startExport(
       project,
       assets,
       preset,
-      (progress) =>
-        setPhase((p) => (p.kind === 'rendering' ? { ...p, kind: 'rendering', progress } : p)),
+      (progress) => {
+        if (isCurrent()) setPhase((p) => (p.kind === 'rendering' ? { ...p, kind: 'rendering', progress } : p));
+      },
       exportedRegion,
       {
         forceMaxFps,
         normalize: effectiveNormalize,
         fileName,
-        onFallback: (fallback) =>
-          setPhase((p) => (p.kind === 'rendering' ? { ...p, fallback } : p)),
+        onFallback: (fallback) => {
+          if (isCurrent()) setPhase((p) => (p.kind === 'rendering' ? { ...p, fallback } : p));
+        },
       },
     );
     handleRef.current = handle;
-    void settle(
-      handle.promise.then(({ blob, filename, normalization }) => {
-        // Nothing to download when the worker streamed into the user's file.
-        if (blob) downloadBlob(blob, filename);
-        setPhase({ kind: 'done', filename, blob, normalization });
-      }),
-    );
+    void settle(handle.promise, isCurrent, ({ blob, filename, normalization }) => {
+      // Nothing to download when the worker streamed into the user's file.
+      if (blob) downloadBlob(blob, filename);
+      setPhase({ kind: 'done', filename, blob, normalization });
+    });
   };
 
   return (
@@ -647,6 +671,7 @@ export function ExportSheet() {
                 <button
                   className="w-full rounded-xl border border-zinc-700 py-2 text-sm text-zinc-300 hover:bg-zinc-800/70 active:bg-zinc-800"
                   onClick={() => {
+                    runRef.current++;
                     canceledRef.current = true;
                     handleRef.current?.cancel();
                     handleRef.current = null;

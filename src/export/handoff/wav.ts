@@ -5,10 +5,15 @@
  * conversion and what a mix stem is expected to be: 16 bits would throw away
  * the headroom the editor is about to mix into, and 32-bit float is still
  * refused by a few tools. The samples arrive as the mixer renders them and
- * leave as byte parts, so a long stem never exists as one float array.
+ * leave as Blob parts, so a long stem never exists as one array.
  */
 export class WavWriter {
-  private readonly parts: Uint8Array<ArrayBuffer>[] = [];
+  /**
+   * One Blob per slice rather than the bytes themselves: a Blob can leave the
+   * JS heap (the browser backs large ones on disk), so an hour-long stem is not
+   * a gigabyte of live arrays waiting for `finish`.
+   */
+  private readonly parts: Blob[] = [];
   private frames = 0;
 
   constructor(
@@ -30,7 +35,7 @@ export class WavWriter {
         out[o++] = (v >> 16) & 0xff;
       }
     }
-    this.parts.push(out);
+    this.parts.push(new Blob([out]));
     this.frames += length;
   }
 

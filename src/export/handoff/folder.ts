@@ -6,12 +6,16 @@ import type { MediaAsset, Project, Track } from '../../types';
 export const cleanName = (s: string) => s.replace(/[\\/:*?"<>|]+/g, '').trim();
 
 /**
- * The name each used asset carries in the folder, unique: two rushes both
- * called IMG_0001.MOV from two cards must not overwrite one another.
+ * The name each used asset carries in the folder.
+ *
+ * When the rushes travel, names are made unique: two rushes both called
+ * IMG_0001.MOV from two cards must not overwrite one another in the ZIP, and
+ * the XML names the copy the folder holds. When they do not travel, the XML
+ * refers to the files the editor already has, so each keeps its own name, even
+ * a shared one - a "(2)" suffix would name a file that exists nowhere.
  *
  * A remuxed source is shipped as the file SelfCut actually holds when the
- * rushes travel, and referred to by its original name when they do not - the
- * editor relinks to the copy they already have.
+ * rushes travel, and referred to by its original name when they do not.
  */
 export function rushNames(
   assets: readonly MediaAsset[],
@@ -21,6 +25,10 @@ export function rushNames(
   const taken = new Set<string>();
   for (const asset of assets) {
     const raw = cleanName((includeRushes ? undefined : asset.originalSource?.name) ?? asset.file.name) || asset.id;
+    if (!includeRushes) {
+      out.set(asset.id, raw);
+      continue;
+    }
     const dot = raw.lastIndexOf('.');
     const stem = dot > 0 ? raw.slice(0, dot) : raw;
     const ext = dot > 0 ? raw.slice(dot) : '';

@@ -17,7 +17,8 @@ export interface ZipEntry {
   data: Blob;
 }
 
-const MAX_ZIP_BYTES = 0xffff_ffff;
+/** The most a ZIP without ZIP64 can hold: its sizes and offsets are 32-bit. */
+export const MAX_ZIP_BYTES = 0xffff_ffff;
 
 export class ZipTooLargeError extends Error {
   constructor() {

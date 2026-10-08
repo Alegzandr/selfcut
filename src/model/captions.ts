@@ -25,6 +25,19 @@ export const CAPTION_Y: Record<AspectRatio, Record<SubtitleVAlign, number>> = {
 };
 
 /**
+ * Wrap width of a generated caption, as a fraction of the output width, where
+ * the frame needs one narrower than a title's default.
+ *
+ * A vertical feed paints its like/comment/share column down the right edge
+ * (from x = 0.84 between y = 0.44 and 0.86, see `socialChrome`), right across
+ * the band a caption sits in. A centred box of 0.64 ends at 0.82, so a long
+ * line wraps before it reaches the buttons instead of running under them.
+ */
+export const CAPTION_WIDTH: Partial<Record<AspectRatio, number>> = {
+  '9:16': 0.64,
+};
+
+/**
  * The band a caption's vertical centre reads as on this frame: the nearest of
  * the three placements above. Nearest rather than fixed thirds, because the
  * placements are not thirds - a vertical bottom caption sits at 0.62, which a

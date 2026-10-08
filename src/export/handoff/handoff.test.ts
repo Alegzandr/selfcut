@@ -224,9 +224,14 @@ describe('buildXmeml', () => {
 });
 
 describe('rushNames', () => {
-  it('keeps two rushes with the same name apart', () => {
+  it('keeps two rushes with the same name apart when they travel', () => {
     const names = rushNames([asset('a', 'IMG_0001.MOV'), asset('b', 'img_0001.mov'), asset('c', 'x.mp4')], true);
     expect([...names.values()]).toEqual(['IMG_0001.MOV', 'img_0001 (2).mov', 'x.mp4']);
+  });
+
+  it('never invents a name for a file the editor already has', () => {
+    const names = rushNames([asset('a', 'IMG_0001.MOV'), asset('b', 'IMG_0001.MOV')], false);
+    expect([...names.values()]).toEqual(['IMG_0001.MOV', 'IMG_0001.MOV']);
   });
 
   it('refers to a remuxed source by the name the editor has, unless it travels', () => {

@@ -12,6 +12,7 @@ import { flushProjectSave } from '../lib/persistence';
 import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
 import { MasterChain } from './masterChain';
 import { WavWriter } from './handoff/wav';
+import { disconnectedSourceNames, exportSpan } from './span';
 import type { MasterNormalization } from '../lib/loudness';
 import { clearRenderPreview, publishRenderFrame } from './renderPreviewBus';
 import { nextAttempt, retryReason, type ExportAttempt } from './retryPlan';
@@ -255,11 +256,8 @@ export function startExport(
     // Synchronous, so it does not cost the picker its user activation.
     flushProjectSave();
 
-    const projectMs = projectDurationMs(project);
-    if (projectMs <= 0) throw new Error(t('errors.export.emptyProject'));
-
-    const startMs = region ? Math.max(0, Math.min(region.startMs, projectMs)) : 0;
-    const durationMs = (region ? Math.min(region.endMs, projectMs) : projectMs) - startMs;
+    if (projectDurationMs(project) <= 0) throw new Error(t('errors.export.emptyProject'));
+    const { startMs, durationMs } = exportSpan(project, region);
     if (durationMs <= 0) {
       throw new Error(t('errors.export.emptyRegion'));
     }
@@ -268,15 +266,9 @@ export function startExport(
     // audio from the mp3 mix) when it reads the stale File: refuse upfront with
     // a clear message. Cheap scan, so it runs for every preset. Checked before
     // the save picker so a doomed export never asks where to put its output.
-    const disconnected = new Set<string>();
-    forEachProjectClip(project, (clip) => {
-      const asset = assets[clip.assetId];
-      if (asset?.disconnected) disconnected.add(asset.file.name);
-    });
-    if (disconnected.size > 0) {
-      throw new Error(
-        t('errors.export.disconnectedSources', { names: [...disconnected].join(', ') }),
-      );
+    const disconnected = disconnectedSourceNames(project, assets);
+    if (disconnected.length > 0) {
+      throw new Error(t('errors.export.disconnectedSources', { names: disconnected.join(', ') }));
     }
 
     // First await of the run: everything above is synchronous so the picker

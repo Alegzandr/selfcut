@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { socialChrome } from '../preview/guides';
 import { captionBandOf } from '../model/captions';
-import type { MediaAsset } from '../types';
+import { textClearance } from '../export/review';
+import type { MediaAsset, TextClip } from '../types';
 import { linkableSelection } from './projectOps';
 
 /**
@@ -407,6 +408,10 @@ describe('addSubtitleClips', () => {
     // And both still read back as the bottom band.
     expect(captionBandOf(landscape, '16:9')).toBe('bottom');
     expect(captionBandOf(vertical, '9:16')).toBe('bottom');
+    // The vertical wrap box ends before the button column, so the review
+    // has nothing to say about a caption the app placed itself.
+    const cap = captions()[0]! as TextClip;
+    expect(textClearance('9:16', { x: cap.transform!.x, y: vertical, widthFrac: cap.text.widthFrac ?? 0.9 })).toBe('clear');
   });
 
   it('leaves a loose .srt unlinked', () => {

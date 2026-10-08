@@ -6,8 +6,9 @@ import { trackDisplayName } from '../../timeline/trackName';
 import { projectExportFps } from '../presets';
 import { ExportCanceledError, renderMixWav } from '../exporter';
 import { buildXmeml } from './xmeml';
-import { buildZip, ZipTooLargeError, type ZipEntry } from './zip';
+import { buildZip, MAX_ZIP_BYTES, ZipTooLargeError, type ZipEntry } from './zip';
 import { cleanName, rushNames, stemProject } from './folder';
+import { disconnectedSourceNames, exportSpan } from '../span';
 
 /**
  * "For my editor": the cut as a folder an editor on Premiere or DaVinci can
@@ -52,20 +53,12 @@ export function startHandoff(
 
   const promise = (async (): Promise<HandoffResult> => {
     flushProjectSave();
-    const projectMs = projectDurationMs(project);
-    if (projectMs <= 0) throw new Error(t('errors.export.emptyProject'));
-    const region = options.region;
-    const startMs = region ? Math.max(0, Math.min(region.startMs, projectMs)) : 0;
-    const durationMs = (region ? Math.min(region.endMs, projectMs) : projectMs) - startMs;
+    if (projectDurationMs(project) <= 0) throw new Error(t('errors.export.emptyProject'));
+    const { startMs, durationMs } = exportSpan(project, options.region);
     if (durationMs <= 0) throw new Error(t('errors.export.emptyRegion'));
-
-    const disconnected = new Set<string>();
-    forEachProjectClip(project, (clip) => {
-      const asset = assets[clip.assetId];
-      if (asset?.disconnected) disconnected.add(asset.file.name);
-    });
-    if (disconnected.size > 0) {
-      throw new Error(t('errors.export.disconnectedSources', { names: [...disconnected].join(', ') }));
+    const disconnected = disconnectedSourceNames(project, assets);
+    if (disconnected.length > 0) {
+      throw new Error(t('errors.export.disconnectedSources', { names: disconnected.join(', ') }));
     }
 
     const base = cleanName(options.baseName) || 'selfcut';
@@ -93,10 +86,19 @@ export function startHandoff(
     });
     onProgress(0.05);
 
+    // Refuse a folder that cannot fit before spending minutes on its stems:
+    // the rushes are known, and each stem is 48 kHz stereo 24-bit at most.
+    const lanesAudible = project.tracks.filter((track) => isTrackAudible(track, project.tracks));
+    const rushBytes = options.includeRushes
+      ? sequence.usedAssetIds.reduce((n, id) => n + (assets[id]?.file.size ?? 0), 0)
+      : 0;
+    const stemBytes = lanesAudible.length * (durationMs / 1000) * 48_000 * 2 * 3;
+    if (rushBytes + stemBytes > MAX_ZIP_BYTES) throw new Error(t('errors.handoff.tooLarge'));
+
     // One stem per root lane that the mix actually plays. A lane silenced by
     // mute or by someone else's solo is not in the mix, so not in the stems:
     // the stems must sum back to what the user hears.
-    const lanes = project.tracks.filter((track) => isTrackAudible(track, project.tracks));
+    const lanes = lanesAudible;
     const entries: ZipEntry[] = [];
     const STEM_SHARE = options.includeRushes ? 0.6 : 0.85;
     let stems = 0;

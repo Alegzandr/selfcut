@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Clip, MediaAsset, Project, Track } from '../types';
-import { blackGaps, clearOfZones, reviewProject, type ReviewInput } from './review';
+import { blackGaps, reviewProject, textClearance, type ReviewInput } from './review';
 
 function clip(id: string, startMs: number, durMs: number, extra: Partial<Clip> = {}): Clip {
   return {
@@ -78,19 +78,33 @@ describe('blackGaps', () => {
   });
 });
 
-describe('clearOfZones', () => {
-  it('lifts a vertical caption out of the feed caption block, towards the centre', () => {
-    const y = clearOfZones('9:16', 0.5, 0.82)!;
-    expect(y).toBeLessThan(0.68);
-    expect(clearOfZones('9:16', 0.5, y)).toBeNull();
+describe('textClearance', () => {
+  it('lifts a vertical caption out of the feed caption block and wraps it before the buttons', () => {
+    const way = textClearance('9:16', { x: 0.5, y: 0.82, widthFrac: 0.9 });
+    expect(way).not.toBe('clear');
+    const fixed = way as { y: number; widthFrac: number };
+    expect(fixed.y).toBeLessThan(0.68);
+    // The button column starts at x = 0.84: the box ends before it.
+    expect(0.5 + fixed.widthFrac / 2).toBeLessThan(0.84);
+    expect(textClearance('9:16', { x: 0.5, ...fixed })).toBe('clear');
+  });
+
+  it('agrees with where generated vertical captions are placed', () => {
+    expect(textClearance('9:16', { x: 0.5, y: 0.62, widthFrac: 0.64 })).toBe('clear');
+  });
+
+  it('flags a full-width text that runs under the side buttons, not only one centred under them', () => {
+    expect(textClearance('9:16', { x: 0.5, y: 0.6, widthFrac: 0.9 })).not.toBe('clear');
   });
 
   it('pushes a title out of the status bar downwards', () => {
-    expect(clearOfZones('9:16', 0.5, 0.05)).toBeGreaterThan(0.11);
+    const way = textClearance('9:16', { x: 0.5, y: 0.05, widthFrac: 0.6 }) as { y: number };
+    expect(way.y).toBeGreaterThan(0.11);
   });
 
-  it('leaves a centred title alone', () => {
-    expect(clearOfZones('9:16', 0.5, 0.5)).toBeNull();
+  it('leaves a centred title alone, and gives up rather than squeeze a text to nothing', () => {
+    expect(textClearance('9:16', { x: 0.5, y: 0.3, widthFrac: 0.9 })).toBe('clear');
+    expect(textClearance('9:16', { x: 0.8, y: 0.6, widthFrac: 0.5 })).toBeNull();
   });
 });
 

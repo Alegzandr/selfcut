@@ -56,7 +56,7 @@ import { announce } from '../../lib/a11yBus';
 import { MAX_CLIP_SPEED, MIN_CLIP_DURATION_MS, MIN_CLIP_SPEED } from '../../app/config';
 
 import { t as translate } from '../../i18n';
-import { CAPTION_Y } from '../../model/captions';
+import { CAPTION_WIDTH, CAPTION_Y } from '../../model/captions';
 
 /**
  * Overlapping (and touching) spans folded into one, latest first.
@@ -149,7 +149,7 @@ export function createClipsSlice(
   | 'addShapeClip'
   | 'updateClip'
   | 'updateClipCommitted'
-  | 'setClipTransforms'
+  | 'applyClipFraming'
   | 'setClipVolumes'
   | 'updateClipTransformLive'
   | 'updateClipColorLive'
@@ -601,12 +601,14 @@ export function createClipsSlice(
       });
     },
 
-    setClipTransforms: (entries) => {
+    applyClipFraming: (entries) => {
       if (entries.length === 0) return;
       withHistory((p) => {
-        for (const { clipId, transform } of entries) {
+        for (const { clipId, transform, widthFrac } of entries) {
           const found = findClip(p, clipId);
-          if (found) found.clip.transform = structuredClone(transform);
+          if (!found) continue;
+          found.clip.transform = structuredClone(transform);
+          if (widthFrac !== undefined && found.clip.kind === 'text') found.clip.text.widthFrac = widthFrac;
         }
       });
     },
@@ -1725,6 +1727,7 @@ export function createClipsSlice(
               sizeFrac: 0.05,
               bold: true,
               outline: true,
+              ...(CAPTION_WIDTH[p.aspectRatio] ? { widthFrac: CAPTION_WIDTH[p.aspectRatio] } : {}),
               // Left undefined when the file states nothing: centered captions.
               ...(cue.align ? { align: cue.align } : {}),
             },

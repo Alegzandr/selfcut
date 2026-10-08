@@ -92,7 +92,8 @@ a one-click fix or a button that takes you there.
 
 **Hand it to an editor.** The other export door makes material, not a final
 file: an editing folder with the timeline as XML (opens in Premiere Pro and
-DaVinci Resolve with every cut, track, speed and level, linked to the rushes),
+DaVinci Resolve with every cut, track, speed and level; point it once to the
+rushes and every clip relinks),
 one 24-bit WAV per track that makes sound, and the rushes themselves; or a
 video master (1080p, 4K, up to 120 fps). Sound behind that door always leaves
 raw, the final mix is the editor's.
