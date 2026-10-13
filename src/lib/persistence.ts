@@ -750,7 +750,12 @@ async function writeAssets(
       'readwrite',
     );
     if (ownerMissing) {
-      tx.objectStore(PROJECT_STORE).put({ ...project, updatedAt: Date.now() }, projectId);
+      // The project as it is now, not as it was when this save was queued: a
+      // save that waited behind a slower one would otherwise write back an
+      // older timeline over the debounced project save that already landed.
+      const live = useStore.getState().project;
+      const owner = live.id === projectId ? live : project;
+      tx.objectStore(PROJECT_STORE).put({ ...owner, updatedAt: Date.now() }, projectId);
     }
     const written = changed.map((asset) => putAsset(tx, asset, projectId, refs.get(asset.id) ?? null));
     // The asset itself goes now - the state is the library, and leaving its
