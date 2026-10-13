@@ -251,7 +251,18 @@ export async function generateCaptions(
   return new Promise<SubtitleCue[] | null>((resolve, reject) => {
     const cleanup = () => {
       w.removeEventListener('message', onMessage);
+      w.removeEventListener('error', onWorkerError);
+      w.removeEventListener('messageerror', onWorkerError);
       signal?.removeEventListener('abort', onAbort);
+    };
+    // The worker died (script failed to load, uncaught throw, out of memory) or
+    // a reply could not be deserialized: no 'result' is ever coming. Drop the
+    // worker so the next run starts a fresh one.
+    const onWorkerError = (e: Event) => {
+      cleanup();
+      w.terminate();
+      if (worker === w) worker = null;
+      reject(new Error((e as ErrorEvent).message || 'caption worker failed'));
     };
     const onMessage = (e: MessageEvent<CaptionReply>) => {
       const m = e.data;
@@ -269,10 +280,12 @@ export async function generateCaptions(
       // A transcription in flight cannot be cancelled cooperatively; drop the
       // worker so it stops, and the next run spins a fresh one (model still cached).
       w.terminate();
-      worker = null;
+      if (worker === w) worker = null;
       resolve(null);
     };
     w.addEventListener('message', onMessage);
+    w.addEventListener('error', onWorkerError);
+    w.addEventListener('messageerror', onWorkerError);
     signal?.addEventListener('abort', onAbort);
     const req: CaptionRequest = {
       type: 'transcribe',
@@ -352,6 +365,13 @@ export async function prefetchCaptionModel(
       else if (m.type === 'ready') done(resolve);
       else if (m.type === 'error') done(() => reject(captionError(m)));
     });
+    // A worker that dies never answers: settle instead of hanging forever.
+    const onWorkerError = (e: Event) =>
+      done(() =>
+        reject(new Error((e as ErrorEvent).message || 'caption worker failed')),
+      );
+    w.addEventListener('error', onWorkerError);
+    w.addEventListener('messageerror', onWorkerError);
     signal?.addEventListener('abort', onAbort);
     const req: CaptionRequest = { type: 'prefetch', model, handheld };
     w.postMessage(req);

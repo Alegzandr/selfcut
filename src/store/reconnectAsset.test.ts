@@ -9,6 +9,7 @@ import type { MediaAsset } from '../types';
  */
 
 const probed = vi.fn();
+const disposed = vi.fn();
 
 vi.mock('../media/probe', () => ({
   probeFile: (file: File, reuseId?: string) => probed(file, reuseId),
@@ -16,7 +17,8 @@ vi.mock('../media/probe', () => ({
 }));
 
 vi.mock('../media/mediaCache', () => ({
-  disposeAssetResources: () => undefined,
+  disposeAssetResources: (id: string) => disposed(id),
+  warmAudio: () => undefined,
   registerInput: () => undefined,
   resetStillFrame: () => undefined,
   disposeUnreachableAssets: () => undefined,
@@ -67,17 +69,24 @@ beforeEach(() => {
   s().resetProject();
   s().addAsset(videoAsset('v', 10_000));
   s().addClipFromAsset('v');
+  // After the reset above, which disposes the previous test's assets.
+  disposed.mockReset();
 });
 
 describe('reconnectAsset', () => {
   it('swaps the file under the same id, leaving clips linked and untouched', async () => {
     const before = mediaClip();
-    probed.mockResolvedValue({ asset: videoAsset('v', 10_000, 'renamed.mp4'), warning: null });
+    probed.mockResolvedValue({ asset: videoAsset('tmp', 10_000, 'renamed.mp4'), warning: null });
 
     await s().reconnectAsset('v', new File([], 'renamed.mp4'));
 
-    expect(probed).toHaveBeenCalledWith(expect.any(File), 'v');
+    // Probed under a scratch id, adopted under the original one.
+    expect(probed).toHaveBeenCalledWith(expect.any(File), undefined);
+    expect(s().assets.v!.id).toBe('v');
     expect(s().assets.v!.file.name).toBe('renamed.mp4');
+    // The old file's cached media is dropped, and so is the scratch probe's.
+    expect(disposed).toHaveBeenCalledWith('v');
+    expect(disposed).toHaveBeenCalledWith('tmp');
     expect(mediaClip().id).toBe(before.id);
     expect(mediaClip().sourceOutMs).toBe(before.sourceOutMs);
   });
@@ -103,12 +112,15 @@ describe('reconnectAsset', () => {
 
   it('keeps the original when the mismatch warning is declined', async () => {
     confirmResult = false;
-    probed.mockResolvedValue({ asset: videoAsset('v', 4000), warning: null });
+    probed.mockResolvedValue({ asset: videoAsset('tmp', 4000), warning: null });
 
     await s().reconnectAsset('v', new File([], 'short.mp4'));
 
     expect(s().assets.v!.durationMs).toBe(10_000);
     expect(mediaClip().sourceOutMs).toBe(10_000);
+    // The original's cache is left alone; only the scratch probe is released.
+    expect(disposed).not.toHaveBeenCalledWith('v');
+    expect(disposed).toHaveBeenCalledWith('tmp');
   });
 
   it('leaves a longer replacement alone: no clip is stretched', async () => {

@@ -52,8 +52,32 @@ export function resetStillFrame(assetId: string): void {
   stillPromises.delete(assetId);
 }
 
+/**
+ * Bumped every time an asset's resources are disposed. Work started before a
+ * disposal (a queued segment decode, a peaks pass, a thumbnail job) captures
+ * the generation it was started under and bails once it moved on, rather than
+ * calling `getInput` and re-creating - and leaking - an Input for an asset
+ * nobody holds any more. A counter rather than a "disposed" set because ids
+ * come back: a reopened project or a reconnected file reuses them.
+ */
+const generations = new Map<string, number>();
+
+/** Current resource generation of an asset; see `generations`. */
+export function assetGeneration(assetId: string): number {
+  return generations.get(assetId) ?? 0;
+}
+
+/** Thrown by `getInput` for work that outlived its asset's resources. */
+export class AssetDisposedError extends Error {
+  constructor(assetId: string) {
+    super(`asset ${assetId} was disposed`);
+    this.name = 'AssetDisposedError';
+  }
+}
+
 /** Release everything cached for an asset (decoder input, still frame, audio buffers, peaks). */
 export function disposeAssetResources(assetId: string): void {
+  generations.set(assetId, assetGeneration(assetId) + 1);
   inputs.get(assetId)?.dispose();
   inputs.delete(assetId);
   resetStillFrame(assetId);
@@ -62,12 +86,30 @@ export function disposeAssetResources(assetId: string): void {
   const prefix = `${assetId}#`;
   for (const key of [...audioEntries.keys()]) if (key.startsWith(prefix)) audioEntries.delete(key);
   for (const key of [...peaksPromises.keys()]) if (key.startsWith(prefix)) peaksPromises.delete(key);
+  for (const key of [...transcodedSources.keys()]) {
+    if (key.startsWith(prefix)) transcodedSources.delete(key);
+  }
+  primaryAliases.delete(assetId);
 }
 
-export async function getInput(asset: MediaAsset): Promise<Input> {
+/**
+ * The asset's decoder input, created on first use. `generation` is the one the
+ * caller's work was started under (default: now); a disposal since then makes
+ * this reject with `AssetDisposedError` instead of creating a new Input.
+ */
+export async function getInput(
+  asset: MediaAsset,
+  generation = assetGeneration(asset.id),
+): Promise<Input> {
+  if (assetGeneration(asset.id) !== generation) throw new AssetDisposedError(asset.id);
   const existing = inputs.get(asset.id);
   if (existing) return existing;
   const input = await createInput(asset.file);
+  // Disposed while the module loaded: nobody would ever dispose this one.
+  if (assetGeneration(asset.id) !== generation) {
+    input.dispose();
+    throw new AssetDisposedError(asset.id);
+  }
   // Two concurrent callers can both miss the map while awaiting the module;
   // the first one to land wins, and the loser's Input is disposed rather than
   // leaked - two Inputs on one file would hold two demuxers.
@@ -127,11 +169,37 @@ interface AudioEntry {
   lastUsedAt: number;
   /**
    * Set for PCM published by a transcode: the source track is undecodable, so
-   * dropping it does not cost a decode but a minutes-long ffmpeg conversion.
-   * Ranked last, exactly like the on-disk cache pins timeline footage.
+   * it is read back from the transcoded copy (`transcodedSources`) instead of
+   * decoded. Ranked last, exactly like the on-disk cache pins timeline footage.
    */
   pinned: boolean;
 }
+
+/**
+ * The whole PCM of a transcoded track, kept in a Blob (planar f32, one channel
+ * after another) so any evicted segment can be read back without the browser
+ * decoder - which cannot handle this track - and without holding the whole
+ * track as live AudioBuffers. Keyed by `audioKey`.
+ */
+interface TranscodedSource {
+  blob: Blob;
+  sampleRate: number;
+  numberOfChannels: number;
+  /** Frames per channel. */
+  length: number;
+}
+
+const transcodedSources = new Map<string, TranscodedSource>();
+
+/**
+ * Assets whose primary track IS a transcoded track (an audio-only import, say):
+ * the primary key reads that track's entries instead of a second copy of them.
+ */
+const primaryAliases = new Map<string, number>();
+
+/** Resolved by a decode that cannot run right now: not memoized, so it retries. */
+const UNAVAILABLE = Symbol('unavailable');
+type Loaded = AudioSegment | null | typeof UNAVAILABLE;
 
 /** Keyed by `${assetId}#${track}@${segmentIndex}` - see `segmentCacheKey`. */
 const audioEntries = new Map<string, AudioEntry>();
@@ -275,32 +343,77 @@ export function getAudioSegment(
   audioTrackIndex: number | undefined,
   index: number,
 ): Promise<AudioSegment | null> {
-  const key = segmentCacheKey(asset.id, audioTrackIndex, index);
+  const track = audioTrackIndex ?? primaryAliases.get(asset.id);
+  const key = segmentCacheKey(asset.id, track, index);
   const existing = audioEntries.get(key);
   if (existing) {
     existing.lastUsedAt = ++useStamp;
     return existing.promise;
   }
+  const generation = assetGeneration(asset.id);
+  let fromTranscode = false;
+  const loaded = enqueueDecode(audioKey(asset.id, track), async (): Promise<Loaded> => {
+    // Disposed while queued: the entry is gone, and decoding would only
+    // re-create the Input the disposal just released.
+    if (assetGeneration(asset.id) !== generation) return null;
+    // Checked when the job runs, not when it was queued: a transcode can have
+    // landed in between.
+    const source = transcodedSources.get(audioKey(asset.id, track));
+    if (source) {
+      fromTranscode = true;
+      return readTranscodedSegment(source, index);
+    }
+    return decodeGuarded(asset, track, index, key, generation);
+  });
   const entry: AudioEntry = {
-    promise: enqueueDecode(audioKey(asset.id, audioTrackIndex), () =>
-      decodeGuarded(asset, audioTrackIndex, index, key),
-    ),
+    promise: loaded.then((segment) => (segment === UNAVAILABLE ? null : segment)),
     value: null,
     bytes: 0,
     lastUsedAt: ++useStamp,
     pinned: false,
   };
   audioEntries.set(key, entry);
-  void entry.promise.then((segment) => {
+  void loaded.then((segment) => {
     // The entry can have been dropped while decoding (asset removed, or the
     // budget swept it): sizing a record nobody holds would resurrect it.
-    if (segment && audioEntries.get(key) === entry) {
+    if (audioEntries.get(key) !== entry) return;
+    // A temporary miss must not become a permanent null: ask again next time.
+    if (segment === UNAVAILABLE) {
+      audioEntries.delete(key);
+      return;
+    }
+    if (segment) {
       entry.value = segment;
       entry.bytes = audioBufferBytes(segment.buffer);
+      entry.pinned = fromTranscode;
       enforceAudioBudget(key);
     }
   });
   return entry.promise;
+}
+
+/** Read one grid-aligned segment back from a transcoded track's Blob. */
+async function readTranscodedSegment(source: TranscodedSource, index: number): Promise<Loaded> {
+  const startMs = segmentStartMs(index);
+  const from = Math.round((startMs / 1000) * source.sampleRate);
+  if (from >= source.length) return null;
+  const frames = Math.min(Math.round((SEGMENT_MS / 1000) * source.sampleRate), source.length - from);
+  try {
+    const target = new AudioBuffer({
+      length: frames,
+      numberOfChannels: source.numberOfChannels,
+      sampleRate: source.sampleRate,
+    });
+    for (let ch = 0; ch < source.numberOfChannels; ch++) {
+      const at = (ch * source.length + from) * 4;
+      const bytes = await source.blob.slice(at, at + frames * 4).arrayBuffer();
+      target.copyToChannel(new Float32Array(bytes), ch, 0);
+    }
+    return { buffer: target, startMs, index };
+  } catch {
+    // Out of memory, or the Blob could not be read: transient, retry later.
+    return UNAVAILABLE;
+  }
 }
 
 /**
@@ -333,6 +446,8 @@ export function prefetchAudioRange(
   fromMs: number,
   toMs: number,
 ): void {
+  // A missing file would only fail to decode, and memoize that failure.
+  if (asset.disconnected) return;
   for (const index of segmentIndexes(fromMs, toMs)) {
     void getAudioSegment(asset, audioTrackIndex, index).catch(() => null);
   }
@@ -353,8 +468,9 @@ export function peekAudioRange(
   toMs: number,
 ): AudioSegment[] {
   const out: AudioSegment[] = [];
+  const track = audioTrackIndex ?? primaryAliases.get(assetId);
   for (const index of segmentIndexes(fromMs, toMs)) {
-    const entry = audioEntries.get(segmentCacheKey(assetId, audioTrackIndex, index));
+    const entry = audioEntries.get(segmentCacheKey(assetId, track, index));
     if (!entry?.value) continue;
     entry.lastUsedAt = ++useStamp;
     out.push(entry.value);
@@ -377,14 +493,15 @@ async function decodeGuarded(
   audioTrackIndex: number | undefined,
   index: number,
   key: string,
-): Promise<AudioSegment | null> {
+  generation: number,
+): Promise<Loaded> {
   try {
-    return await decodeSegment(asset, audioTrackIndex, index);
+    return await decodeSegment(asset, audioTrackIndex, index, generation);
   } catch (err) {
     if (!(err instanceof AudioMemoryError)) return null;
     releaseReclaimable(key);
     try {
-      return await decodeSegment(asset, audioTrackIndex, index);
+      return await decodeSegment(asset, audioTrackIndex, index, generation);
     } catch (retryErr) {
       reportAudioMemory(asset, retryErr instanceof AudioMemoryError ? retryErr : err);
       return null;
@@ -396,9 +513,8 @@ async function decodeGuarded(
  * Drop every entry that can simply be decoded again, keeping `keep`.
  *
  * Deliberately not `enforceAudioBudget(0)`: that would take the pinned
- * transcoded PCM with it, and re-creating one of those is a minutes-long ffmpeg
- * conversion where re-decoding costs seconds. Freeing room for a decode must
- * not cost more than the decode it rescues.
+ * transcoded PCM with it, which is ranked last for a reason - the only copy it
+ * comes back from is the Blob it was published into.
  */
 function releaseReclaimable(keep: string): void {
   for (const [key, entry] of [...audioEntries]) {
@@ -469,7 +585,8 @@ async function decodeSegment(
   asset: MediaAsset,
   audioTrackIndex: number | undefined,
   index: number,
-): Promise<AudioSegment | null> {
+  generation: number,
+): Promise<Loaded> {
   if (!asset.hasAudio) return null;
   const startMs = segmentStartMs(index);
   // Entirely past the end of the source: nothing to decode, and a memoized null
@@ -477,9 +594,12 @@ async function decodeSegment(
   const spanMs = Math.min(SEGMENT_MS, asset.durationMs + SOURCE_SLACK_MS - startMs);
   if (spanMs <= 0) return null;
 
-  const input = await getInput(asset);
+  const input = await getInput(asset, generation);
   const track = await resolveAudioTrack(input, audioTrackIndex);
-  if (!track || !(await track.canDecode())) return null;
+  if (!track) return null;
+  // Not decodable (yet): a transcode can still make it so, and must not find
+  // a null memoized in its place.
+  if (!(await track.canDecode())) return UNAVAILABLE;
 
   const { AudioBufferSink } = await mediabunny();
   const sink = new AudioBufferSink(track);
@@ -562,11 +682,11 @@ export function warmAudio(asset: MediaAsset): void {
  * waveform) reads the cache, so this single injection makes the track audible
  * everywhere without any of them knowing a transcode happened.
  *
- * Sliced onto the same grid as a normal decode: the mix only ever asks for
- * segments, so a transcode publishing one long buffer would be inaudible. The
- * slices are pinned - unlike a decode, this PCM cannot be reconstructed by
- * asking the browser again, and the only way back is the minutes-long
- * conversion that produced it.
+ * The PCM is moved into a Blob that segments are read back from on demand,
+ * onto the same grid as a normal decode: unlike a decode, this sound cannot be
+ * reconstructed by asking the browser again, so an evicted segment must have
+ * somewhere to come back from short of the minutes-long conversion that
+ * produced it. Only the head is sliced eagerly, like `warmAudio`.
  *
  * Peaks are re-derived from the buffer here because `streamPeaks` decodes
  * through mediabunny, which is exactly what cannot handle this track.
@@ -578,33 +698,43 @@ export function setTranscodedAudio(
   { alsoPrimary = false }: { alsoPrimary?: boolean } = {},
 ): number[] {
   const peaks = peaksFromBuffer(buffer);
+  const key = audioKey(assetId, audioTrackIndex);
+  const channels: Float32Array<ArrayBuffer>[] = [];
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    channels.push(buffer.getChannelData(ch) as Float32Array<ArrayBuffer>);
+  }
+  transcodedSources.set(key, {
+    blob: new Blob(channels),
+    sampleRate: buffer.sampleRate,
+    numberOfChannels: buffer.numberOfChannels,
+    length: buffer.length,
+  });
   // A clip that pins no track reads the cache under the "primary" key, which is
   // deliberately distinct from '#0'. When this IS the source's only track, the
-  // two address the same sound, so publish under both or such a clip (any
-  // audio-only import) would stay silent after its transcode.
-  const tracks: (number | undefined)[] = alsoPrimary
-    ? [audioTrackIndex, undefined]
-    : [audioTrackIndex];
-  const durationMs = (buffer.length / buffer.sampleRate) * 1000;
-  let lastKey = '';
-  for (const track of tracks) {
-    for (const index of segmentIndexes(0, durationMs)) {
-      const segment = sliceSegment(buffer, index);
-      if (!segment) continue;
-      lastKey = segmentCacheKey(assetId, track, index);
-      audioEntries.set(lastKey, {
-        promise: Promise.resolve(segment),
-        value: segment,
-        bytes: audioBufferBytes(segment.buffer),
-        lastUsedAt: ++useStamp,
-        pinned: true,
-      });
-    }
+  // two address the same sound: alias the primary onto this track, so such a
+  // clip (any audio-only import) is audible without a second copy of the PCM.
+  if (alsoPrimary) primaryAliases.set(assetId, audioTrackIndex);
+  // Whatever was memoized before (nulls for a track that could not decode) is
+  // stale now: drop it so the next request reads the transcoded copy.
+  const stale = [`${key}@`, ...(alsoPrimary ? [`${audioKey(assetId)}@`] : [])];
+  for (const k of [...audioEntries.keys()]) {
+    if (stale.some((prefix) => k.startsWith(prefix))) audioEntries.delete(k);
+  }
+  for (const track of alsoPrimary ? [audioTrackIndex, undefined] : [audioTrackIndex]) {
     peaksPromises.set(audioKey(assetId, track), Promise.resolve(peaks));
   }
-  // Every slice is in before the budget is asked to rank them: sweeping between
-  // two of them could drop one half of a track that was just published whole.
-  enforceAudioBudget(lastKey);
+  const head = sliceSegment(buffer, 0);
+  if (head) {
+    const headKey = segmentCacheKey(assetId, audioTrackIndex, 0);
+    audioEntries.set(headKey, {
+      promise: Promise.resolve(head),
+      value: head,
+      bytes: audioBufferBytes(head.buffer),
+      lastUsedAt: ++useStamp,
+      pinned: true,
+    });
+    enforceAudioBudget(headKey);
+  }
   return peaks;
 }
 
@@ -682,7 +812,7 @@ export function getPeaks(
   const key = audioKey(asset.id, audioTrackIndex);
   let promise = peaksPromises.get(key);
   if (!promise) {
-    promise = streamPeaks(asset, audioTrackIndex).catch(() => null);
+    promise = streamPeaks(asset, audioTrackIndex, assetGeneration(asset.id)).catch(() => null);
     peaksPromises.set(key, promise);
   }
   return promise;
@@ -694,10 +824,11 @@ export function getPeaks(
  */
 async function streamPeaks(
   asset: MediaAsset,
-  audioTrackIndex?: number,
+  audioTrackIndex: number | undefined,
+  generation: number,
 ): Promise<number[] | null> {
   if (!asset.hasAudio) return null;
-  const input = await getInput(asset);
+  const input = await getInput(asset, generation);
   const track = await resolveAudioTrack(input, audioTrackIndex);
   if (!track || !(await track.canDecode())) return null;
 
@@ -708,6 +839,8 @@ async function streamPeaks(
   const out = new Array<number>(bins).fill(0);
 
   for await (const wrapped of sink.buffers()) {
+    // Disposed mid-pass: stop reading through an Input that is gone.
+    if (assetGeneration(asset.id) !== generation) return null;
     const data = wrapped.buffer.getChannelData(0);
     const sr = wrapped.buffer.sampleRate;
     // Sampling every few frames is plenty for a visual envelope.

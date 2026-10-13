@@ -328,10 +328,42 @@ export class FFmpegCanceled extends Error {
  */
 let queue: Promise<unknown> = Promise.resolve();
 
+/** Jobs queued or running; the instance is only released at zero. */
+let pending = 0;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * How long an idle instance is kept. A wasm heap never shrinks: after one
+ * episode-length transcode it stays at its peak size for as long as the worker
+ * lives. Kept a little while so a batch of jobs reuses it, then released - the
+ * next job re-instantiates from the cached blob: URLs, it downloads nothing.
+ */
+const IDLE_RELEASE_MS = 30_000;
+
+function releaseWhenIdle(): void {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    if (pending > 0 || !ffmpegPromise) return;
+    const instance = ffmpegPromise;
+    discardFFmpeg();
+    void instance.then(({ ffmpeg }) => ffmpeg.terminate()).catch(() => undefined);
+  }, IDLE_RELEASE_MS);
+}
+
 function enqueue<T>(run: () => Promise<T>): Promise<T> {
+  pending++;
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
   // Runs on both settle paths: a job that failed must not block the next one.
   const next = queue.then(run, run);
-  queue = next.catch(() => undefined);
+  queue = next
+    .catch(() => undefined)
+    .finally(() => {
+      if (--pending === 0) releaseWhenIdle();
+    });
   return next;
 }
 
@@ -469,6 +501,13 @@ export function runFFmpegJob({
         await ffmpeg.deleteFile(output).catch(() => undefined);
       }
       return result;
+    } catch (err) {
+      // A failed job (non-zero exit, a read that threw) can leave partial
+      // outputs behind in the in-memory filesystem the instance keeps.
+      if (!signal?.aborted) {
+        for (const output of outputs) await ffmpeg.deleteFile(output).catch(() => undefined);
+      }
+      throw err;
     } finally {
       ffmpeg.off('progress', onFFmpegProgress);
       signal?.removeEventListener('abort', abort);

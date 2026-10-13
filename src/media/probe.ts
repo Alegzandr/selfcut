@@ -5,6 +5,7 @@ import { AudioTrackInfo, MediaAsset, isTrackPlayable } from '../types';
 import { uid } from '../lib/id';
 import { IMAGE_CLIP_DEFAULT_MS } from '../app/config';
 import {
+  assetGeneration,
   createInput,
   expectedPeakBins,
   getInput,
@@ -170,6 +171,23 @@ export async function probeFile(
     }
   }
 
+  try {
+    return await describeReadableInput(file, input, reuseId, originalSource);
+  } catch (err) {
+    // Every exit before the input is registered must release it, a throw from
+    // one of the probes below included - nothing else holds it.
+    input.dispose();
+    throw err;
+  }
+}
+
+/** Probe what a readable input carries into an asset; registers the input on success. */
+async function describeReadableInput(
+  file: File,
+  input: Input,
+  reuseId: string | undefined,
+  originalSource: MediaAsset['originalSource'],
+): Promise<ProbeResult> {
   const videoTrack = await input.getPrimaryVideoTrack();
   const audioTracks = await probeAudioTracks(input);
   // Header-only, so it costs a couple of reads and never blocks on a decoder.
@@ -178,12 +196,10 @@ export async function probeFile(
   const playableAudio = audioTracks.filter(isTrackPlayable);
   const skippedCodecs = undecodableCodecs(audioTracks);
   if (!videoTrack && audioTracks.length === 0) {
-    input.dispose();
     throw new Error(t('errors.media.noTrack', { name: file.name }));
   }
   const videoDecodable = videoTrack ? await videoTrack.canDecode() : false;
   if (videoTrack && !videoDecodable && playableAudio.length === 0) {
-    input.dispose();
     throw new Error(
       t('errors.media.undecodableVideo', { name: file.name, codec: videoTrack.codec ?? '?' }),
     );
@@ -194,7 +210,6 @@ export async function probeFile(
 
   const durationMs = (await input.computeDuration()) * 1000;
   if (!isFinite(durationMs) || durationMs <= 0) {
-    input.dispose();
     throw new Error(t('errors.media.invalidDuration', { name: file.name }));
   }
 
@@ -213,6 +228,8 @@ export async function probeFile(
     thumbnails: [],
   };
 
+  // Nothing below may throw: from here on the cache owns (and disposes) the
+  // input, so the caller's catch must not dispose it as well.
   registerInput(asset.id, input);
 
   if (decodableVideo) {
@@ -326,16 +343,17 @@ export function ensureAssetVisuals(asset: MediaAsset, sink: AssetVisualsSink): v
   if (asset.kind === 'video' && asset.thumbnails.length < targetThumbnailCount(asset.durationMs)) {
     void trackVisualJob(
       thumbnailsJobKey(asset.id),
-      extractAssetThumbnails(asset).then((thumbs) => {
+      extractAssetThumbnails(asset, assetGeneration(asset.id)).then((thumbs) => {
         if (thumbs.length) sink.setAssetThumbnails(asset.id, thumbs);
       }),
     );
   }
 }
 
-async function extractAssetThumbnails(asset: MediaAsset): Promise<string[]> {
+async function extractAssetThumbnails(asset: MediaAsset, generation: number): Promise<string[]> {
   try {
-    const track = await (await getInput(asset)).getPrimaryVideoTrack();
+    // Rejects (into the catch) when the asset was disposed since this was queued.
+    const track = await (await getInput(asset, generation)).getPrimaryVideoTrack();
     if (!track) return [];
     const count = targetThumbnailCount(asset.durationMs);
     const timestamps = Array.from(

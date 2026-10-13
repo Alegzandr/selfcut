@@ -705,7 +705,25 @@ async function writeProject(project: Project): Promise<void> {
   }
 }
 
-async function syncAssets(
+/**
+ * Library saves run one after another. Each one is a diff against the state
+ * before it, and one that copies a large file into the storage folder can take
+ * a while: run concurrently, a slow save committing after a newer one would
+ * write back an asset the newer one had removed.
+ */
+let assetSyncQueue: Promise<void> = Promise.resolve();
+
+function syncAssets(
+  next: Record<string, MediaAsset>,
+  prev: Record<string, MediaAsset>,
+  project: Project,
+): Promise<void> {
+  // `writeAssets` reports its own failures and never rejects.
+  assetSyncQueue = assetSyncQueue.then(() => writeAssets(next, prev, project));
+  return assetSyncQueue;
+}
+
+async function writeAssets(
   next: Record<string, MediaAsset>,
   prev: Record<string, MediaAsset>,
   project: Project,

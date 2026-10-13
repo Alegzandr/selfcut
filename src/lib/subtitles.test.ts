@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatSubtitles, parseSubtitles, isSubtitleFile } from './subtitles';
+import { decodeSubtitleBytes, formatSubtitles, parseSubtitles, isSubtitleFile } from './subtitles';
 
 describe('isSubtitleFile', () => {
   it('matches .srt and .vtt case-insensitively', () => {
@@ -195,5 +195,58 @@ describe('formatSubtitles', () => {
     ];
     expect(parseSubtitles(formatSubtitles(placed, 'srt'))).toEqual(placed);
     expect(parseSubtitles(formatSubtitles(placed, 'vtt'))).toEqual(placed);
+  });
+});
+
+describe('formatSubtitles - unsafe cue text', () => {
+  it('drops blank lines inside a cue, which would otherwise end it early', () => {
+    const cues = [{ startMs: 0, endMs: 1000, text: 'One\n\n  \nTwo' }];
+    expect(formatSubtitles(cues, 'srt')).toBe('1\n00:00:00,000 --> 00:00:01,000\nOne\nTwo\n');
+    const expected = [{ startMs: 0, endMs: 1000, text: 'One\nTwo' }];
+    expect(parseSubtitles(formatSubtitles(cues, 'srt'))).toEqual(expected);
+    expect(parseSubtitles(formatSubtitles(cues, 'vtt'))).toEqual(expected);
+  });
+
+  it('escapes "-->" in WebVTT cue text', () => {
+    const vtt = formatSubtitles([{ startMs: 0, endMs: 1000, text: 'A --> B' }], 'vtt');
+    expect(vtt).toContain('\nA --&gt; B\n');
+    // Only the timing line carries the arrow.
+    expect(vtt.match(/-->/g)).toHaveLength(1);
+  });
+});
+
+describe('decodeSubtitleBytes', () => {
+  const srt = '1\n00:00:00,000 --> 00:00:01,000\nÇa été déjà vu\n';
+
+  const utf16 = (text: string, bigEndian: boolean): Uint8Array => {
+    const out = new Uint8Array(2 + text.length * 2);
+    out.set(bigEndian ? [0xfe, 0xff] : [0xff, 0xfe]);
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      out[2 + i * 2] = bigEndian ? c >> 8 : c & 0xff;
+      out[3 + i * 2] = bigEndian ? c & 0xff : c >> 8;
+    }
+    return out;
+  };
+
+  it('reads plain UTF-8', () => {
+    expect(decodeSubtitleBytes(new TextEncoder().encode(srt))).toBe(srt);
+  });
+
+  it('strips a UTF-8 BOM', () => {
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(srt)]);
+    expect(decodeSubtitleBytes(bytes)).toBe(srt);
+  });
+
+  it('reads UTF-16LE and UTF-16BE with a BOM', () => {
+    expect(decodeSubtitleBytes(utf16(srt, false))).toBe(srt);
+    expect(decodeSubtitleBytes(utf16(srt, true))).toBe(srt);
+  });
+
+  it('falls back to Windows-1252 when the bytes are not valid UTF-8', () => {
+    // One byte per accented letter (Latin-1 range, identical in 1252): not UTF-8.
+    const bytes = Uint8Array.from(srt, (ch) => ch.charCodeAt(0));
+    expect(decodeSubtitleBytes(bytes)).toBe(srt);
+    expect(parseSubtitles(decodeSubtitleBytes(bytes))[0]!.text).toBe('Ça été déjà vu');
   });
 });
