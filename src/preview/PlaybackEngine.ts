@@ -8,6 +8,7 @@ import {
   shouldBlendFrames,
   delegatedLinkIds,
   findComp,
+  forEachTrackSet,
   isCompClip,
   isTextClip,
   isTrackAudible,
@@ -32,7 +33,7 @@ import { syncLuts } from './colorPass';
 import { SCOPE_SAMPLE_WIDTH } from './scopes';
 import { hasScopeListeners, publishScopeFrame } from './scopeBus';
 import { renderPreviewFrame, subscribeRenderPreview } from '../export/renderPreviewBus';
-import { MixScheduler, audioMixDelta } from './audioMix';
+import { MixScheduler, audioMixDelta, outputLatencyS } from './audioMix';
 import { TrackLevels, hasLevelListeners, publishLevels } from './meterBus';
 
 /**
@@ -556,10 +557,12 @@ export class PlaybackEngine {
 
   private playbackTimeMs(state: EditorState): number {
     if (this.wasPlaying && this.audioCtx) {
-      return (
-        this.anchorMediaMs +
-        Math.max(0, this.audioCtx.currentTime - this.anchorCtxTime) * 1000 * this.rate
-      );
+      // `currentTime` is what the context has rendered, not what has reached the
+      // speakers: on Bluetooth the two are a few hundred ms apart, and a picture
+      // timed off the first runs ahead of the sound by exactly that much. The
+      // clamp still holds the playhead on the anchor until the sound arrives.
+      const heardAt = this.audioCtx.currentTime - outputLatencyS(this.audioCtx);
+      return this.anchorMediaMs + Math.max(0, heardAt - this.anchorCtxTime) * 1000 * this.rate;
     }
     return state.currentTimeMs;
   }
@@ -797,6 +800,7 @@ export class PlaybackEngine {
     drawTracks(this.ctx, tracksOf(state.project, state.activeCompId), tMs, w, h, {
       compTracks: (compId) => compLanes(state, compId),
       sample: (clip, atMs) => this.sampleFor(state, clip, atMs, liveClipIds),
+      pixelScale: w / width,
     });
 
     this.prewarmUpcoming(state, tMs, liveClipIds);
@@ -1198,12 +1202,21 @@ export class PlaybackEngine {
   }
 
   private pruneCursors(project: Project): void {
+    // Every clip, asset and lane wherever it lives: a clip inside a precomp is
+    // decoded through the same flat pool, and while a composition is open its
+    // lanes are the ones feeding the buses.
     const liveIds = new Set<string>();
-    for (const track of project.tracks) {
-      for (const clip of track.clips) {
-        liveIds.add(clip.id);
+    const liveAssetIds = new Set<string>();
+    const liveTrackIds = new Set<string>();
+    forEachTrackSet(project, (tracks) => {
+      for (const track of tracks) {
+        liveTrackIds.add(track.id);
+        for (const clip of track.clips) {
+          liveIds.add(clip.id);
+          liveAssetIds.add(clip.assetId);
+        }
       }
-    }
+    });
     for (const [clipId, cursor] of this.cursors) {
       if (!liveIds.has(clipId)) {
         cursor.dispose();
@@ -1218,13 +1231,10 @@ export class PlaybackEngine {
     }
     // Stills of assets no longer on the timeline: drop the lookup entry (the
     // bitmap itself is owned and closed by the media cache).
-    const liveAssetIds = new Set<string>();
-    for (const track of project.tracks) for (const clip of track.clips) liveAssetIds.add(clip.assetId);
     for (const assetId of [...this.stills.keys()]) {
       if (!liveAssetIds.has(assetId)) this.stills.delete(assetId);
     }
     // Buses of deleted tracks: disconnect so they stop feeding the master.
-    const liveTrackIds = new Set(project.tracks.map((t) => t.id));
     for (const [trackId, bus] of this.trackBuses) {
       if (!liveTrackIds.has(trackId)) {
         bus.gain.disconnect();
