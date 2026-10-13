@@ -15,6 +15,7 @@ import {
 import i18n, { LOCALES, setLocale, type Locale } from '../i18n';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
+import { useModalDialog } from './useModalDialog';
 import type { TimeFormat } from '../lib/time';
 import { PREVIEW_BACKGROUNDS } from '../lib/palette';
 import { CaptionModelDialog } from './CaptionModelDialog';
@@ -396,20 +397,9 @@ export function Preferences() {
   const [tab, setTab] = useState<TabId>('general');
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement>());
 
-  // Escape closes the dialog (the tooltip advertises it); capture phase so the
-  // global editor hotkeys never see the keystroke.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      setPreferencesOpen(false);
-    };
-    window.addEventListener('keydown', onKey, { capture: true });
-    return () =>
-      window.removeEventListener('keydown', onKey, { capture: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Escape closes the dialog (the tooltip advertises it).
+  useModalDialog(open, panelRef, { onEscape: () => setPreferencesOpen(false) });
 
   // Arrow keys walk the rail, as a tablist is expected to: the tabs are a
   // single stop in the tab order, and Up/Down move within it.
@@ -434,6 +424,7 @@ export function Preferences() {
           onClick={() => setPreferencesOpen(false)}
         >
           <m.div
+            ref={panelRef}
             {...dialog}
             role="dialog"
             aria-modal="true"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractPatch, searchPatch, trackFrames, type GrayFrame } from './trackMotion';
+import { createTracker, extractPatch, searchPatch, trackFrames, type GrayFrame } from './trackMotion';
 
 const W = 120;
 const H = 90;
@@ -70,5 +70,20 @@ describe('trackFrames', () => {
     const m = trackFrames([frame(tex), rot], p1, p2, OPTS);
     expect(m.rotation[1]).toBeGreaterThan(3);
     expect(m.rotation[1]).toBeLessThan(9);
+  });
+});
+
+describe('createTracker', () => {
+  it('tracks a stream frame by frame exactly like the batch API', () => {
+    const p1 = { x: CX - 18, y: CY };
+    const p2 = { x: CX + 18, y: CY };
+    const shifts = [0, 2, 4, 7];
+    const shifted = (d: number) => frame((x, y) => tex(x - d, y - d / 2));
+    const tracker = createTracker(p1, p2, OPTS);
+    // Each frame is built, pushed and dropped: nothing but the tracker holds it.
+    for (const d of shifts) tracker.push(shifted(d));
+    expect(tracker.motion).toEqual(trackFrames(shifts.map(shifted), p1, p2, OPTS));
+    expect(tracker.motion.tx).toHaveLength(shifts.length);
+    expect(tracker.motion.tx[3]).toBeCloseTo(7 / W, 2);
   });
 });

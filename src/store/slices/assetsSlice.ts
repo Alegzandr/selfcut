@@ -1,6 +1,11 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
-import { audioKey, disposeAssetResources, setTranscodedAudio } from '../../media/mediaCache';
+import {
+  audioKey,
+  disposeAssetResources,
+  setTranscodedAudio,
+  warmAudio,
+} from '../../media/mediaCache';
 import { ensureAssetVisuals, probeFile } from '../../media/probe';
 import { FFmpegCanceled, type FFmpegProgress } from '../../media/ffmpeg';
 import { decodeCachedAudio, transcodeAudioTrack } from '../../media/transcodeAudio';
@@ -58,15 +63,18 @@ export function createAssetsSlice(
     reconnectAsset: async (assetId, file) => {
       const existing = get().assets[assetId];
       if (!existing) return;
+      // Probed under a scratch id: until the user accepts the replacement,
+      // nothing of it (decoder input, warmed audio) may land under the real id,
+      // where the original's clips would read it.
+      let scratchId: string | undefined;
       try {
-        // Reuse the id so the asset's clips stay linked; probe re-registers the
-        // decoder input (disposing the stale one) under the same id.
-        const { asset: probed, warning, notice } = await probeFile(file, assetId);
+        const result = await probeFile(file);
+        scratchId = result.asset.id;
+        const { warning, notice } = result;
+        // Reuse the id so the asset's clips stay linked.
+        const probed = { ...result.asset, id: assetId };
         // The asset may have been removed while the OS file dialog was open.
-        if (!get().assets[assetId]) {
-          disposeAssetResources(assetId);
-          return;
-        }
+        if (!get().assets[assetId]) return;
 
         // The replacement need not line up with the original: a shorter file
         // leaves clips trimmed past its end, a different kind changes what they
@@ -88,24 +96,18 @@ export function createAssetsSlice(
             confirmLabel: t('library.reconnectConfirm.action'),
             danger: true,
           }));
-        if (!accepted) {
-          // Put the original file back under the id so its decoder is valid
-          // again. A disconnected asset has no readable file to restore: it
-          // simply stays disconnected.
-          if (!existing.disconnected) {
-            await probeFile(existing.file, assetId).catch(() => undefined);
-          }
-          return;
-        }
+        // Declined: the original's resources were never touched.
+        if (!accepted) return;
 
         // Unlike the native confirm() this replaced, the dialog does not block
         // the app: the asset can have been removed while it was up.
-        if (!get().assets[assetId]) {
-          disposeAssetResources(assetId);
-          return;
-        }
+        if (!get().assets[assetId]) return;
 
+        // Everything cached for the old file (decoder input, audio segments,
+        // memoized misses, peaks, still) describes the wrong media now.
+        disposeAssetResources(assetId);
         set({ assets: { ...get().assets, [assetId]: probed } });
+        warmAudio(probed);
         // Clamp what the new source can no longer cover, as one undoable step.
         if (overrun.length > 0) {
           const ids = new Set(overrun.map((c) => c.id));
@@ -130,6 +132,8 @@ export function createAssetsSlice(
             ? err.message
             : t('errors.media.importFailed', { name: file.name }),
         );
+      } finally {
+        if (scratchId) disposeAssetResources(scratchId);
       }
     },
 

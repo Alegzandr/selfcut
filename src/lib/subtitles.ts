@@ -162,6 +162,29 @@ function parseAssSubtitles(content: string): SubtitleCue[] {
 }
 
 /**
+ * Decode the bytes of a subtitle file to text.
+ *
+ * Subtitle files predate UTF-8 everywhere: plenty of SRTs in the wild are
+ * UTF-16 (from Windows tools, with a BOM) or Windows-1252 (no marker at all).
+ * A BOM decides when there is one; otherwise strict UTF-8, falling back to
+ * Windows-1252 when the bytes are not valid UTF-8 - which, for Latin text,
+ * almost always means they were written in it.
+ */
+export function decodeSubtitleBytes(bytes: Uint8Array): string {
+  const [b0, b1, b2] = bytes;
+  if (b0 === 0xef && b1 === 0xbb && b2 === 0xbf) {
+    return new TextDecoder('utf-8').decode(bytes.subarray(3));
+  }
+  if (b0 === 0xff && b1 === 0xfe) return new TextDecoder('utf-16le').decode(bytes.subarray(2));
+  if (b0 === 0xfe && b1 === 0xff) return new TextDecoder('utf-16be').decode(bytes.subarray(2));
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder('windows-1252').decode(bytes);
+  }
+}
+
+/**
  * Parse SRT, WebVTT or SubStation Alpha (.ass/.ssa) content into cues.
  * Tolerant: skips numeric counters, the WEBVTT header, NOTE/STYLE blocks and
  * any block without a valid "start --> end" line. Returns cues sorted by
@@ -238,6 +261,20 @@ function vttSettings({ align, vAlign }: Placement): string {
 }
 
 /**
+ * A cue's text made safe to write inside a block: a blank line would end the
+ * cue there (the rest read back as garbage, or lost), and in WebVTT the text
+ * must not contain "-->" at all, so it is written as the escaped `--&gt;`.
+ */
+function cueText(text: string, format: SubtitleFormat): string {
+  const joined = text
+    .replace(/\r/g, '')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .join('\n');
+  return format === 'vtt' ? joined.replace(/-->/g, '--&gt;') : joined;
+}
+
+/**
  * Write cues back out as SRT or WebVTT.
  *
  * Placement survives the round trip in each format's own notation: a cue
@@ -250,13 +287,14 @@ export function formatSubtitles(cues: SubtitleCue[], format: SubtitleFormat): st
   const sep = format === 'srt' ? ',' : '.';
   const blocks = cues.map((cue, i) => {
     const timing = `${formatTimestamp(cue.startMs, sep)} --> ${formatTimestamp(cue.endMs, sep)}`;
+    const text = cueText(cue.text, format);
     if (format === 'vtt') {
-      return `${timing}${vttSettings(cue)}\n${cue.text}`;
+      return `${timing}${vttSettings(cue)}\n${text}`;
     }
     const placed = cue.align || cue.vAlign;
     const tag = placed ? `{\\an${AN_CODE[cue.vAlign ?? 'bottom'][cue.align ?? 'center']}}` : '';
     // SRT numbers its cues from 1; the counter is part of the format, not a hint.
-    return `${i + 1}\n${timing}\n${tag}${cue.text}`;
+    return `${i + 1}\n${timing}\n${tag}${text}`;
   });
   const body = blocks.join('\n\n');
   return format === 'vtt' ? `WEBVTT\n\n${body}\n` : `${body}\n`;

@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Cross2Icon, ResetIcon } from '@radix-ui/react-icons';
 import { useStore, getLanes } from '../store/store';
@@ -77,6 +78,7 @@ export function TrackFxPanel({ track }: { track: Track }) {
 /** The lane's colour grade: the same LUT and the same parameters a clip has. */
 function TrackGrade({ track }: { track: Track }) {
   const { t } = useTranslation();
+  const lutId = useId();
   const { setTrackColorLive, setTrackLut, setTrackLutIntensity } = useStore.getState();
   const luts = useStore((s) => s.project.luts) ?? [];
   const lut = track.color?.lut;
@@ -87,8 +89,11 @@ function TrackGrade({ track }: { track: Track }) {
         {t('inspector.adjust')}
       </h3>
       <div className="flex items-center gap-2">
-        <span className="w-16 flex-none text-xs text-zinc-500">{t('inspector.lut')}</span>
+        <label htmlFor={lutId} className="w-16 flex-none text-xs text-zinc-500">
+          {t('inspector.lut')}
+        </label>
         <select
+          id={lutId}
           value={lut?.id ?? ''}
           onChange={(e) => setTrackLut(track.id, e.target.value || null)}
           className="min-w-0 flex-1 rounded-md border border-hair-strong bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-brand-500"

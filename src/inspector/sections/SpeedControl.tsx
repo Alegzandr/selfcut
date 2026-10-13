@@ -13,7 +13,7 @@
  * scales the whole curve and keeps its shape - nothing is destroyed, and there
  * is no dialog warning that it would be.
  */
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LockClosedIcon, LockOpen1Icon } from '@radix-ui/react-icons';
 import { useStore } from '../../store/store';
@@ -74,6 +74,7 @@ function PresetCurve({ preset }: { preset: RampPresetId }) {
 
 export function SpeedControl({ clip }: { clip: Clip }) {
   const { t } = useTranslation();
+  const speedId = useId();
   const { updateClipCommitted } = useStore.getState();
   const [text, setText] = useState(String(clip.speed));
   // Resync the field during render when the clip or its speed changes.
@@ -113,7 +114,9 @@ export function SpeedControl({ clip }: { clip: Clip }) {
   return (
     <div className="space-y-2">
       <div className="flex items-start gap-2 text-xs text-zinc-400">
-        <span className="w-16 flex-none pt-1.5">{t('inspector.speed')}</span>
+        <label htmlFor={speedId} className="w-16 flex-none pt-1.5">
+          {t('inspector.speed')}
+        </label>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {[0.5, 1, 1.5, 2].map((s) => (
             <ToggleButton
@@ -126,6 +129,7 @@ export function SpeedControl({ clip }: { clip: Clip }) {
           ))}
           <div className="flex items-center gap-1">
             <input
+              id={speedId}
               type="number"
               inputMode="decimal"
               min={0.1}

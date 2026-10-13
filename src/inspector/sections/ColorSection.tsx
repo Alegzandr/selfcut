@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ResetIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../store/store';
@@ -24,6 +25,7 @@ function valueAt(ch: Channel | undefined, localMs: number): number {
  */
 function LutRow({ clip }: { clip: Clip }) {
   const { t } = useTranslation();
+  const lutId = useId();
   const luts = useStore((s) => s.project.luts) ?? [];
   const { setClipsLut, setClipLutIntensity, clearClipLut } = useStore.getState();
   const active = clip.color?.lut;
@@ -38,8 +40,11 @@ function LutRow({ clip }: { clip: Clip }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <span className="w-16 flex-none text-xs text-zinc-500">{t('inspector.lut')}</span>
+        <label htmlFor={lutId} className="w-16 flex-none text-xs text-zinc-500">
+          {t('inspector.lut')}
+        </label>
         <select
+          id={lutId}
           value={active?.id ?? ''}
           onChange={(e) =>
             e.target.value ? setClipsLut(targets(), e.target.value) : clearClipLut(clip.id)

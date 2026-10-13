@@ -60,6 +60,39 @@ export function withDeadline<T>(promise: Promise<T>, ms: number, what: string): 
 }
 
 /**
+ * `withDeadline`, for a wait that can say it is still alive: each `renew()`
+ * starts the full `ms` over.
+ *
+ * For a reply that can legitimately take long but reports progress on the way -
+ * the first slice of a normalized mix waits on a loudness pass over the whole
+ * timeline - so the watchdog fires on silence rather than on duration.
+ */
+export function withRenewableDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+  what: string,
+): { promise: Promise<T>; renew: () => void } {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let fire: (err: StalledError) => void = () => {};
+  let done = false;
+  const deadline = new Promise<never>((_, reject) => {
+    fire = reject;
+  });
+  const arm = () => {
+    clearTimeout(timer);
+    if (!done) timer = setTimeout(() => fire(new StalledError(what, ms)), ms);
+  };
+  arm();
+  return {
+    promise: Promise.race([promise, deadline]).finally(() => {
+      done = true;
+      clearTimeout(timer);
+    }),
+    renew: arm,
+  };
+}
+
+/**
  * How long one encode may take before the encoder counts as stopped.
  *
  * This is the wait for ONE frame's packet with the queue already full, not the
@@ -172,7 +205,9 @@ export const SUPPORT_PROBE_MS = 10_000;
  *
  * The mix is rendered five seconds at a time in an `OfflineAudioContext`, which
  * is fast even on a dense timeline; this only elapses if the main thread is
- * wedged or the reply was lost. Timing out truncates the soundtrack, exactly as
- * a failed slice does - a video with short audio beats a render that never ends.
+ * wedged or the reply was lost. The main thread renews it while a normalized
+ * mix is still being measured (`audioPending`), so a long loudness pass is not
+ * mistaken for a wedged one. Timing out fails the export, exactly as a failed
+ * slice does: a file whose soundtrack silently stops short is not a success.
  */
 export const AUDIO_CHUNK_STALL_MS = 120_000;

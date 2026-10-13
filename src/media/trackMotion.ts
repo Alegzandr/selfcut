@@ -112,6 +112,40 @@ function wrapDeg(d: number): number {
 }
 
 /**
+ * Incremental two-point tracker: feed it frames one at a time (the first one is
+ * the reference) and it appends that frame's motion to `motion`. Only the two
+ * reference patches and the last positions are kept, so frames can be streamed
+ * straight from the decoder without holding them all in memory.
+ */
+export function createTracker(
+  p1: Pt,
+  p2: Pt,
+  opts: { half: number; radius: number },
+): { push: (f: GrayFrame) => void; motion: TrackedMotion } {
+  const motion: TrackedMotion = { tx: [], ty: [], scale: [], rotation: [] };
+  const base = geometry(p1, p2);
+  let ref1: Float32Array | null = null;
+  let ref2: Float32Array | null = null;
+  let a = { ...p1 };
+  let b = { ...p2 };
+  const push = (f: GrayFrame): void => {
+    if (!ref1 || !ref2) {
+      ref1 = extractPatch(f, Math.round(p1.x), Math.round(p1.y), opts.half);
+      ref2 = extractPatch(f, Math.round(p2.x), Math.round(p2.y), opts.half);
+    } else {
+      a = searchPatch(f, ref1, opts.half, Math.round(a.x), Math.round(a.y), opts.radius);
+      b = searchPatch(f, ref2, opts.half, Math.round(b.x), Math.round(b.y), opts.radius);
+    }
+    const g = geometry(a, b);
+    motion.tx.push((g.cx - base.cx) / f.w);
+    motion.ty.push((g.cy - base.cy) / f.h);
+    motion.scale.push(base.len > 1e-3 ? g.len / base.len : 1);
+    motion.rotation.push(wrapDeg(((g.ang - base.ang) * 180) / Math.PI));
+  };
+  return { push, motion };
+}
+
+/**
  * Track the two points across the frames and return the motion of the pair,
  * relative to the first frame. `tx`/`ty` are fractions of the frame size (so
  * they map straight onto a mask's motion channels); `scale` is a ratio; and
@@ -123,28 +157,9 @@ export function trackFrames(
   p2: Pt,
   opts: { half: number; radius: number },
 ): TrackedMotion {
-  const out: TrackedMotion = { tx: [], ty: [], scale: [], rotation: [] };
-  if (frames.length === 0) return out;
-  const f0 = frames[0]!;
-  const ref1 = extractPatch(f0, Math.round(p1.x), Math.round(p1.y), opts.half);
-  const ref2 = extractPatch(f0, Math.round(p2.x), Math.round(p2.y), opts.half);
-  const base = geometry(p1, p2);
-
-  let a = { ...p1 };
-  let b = { ...p2 };
-  for (let i = 0; i < frames.length; i++) {
-    const f = frames[i]!;
-    if (i > 0) {
-      a = searchPatch(f, ref1, opts.half, Math.round(a.x), Math.round(a.y), opts.radius);
-      b = searchPatch(f, ref2, opts.half, Math.round(b.x), Math.round(b.y), opts.radius);
-    }
-    const g = geometry(a, b);
-    out.tx.push((g.cx - base.cx) / f.w);
-    out.ty.push((g.cy - base.cy) / f.h);
-    out.scale.push(base.len > 1e-3 ? g.len / base.len : 1);
-    out.rotation.push(wrapDeg(((g.ang - base.ang) * 180) / Math.PI));
-  }
-  return out;
+  const tracker = createTracker(p1, p2, opts);
+  for (const f of frames) tracker.push(f);
+  return tracker.motion;
 }
 
 /** RGBA image data → a grayscale frame (BT.601 luma). */
@@ -221,24 +236,6 @@ export async function trackMaskMotion(
   const sctx = scratch.getContext('2d', { willReadFrequently: true });
   if (!sctx) return null;
 
-  const frames: GrayFrame[] = [];
-  const localMs: number[] = [];
-  let i = 0;
-  for await (const wrapped of sink.canvasesAtTimestamps(stamps)) {
-    if (signal?.aborted) return null;
-    if (wrapped) {
-      sctx.clearRect(0, 0, workW, workH);
-      sctx.drawImage(wrapped.canvas as CanvasImageSource, 0, 0, workW, workH);
-      frames.push(toGray(sctx.getImageData(0, 0, workW, workH)));
-      localMs.push(times[i]! - clip.timelineStartMs);
-    }
-    i++;
-    onProgress(Math.min(1, i / stamps.length));
-    // Yield so the decode loop never locks the UI for long.
-    await Promise.resolve();
-  }
-  if (frames.length < 2) return null;
-
   // Seed two points across the mask box (horizontal pair), in working px.
   const bbox = maskBBox(mask);
   const cx = bbox.cx * workW;
@@ -246,7 +243,27 @@ export async function trackMaskMotion(
   const off = Math.max(6, bbox.w * workW * 0.28);
   const half = Math.max(6, Math.round(workW * 0.03));
   const radius = Math.max(8, Math.round(workW * 0.045));
-  const motion = trackFrames(frames, { x: cx - off, y: cy }, { x: cx + off, y: cy }, { half, radius });
+  // Frames are streamed through the tracker: holding every decoded frame of a
+  // long clip would cost gigabytes.
+  const tracker = createTracker({ x: cx - off, y: cy }, { x: cx + off, y: cy }, { half, radius });
+
+  const localMs: number[] = [];
+  let i = 0;
+  for await (const wrapped of sink.canvasesAtTimestamps(stamps)) {
+    if (signal?.aborted) return null;
+    if (wrapped) {
+      sctx.clearRect(0, 0, workW, workH);
+      sctx.drawImage(wrapped.canvas as CanvasImageSource, 0, 0, workW, workH);
+      tracker.push(toGray(sctx.getImageData(0, 0, workW, workH)));
+      localMs.push(times[i]! - clip.timelineStartMs);
+    }
+    i++;
+    onProgress(Math.min(1, i / stamps.length));
+    // Yield so the decode loop never locks the UI for long.
+    await Promise.resolve();
+  }
+  if (localMs.length < 2) return null;
+  const motion = tracker.motion;
 
   const chan = (values: number[]): Keyframe[] => values.map((value, k) => ({ t: localMs[k]!, value }));
   return {

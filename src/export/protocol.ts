@@ -41,13 +41,29 @@ export interface AudioChunkMessage {
   channels: Float32Array[];
 }
 
-/** Main thread → worker: rendering that chunk failed; give up on the audio. */
+/** Main thread → worker: rendering that chunk failed; the export fails (`audioMixFailed`). */
 export interface AudioFailedMessage {
   type: 'audioFailed';
   offset: number;
 }
 
-export type MainToWorker = ExportRequest | AudioChunkMessage | AudioFailedMessage;
+/**
+ * Main thread → worker: the slice at `offset` is still on its way. Sent each
+ * time the loudness pass of a normalized mix makes progress, which it has to
+ * finish over the whole timeline before the first slice can be served - an
+ * mp3 of an hour-long cut would otherwise outlast `AUDIO_CHUNK_STALL_MS` on the
+ * very first request and be read as a wedged main thread.
+ */
+export interface AudioPendingMessage {
+  type: 'audioPending';
+  offset: number;
+}
+
+export type MainToWorker =
+  | ExportRequest
+  | AudioChunkMessage
+  | AudioFailedMessage
+  | AudioPendingMessage;
 
 /**
  * Where a render's bytes go.
@@ -141,6 +157,12 @@ export type ExportErrorCode =
    */
   | 'encoderStalled'
   /**
+   * A slice of the mix could not be rendered, or never arrived. Failed rather
+   * than finalized: a file whose soundtrack stops short - or an mp3 with no
+   * audio in it at all - is not a finished export.
+   */
+  | 'audioMixFailed'
+  /**
    * The browser refused to copy the render request to a worker. Not a failure
    * of the render at all - a gap in what this engine's structured clone
    * accepts, which differs between them - so it is retried on terms that ask it
@@ -163,7 +185,12 @@ export type WorkerReply =
    * and is what closes it.
    */
   | { type: 'previewFrame'; bitmap: ImageBitmap; timeMs: number }
-  /** `buffer` is null when the output went straight to the user's file. */
+  /**
+   * `buffer` is null when the output went straight to the sink (the picked or
+   * the scratch file), and the whole file when the worker had to buffer it -
+   * which can happen with a sink in the request, when the scratch file could
+   * not be re-opened. It is the report of where the bytes actually are.
+   */
   | { type: 'done'; buffer: ArrayBuffer | null; mime: string }
   | { type: 'error'; code: ExportErrorCode }
   /** Frame breakdown of the finished render, when `measure` was set. */

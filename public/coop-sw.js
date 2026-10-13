@@ -41,8 +41,10 @@ const WORKER_DESTINATIONS = new Set(['worker', 'sharedworker']);
 
 /** The editor. Registration takes root scope, so the landing pages come through
  * here too and must be handed back exactly as they were: isolation would gain
- * them nothing and COEP would break any cross-origin embed they later grow. */
-const EDITOR_PATH = '/app/';
+ * them nothing and COEP would break any cross-origin embed they later grow.
+ * Resolved against the scope, which is the site base: a build for a subpath
+ * (VITE_BASE) puts the editor under it. */
+const EDITOR_PATH = new URL('app/', self.registration.scope).pathname;
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;

@@ -9,6 +9,7 @@ import { eraseSelfcutData } from '../lib/resetData';
 import { useStorageFolder } from './StorageLocation';
 import { captionCacheAvailable, listCachedModels } from '../media/captionsCache';
 import { formatBytes } from '../lib/bytes';
+import { useModalDialog } from './useModalDialog';
 
 /**
  * The confirmation in front of the data erase.
@@ -63,20 +64,17 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
     };
   }, [open]);
 
+  const panelRef = useRef<HTMLDivElement>(null);
+
   // Escape cancels, and the cancelling button takes focus: the destructive
-  // action is never one stray Enter away.
-  useEffect(() => {
-    if (!open) return;
-    cancelRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || busy) return;
-      e.stopPropagation();
-      onClose();
-    };
-    window.addEventListener('keydown', onKey, { capture: true });
-    return () => window.removeEventListener('keydown', onKey, { capture: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, busy]);
+  // action is never one stray Enter away. Mid-erase the key is still swallowed,
+  // so it cannot close the Preferences dialog behind this one either.
+  useModalDialog(open, panelRef, {
+    onEscape: () => {
+      if (!busy) onClose();
+    },
+    initialFocus: cancelRef,
+  });
 
   const offerModels = modelBytes !== null && modelBytes > 0;
 
@@ -113,6 +111,7 @@ export function ResetDataDialog({ open, onClose }: { open: boolean; onClose: () 
           onClick={() => !busy && onClose()}
         >
           <m.div
+            ref={panelRef}
             {...dialog}
             role="alertdialog"
             aria-modal="true"

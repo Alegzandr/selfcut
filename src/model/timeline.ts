@@ -306,11 +306,13 @@ export function gapAt(track: Track, timeMs: number): TrackGap | null {
  * over another's is the one where nothing at all is playing. Locked tracks are
  * left out of the reckoning for the same reason they are left out of the
  * shift - they are pinned, so what they hold is not the timeline's to close.
+ *
+ * `timeline` is the one being edited: the project, or an open composition.
  */
-export function timelineGapAt(project: Project, timeMs: number): TrackGap | null {
+export function timelineGapAt(timeline: Pick<Project, 'tracks'>, timeMs: number): TrackGap | null {
   let prevEnd = 0;
   let nextStart = Infinity;
-  for (const track of project.tracks) {
+  for (const track of timeline.tracks) {
     if (track.locked) continue;
     for (const clip of track.clips) {
       const start = clip.timelineStartMs;

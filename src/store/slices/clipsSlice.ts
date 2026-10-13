@@ -34,7 +34,11 @@ import {
   staticValueOf,
   writeChannel,
   hasVelocity,
+  rampDurationMs,
+  rateAt,
   shiftVelocity,
+  sourceOffsetAtTimeline,
+  timelineAtSourceOffset,
   gapAt,
   timelineGapAt,
   type TrackGap,
@@ -119,6 +123,20 @@ function buildAudioClip(
   };
 }
 
+/**
+ * The lowest start among clips, so a group shift can be clamped as one
+ * (`delta >= -lowest`) instead of each member stopping at 0 on its own, which
+ * would tear a linked partner that starts earlier out of sync.
+ */
+function lowestStart(p: Project, clipIds: string[]): number {
+  let lowest = Infinity;
+  for (const id of clipIds) {
+    const c = findClip(p, id)?.clip;
+    if (c) lowest = Math.min(lowest, c.timelineStartMs);
+  }
+  return lowest;
+}
+
 /** Copy-on-write edits shifting each clip's start by `delta` (clamped ≥ 0). */
 function shiftEdits(clipIds: string[], delta: number): Map<string, (c: Clip) => Clip> {
   const edits = new Map<string, (c: Clip) => Clip>();
@@ -129,6 +147,29 @@ function shiftEdits(clipIds: string[], delta: number): Map<string, (c: Clip) => 
     });
   }
   return edits;
+}
+
+/**
+ * Source ms (from `sourceInMs`) that `localMs` of the clip's timeline span
+ * covers, and its inverse. Flat `speed` for most clips; an unlocked velocity
+ * ramp sets the clip's length itself, so its edges map through the ramp - and
+ * past either end of the window, at the rate the ramp holds there.
+ */
+function sourceOffsetAt(clip: Clip, localMs: number): number {
+  if (!hasVelocity(clip) || clip.velocityLocked) return localMs * clip.speed;
+  if (localMs < 0) return localMs * rateAt(clip, 0);
+  const durMs = rampDurationMs(clip);
+  const span = clip.sourceOutMs - clip.sourceInMs;
+  if (localMs > durMs) return span + (localMs - durMs) * rateAt(clip, span);
+  return sourceOffsetAtTimeline(clip, localMs);
+}
+
+function localAtSourceOffset(clip: Clip, offsetMs: number): number {
+  if (!hasVelocity(clip) || clip.velocityLocked) return offsetMs / clip.speed;
+  if (offsetMs < 0) return offsetMs / rateAt(clip, 0);
+  const span = clip.sourceOutMs - clip.sourceInMs;
+  if (offsetMs > span) return rampDurationMs(clip) + (offsetMs - span) / rateAt(clip, span);
+  return timelineAtSourceOffset(clip, offsetMs);
 }
 
 /** Resolve a patch against the clip it is about to land on. */
@@ -1114,10 +1155,16 @@ export function createClipsSlice(
       const p = get().project;
       const found = findClip(p, clipId);
       if (!found) return;
-      const start = Math.max(0, timelineStartMs);
-      const delta = start - found.clip.timelineStartMs;
+      const partners = linkedPartnerIds(p, clipId);
+      // The group stops at t=0 as a whole: the earliest member, partner or
+      // not, is the one that reaches it first.
+      const delta = Math.max(
+        timelineStartMs - found.clip.timelineStartMs,
+        -lowestStart(p, [clipId, ...partners]),
+      );
+      const start = found.clip.timelineStartMs + delta;
       // Linked partners follow the same time delta, staying on their own track.
-      const shiftBy = shiftEdits(linkedPartnerIds(p, clipId), delta);
+      const shiftBy = shiftEdits(partners, delta);
       const target =
         targetTrackId && targetTrackId !== found.track.id
           ? lanes(p).find((t) => t.id === targetTrackId)
@@ -1160,8 +1207,19 @@ export function createClipsSlice(
       const p = get().project;
       const inSet = new Set(entries.map((e) => e.clipId));
       const edits = new Map<string, (c: Clip) => Clip>();
+      // How far the whole batch has to be held back so no member - nor a
+      // partner dragged along - crosses t=0. Applied to every entry alike, so
+      // the batch keeps its own spacing and partners stay in sync.
+      let lift = 0;
       for (const { clipId, timelineStartMs } of entries) {
-        const start = Math.max(0, timelineStartMs);
+        const found = findClip(p, clipId);
+        if (!found) continue;
+        const delta = timelineStartMs - found.clip.timelineStartMs;
+        const partners = linkedPartnerIds(p, clipId).filter((id) => !inSet.has(id));
+        lift = Math.max(lift, -(lowestStart(p, [clipId, ...partners]) + delta));
+      }
+      for (const { clipId, timelineStartMs } of entries) {
+        const start = Math.max(0, timelineStartMs + lift);
         edits.set(clipId, (c) => (c.timelineStartMs === start ? c : { ...c, timelineStartMs: start }));
         const found = findClip(p, clipId);
         if (!found) continue;
@@ -1178,13 +1236,12 @@ export function createClipsSlice(
       const assets = get().assets;
       const edit = (clip: Clip): Clip => {
         const asset = assets[clip.assetId];
-        const minSourceSpan = MIN_CLIP_DURATION_MS * clip.speed;
         // A clip with no fixed-length media - a generated clip (text, solid,
         // shape) or a still - has no source to run out of, on either side.
         const unbounded = !asset || asset.kind === 'image';
         if (edge === 'left') {
           const proposed = Math.max(0, timelineMs);
-          const sourceIn = clip.sourceInMs + (proposed - clip.timelineStartMs) * clip.speed;
+          const sourceIn = clip.sourceInMs + sourceOffsetAt(clip, proposed - clip.timelineStartMs);
           if (unbounded && sourceIn < 0) {
             // Nothing to reveal, so the left edge LENGTHENS the clip instead of
             // stopping at source 0: keep the right edge and the source window's
@@ -1204,9 +1261,11 @@ export function createClipsSlice(
               clip.timelineStartMs - start,
             );
           }
-          const clamped = clamp(sourceIn, 0, clip.sourceOutMs - minSourceSpan);
+          const maxIn =
+            clip.sourceInMs + sourceOffsetAt(clip, clipDurationMs(clip) - MIN_CLIP_DURATION_MS);
+          const clamped = clamp(sourceIn, 0, maxIn);
           if (clamped === clip.sourceInMs) return clip;
-          const shift = (clamped - clip.sourceInMs) / clip.speed;
+          const shift = localAtSourceOffset(clip, clamped - clip.sourceInMs);
           // Ramp keys are source offsets from `sourceInMs`, so they move the
           // other way to the window's head - and keys pushed negative are kept,
           // not dropped: they still shape the curve inside the window, which is
@@ -1224,10 +1283,10 @@ export function createClipsSlice(
             -shift,
           );
         }
-        let sourceOut = clip.sourceInMs + (timelineMs - clip.timelineStartMs) * clip.speed;
+        let sourceOut = clip.sourceInMs + sourceOffsetAt(clip, timelineMs - clip.timelineStartMs);
         // A still has no intrinsic duration: its clips stretch without bound.
         const maxOut = unbounded ? Infinity : asset.durationMs;
-        sourceOut = clamp(sourceOut, clip.sourceInMs + minSourceSpan, maxOut);
+        sourceOut = clamp(sourceOut, clip.sourceInMs + sourceOffsetAt(clip, MIN_CLIP_DURATION_MS), maxOut);
         if (sourceOut === clip.sourceOutMs) return clip;
         return { ...clip, sourceOutMs: sourceOut };
       };
@@ -1411,7 +1470,7 @@ export function createClipsSlice(
       // With the ripple on every track, the span that can be closed is the one
       // the WHOLE timeline is empty over: closing this lane's gap alone would
       // slide the others past content that is still playing there.
-      const gap = rippleAcrossTracks ? timelineGapAt(project, timeMs) : gapAt(track, timeMs);
+      const gap = rippleAcrossTracks ? timelineGapAt(host(project), timeMs) : gapAt(track, timeMs);
       if (!gap) return;
       if (rippleAcrossTracks) closeTimelineGap(gap);
       else closeGaps([{ trackId, gap }]);
@@ -1420,7 +1479,7 @@ export function createClipsSlice(
     closeGapsAtPlayhead: () => {
       const { project, currentTimeMs, rippleAcrossTracks } = get();
       if (rippleAcrossTracks) {
-        const gap = timelineGapAt(project, currentTimeMs);
+        const gap = timelineGapAt(host(project), currentTimeMs);
         if (gap) closeTimelineGap(gap);
         return;
       }

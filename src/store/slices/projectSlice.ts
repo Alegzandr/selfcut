@@ -83,6 +83,10 @@ export function createProjectSlice(
         assets: map,
         past: [],
         future: [],
+        gestureSnapshot: null,
+        // Copied clips point at the outgoing project's assets and compositions,
+        // which the incoming one does not have.
+        clipboard: null,
         selectedClipId: null,
         selectedClipIds: [],
         currentTimeMs: 0,

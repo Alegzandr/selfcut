@@ -10,5 +10,9 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  // Not right away: the click only schedules the download, and Firefox and
+  // Safari read the blob URL after this returns - revoked synchronously, the
+  // file can come out empty or fail outright. A minute is far longer than any
+  // browser takes to pick it up, and holding the blob that long costs nothing.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

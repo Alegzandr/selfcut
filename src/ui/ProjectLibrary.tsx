@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
 import { useEnterMotion } from './motion';
 import { CheckIcon, Cross2Icon, FilePlusIcon, Pencil2Icon, TrashIcon } from '@radix-ui/react-icons';
 import { useStore } from '../store/store';
+import { useModalDialog } from './useModalDialog';
 import {
   createNewProject,
   deleteProject,
@@ -29,20 +30,12 @@ export function ProjectLibrary() {
   const { setProjectLibraryOpen, requestConfirm } = useStore.getState();
   const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (editing) {
-        setEditing(null);
-        return;
-      }
-      e.stopPropagation();
-      setProjectLibraryOpen(false);
-    };
-    window.addEventListener('keydown', onKey, { capture: true });
-    return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [open, editing, setProjectLibraryOpen]);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Escape backs out of a rename first, then closes the library.
+  useModalDialog(open, panelRef, {
+    onEscape: () => (editing ? setEditing(null) : setProjectLibraryOpen(false)),
+  });
 
   const close = () => setProjectLibraryOpen(false);
 
@@ -76,6 +69,7 @@ export function ProjectLibrary() {
           onClick={close}
         >
           <m.div
+            ref={panelRef}
             {...dialog}
             role="dialog"
             aria-modal="true"

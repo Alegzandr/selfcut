@@ -1,6 +1,6 @@
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny';
 import type { Clip, Project } from '../types';
-import { findComp, isTextClip, shouldBlendFrames, timelineToSourceMs } from '../model';
+import { findComp, isTextClip, outputDimensions, shouldBlendFrames, timelineToSourceMs } from '../model';
 import { drawTracks, forEachActiveMediaClip, invalidateResampling } from '../preview/compositor';
 import { syncLuts } from '../preview/colorPass';
 import { loadFonts } from '../lib/fonts';
@@ -32,6 +32,8 @@ import { endSpan, span } from '../perf/probe';
  */
 interface FrameDecode {
   clip: Clip;
+  /** Which play of the clip this is (see `clipInstanceKey`): what readers are keyed by. */
+  instance: string;
   /** Timeline ms inside the composition holding the clip (its own local time). */
   atMs: number;
   sample: DrawableFrame | null;
@@ -57,7 +59,7 @@ export class FrameRenderer {
   private readonly stills: Map<string, StillFrame>;
   private readonly inputs = new Map<string, Input>();
   /**
-   * One reader per clip, created on first use and released as soon as the clip
+   * One reader per clip instance, created on first use and released as soon as the clip
    * is behind the render head.
    *
    * Keeping them all for the whole render is what a first pass does, and it
@@ -66,9 +68,13 @@ export class FrameRenderer {
    * decoded samples (~12 MB apiece at 4K), so a fifty-clip 4K timeline had
    * fifty decoders and hundreds of megabytes of frames live at the last frame
    * of the render, competing for the handful of decoders a browser will run in
-   * parallel. The render walks output time strictly forward and no clip is
+   * parallel. The render walks output time strictly forward and no instance is
    * visible twice, so a reader missing from the current frame's layers can
    * only be one whose clip has ended: dropping it is exact, not a heuristic.
+   *
+   * Keyed by instance and not by `clip.id`: a precomp placed twice puts the
+   * same inner clip on screen at two times at once, and one shared reader would
+   * be asked for both - each request closing the sample the other one drew.
    */
   private readonly readers = new Map<string, ClipReader>();
   /** Reused across frames: the layer list was garbage on every one of them. */
@@ -140,11 +146,11 @@ export class FrameRenderer {
     return null;
   };
 
-  private reader(clip: Clip): ClipReader {
-    let reader = this.readers.get(clip.id);
+  private reader(clip: Clip, instance: string): ClipReader {
+    let reader = this.readers.get(instance);
     if (!reader) {
       reader = new ClipReader(clip, this.openSink);
-      this.readers.set(clip.id, reader);
+      this.readers.set(instance, reader);
     }
     return reader;
   }
@@ -168,8 +174,8 @@ export class FrameRenderer {
     // precomp cannot be awaited in the middle of it.
     const decodes = this.decodes;
     decodes.length = 0;
-    forEachActiveMediaClip(project.tracks, tMs, compTracks, (clip, atMs) => {
-      decodes.push({ clip, atMs, sample: null });
+    forEachActiveMediaClip(project.tracks, tMs, compTracks, (clip, atMs, instance) => {
+      decodes.push({ clip, instance, atMs, sample: null });
     });
 
     // Decoded concurrently: the readers are independent, so N stacked layers
@@ -177,14 +183,14 @@ export class FrameRenderer {
     const decodeStarted = span();
     await Promise.all(
       decodes.map(async (entry) => {
-        const { clip, atMs } = entry;
+        const { clip, instance, atMs } = entry;
         const still = this.stills.get(clip.assetId);
         if (still) {
           // A still is the same frame at every output time - nothing to decode.
           entry.sample = still;
           return;
         }
-        entry.sample = await this.reader(clip).frameAt(
+        entry.sample = await this.reader(clip, instance).frameAt(
           timelineToSourceMs(clip, atMs) / 1000,
           shouldBlendFrames(clip, atMs),
         );
@@ -193,7 +199,7 @@ export class FrameRenderer {
     endSpan('decode', decodeStarted);
 
     const samples = new Map<string, DrawableFrame | null>();
-    for (const entry of decodes) samples.set(entry.clip.id, entry.sample);
+    for (const entry of decodes) samples.set(entry.instance, entry.sample);
 
     const compositeStarted = span();
     this.ctx.globalAlpha = 1;
@@ -205,7 +211,11 @@ export class FrameRenderer {
     // the same code.
     drawTracks(this.ctx, project.tracks, tMs, width, height, {
       compTracks,
-      sample: (clip) => samples.get(clip.id) ?? null,
+      sample: (_clip, _atMs, instance) => samples.get(instance) ?? null,
+      // A preset at another size than the project's own (a 4K render of a
+      // 1080p timeline) keeps a lane's sharpen radius in project pixels, the
+      // same one the preview shows.
+      pixelScale: width / outputDimensions(project.aspectRatio).width,
     });
     endSpan('composite', compositeStarted);
   }
@@ -217,10 +227,10 @@ export class FrameRenderer {
    * frames these readers own, and it is the capture that copies them out.
    */
   async releaseFinishedReaders(): Promise<void> {
-    const visible = new Set(this.decodes.map((entry) => entry.clip.id));
-    for (const [clipId, reader] of [...this.readers]) {
-      if (visible.has(clipId)) continue;
-      this.readers.delete(clipId);
+    const visible = new Set(this.decodes.map((entry) => entry.instance));
+    for (const [instance, reader] of [...this.readers]) {
+      if (visible.has(instance)) continue;
+      this.readers.delete(instance);
       await closeReader(reader);
     }
   }

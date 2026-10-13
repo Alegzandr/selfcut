@@ -25,7 +25,7 @@ const COLOR_MODULE = '/src/preview/colorPass.ts';
 async function gradeSolid(
   page: import('@playwright/test').Page,
   rgb: [number, number, number],
-  adjust: Record<string, number>,
+  adjust: Record<string, unknown>,
 ): Promise<[number, number, number]> {
   const mod = await appModuleUrl(page, COLOR_MODULE);
   return page.evaluate(
@@ -323,4 +323,34 @@ test('sharpening overshoots the edge and leaves the flats alone', async ({ page 
   // The dark side of a 100/160 step is pulled down and the bright side up.
   expect(sharp.darkEdge).toBeLessThan(flat.darkEdge - 5);
   expect(sharp.brightEdge).toBeGreaterThan(flat.brightEdge + 5);
+});
+
+test('a 3D LUT grades the frame instead of blacking it out', async ({ page }) => {
+  // LUT tables are uploaded from a typed array. WebGL2 refuses that upload for a
+  // 3D texture while UNPACK_FLIP_Y is on, and with the default 4-byte row
+  // alignment an RGB row of 17 or 33 entries does not line up either: both left
+  // the texture incomplete, so every LUT sampled black. An inverting table makes
+  // the expected output exact on paper. The odd sizes are the ones that broke.
+  const mod = await appModuleUrl(page, COLOR_MODULE);
+  for (const size of [17, 33]) {
+    const id = `invert-${size}`;
+    await page.evaluate(
+      async ({ url, n, lutId }) => {
+        const { syncLuts } = (await import(url)) as {
+          syncLuts: (luts: { id: string; name: string; size: number; data: number[] }[]) => void;
+        };
+        const data: number[] = [];
+        for (let b = 0; b < n; b++)
+          for (let g = 0; g < n; g++)
+            for (let r = 0; r < n; r++)
+              data.push(1 - r / (n - 1), 1 - g / (n - 1), 1 - b / (n - 1));
+        syncLuts([{ id: lutId, name: lutId, size: n, data }]);
+      },
+      { url: mod, n: size, lutId: id },
+    );
+    const out = await gradeSolid(page, [200, 100, 50], { lut: { id, intensity: 1 } });
+    expect(out).not.toBeNull();
+    const expected = [55, 155, 205];
+    for (let i = 0; i < 3; i++) expect(Math.abs(out[i]! - expected[i]!)).toBeLessThanOrEqual(3);
+  }
 });

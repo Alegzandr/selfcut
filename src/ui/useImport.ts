@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useStore } from '../store/store';
 import { ensureAssetVisuals, probeFile } from '../media/probe';
 import type { FFmpegProgress } from '../media/ffmpeg';
-import { isSubtitleFile, parseSubtitles } from '../lib/subtitles';
+import { decodeSubtitleBytes, isSubtitleFile, parseSubtitles } from '../lib/subtitles';
 import { findExistingAsset, isDetached } from './importDedup';
 import { findClip } from '../store/projectOps';
 import { clipEndMs } from '../model';
@@ -96,7 +96,8 @@ export function useImport(): (files: Iterable<File>, opts?: ImportOptions) => Pr
         try {
           // Subtitle files (.srt/.vtt) become caption clips, not media assets.
           if (isSubtitleFile(file)) {
-            const cues = parseSubtitles(await file.text());
+            const text = decodeSubtitleBytes(new Uint8Array(await file.arrayBuffer()));
+            const cues = parseSubtitles(text);
             if (cues.length === 0) throw new Error(t('errors.media.noCues', { name: file.name }));
             addSubtitleClips(cues);
             continue;

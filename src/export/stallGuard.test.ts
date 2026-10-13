@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { StalledError, withDeadline } from './stallGuard';
+import { StalledError, withDeadline, withRenewableDeadline } from './stallGuard';
 
 describe('withDeadline', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -46,5 +46,45 @@ describe('withDeadline', () => {
     // attached a handler, so nothing here should reach the unhandled path.
     reject(new Error('too late'));
     await vi.advanceTimersByTimeAsync(0);
+  });
+});
+
+describe('withRenewableDeadline', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('starts the full wait over on every renew', async () => {
+    let resolve: (v: number) => void = () => {};
+    const guarded = withRenewableDeadline(
+      new Promise<number>((r) => {
+        resolve = r;
+      }),
+      1000,
+      'mix',
+    );
+    // Three times the deadline in all, never more than 900 ms without a sign of life.
+    for (let i = 0; i < 3; i++) {
+      await vi.advanceTimersByTimeAsync(900);
+      guarded.renew();
+    }
+    resolve(5);
+    await expect(guarded.promise).resolves.toBe(5);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('fires once the renewals stop', async () => {
+    const guarded = withRenewableDeadline(new Promise<void>(() => {}), 1000, 'mix');
+    const settled = expect(guarded.promise).rejects.toThrow(StalledError);
+    await vi.advanceTimersByTimeAsync(900);
+    guarded.renew();
+    await vi.advanceTimersByTimeAsync(1000);
+    await settled;
+  });
+
+  it('does not re-arm after it settled', async () => {
+    const guarded = withRenewableDeadline(Promise.resolve(1), 1000, 'mix');
+    await guarded.promise;
+    guarded.renew();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

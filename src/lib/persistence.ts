@@ -705,7 +705,25 @@ async function writeProject(project: Project): Promise<void> {
   }
 }
 
-async function syncAssets(
+/**
+ * Library saves run one after another. Each one is a diff against the state
+ * before it, and one that copies a large file into the storage folder can take
+ * a while: run concurrently, a slow save committing after a newer one would
+ * write back an asset the newer one had removed.
+ */
+let assetSyncQueue: Promise<void> = Promise.resolve();
+
+function syncAssets(
+  next: Record<string, MediaAsset>,
+  prev: Record<string, MediaAsset>,
+  project: Project,
+): Promise<void> {
+  // `writeAssets` reports its own failures and never rejects.
+  assetSyncQueue = assetSyncQueue.then(() => writeAssets(next, prev, project));
+  return assetSyncQueue;
+}
+
+async function writeAssets(
   next: Record<string, MediaAsset>,
   prev: Record<string, MediaAsset>,
   project: Project,
@@ -732,7 +750,12 @@ async function syncAssets(
       'readwrite',
     );
     if (ownerMissing) {
-      tx.objectStore(PROJECT_STORE).put({ ...project, updatedAt: Date.now() }, projectId);
+      // The project as it is now, not as it was when this save was queued: a
+      // save that waited behind a slower one would otherwise write back an
+      // older timeline over the debounced project save that already landed.
+      const live = useStore.getState().project;
+      const owner = live.id === projectId ? live : project;
+      tx.objectStore(PROJECT_STORE).put({ ...owner, updatedAt: Date.now() }, projectId);
     }
     const written = changed.map((asset) => putAsset(tx, asset, projectId, refs.get(asset.id) ?? null));
     // The asset itself goes now - the state is the library, and leaving its

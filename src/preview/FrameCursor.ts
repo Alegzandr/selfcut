@@ -78,9 +78,14 @@ function ensureWorker(): Worker | null {
         return;
       }
       // A frame for a cursor disposed while the message was in flight must
-      // still be closed, or its GPU memory lingers until GC.
-      if (proxy) proxy.receive(msg);
-      else msg.frame.close();
+      // still be closed, or its GPU memory lingers until GC - both halves of a
+      // blended pair.
+      if (proxy) {
+        proxy.receive(msg);
+      } else {
+        msg.frame.close();
+        msg.next?.close();
+      }
     };
     // An uncaught throw inside the worker. Without this handler the exception
     // is swallowed by the worker's own scope and nothing on this side ever

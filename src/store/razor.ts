@@ -1,4 +1,4 @@
-import type { Clip, Project } from '../types';
+import type { Clip, Track } from '../types';
 import { clipDurationMs, cloneClip, sliceClipAnimation, sliceVelocity, timelineToSourceMs } from '../model';
 import { uid } from '../lib/id';
 
@@ -61,10 +61,13 @@ export function razorClip(clip: Clip, atMs: number, relink: Map<string, string>)
  * straddling the instant are razored there, then everything from it on slides
  * right. Every track, not just the ones receiving content - an insert that
  * moved one lane would slide a voice-over off its picture.
+ *
+ * `tracks` are the lanes of the timeline being edited (the open composition's
+ * inside a precomp), never the root's by default.
  */
-export function insertRoom(p: Project, atMs: number, spanMs: number): void {
+export function insertRoom(tracks: Track[], atMs: number, spanMs: number): void {
   const relink = new Map<string, string>();
-  for (const track of p.tracks) {
+  for (const track of tracks) {
     if (track.locked) continue;
     const additions: Clip[] = [];
     for (const clip of track.clips) {

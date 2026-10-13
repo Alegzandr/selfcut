@@ -16,6 +16,7 @@ import { focusIsKeyboardDriven } from '../lib/focusModality';
 import { openProject, saveProject } from './projectActions';
 import { PLAYBACK_SKIP_BACK_MS, PLAYBACK_SKIP_FORWARD_MS } from '../app/config';
 import { shuttleStep } from '../lib/shuttle';
+import { modalDialogOpen } from './useModalDialog';
 
 /**
  * Jump to the previous/next edit point (clip edges, markers, region corners,
@@ -188,7 +189,9 @@ export function useEditorHotkeys() {
 
       // A modal dialog open: the timeline must go inert - a stray Space or
       // Delete must not edit behind it. Each dialog handles Escape itself.
-      if (s.exportOpen || s.preferencesOpen || s.aboutOpen || s.confirmDialog) return;
+      // The export sheet and the touch track sheet keep their own Escape
+      // handling, outside the shared modal stack, so they are named here.
+      if (s.exportOpen || s.trackSettingsTrackId || modalDialogOpen()) return;
 
       // The shortcuts panel is the one dialog whose dismissal is owned here
       // rather than by the dialog itself, so Escape and the '?' toggle still

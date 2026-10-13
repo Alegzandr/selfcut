@@ -160,7 +160,7 @@ export function drawClipSample(
   let graded: CanvasImageSource | null = null;
   if (color) {
     const started = span();
-    graded = gradeFrame(sample, sw, sh, color);
+    graded = gradeFrame(sample, sw, sh, color, renderedFrameScale.get(sample) ?? 1);
     endSpan('grade', started);
     if (graded) count('gradedClips');
   }
@@ -687,6 +687,8 @@ export function drawTrackLayer(
    * slot would have the inner composite clear the outer one out from under it.
    */
   depth = 0,
+  /** Output pixels per project pixel; see `CompositeSource.pixelScale`. */
+  pixelScale = 1,
 ): void {
   if (!trackHasPictureFx(track)) {
     paint(ctx);
@@ -705,7 +707,9 @@ export function drawTrackLayer(
   const color = resolveTrackColor(track);
   // `gradeFrame` hands back a canvas it reuses, so it is drawn from immediately
   // and never held. A failed grade falls through to the ungraded scratch.
-  const graded = color ? gradeFrame(canvasAsFrame(scratch.canvas), outW, outH, color) : null;
+  const graded = color
+    ? gradeFrame(canvasAsFrame(scratch.canvas), outW, outH, color, pixelScale)
+    : null;
   const source = graded ?? scratch.canvas;
   const blurPx = resolveTrackBlur(track) * outH * 0.06;
   drawBlurred(ctx, blurPx, { x: 0, y: 0, w: outW, h: outH }, (target) => {
@@ -725,10 +729,19 @@ export function drawTrackLayer(
  * file.
  */
 export interface CompositeSource {
-  /** The decoded picture for a media clip at this time, or null when it is not ready. */
-  sample: (clip: Clip, timelineMs: number) => DrawableFrame | null;
+  /**
+   * The decoded picture for a media clip at this time, or null when it is not
+   * ready. `instance` tells apart two plays of the same clip through two comp
+   * clips of one composition (see `clipInstanceKey`).
+   */
+  sample: (clip: Clip, timelineMs: number, instance: string) => DrawableFrame | null;
   /** The lanes of a nested composition, or null when it has been deleted. */
   compTracks: (compId: string) => Track[] | null;
+  /**
+   * Output pixels per project pixel: below 1 for a preview drawn at a reduced
+   * rung, 1 for an export at the project's own size. Absent = 1.
+   */
+  pixelScale?: number;
 }
 
 /**
@@ -755,6 +768,7 @@ export function drawTracks(
   outH: number,
   source: CompositeSource,
   depth = 0,
+  path = '',
 ): void {
   for (let t = tracks.length - 1; t >= 0; t--) {
     const track = tracks[t]!;
@@ -770,12 +784,13 @@ export function drawTracks(
       (target) => {
         forEachVisibleVideoClip(track, tMs, (clip, xfadeInMs) => {
           const sample = isCompClip(clip)
-            ? renderCompFrame(clip, tMs, outW, outH, source, depth)
-            : source.sample(clip, tMs);
+            ? renderCompFrame(clip, tMs, outW, outH, source, depth, path)
+            : source.sample(clip, tMs, clipInstanceKey(path, clip));
           drawClip(target, clip, outW, outH, tMs, alphaMul, xfadeInMs, sample);
         });
       },
       depth,
+      source.pixelScale,
     );
   }
 }
@@ -800,6 +815,7 @@ function renderCompFrame(
   outH: number,
   source: CompositeSource,
   depth: number,
+  path: string,
 ): DrawableFrame | null {
   if (depth >= MAX_COMP_DEPTH) return null;
   const tracks = source.compTracks(clip.compId);
@@ -808,15 +824,48 @@ function renderCompFrame(
   if (!scratch) return null;
   const started = span();
   scratch.ctx.clearRect(0, 0, outW, outH);
-  drawTracks(scratch.ctx, tracks, compTimeAt(clip, tMs), outW, outH, source, depth + 1);
+  drawTracks(
+    scratch.ctx,
+    tracks,
+    compTimeAt(clip, tMs),
+    outW,
+    outH,
+    source,
+    depth + 1,
+    clipInstanceKey(path, clip),
+  );
   count('compLayers');
   endSpan('comp', started);
-  return canvasAsFrame(scratch.canvas);
+  const frame = canvasAsFrame(scratch.canvas);
+  renderedFrameScale.set(frame, source.pixelScale ?? 1);
+  return frame;
+}
+
+/**
+ * Pixels per project pixel of a picture the compositor rendered at output size
+ * (a precomp), read when the comp clip's own grade runs over it. Decoded footage
+ * is not in here: it is graded at its own resolution, scale 1.
+ */
+const renderedFrameScale = new WeakMap<DrawableFrame, number>();
+
+/**
+ * Which play of a clip this is: its id, prefixed with the comp clips it is
+ * reached through.
+ *
+ * A composition can be placed more than once - two comp clips of one precomp,
+ * overlapping - and then the SAME inner clip is on screen twice at two
+ * different times. Keyed by `clip.id` alone the two plays share one decoder and
+ * one sample; keyed by instance, each gets its own. At the top level the key is
+ * the bare id.
+ */
+export function clipInstanceKey(path: string, clip: Clip): string {
+  return path ? `${path}/${clip.id}` : clip.id;
 }
 
 /**
  * Visit every MEDIA clip that has to be decoded to draw `tMs`, at any nesting
- * depth, each with the time in its own composition.
+ * depth, each with the time in its own composition and its instance key (see
+ * `clipInstanceKey`).
  *
  * The decode pool is flat - one cursor per clip id, wherever the clip lives - so
  * everything that manages it (keeping a drawn clip alive, warming the next cut,
@@ -829,8 +878,9 @@ export function forEachActiveMediaClip(
   tracks: Track[],
   tMs: number,
   compTracks: (compId: string) => Track[] | null,
-  fn: (clip: Clip, atMs: number) => void,
+  fn: (clip: Clip, atMs: number, instance: string) => void,
   depth = 0,
+  path = '',
 ): void {
   if (depth >= MAX_COMP_DEPTH) return;
   for (const track of tracks) {
@@ -838,10 +888,19 @@ export function forEachActiveMediaClip(
     forEachVisibleVideoClip(track, tMs, (clip) => {
       if (isCompClip(clip)) {
         const inner = compTracks(clip.compId);
-        if (inner) forEachActiveMediaClip(inner, compTimeAt(clip, tMs), compTracks, fn, depth + 1);
+        if (inner) {
+          forEachActiveMediaClip(
+            inner,
+            compTimeAt(clip, tMs),
+            compTracks,
+            fn,
+            depth + 1,
+            clipInstanceKey(path, clip),
+          );
+        }
         return;
       }
-      if (clip.kind === 'media') fn(clip, tMs);
+      if (clip.kind === 'media') fn(clip, tMs, clipInstanceKey(path, clip));
     });
   }
 }
