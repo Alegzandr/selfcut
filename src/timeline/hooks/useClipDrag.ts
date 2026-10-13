@@ -45,8 +45,12 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
       if (drag.current?.winDriven) return;
       sessionCleanup.current?.();
       // A trim can't outlive its clip's component: don't strand the preview on
-      // a frame the playhead isn't at.
-      if (drag.current) useStore.getState().setPreviewOverride(null);
+      // a frame the playhead isn't at, nor leave its gesture open - a dangling
+      // snapshot would swallow every later edit's undo step.
+      if (drag.current) {
+        useStore.getState().setPreviewOverride(null);
+        useStore.getState().endGesture();
+      }
       if (autoScrollRaf.current != null) cancelAnimationFrame(autoScrollRaf.current);
       if (longPress.current) clearTimeout(longPress.current.timer);
     },
@@ -180,7 +184,7 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
         // Re-collect snap points excluding the clones: the originals' edges are
         // now valid snap targets (a copy often lands right against its source).
         d.points = collectSnapPoints(
-          state.project,
+          getTimeline(state),
           Object.values(idMap),
           state.currentTimeMs,
           state.loopRegion,
@@ -273,7 +277,7 @@ export function useClipDrag({ clip, asset, trackKind, selected, coarse, durMs }:
       // Linked partners move along with the clip: their edges must not be snap
       // targets or the drag keeps sticking to its own starting position.
       points: collectSnapPoints(
-        state.project,
+        getTimeline(state),
         [clip.id, ...linkedPartnerIds(state.project, clip.id)],
         state.currentTimeMs,
         state.loopRegion,
