@@ -4,6 +4,7 @@ import { defineConfig } from 'astro/config';
 
 import { crossOriginIsolation } from './integrations/crossOriginIsolation';
 import { ffmpegCore } from './integrations/ffmpegCore';
+import { onnxRuntime } from './integrations/onnxRuntime';
 import { sitemap } from './integrations/sitemap';
 import { ORIGIN } from './src/landing/langs';
 
@@ -42,16 +43,16 @@ export default defineConfig({
         "media-src 'self' blob:",
         // Auto-captions run Whisper locally via transformers.js. The audio
         // never leaves the browser; only the open-source model weights
-        // (HuggingFace hub, cached after first download) and the onnxruntime wasm
-        // (jsdelivr) are fetched - hence these hosts and the jsdelivr script
-        // source below. Self-hosting them like the ffmpeg core would remove them
-        // entirely; see captionsModel.ts.
+        // (HuggingFace hub, cached after first download) are fetched - hence
+        // these hosts. The onnxruntime wasm is served from our own origin (see
+        // the onnxRuntime integration); self-hosting the weights the same way
+        // would remove the rest; see captionsModel.ts.
         //
         // `*.hf.co` is not a second vendor: huggingface.co URLs 302 to the CDN
         // that actually serves the weights (`us.aws.cdn.hf.co` today), and CSP
         // checks every hop of a redirect. Without it the download fails on the
         // first byte of the first weight file.
-        "connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co https://cdn.jsdelivr.net",
+        "connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co",
         "worker-src 'self' blob:",
         "object-src 'none'",
         "base-uri 'none'",
@@ -61,8 +62,9 @@ export default defineConfig({
         // 'wasm-unsafe-eval' is what lets ffmpeg.wasm compile its module: the
         // narrow WebAssembly-only permission, which does NOT re-enable eval()
         // for scripts. The core is served from our own origin (see the
-        // ffmpegCore integration), so no CDN needs allowing for it.
-        resources: ["'self'", "'wasm-unsafe-eval'", 'blob:', 'https://cdn.jsdelivr.net'],
+        // ffmpegCore integration), and so is onnxruntime (onnxRuntime
+        // integration), so no CDN needs allowing for either.
+        resources: ["'self'", "'wasm-unsafe-eval'", 'blob:'],
       },
       styleDirective: {
         resources: [
@@ -77,7 +79,7 @@ export default defineConfig({
       },
     },
   },
-  integrations: [react(), ffmpegCore(), crossOriginIsolation(), sitemap()],
+  integrations: [react(), ffmpegCore(), onnxRuntime(), crossOriginIsolation(), sitemap()],
   vite: {
     plugins: [tailwindcss()],
     worker: {

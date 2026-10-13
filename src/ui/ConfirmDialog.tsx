@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
 import { useEnterMotion } from './motion';
 import { useStore } from '../store/store';
+import { useModalDialog } from './useModalDialog';
 
 /**
  * The app's confirmation dialog, driven by `requestConfirm()`. One instance
@@ -18,24 +19,13 @@ export function ConfirmDialog() {
   const { resolveConfirm } = useStore.getState();
   const confirmRef = useRef<HTMLButtonElement>(null);
 
-  // Escape declines. Capture phase so the global editor hotkeys never see the
-  // keystroke while the dialog owns the screen.
-  useEffect(() => {
-    if (!request) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      resolveConfirm(false);
-    };
-    window.addEventListener('keydown', onKey, { capture: true });
-    return () => window.removeEventListener('keydown', onKey, { capture: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [request]);
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  // Focus the accepting button so Enter answers and Tab stays in the dialog.
-  useEffect(() => {
-    if (request) confirmRef.current?.focus();
-  }, [request]);
+  // Escape declines; the accepting button takes focus so Enter answers.
+  useModalDialog(request !== null, panelRef, {
+    onEscape: () => resolveConfirm(false),
+    initialFocus: confirmRef,
+  });
 
   return (
     <AnimatePresence>
@@ -48,6 +38,7 @@ export function ConfirmDialog() {
           onClick={() => resolveConfirm(false)}
         >
           <m.div
+            ref={panelRef}
             {...dialog}
             role="alertdialog"
             aria-modal="true"

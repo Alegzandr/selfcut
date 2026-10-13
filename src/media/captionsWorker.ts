@@ -111,6 +111,39 @@ async function resolve(model: ReturnType<typeof captionModel>, handheld: boolean
   };
 }
 
+/**
+ * Where the onnxruntime-web wasm runtime is served from: our own origin, copied
+ * there by the onnxRuntime integration (integrations/onnxRuntime.ts).
+ */
+const ONNX_WASM_DIR = new URL(`${import.meta.env.BASE_URL}onnxruntime/`, self.location.href).href;
+
+/**
+ * Point onnxruntime at the self-hosted runtime instead of jsdelivr.
+ *
+ * transformers.js has already filled `wasmPaths` with CDN URLs by the time it
+ * is imported, having picked the build this browser needs (asyncify, or the
+ * plain one on older Safari). Only the directory is swapped, so that choice -
+ * and the version, which is the one installed - stays exactly as it made it.
+ */
+let onnxSelfHosted = false;
+function selfHostOnnxRuntime(wasm: { wasmPaths?: unknown } | undefined): void {
+  // Once: transformers.js later swaps `mjs` for a blob: URL of its own, which
+  // a second pass (the next model) must not rewrite.
+  if (!wasm || onnxSelfHosted) return;
+  onnxSelfHosted = true;
+  const paths = wasm.wasmPaths;
+  const local = (url: string) => ONNX_WASM_DIR + url.slice(url.lastIndexOf('/') + 1);
+  if (paths && typeof paths === 'object') {
+    const { mjs, wasm: binary } = paths as { mjs?: unknown; wasm?: unknown };
+    wasm.wasmPaths = {
+      ...(typeof mjs === 'string' && { mjs: local(mjs) }),
+      ...(typeof binary === 'string' && { wasm: local(binary) }),
+    };
+  } else {
+    wasm.wasmPaths = ONNX_WASM_DIR;
+  }
+}
+
 async function getAsr(modelId: string, handheld: boolean): Promise<Asr> {
   const cached = pipelines.get(modelId);
   if (cached) return cached;
@@ -119,6 +152,7 @@ async function getAsr(modelId: string, handheld: boolean): Promise<Asr> {
     const { pipeline, env } = await import('@huggingface/transformers');
     // Remote (HuggingFace hub) weights, cached by the browser after first use.
     env.allowLocalModels = false;
+    selfHostOnnxRuntime(env.backends.onnx.wasm);
     const progress_callback = (p: { status?: string; progress?: number }) => {
       if (p.status === 'progress' && typeof p.progress === 'number') {
         post({ type: 'progress', stage: 'model', value: p.progress / 100 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { useMemo, useRef, type ReactNode } from 'react';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
@@ -8,6 +8,7 @@ import { useStore } from '../store/store';
 import { PLAYBACK_SKIP_BACK_MS, PLAYBACK_SKIP_FORWARD_MS } from '../app/config';
 import { Kbd } from './Kbd';
 import { Tooltip } from './Tooltip';
+import { useModalDialog } from './useModalDialog';
 
 /**
  * Shortcut table. `GROUPS` lives outside the component, so it holds i18n *keys*
@@ -276,46 +277,12 @@ export function ShortcutsHelp() {
   const { setShortcutsOpen } = useStore.getState();
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Move focus into the panel and hand it back on close. Without this the
-  // caret stays on whatever opened the dialog, so a screen reader keeps
-  // reading the editor behind the overlay and Page Down scrolls the timeline
-  // rather than the 62 rows the user just asked to see.
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus({ preventScroll: true });
-    return () => {
-      // `isConnected`: a dialog opened from a menu outlives the item that
-      // opened it, and focusing a detached node silently drops focus on body.
-      if (previous?.isConnected) previous.focus();
-    };
-  }, [open]);
-
-  // Keep Tab inside the dialog. The panel itself is the only other stop, so
-  // this is a two-element cycle, but it is written for whatever lands here next.
-  function trapTab(e: KeyboardEvent<HTMLDivElement>) {
-    if (e.key !== 'Tab') return;
-    const panel = panelRef.current;
-    if (!panel) return;
-    const stops = [
-      ...panel.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
-      ),
-    ];
-    const first = stops.at(0);
-    const last = stops.at(-1);
-    if (!first || !last) {
-      // Nothing focusable left inside: keep the caret rather than let Tab
-      // walk out into the editor sitting behind the overlay.
-      e.preventDefault();
-      return;
-    }
-    const active = document.activeElement;
-    const leaving = e.shiftKey ? active === first || active === panel : active === last;
-    if (!leaving) return;
-    e.preventDefault();
-    (e.shiftKey ? last : first).focus();
-  }
+  // Move focus into the panel and hand it back on close, and keep Tab inside.
+  // Without this the caret stays on whatever opened the dialog, so a screen
+  // reader keeps reading the editor behind the overlay and Page Down scrolls
+  // the timeline rather than the 62 rows the user just asked to see. No
+  // Escape handler: see above.
+  useModalDialog(open, panelRef, { initialFocus: panelRef });
 
   return (
     <AnimatePresence>
@@ -340,7 +307,6 @@ export function ShortcutsHelp() {
             tabIndex={-1}
             className="flex max-h-[85dvh] w-full max-w-4xl flex-col xl:max-w-6xl overflow-hidden sheet outline-none"
             onClick={(e) => e.stopPropagation()}
-            onKeyDown={trapTab}
           >
             {/* Outside the scroller: with nine groups to page through, the way
                 out must not scroll away with them. */}

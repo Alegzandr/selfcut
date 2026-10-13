@@ -96,12 +96,22 @@ export function openFolderPicker(onFiles: (files: FileList) => void): void {
   pick(onFiles, true);
 }
 
+/**
+ * The input of the picker last opened, until it reports back. A cancelled
+ * picker fires `cancel` rather than `change`, and browsers without that event
+ * report nothing at all: the next pick sweeps the leftover away, so at most
+ * one hidden input ever sits in the document.
+ */
+let pending: HTMLInputElement | null = null;
+
 function pick(
   onFiles: (files: FileList) => void,
   directory: boolean,
   opts: { accept?: string; multiple?: boolean } = {},
 ): void {
+  pending?.remove();
   const input = document.createElement('input');
+  pending = input;
   input.type = 'file';
   if (directory) {
     // Not in the HTMLInputElement typings, but supported by every target browser.
@@ -111,10 +121,15 @@ function pick(
   }
   input.multiple = opts.multiple ?? true;
   input.style.display = 'none';
+  const done = () => {
+    input.remove();
+    if (pending === input) pending = null;
+  };
   input.addEventListener('change', () => {
     if (input.files?.length) onFiles(input.files);
-    input.remove();
+    done();
   });
+  input.addEventListener('cancel', done);
   document.body.appendChild(input);
   input.click();
 }

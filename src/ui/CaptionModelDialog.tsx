@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, m } from 'framer-motion';
@@ -11,6 +11,7 @@ import {
   TrashIcon,
 } from '@radix-ui/react-icons';
 import { Tooltip } from './Tooltip';
+import { useModalDialog } from './useModalDialog';
 import { CAPTION_MODELS, type CaptionModelInfo } from '../media/captionsModel';
 import {
   captionCapabilities,
@@ -224,19 +225,8 @@ export function CaptionModelDialog({
     refreshCache();
   }, [open, refreshCache]);
 
-  // Escape closes; capture phase so the global editor hotkeys never see it while
-  // the dialog owns the screen.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      onClose();
-    };
-    window.addEventListener('keydown', onKey, { capture: true });
-    return () => window.removeEventListener('keydown', onKey, { capture: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalDialog(open, panelRef, { onEscape: onClose });
 
   // Deliberately no abort on close: a download of several hundred megabytes is
   // exactly the thing to start and then go back to cutting over. It keeps
@@ -272,6 +262,7 @@ export function CaptionModelDialog({
           onClick={onClose}
         >
           <m.div
+            ref={panelRef}
             {...dialog}
             role="dialog"
             aria-modal="true"

@@ -29,6 +29,7 @@ export function registerCoopWorker(): void {
   // public/coop-sw.js), which scope alone could not express.
   const url = `${import.meta.env.BASE_URL}coop-sw.js`;
   const scope = new URL(import.meta.env.BASE_URL, location.href).href;
+  const editorPath = new URL('app/', scope).pathname;
 
   void (async () => {
     try {
@@ -40,7 +41,7 @@ export function registerCoopWorker(): void {
       // hand. Deliberately not written as "unregister anything that is not ours":
       // this owns the coop worker, not the origin's registrations.
       const stale = (await navigator.serviceWorker.getRegistrations()).filter(
-        (reg) => reg.scope !== scope && new URL(reg.scope).pathname.startsWith('/app/'),
+        (reg) => reg.scope !== scope && new URL(reg.scope).pathname.startsWith(editorPath),
       );
       for (const reg of stale) await reg.unregister();
 

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
 import { useEnterMotion } from './motion';
 import { Cross2Icon, MagnifyingGlassIcon } from '@radix-ui/react-icons';
 import { Tooltip } from './Tooltip';
 import { JobProgress } from './JobProgress';
+import { useModalDialog } from './useModalDialog';
 import type { FFmpegProgress } from '../media/ffmpeg';
 
 /** Above this many rows, scanning the list by eye stops working: offer a filter. */
@@ -84,28 +85,20 @@ export function TrackPickerDialog({
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<number[]>([]);
 
-  // Escape closes; capture phase so the global editor hotkeys never see it while
-  // the dialog owns the screen.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      onClose();
-    };
-    window.addEventListener('keydown', onKey, { capture: true });
-    return () => window.removeEventListener('keydown', onKey, { capture: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalDialog(open, panelRef, { onEscape: onClose });
 
   // A stale filter must not greet the next opening with an empty list, and a
-  // stale selection must not come back ticked.
-  useEffect(() => {
+  // stale selection must not come back ticked. Reset during render, on the
+  // closing edge, rather than from an effect.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (!open) {
       setQuery('');
       setPicked([]);
     }
-  }, [open]);
+  }
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -126,6 +119,7 @@ export function TrackPickerDialog({
           onClick={onClose}
         >
           <m.div
+            ref={panelRef}
             {...dialog}
             role="dialog"
             aria-modal="true"

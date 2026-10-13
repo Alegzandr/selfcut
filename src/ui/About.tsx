@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, m } from 'framer-motion';
 import { useEnterMotion } from './motion';
@@ -9,6 +9,7 @@ import logoUrl from '../assets/logo.png?url';
 import { APP_NAME, APP_VERSION } from '../app/config';
 import { useStore } from '../store/store';
 import { Tooltip } from './Tooltip';
+import { useModalDialog } from './useModalDialog';
 
 /**
  * About dialog, opened from Help. A small identity card: logo, name, version
@@ -20,19 +21,9 @@ export function About() {
   const open = useStore((s) => s.aboutOpen);
   const { setAboutOpen } = useStore.getState();
 
-  // Escape closes the dialog (the tooltip advertises it); capture phase so the
-  // global editor hotkeys never see the keystroke.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      setAboutOpen(false);
-    };
-    window.addEventListener('keydown', onKey, { capture: true });
-    return () => window.removeEventListener('keydown', onKey, { capture: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Escape closes the dialog (the tooltip advertises it).
+  useModalDialog(open, panelRef, { onEscape: () => setAboutOpen(false) });
 
   return (
     <AnimatePresence>
@@ -45,6 +36,7 @@ export function About() {
           onClick={() => setAboutOpen(false)}
         >
           <m.div
+            ref={panelRef}
             {...dialog}
             role="dialog"
             aria-modal="true"
