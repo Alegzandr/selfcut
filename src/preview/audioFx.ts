@@ -27,6 +27,42 @@ export interface AudioFxChain {
 type Segment = AudioFxChain;
 
 /**
+ * A tiny seeded PRNG (mulberry32): the same seed gives the same sequence on
+ * every context and every machine.
+ */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * One channel of the reverb's impulse response: decaying noise from a fixed
+ * seed per channel.
+ *
+ * Seeded rather than `Math.random`, because the IR is rebuilt for every audio
+ * context - the preview's, and each slice of an export's - and a random one
+ * made every slice of the same reverb sound slightly different from the last,
+ * and from what was heard while editing.
+ */
+export function fillReverbImpulse(data: Float32Array, channel: number): void {
+  const random = mulberry32(0x5e1fc07 + channel * 0x9e3779b9);
+  const len = data.length;
+  for (let i = 0; i < len; i++) {
+    const decay = Math.pow(1 - i / len, 2.5);
+    data[i] = (random() * 2 - 1) * decay;
+  }
+}
+
+/** Length of the reverb tail, in seconds. */
+export const REVERB_IR_SECONDS = 1.6;
+
+/**
  * A short synthetic reverb impulse response (decaying stereo noise), memoized per
  * audio context so every reverb clip shares one buffer. Avoids bundling an IR
  * file: a 1.6 s exponential-decay noise burst is a serviceable room.
@@ -35,15 +71,9 @@ const reverbIRCache = new WeakMap<BaseAudioContext, AudioBuffer>();
 function reverbImpulse(ctx: BaseAudioContext): AudioBuffer {
   const cached = reverbIRCache.get(ctx);
   if (cached) return cached;
-  const len = Math.floor(ctx.sampleRate * 1.6);
+  const len = Math.floor(ctx.sampleRate * REVERB_IR_SECONDS);
   const ir = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let ch = 0; ch < 2; ch++) {
-    const data = ir.getChannelData(ch);
-    for (let i = 0; i < len; i++) {
-      const decay = Math.pow(1 - i / len, 2.5);
-      data[i] = (Math.random() * 2 - 1) * decay;
-    }
-  }
+  for (let ch = 0; ch < 2; ch++) fillReverbImpulse(ir.getChannelData(ch), ch);
   reverbIRCache.set(ctx, ir);
   return ir;
 }

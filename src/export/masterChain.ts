@@ -65,7 +65,7 @@ export class MasterChain {
       return masterNormalization(meter.result());
     })().catch((err: unknown) => {
       // A slice that failed to render fails the same way on the encoder's
-      // pass, where the export truncates the mix and says so; here it only
+      // pass, where it fails the export (`audioMixFailed`); here it only
       // means the level stays as it was.
       console.warn('[export] loudness measurement failed, exporting the mix as is:', err);
       return null;
