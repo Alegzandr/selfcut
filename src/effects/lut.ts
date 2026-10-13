@@ -33,6 +33,19 @@ export class LutParseError extends Error {
 /** Cube sizes we accept: below 2 is meaningless, above 128 is not a real LUT. */
 const MIN_SIZE = 2;
 const MAX_SIZE = 128;
+/**
+ * A 1D table is just a curve, and curves ship long: 1024 and 4096 entries are
+ * the norm, and 65536 is what a 16-bit table looks like.
+ */
+const MAX_1D_SIZE = 65536;
+/**
+ * Edge of the cube a long 1D table is resampled onto. Expanding it entry for
+ * entry would make an N³ cube - a billion points for a 1024-entry curve - so
+ * past this size the curve is sampled at this many evenly spaced levels, and
+ * the renderer's trilinear fetch interpolates between them as it does for any
+ * cube. At 64 levels the step between grid points is about four 8-bit codes.
+ */
+export const MAX_1D_EXPANDED_SIZE = 64;
 
 export function parseCube(text: string): ParsedCube {
   let size3d = 0;
@@ -73,7 +86,7 @@ export function parseCube(text: string): ParsedCube {
   }
 
   if (size3d) {
-    if (!inRange(size3d)) throw new LutParseError('errors.lut.invalid');
+    if (!inRange(size3d, MAX_SIZE)) throw new LutParseError('errors.lut.invalid');
     if (data.length !== size3d * size3d * size3d * 3) {
       throw new LutParseError('errors.lut.invalid');
     }
@@ -81,9 +94,11 @@ export function parseCube(text: string): ParsedCube {
   }
 
   if (size1d) {
-    if (!inRange(size1d)) throw new LutParseError('errors.lut.invalid');
+    if (!inRange(size1d, MAX_1D_SIZE)) throw new LutParseError('errors.lut.invalid');
     if (data.length !== size1d * 3) throw new LutParseError('errors.lut.invalid');
-    return { size: size1d, data: expand1dTo3d(size1d, data) };
+    const curve = size1d > MAX_1D_EXPANDED_SIZE ? resampleCurve(data, MAX_1D_EXPANDED_SIZE) : data;
+    const n = curve.length / 3;
+    return { size: n, data: expand1dTo3d(n, curve) };
   }
 
   throw new LutParseError('errors.lut.invalid');
@@ -93,8 +108,28 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
-function inRange(n: number): boolean {
-  return Number.isInteger(n) && n >= MIN_SIZE && n <= MAX_SIZE;
+function inRange(n: number, max: number): boolean {
+  return Number.isInteger(n) && n >= MIN_SIZE && n <= max;
+}
+
+/**
+ * Sample a 1D curve (RGB triplets) at `n` evenly spaced input levels, linearly
+ * interpolating between its entries. Both ends land exactly on the curve's own
+ * first and last entries.
+ */
+function resampleCurve(curve: number[], n: number): number[] {
+  const last = curve.length / 3 - 1;
+  const out = new Array<number>(n * 3);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * last;
+    const lo = Math.floor(x);
+    const hi = Math.min(lo + 1, last);
+    const f = x - lo;
+    for (let c = 0; c < 3; c++) {
+      out[i * 3 + c] = curve[lo * 3 + c]! * (1 - f) + curve[hi * 3 + c]! * f;
+    }
+  }
+  return out;
 }
 
 /**

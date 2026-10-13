@@ -160,7 +160,7 @@ export function drawClipSample(
   let graded: CanvasImageSource | null = null;
   if (color) {
     const started = span();
-    graded = gradeFrame(sample, sw, sh, color);
+    graded = gradeFrame(sample, sw, sh, color, renderedFrameScale.get(sample) ?? 1);
     endSpan('grade', started);
     if (graded) count('gradedClips');
   }
@@ -687,6 +687,8 @@ export function drawTrackLayer(
    * slot would have the inner composite clear the outer one out from under it.
    */
   depth = 0,
+  /** Output pixels per project pixel; see `CompositeSource.pixelScale`. */
+  pixelScale = 1,
 ): void {
   if (!trackHasPictureFx(track)) {
     paint(ctx);
@@ -705,7 +707,9 @@ export function drawTrackLayer(
   const color = resolveTrackColor(track);
   // `gradeFrame` hands back a canvas it reuses, so it is drawn from immediately
   // and never held. A failed grade falls through to the ungraded scratch.
-  const graded = color ? gradeFrame(canvasAsFrame(scratch.canvas), outW, outH, color) : null;
+  const graded = color
+    ? gradeFrame(canvasAsFrame(scratch.canvas), outW, outH, color, pixelScale)
+    : null;
   const source = graded ?? scratch.canvas;
   const blurPx = resolveTrackBlur(track) * outH * 0.06;
   drawBlurred(ctx, blurPx, { x: 0, y: 0, w: outW, h: outH }, (target) => {
@@ -729,6 +733,11 @@ export interface CompositeSource {
   sample: (clip: Clip, timelineMs: number) => DrawableFrame | null;
   /** The lanes of a nested composition, or null when it has been deleted. */
   compTracks: (compId: string) => Track[] | null;
+  /**
+   * Output pixels per project pixel: below 1 for a preview drawn at a reduced
+   * rung, 1 for an export at the project's own size. Absent = 1.
+   */
+  pixelScale?: number;
 }
 
 /**
@@ -776,6 +785,7 @@ export function drawTracks(
         });
       },
       depth,
+      source.pixelScale,
     );
   }
 }
@@ -811,8 +821,17 @@ function renderCompFrame(
   drawTracks(scratch.ctx, tracks, compTimeAt(clip, tMs), outW, outH, source, depth + 1);
   count('compLayers');
   endSpan('comp', started);
-  return canvasAsFrame(scratch.canvas);
+  const frame = canvasAsFrame(scratch.canvas);
+  renderedFrameScale.set(frame, source.pixelScale ?? 1);
+  return frame;
 }
+
+/**
+ * Pixels per project pixel of a picture the compositor rendered at output size
+ * (a precomp), read when the comp clip's own grade runs over it. Decoded footage
+ * is not in here: it is graded at its own resolution, scale 1.
+ */
+const renderedFrameScale = new WeakMap<DrawableFrame, number>();
 
 /**
  * Visit every MEDIA clip that has to be decoded to draw `tMs`, at any nesting

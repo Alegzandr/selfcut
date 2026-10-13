@@ -44,7 +44,8 @@ uniform sampler3D uLut;
 uniform sampler2D uCurve;
 uniform float uBright, uContrast, uSat, uTemp, uTint, uVignette, uLutAmount, uLutSize, uCurveOn;
 uniform float uSharpen;
-// One texel of the source frame, in uv - the unsharp mask's whole sense of scale.
+// The unsharp mask's radius in uv - its whole sense of scale. One texel of the
+// source frame, or one project pixel for a picture rendered at output size.
 uniform vec2 uTexel;
 uniform float uKeyOn, uKeySim, uKeySmooth, uKeySpill;
 uniform vec3 uKeyColor;
@@ -92,7 +93,10 @@ vec3 hlgToLinear(vec3 c) {
 vec3 linearToHlg(vec3 c) {
   const float a = 0.17883277, b = 0.28466892, cc = 0.55991073;
   c = max(c, 0.0);
-  return mix(sqrt(3.0 * c), a * log(12.0 * c - b) + cc, step(vec3(1.0 / 12.0), c));
+  // The log branch is evaluated for every pixel, chosen or not, and below
+  // b/12 its argument goes negative: log() of that is NaN, which mix() cannot
+  // weight away. Clamped so the discarded branch stays a number.
+  return mix(sqrt(3.0 * c), a * log(max(12.0 * c - b, 1e-6)) + cc, step(vec3(1.0 / 12.0), c));
 }
 vec3 toLinear(vec3 c) {
   if (uTransfer == 1) return pqToLinear(c);
@@ -248,6 +252,8 @@ interface Uniforms {
  * each one to a `sampler3D` lazily on first use and caches the GPU texture.
  */
 const lutRegistry = new Map<string, Lut>();
+/** Bumped whenever the registry is rebuilt, so a grader knows to prune its textures. */
+let lutGeneration = 0;
 /** Last array `syncLuts` saw, so an unchanged project skips the rebuild each frame. */
 let lastLuts: Lut[] | null = null;
 
@@ -263,6 +269,7 @@ export function syncLuts(luts: readonly Lut[] | undefined): void {
   lastLuts = next;
   lutRegistry.clear();
   for (const lut of next) lutRegistry.set(lut.id, lut);
+  lutGeneration++;
 }
 
 class ColorGrader {
@@ -287,8 +294,10 @@ class ColorGrader {
   private halfFloatOk = true;
   /** Internal format the frame texture currently holds, so a switch re-allocates. */
   private texIsHalfFloat = false;
-  /** Uploaded LUTs, keyed by `Lut.id`. Built on first use, kept for the session. */
+  /** Uploaded LUTs, keyed by `Lut.id`. Built on first use, kept while the LUT is registered. */
   private lutTextures = new Map<string, { tex: WebGLTexture; size: number }>();
+  /** `lutGeneration` the textures were last pruned against. */
+  private lutGenerationSeen = 0;
   /** Bound when no LUT is active, so the `sampler3D` always has a valid texture. */
   private identityLut: WebGLTexture;
   /** Uploaded tone-curve textures, keyed by their baked bytes (stable per grade). */
@@ -394,13 +403,30 @@ class ColorGrader {
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
-    // ArrayBufferView uploads ignore UNPACK_FLIP_Y, so the data's r-fastest
-    // ordering maps straight onto (x=r, y=g, z=b) with no axis surprises.
-    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB8, n, n, n, 0, gl.RGB, gl.UNSIGNED_BYTE, bytes);
+    // Unflipped, the data's r-fastest ordering maps straight onto
+    // (x=r, y=g, z=b) with no axis surprises.
+    withRawUnpack(gl, () =>
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB8, n, n, n, 0, gl.RGB, gl.UNSIGNED_BYTE, bytes),
+    );
 
     const entry = { tex, size: n };
     this.lutTextures.set(id, entry);
     return entry;
+  }
+
+  /**
+   * Free the textures of LUTs the registry no longer holds. A LUT removed from
+   * the project would otherwise keep its N³ texture on the GPU for the rest of
+   * the session. Runs once per registry rebuild, not per frame.
+   */
+  private pruneLutTextures(): void {
+    if (this.lutGenerationSeen === lutGeneration) return;
+    this.lutGenerationSeen = lutGeneration;
+    for (const [id, entry] of this.lutTextures) {
+      if (lutRegistry.has(id)) continue;
+      this.gl.deleteTexture(entry.tex);
+      this.lutTextures.delete(id);
+    }
   }
 
   /**
@@ -474,7 +500,13 @@ class ColorGrader {
     return this.scratch;
   }
 
-  grade(sample: DrawableFrame, w: number, h: number, adj: ResolvedColor): AnyCanvas | null {
+  grade(
+    sample: DrawableFrame,
+    w: number,
+    h: number,
+    adj: ResolvedColor,
+    pixelScale: number,
+  ): AnyCanvas | null {
     if (w <= 0 || h <= 0) return null;
     this.resize(w, h);
 
@@ -482,6 +514,7 @@ class ColorGrader {
 
     // Bind the LUT on unit 1 (or the identity, so the sampler is never unbound),
     // and only turn the LUT branch on when the clip's LUT is actually registered.
+    this.pruneLutTextures();
     const lut = adj.lut ? this.lutTexture(adj.lut.id) : null;
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_3D, lut ? lut.tex : this.identityLut);
@@ -521,8 +554,11 @@ class ColorGrader {
     // The frame is uploaded at its own size and the canvas resized to match, so
     // one texel is one output pixel and the mask's radius is the pixel it is
     // named for - not a fraction of whatever the preview happens to be scaled to.
+    // A picture already rendered at output size (a lane, a precomp) carries
+    // `pixelScale` texels per project pixel, so its radius stays one project
+    // pixel whether the preview runs at a quarter of the export or at all of it.
     gl.uniform1f(this.uniforms.uSharpen, adj.sharpen);
-    gl.uniform2f(this.uniforms.uTexel, 1 / w, 1 / h);
+    gl.uniform2f(this.uniforms.uTexel, pixelScale / w, pixelScale / h);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return this.canvas;
   }
@@ -547,7 +583,9 @@ function buildIdentityLut(gl: WebGL2RenderingContext): WebGLTexture {
   const d = new Uint8Array([
     0, 0, 0, 255, 0, 0, 0, 255, 0, 255, 255, 0, 0, 0, 255, 255, 0, 255, 0, 255, 255, 255, 255, 255,
   ]);
-  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB8, 2, 2, 2, 0, gl.RGB, gl.UNSIGNED_BYTE, d);
+  withRawUnpack(gl, () =>
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB8, 2, 2, 2, 0, gl.RGB, gl.UNSIGNED_BYTE, d),
+  );
   return tex;
 }
 
@@ -572,10 +610,34 @@ function buildCurveTextureGl(gl: WebGL2RenderingContext, bytes: Uint8Array): Web
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  // ArrayBufferView uploads ignore UNPACK_FLIP_Y, so the 256 entries map straight
-  // to x = input code with no vertical flip to worry about on a 1px-tall texture.
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+  // A 2D ArrayBufferView upload DOES honour UNPACK_FLIP_Y, but flipping a
+  // 1px-tall texture is a no-op; it goes through the raw state all the same so
+  // no buffer upload depends on the frame path's pixel-store settings.
+  withRawUnpack(gl, () =>
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, bytes),
+  );
   return tex;
+}
+
+/**
+ * Run a typed-array upload under the pixel-store state it needs, then put back
+ * the state the frame uploads depend on.
+ *
+ * The frame path keeps UNPACK_FLIP_Y on, so a decoded picture lands right way
+ * up. But WebGL2 refuses `texImage3D` from an ArrayBufferView outright while
+ * FLIP_Y is set (INVALID_OPERATION, the texture left empty and every LUT-graded
+ * frame black), and the default 4-byte row alignment rejects the tightly packed
+ * RGB rows of an odd-sized cube (17, 33, the 2x2x2 identity) as too short.
+ */
+function withRawUnpack(gl: WebGL2RenderingContext, upload: () => void): void {
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  try {
+    upload();
+  } finally {
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  }
 }
 
 function buildProgram(gl: WebGL2RenderingContext): WebGLProgram {
@@ -677,17 +739,22 @@ function getGrader(): ColorGrader | null {
  * null when grading is unavailable (no WebGL2) or fails — the caller then draws
  * the ungraded frame. The returned canvas is reused across calls, so draw from
  * it immediately.
+ *
+ * `pixelScale` is how many of the frame's pixels make one project pixel: 1 for
+ * decoded footage (graded at its own resolution), the output-to-project ratio
+ * for a picture the compositor rendered at output size.
  */
 export function gradeFrame(
   sample: DrawableFrame,
   w: number,
   h: number,
   adj: ResolvedColor,
+  pixelScale = 1,
 ): AnyCanvas | null {
   const g = getGrader();
   if (!g) return null;
   try {
-    return g.grade(sample, w, h, adj);
+    return g.grade(sample, w, h, adj, pixelScale);
   } catch {
     // A throw here is the context dying mid-frame in all but name: drop the
     // grader so the next frame rebuilds instead of failing forever.

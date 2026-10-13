@@ -1,6 +1,6 @@
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny';
 import type { Clip, Project } from '../types';
-import { findComp, isTextClip, shouldBlendFrames, timelineToSourceMs } from '../model';
+import { findComp, isTextClip, outputDimensions, shouldBlendFrames, timelineToSourceMs } from '../model';
 import { drawTracks, forEachActiveMediaClip, invalidateResampling } from '../preview/compositor';
 import { syncLuts } from '../preview/colorPass';
 import { loadFonts } from '../lib/fonts';
@@ -206,6 +206,10 @@ export class FrameRenderer {
     drawTracks(this.ctx, project.tracks, tMs, width, height, {
       compTracks,
       sample: (clip) => samples.get(clip.id) ?? null,
+      // A preset at another size than the project's own (a 4K render of a
+      // 1080p timeline) keeps a lane's sharpen radius in project pixels, the
+      // same one the preview shows.
+      pixelScale: width / outputDimensions(project.aspectRatio).width,
     });
     endSpan('composite', compositeStarted);
   }

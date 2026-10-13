@@ -100,6 +100,17 @@ interface Lane {
 const VOLUME_RAMP_TAU_S = 0.01;
 
 /**
+ * How far behind the context clock the speakers are, in seconds. `outputLatency`
+ * where the browser reports it, `baseLatency` as the floor otherwise, 0 where
+ * neither exists or either reads as nonsense (some engines report 0 or NaN until
+ * the device has started).
+ */
+export function outputLatencyS(ctx: Pick<AudioContext, 'outputLatency' | 'baseLatency'>): number {
+  const latency = ctx.outputLatency || ctx.baseLatency || 0;
+  return Number.isFinite(latency) && latency > 0 ? latency : 0;
+}
+
+/**
  * What separates two project versions for the mix: nothing, only how loud
  * something is, or the schedule itself. See `audioMixDelta`.
  */
