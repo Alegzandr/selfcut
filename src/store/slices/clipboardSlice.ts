@@ -2,13 +2,14 @@ import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState, ClipboardItem } from '../editorState';
 import { uid } from '../../lib/id';
 import { ensureTrack, findClip } from '../projectOps';
-import { clipDurationMs } from '../../model';
+import { clipDurationMs, isCompClip, wouldNest } from '../../model';
 import { insertRoom } from '../razor';
+import { t as translate } from '../../i18n';
 
 export function createClipboardSlice(
   set: StoreSet,
   get: StoreGet,
-  { withHistory, host }: SliceHelpers,
+  { withHistory, host, lanes }: SliceHelpers,
 ): Pick<EditorState, 'copyClips' | 'cutClips' | 'pasteAtPlayhead' | 'pasteInsertAtPlayhead'> {
   return {
     copyClips: (clipIds) => {
@@ -54,8 +55,16 @@ export function createClipboardSlice(
    * span of the pasted block, so the cut downstream keeps its sync.
    */
   function paste(insert: boolean): void {
-    const { clipboard, currentTimeMs } = get();
-    if (!clipboard || clipboard.items.length === 0) return;
+    const { clipboard: copied, currentTimeMs, project, activeCompId } = get();
+    if (!copied || copied.items.length === 0) return;
+    // A composition clip cannot land inside its own composition (or one it
+    // nests): those are refused, like `addCompClip` refuses them.
+    const items = copied.items.filter(
+      (item) => !(isCompClip(item.clip) && wouldNest(project, activeCompId, item.clip.compId)),
+    );
+    if (items.length < copied.items.length) get().setNotice(translate('comp.cycleRefused'));
+    if (items.length === 0) return;
+    const clipboard = { items };
     const newIds = clipboard.items.map(() => uid('clip'));
     // Re-keyed so a pasted pair links to itself and not to the clips it came from.
     const linkIds = new Map<string, string>();
@@ -66,7 +75,7 @@ export function createClipboardSlice(
       ? Math.max(...clipboard.items.map((item) => item.offsetMs + clipDurationMs(item.clip)))
       : 0;
     withHistory((p) => {
-      if (insert) insertRoom(p, currentTimeMs, spanMs);
+      if (insert) insertRoom(lanes(p), currentTimeMs, spanMs);
       clipboard.items.forEach((item, i) => {
         const track = ensureTrack(host(p), item.kind, item.clip.trackId);
         const clip = structuredClone(item.clip);

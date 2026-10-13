@@ -1,7 +1,8 @@
 import type { StoreSet, StoreGet, SliceHelpers } from '../sliceHelpers';
 import type { EditorState } from '../editorState';
 import type { Project } from '../../types';
-import { findComp } from '../../model';
+import { produce } from 'immer';
+import { findComp, syncCompClips } from '../../model';
 import { resolveOverlaps } from '../projectOps';
 import { disposeUnreachableAssets, reviveAssets } from '../assetLifecycle';
 import { announce } from '../../lib/a11yBus';
@@ -23,7 +24,12 @@ export function createHistorySlice(
   _helpers: SliceHelpers,
 ): Pick<EditorState, 'beginGesture' | 'endGesture' | 'cancelGesture' | 'undo' | 'redo'> {
   return {
-    beginGesture: () => set({ gestureSnapshot: { project: get().project, assets: get().assets } }),
+    beginGesture: () => {
+      // A gesture already open keeps its snapshot: overwriting it would fold
+      // the edits made so far into the "before" state and lose them to undo.
+      if (get().gestureSnapshot) return;
+      set({ gestureSnapshot: { project: get().project, assets: get().assets } });
+    },
 
     cancelGesture: () => {
       const snap = get().gestureSnapshot;
@@ -36,9 +42,18 @@ export function createHistorySlice(
     },
 
     endGesture: () => {
+      // Gesture steps write the project directly, bypassing `withHistory`, so
+      // the clips playing a composition edited during the gesture are retimed
+      // here, against the project as it was when the gesture began.
+      const snap = get().gestureSnapshot;
+      const live = get().project;
+      const synced =
+        snap && snap.project !== live
+          ? produce(live, (draft) => syncCompClips(snap.project, draft))
+          : live;
       // Settle any illegal overlap created during the gesture (drag/trim);
       // legal pairwise overlaps are kept - they are crossfades.
-      const settled = resolveOverlaps(get().project, get().selectedClipId);
+      const settled = resolveOverlaps(synced, get().selectedClipId);
       if (settled !== get().project) set({ project: settled });
       const { gestureSnapshot, project, assets, past } = get();
       if (
@@ -56,6 +71,9 @@ export function createHistorySlice(
     },
 
     undo: () => {
+      // An undo landing mid-gesture first commits the gesture, so it is the
+      // gesture that gets undone and no snapshot is left dangling.
+      if (get().gestureSnapshot) get().endGesture();
       const { past, future, project, assets } = get();
       if (past.length === 0) return;
       const prev = past[past.length - 1]!;
@@ -77,6 +95,7 @@ export function createHistorySlice(
     },
 
     redo: () => {
+      if (get().gestureSnapshot) get().endGesture();
       const { past, future, project, assets } = get();
       if (future.length === 0) return;
       const next = future[0]!;

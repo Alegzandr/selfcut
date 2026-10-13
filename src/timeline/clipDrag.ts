@@ -116,6 +116,9 @@ const signedMs = (v: number) => `${v < 0 ? '−' : '+'}${formatTime(Math.abs(v))
  * the clip's head for a left trim, its tail for a right one - so a clip already
  * playing across that instant stays where it is instead of being torn out of
  * step with the picture it belongs to.
+ *
+ * The clip's own linked partners are never captured: they are trimmed and
+ * moved with it, so rippling them as well would move them twice.
  */
 export const rippleForTrim = (
   timeline: TimelineView,
@@ -126,16 +129,19 @@ export const rippleForTrim = (
   const own = timeline.tracks.find((tr) => tr.id === clip.trackId);
   const captured: { id: string; startMs: number }[] = [];
   const editPoint = edge === 'left' ? clip.timelineStartMs : clipEndMs(clip);
+  const isPartner = (c: Clip) => !!clip.linkId && c.linkId === clip.linkId;
   for (const track of timeline.tracks) {
     if (track === own) {
       for (const c of track.clips) {
-        if (c.id !== clip.id && c.timelineStartMs > clip.timelineStartMs) {
+        if (c.id !== clip.id && !isPartner(c) && c.timelineStartMs > clip.timelineStartMs) {
           captured.push({ id: c.id, startMs: c.timelineStartMs });
         }
       }
     } else if (acrossTracks && !track.locked) {
       for (const c of track.clips) {
-        if (c.timelineStartMs >= editPoint) captured.push({ id: c.id, startMs: c.timelineStartMs });
+        if (!isPartner(c) && c.timelineStartMs >= editPoint) {
+          captured.push({ id: c.id, startMs: c.timelineStartMs });
+        }
       }
     }
   }
