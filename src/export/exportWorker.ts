@@ -42,6 +42,7 @@ import {
   SUPPORT_PROBE_MS,
   TEARDOWN_STALL_MS,
   withDeadline,
+  withRenewableDeadline,
 } from './stallGuard';
 import {
   AUDIO_CHUNK_FRAMES,
@@ -333,6 +334,8 @@ const worker = self as unknown as {
  * is dropped rather than resurrecting a settled promise.
  */
 let awaitingAudio: ((chunk: Float32Array[] | null) => void) | null = null;
+/** Restarts the deadline on the chunk being awaited; see `audioPending`. */
+let renewAudioDeadline: (() => void) | null = null;
 
 worker.onmessage = (e) => {
   const msg = e.data;
@@ -346,6 +349,10 @@ worker.onmessage = (e) => {
     const resolve = awaitingAudio;
     awaitingAudio = null;
     resolve?.(null);
+    return;
+  }
+  if (msg.type === 'audioPending') {
+    renewAudioDeadline?.();
     return;
   }
   void (async () => {
@@ -369,9 +376,8 @@ worker.onmessage = (e) => {
  *
  * `OfflineAudioContext` does not exist here, so the mix has to be rendered on
  * the main thread - but pulling it slice by slice means neither side ever holds
- * more than one slice. Resolves to null when that slice could not be rendered,
- * which ends the audio track rather than failing the whole export: a video with
- * a truncated soundtrack beats no video at all.
+ * more than one slice. Resolves to null when that slice could not be rendered
+ * or never came, which the caller turns into a failed export.
  */
 function pullAudio(offset: number, frames: number): Promise<Float32Array[] | null> {
   const chunk = new Promise<Float32Array[] | null>((resolve) => {
@@ -379,18 +385,25 @@ function pullAudio(offset: number, frames: number): Promise<Float32Array[] | nul
     worker.postMessage({ type: 'needAudio', offset, frames });
   });
   // A reply that never arrives - a wedged main thread, a message lost with a
-  // worker that was replaced - reads as a slice that could not be rendered.
-  // The soundtrack then ends where the mix did, which is the same outcome the
-  // main thread reports for a slice it failed to render, and not a video that
-  // is 92% encoded and waiting for ever.
-  return withDeadline(chunk, AUDIO_CHUNK_STALL_MS, 'audio mix from the main thread').catch(
-    (err: unknown) => {
+  // worker that was replaced - reads as a slice that could not be rendered,
+  // and not as a video that is 92% encoded and waiting for ever. The main
+  // thread renews the deadline while it is still measuring a normalized mix.
+  const guarded = withRenewableDeadline(
+    chunk,
+    AUDIO_CHUNK_STALL_MS,
+    'audio mix from the main thread',
+  );
+  renewAudioDeadline = guarded.renew;
+  return guarded.promise
+    .catch((err: unknown) => {
       if (!(err instanceof StalledError)) throw err;
-      console.warn('[export] no audio slice from the main thread, truncating the mix');
+      console.warn('[export] no audio slice from the main thread');
       awaitingAudio = null;
       return null;
-    },
-  );
+    })
+    .finally(() => {
+      if (renewAudioDeadline === guarded.renew) renewAudioDeadline = null;
+    });
 }
 
 /**
@@ -1214,9 +1227,10 @@ async function pushAudioMix(
   for (let offset = 0; offset < totalFrames; offset += AUDIO_CHUNK_FRAMES) {
     const frames = Math.min(AUDIO_CHUNK_FRAMES, totalFrames - offset);
     const channels = await pullAudio(offset, frames);
-    // The main thread could not render this slice: stop rather than write
-    // silence, so the file's audio ends where the mix did.
-    if (!channels) return;
+    // The main thread could not render this slice. Finalizing here would hand
+    // back a file whose audio silently stops short - for an mp3, possibly a file
+    // with no audio in it at all - reported as a finished export.
+    if (!channels) throw new ExportError('audioMixFailed');
     const data = new Float32Array(frames * channelCount);
     for (let ch = 0; ch < channelCount; ch++) {
       data.set(channels[ch]!.subarray(0, frames), ch * frames);

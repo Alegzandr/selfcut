@@ -36,21 +36,131 @@ async function scratchDir(): Promise<FileSystemDirectoryHandle | null> {
 }
 
 /**
- * Delete leftover scratch files, keeping `except` if given.
+ * How long a scratch file is left alone after it was last written.
+ *
+ * The finished file is what the download reads from, and nothing tells the page
+ * when a download is over - a multi-gigabyte transfer is still in flight long
+ * after `click()` returns, possibly in another tab. A file untouched for this
+ * long is not being rendered (a render writes continuously) and is past any
+ * download a person would still be waiting on.
+ */
+export const SCRATCH_GRACE_MS = 10 * 60_000;
+
+/** Web Lock held, shared, for as long as a render writes into a scratch file. */
+const SCRATCH_LOCK_PREFIX = 'selfcut-export-scratch:';
+
+export interface ScratchEntry {
+  name: string;
+  /** `File.lastModified`; 0 when it could not be read. */
+  lastModified: number;
+}
+
+export interface ScratchSweepOptions {
+  /** Names never removed: the export that is about to use, or just produced, them. */
+  keep?: readonly string[];
+  /**
+   * Also spare the most recently written of the others. Set when a NEW export
+   * starts: the previous one's file may still be downloading, and it is only
+   * reclaimed once the new export has finished (see `startExport`).
+   */
+  keepNewest?: boolean;
+}
+
+/**
+ * Which scratch files a sweep may remove. Pure, so the rules can be tested
+ * without a file system: a file is spared if it is kept by name, locked by a
+ * render in progress (in any tab), written within `SCRATCH_GRACE_MS`, or - with
+ * `keepNewest` - the most recent of the others.
+ */
+export function scratchToSweep(
+  entries: readonly ScratchEntry[],
+  now: number,
+  locked: ReadonlySet<string>,
+  options: ScratchSweepOptions = {},
+): string[] {
+  const keep = new Set(options.keep ?? []);
+  const candidates = entries.filter((e) => !keep.has(e.name) && !locked.has(e.name));
+  let newest: ScratchEntry | null = null;
+  if (options.keepNewest) {
+    for (const e of candidates) if (!newest || e.lastModified > newest.lastModified) newest = e;
+  }
+  return candidates
+    .filter((e) => e !== newest && now - e.lastModified >= SCRATCH_GRACE_MS)
+    .map((e) => e.name);
+}
+
+/** Names of the scratch files a render holds the lock on, in any tab. */
+async function lockedScratch(): Promise<Set<string>> {
+  const out = new Set<string>();
+  try {
+    const state = await navigator.locks?.query();
+    for (const lock of state?.held ?? []) {
+      if (lock.name?.startsWith(SCRATCH_LOCK_PREFIX)) {
+        out.add(lock.name.slice(SCRATCH_LOCK_PREFIX.length));
+      }
+    }
+  } catch {
+    /* no Web Locks: the age rule alone protects files in use */
+  }
+  return out;
+}
+
+/**
+ * Mark a scratch file as in use until the returned release is called. Without
+ * Web Locks the release does nothing, and the age rule protects the file.
+ */
+async function lockScratch(name: string): Promise<() => void> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  if (!locks) return () => {};
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  try {
+    // Shared: two renders of one file name (two tabs) must not wait on each
+    // other - the lock only has to be visible to `query()`.
+    await new Promise<void>((granted, refused) => {
+      locks
+        .request(SCRATCH_LOCK_PREFIX + name, { mode: 'shared' }, () => {
+          granted();
+          return held;
+        })
+        .catch(refused);
+    });
+  } catch {
+    return () => {};
+  }
+  return release;
+}
+
+/**
+ * Delete leftover scratch files that nothing is using any more.
  *
  * A finished export's file is deliberately NOT deleted the moment the download
  * starts: the download reads from that very file, and a multi-gigabyte transfer
  * is still in flight long after `click()` returns. So the sweep is what
- * reclaims it - on the next export, and once more at startup.
+ * reclaims it - once the next export has finished, and at startup - and only
+ * when it is neither locked by a render nor recently written (see
+ * `scratchToSweep`): another tab may be rendering into, or downloading from, a
+ * file this one knows nothing about.
  */
-export async function sweepExportScratch(except?: string): Promise<void> {
+export async function sweepExportScratch(options: ScratchSweepOptions = {}): Promise<void> {
   const dir = await scratchDir();
   if (!dir) return;
   try {
+    const entries: ScratchEntry[] = [];
     // `keys()` is async-iterable on the directory handle; a browser without it
     // simply keeps its scratch file until the origin's storage is cleared.
     for await (const name of (dir as unknown as { keys(): AsyncIterable<string> }).keys()) {
-      if (name === except) continue;
+      const lastModified = await dir
+        .getFileHandle(name)
+        .then((handle) => handle.getFile())
+        .then((file) => file.lastModified)
+        .catch(() => 0);
+      entries.push({ name, lastModified });
+    }
+    const locked = await lockedScratch();
+    for (const name of scratchToSweep(entries, Date.now(), locked, options)) {
       await dir.removeEntry(name).catch(() => undefined);
     }
   } catch {
@@ -62,19 +172,28 @@ export async function sweepExportScratch(except?: string): Promise<void> {
  * A writable scratch file for one export, or null when OPFS is unavailable.
  * The handle is structured-cloneable, so the export worker streams into it
  * directly and the main thread never sees the bytes.
+ *
+ * The file is locked as in use until `release` is called, which the export does
+ * once it has settled; until then no sweep, in this tab or another, removes it.
  */
 export async function openExportScratch(
   filename: string,
-): Promise<{ handle: FileSystemFileHandle; name: string } | null> {
+): Promise<{ handle: FileSystemFileHandle; name: string; release: () => void } | null> {
   const dir = await scratchDir();
   if (!dir) return null;
+  // Locked before the file exists, so a sweep starting in another tab can never
+  // see it unlocked.
+  const release = await lockScratch(filename);
   try {
-    // Sweep first: the previous export's file can be gigabytes, and keeping it
-    // alongside the new one would double what the origin holds for no reason.
-    await sweepExportScratch(filename);
+    // Sweep first: old exports' files can be gigabytes, and keeping them all
+    // alongside the new one would multiply what the origin holds. The most
+    // recent one is spared - it may still be downloading - and reclaimed once
+    // this export has finished.
+    await sweepExportScratch({ keep: [filename], keepNewest: true });
     const handle = await dir.getFileHandle(filename, { create: true });
-    return { handle, name: filename };
+    return { handle, name: filename, release };
   } catch {
+    release();
     return null;
   }
 }

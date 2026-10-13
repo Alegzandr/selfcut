@@ -7,10 +7,11 @@ import { AudioSegment, segmentIndexes } from '../media/audioSegments';
 import { decodeImageFile } from '../media/stillImage';
 import { flattenAudibleClips, scheduleProjectAudio } from '../preview/audioMix';
 import { firstUncloneable } from '../lib/cloneable';
-import { openExportScratch, readExportScratch } from '../lib/opfs';
+import { openExportScratch, readExportScratch, sweepExportScratch } from '../lib/opfs';
 import { flushProjectSave } from '../lib/persistence';
 import { ExportPreset, exportFileName, resolveMp4Preset } from './presets';
 import { MasterChain } from './masterChain';
+import { AUDIO_PREROLL_SECONDS, preRolledSlice } from './audioSlice';
 import { WavWriter } from './handoff/wav';
 import { disconnectedSourceNames, exportSpan } from './span';
 import { LoudnessMeter, type LoudnessResult, type MasterNormalization } from '../lib/loudness';
@@ -179,6 +180,7 @@ const ERROR_KEYS = {
   // Retried on terms that copy less before it is ever shown; the sentence names
   // the value the browser refused, which is the only part worth reporting.
   cannotClone: 'errors.export.cannotClone',
+  audioMixFailed: 'errors.export.audioMixFailed',
 } as const satisfies Record<ExportErrorCode, string>;
 
 /**
@@ -247,6 +249,13 @@ export function startExport(
    * is over. Its bitmap is closed instead of published.
    */
   let settled = false;
+  /** Lets go of the scratch file's in-use lock (see `openExportScratch`). */
+  let releaseScratch: () => void = () => {};
+  /**
+   * The slice the worker is waiting on, when it is waiting on one. The loudness
+   * pass renews the worker's deadline on it while it runs (see `audioPending`).
+   */
+  let pendingAudio: { target: Worker; offset: number } | null = null;
 
   const run = (async () => {
     // Get the timeline on disk before the heaviest thing the app does starts.
@@ -295,6 +304,7 @@ export function startExport(
       const opened = await openExportScratch(filename);
       if (opened) {
         scratch = opened.handle;
+        releaseScratch = opened.release;
         sink = { kind: 'scratch', name: opened.name };
       } else if (estimatedOutputBytes(preset, durationMs) > MAX_IN_MEMORY_EXPORT_BYTES) {
         // Neither a picked file nor scratch space: the only path left builds the
@@ -317,9 +327,19 @@ export function startExport(
     // video to hide it behind, so there it is the first stretch of the bar.
     const measureShare = mix?.master && preset.kind === 'mp3' ? 0.4 : 0;
     const workerBase = 0.1 + measureShare;
+    // Stopped by any exit, not only a cancel: a render that failed or finished
+    // has no use for the number, and the pass would otherwise keep rendering
+    // the whole mix in the background.
     void mix?.master?.measure(
-      () => canceled,
-      measureShare > 0 ? (v) => onProgress(0.1 + v * measureShare) : undefined,
+      () => canceled || settled,
+      (v) => {
+        if (measureShare > 0) onProgress(0.1 + v * measureShare);
+        // The first slice of a normalized mix waits on this whole pass. Each
+        // step of it is a sign of life the worker's deadline is renewed on.
+        if (pendingAudio && pendingAudio.target === worker) {
+          pendingAudio.target.postMessage({ type: 'audioPending', offset: pendingAudio.offset });
+        }
+      },
     );
 
     // Adapt frame rate (and, with it, bitrate) to the project's source footage
@@ -423,11 +443,14 @@ export function startExport(
         };
         worker!.onerror = (e) => reject(crashError(e.message));
         // One slice of the mix, rendered now that the encoder is ready for it
-        // and transferred (not copied) into the worker. A failure here truncates
-        // the soundtrack rather than losing the whole render.
+        // and transferred (not copied) into the worker. A failure here fails
+        // the render (`audioMixFailed`) rather than finishing a file whose
+        // soundtrack stops short.
         const serveAudio = async (offset: number, frames: number): Promise<void> => {
           const target = worker;
           if (!target || !mix) return;
+          const pending = { target, offset };
+          pendingAudio = pending;
           try {
             const channels = await mix.render(offset, frames);
             if (worker !== target) return;
@@ -436,8 +459,10 @@ export function startExport(
               channels.map((c) => c.buffer as ArrayBuffer),
             );
           } catch (err) {
-            console.warn('[export] audio slice failed, truncating the mix:', err);
+            console.warn('[export] audio slice failed:', err);
             if (worker === target) target.postMessage({ type: 'audioFailed', offset });
+          } finally {
+            if (pendingAudio === pending) pendingAudio = null;
           }
         };
         try {
@@ -470,41 +495,50 @@ export function startExport(
       bufferOutput: false,
     };
     let buffer: { buffer: ArrayBuffer | null; mime: string };
-    for (;;) {
-      try {
-        buffer = await runWorker(attempt);
-        break;
-      } catch (err) {
-        if (!(err instanceof ExportWorkerError)) throw err;
-        const next = nextAttempt(attempt, err.code);
-        if (!next) throw err;
-        console.warn(`[export] ${retryReason(err.code, next)}`);
-        if (err.code === 'encoderStalled') {
-          options?.onFallback?.(next.preferSoftware ? 'softwareEncoder' : 'oneEncoder');
+    try {
+      for (;;) {
+        try {
+          buffer = await runWorker(attempt);
+          break;
+        } catch (err) {
+          if (!(err instanceof ExportWorkerError)) throw err;
+          const next = nextAttempt(attempt, err.code);
+          if (!next) throw err;
+          console.warn(`[export] ${retryReason(err.code, next)}`);
+          if (err.code === 'encoderStalled') {
+            options?.onFallback?.(next.preferSoftware ? 'softwareEncoder' : 'oneEncoder');
+          }
+          attempt = next;
+          // Cast: nothing in this function body assigns `worker`, so control-flow
+          // analysis still believes it is null - `runWorker` sets it from inside a
+          // closure that the analysis cannot follow.
+          (worker as Worker | null)?.terminate();
+          worker = null;
+          // `cause` keeps the failure that was in hand when the cancel landed:
+          // the user sees the cancel, and a render that gave up on itself can
+          // still be traced back.
+          if (canceled) throw new Error(t('errors.export.canceled'), { cause: err });
+          // The new attempt walks the same ground from the start: put the bar back
+          // where that attempt begins rather than let it appear to freeze at
+          // whatever the abandoned render had reached.
+          onProgress(workerBase);
         }
-        attempt = next;
-        // Cast: nothing in this function body assigns `worker`, so control-flow
-        // analysis still believes it is null - `runWorker` sets it from inside a
-        // closure that the analysis cannot follow.
-        (worker as Worker | null)?.terminate();
-        worker = null;
-        // `cause` keeps the failure that was in hand when the cancel landed:
-        // the user sees the cancel, and a render that gave up on itself can
-        // still be traced back.
-        if (canceled) throw new Error(t('errors.export.canceled'), { cause: err });
-        // The new attempt walks the same ground from the start: put the bar back
-        // where that attempt begins rather than let it appear to freeze at
-        // whatever the abandoned render had reached.
-        onProgress(workerBase);
       }
+    } finally {
+      // Every exit, not only success: the bitmaps are cloned into each worker,
+      // never transferred, so these are GPU-backed copies only this thread can
+      // free - on a cancel, a crash or a failure that is not retried alike.
+      for (const bitmap of Object.values(stills)) bitmap.close();
     }
     rejectWorkerReply = null;
-    for (const bitmap of Object.values(stills)) bitmap.close();
 
     onProgress(1);
     // Settled long before this point: the encoder cannot have pulled a slice
     // of mix without it.
     const normalization = mix?.master ? await mix.master.measure() : null;
+    // A new file is finished, so the previous export's - spared when this one
+    // started, in case it was still downloading - can go now.
+    void sweepExportScratch({ keep: sink?.kind === 'scratch' ? [sink.name] : [] });
     // Three destinations, one return shape. A render into the file the user
     // picked is already where they wanted it (blob: null, nothing to
     // download); a scratch render is on disk too, but privately, so it is
@@ -512,11 +546,13 @@ export function startExport(
     // loading it into memory; only the in-memory last resort materializes a
     // Blob from a buffer.
     //
-    // `bufferOutput` is what tells those last two apart. The scratch file is
-    // opened before the first attempt and outlives one that never used it, so
-    // an attempt that buffered would otherwise hand back that untouched file -
-    // a download of nothing at all, reported as a finished export.
-    if (scratch && !attempt.bufferOutput) {
+    // The worker's reply is what tells those last two apart: it posts a buffer
+    // exactly when it rendered into memory - a buffered attempt, or a scratch
+    // file it could not re-open. The scratch file is opened before the first
+    // attempt and outlives one that never wrote to it, so going by the request
+    // instead would hand back that untouched file - a download of nothing at
+    // all, reported as a finished export.
+    if (scratch && !buffer.buffer) {
       return { blob: await readExportScratch(scratch), filename, normalization };
     }
     return {
@@ -528,6 +564,9 @@ export function startExport(
 
   const promise = Promise.race([run, cancelation]).finally(() => {
     settled = true;
+    // The render no longer writes to it. The file itself stays for the
+    // download, and is reclaimed by a later sweep once it has aged out.
+    releaseScratch();
     // Done, failed or canceled alike: hand the monitor back to the playhead.
     clearRenderPreview();
     worker?.terminate();
@@ -601,7 +640,15 @@ class AudioMixRenderer {
     return this.master ? this.master.render(offset, frames) : this.renderRaw(offset, frames);
   }
 
-  private async renderRaw(offset: number, frames: number): Promise<Float32Array[]> {
+  private async renderRaw(sliceOffset: number, sliceFrames: number): Promise<Float32Array[]> {
+    // Started ahead of the slice, so effect tails and compressors carry over
+    // its start the way one continuous render would; the lead-in is dropped
+    // below. See `AUDIO_PREROLL_SECONDS`.
+    const { renderOffset: offset, renderFrames: frames, discard } = preRolledSlice(
+      sliceOffset,
+      sliceFrames,
+      AUDIO_PREROLL_SECONDS * this.info.sampleRate,
+    );
     const fromMs = this.startMs + (offset / this.info.sampleRate) * 1000;
     const durationMs = (Math.max(1, frames) / this.info.sampleRate) * 1000;
     // Decoded first and held for the whole render: the scheduler reads what is
@@ -637,7 +684,12 @@ class AudioMixRenderer {
     );
     const rendered = await ctx.startRendering();
     const channels: Float32Array[] = [];
-    for (let ch = 0; ch < this.info.channelCount; ch++) channels.push(rendered.getChannelData(ch));
+    for (let ch = 0; ch < this.info.channelCount; ch++) {
+      const data = rendered.getChannelData(ch);
+      // Copied out rather than viewed: the slices are transferred to the worker
+      // whole, and a view would carry the pre-roll along with it.
+      channels.push(discard > 0 ? data.slice(discard, discard + sliceFrames) : data);
+    }
     return channels;
   }
 }

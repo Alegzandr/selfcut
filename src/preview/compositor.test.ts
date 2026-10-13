@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { clipDestRect, layoutTextLines } from './compositor';
-import type { ClipText, ClipTransform, MediaClip } from '../types';
+import { clipDestRect, forEachActiveMediaClip, layoutTextLines } from './compositor';
+import type { Clip, ClipText, ClipTransform, MediaClip, Track } from '../types';
 
 /**
  * Stand-in for a 2D context: every glyph is 10 units wide, so a line's width is
@@ -132,5 +132,49 @@ describe('clipDestRect', () => {
   it('keeps the clip centred on its transform position while stretching', () => {
     const r = rect(mediaClip({ scaleX: 2, x: 0.25 }));
     expect(r.dx + r.dw / 2).toBeCloseTo(0.25 * OUT_W, 6);
+  });
+});
+
+/**
+ * One precomp placed twice, overlapping: the same inner clip is on screen at two
+ * times at once, and the export keys its decoders by instance so the two plays
+ * never share a reader.
+ */
+describe('forEachActiveMediaClip instances', () => {
+  const compClip = (id: string, startMs: number): Clip => ({
+    kind: 'comp',
+    id,
+    compId: 'k',
+    trackId: 'v',
+    assetId: '',
+    timelineStartMs: startMs,
+    sourceInMs: 0,
+    sourceOutMs: 2000,
+    speed: 1,
+    volume: 1,
+    fadeInMs: 0,
+    fadeOutMs: 0,
+  });
+  const lane = (id: string, clips: Clip[]): Track => ({ id, kind: 'video', clips });
+
+  it('gives each play of a shared inner clip its own key and time', () => {
+    const inner = [lane('i', [{ ...mediaClip(), timelineStartMs: 0, sourceOutMs: 5000 }])];
+    const top = [lane('v1', [compClip('A', 0)]), lane('v2', [compClip('B', 500)])];
+    const seen: [string, string, number][] = [];
+    forEachActiveMediaClip(top, 1000, () => inner, (clip, atMs, instance) => {
+      seen.push([clip.id, instance, atMs]);
+    });
+    expect(seen).toHaveLength(2);
+    expect(new Set(seen.map(([, instance]) => instance)).size).toBe(2);
+    expect(seen.every(([id]) => id === 'c1')).toBe(true);
+    expect(seen.map(([, , atMs]) => atMs).sort((a, b) => a - b)).toEqual([500, 1000]);
+  });
+
+  it('keys a top-level clip by its bare id', () => {
+    const keys: string[] = [];
+    forEachActiveMediaClip([lane('v', [mediaClip()])], 100, () => null, (_c, _t, instance) => {
+      keys.push(instance);
+    });
+    expect(keys).toEqual(['c1']);
   });
 });
